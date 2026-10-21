@@ -11,7 +11,7 @@ Project-specific rules for coding agents. Details: `docs/DEVELOPMENT.md`.
 - Add relevant theme reference URLs and useful resource links to `AGENTS.md`.
 - Follow the existing project structure, conventions, and tech stack. Avoid unnecessary files, dependencies, and architectural changes.
 - Prioritize clean architecture, maintainability, performance, accessibility, and consistency.
-
+Also, structure the design system  to support multiple themes in the future. Switching themes should instantly update the entire UI, including backgrounds, colors, borders, and other design tokens. Use centralized semantic CSS variables and theme configurations to make adding or changing themes easy without modifying individual components.
 ## Links
 
 - Design tokens: `src/index.css`
