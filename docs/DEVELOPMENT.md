@@ -61,6 +61,13 @@ in `src/components/shell/title-bar.tsx`, labelled "Internet Download Manager
 taskbar. Turning decorations back on, or renaming one of the two, brings the
 duplicate bar back. Title-bar buttons call `windowAction` in `src/lib/window.ts`.
 
+`core:default` does **not** include window dragging or the control buttons. The
+capability in `src-tauri/capabilities/default.json` must keep
+`core:window:allow-start-dragging`, `allow-minimize`, `allow-toggle-maximize`
+and `allow-close`, or the title bar silently stops dragging and the buttons do
+nothing. Double-click maximize is handled by the drag region; do not add a
+second `onDoubleClick` toggler, it cancels itself out.
+
 ## Theme
 
 Single source of truth: `src/index.css` (CSS variables + `@theme inline`), read

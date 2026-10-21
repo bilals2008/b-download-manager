@@ -10,13 +10,9 @@ export function TitleBar() {
   return (
     <div
       data-tauri-drag-region
-      onDoubleClick={() => void windowAction("toggleMaximize")}
       className="flex h-8 items-stretch bg-chrome-title text-chrome-title-text"
     >
-      <div
-        data-tauri-drag-region
-        className="pointer-events-none flex flex-1 items-center gap-2 px-2"
-      >
+      <div className="pointer-events-none flex flex-1 items-center gap-2 px-2">
         <AppMark />
         <span className="text-xs select-none">
           Internet Download Manager 6.43
