@@ -1,0 +1,9 @@
+node_modules
+dist
+dist-ssr
+release
+*.local
+*.tsbuildinfo
+.DS_Store
+src-tauri/target
+src-tauri/gen

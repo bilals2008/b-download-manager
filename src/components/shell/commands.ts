@@ -1,0 +1,73 @@
+/**
+ * Every action the top bar can dispatch. The screens that implement these
+ * commands are built separately; keeping the names in one union stops the menu
+ * data, the toolbar data and the app shell from drifting apart.
+ */
+export type ShellCommand =
+  // Tasks
+  | "add-download"
+  | "add-batch"
+  | "add-batch-clipboard"
+  | "run-grabber"
+  | "drop-target"
+  | "export-list"
+  | "export-text"
+  | "import-list"
+  | "import-text"
+  | "exit"
+  // File
+  | "stop"
+  | "delete"
+  | "resume"
+  | "redownload"
+  // Downloads
+  | "pause-all"
+  | "stop-all"
+  | "delete-completed"
+  | "find"
+  | "find-next"
+  | "scheduler"
+  | "start-queue"
+  | "stop-queue"
+  | "speed-limiter-on"
+  | "speed-limiter-off"
+  | "speed-limiter-settings"
+  | "speed-limiter-options"
+  // View
+  | "categories"
+  | "options"
+  | "arrange-order"
+  | "arrange-name"
+  | "arrange-size"
+  | "arrange-status"
+  | "arrange-eta"
+  | "arrange-speed"
+  | "arrange-last-try"
+  | "arrange-path"
+  | "toolbar-customize"
+  | "toolbar-large"
+  | "toolbar-small"
+  | "toolbar-new"
+  | "toolbar-neon"
+  | "tray-3d"
+  | "tray-classic"
+  | "tray-hidden"
+  | "tray-customize-list"
+  | "tray-dark-mode"
+  | "font-choose"
+  | "font-reset"
+  | "language-english"
+  // Help
+  | "help-contents"
+  | "tutorials"
+  | "help-scheduler-queues"
+  | "grabber-help"
+  | "tip-of-the-day"
+  | "website"
+  | "support"
+  | "check-updates"
+  | "about"
+  | "tell-friend"
+  // Registration
+  | "order-online"
+  | "registration";

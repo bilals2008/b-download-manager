@@ -1,0 +1,179 @@
+@import "tailwindcss";
+
+/*
+  One theme, one source of truth.
+
+  The palette is warm and soft on purpose: paper, sand and clay, with a single
+  sage accent that is only ever used for "finished". There is no second
+  accent hue, no gradient and no cool grey anywhere in the product.
+
+  The hex values below are the ones the palette checker
+  (`npm run check:palette`) verifies for WCAG contrast, so change them there
+  and here together, or run the checker.
+*/
+:root {
+  --radius: 0.75rem;
+
+  /* warm paper neutrals */
+  --background: #f7f3ec;
+  --foreground: #33291f;
+  --card: #fdfbf7;
+  --card-foreground: #33291f;
+  --popover: #fdfbf7;
+  --popover-foreground: #33291f;
+
+  /* clay is the only action colour */
+  --primary: #a94e36;
+  --primary-foreground: #fdf8f2;
+
+  --secondary: #f0e7db;
+  --secondary-foreground: #4a3b2c;
+
+  --muted: #f1ebe2;
+  --muted-foreground: #6e6256;
+
+  --accent: #e9e3d5;
+  --accent-foreground: #453629;
+
+  /* sage marks finished work and nothing else */
+  --success: #4f6b4c;
+  --success-foreground: #f6f8f3;
+
+  --destructive: #b4514b;
+  --destructive-foreground: #fdf6f4;
+
+  --border: #e5dccf;
+  --input: #948572;
+  --ring: #a94e36;
+
+  /*
+    Application chrome. The download manager is a desktop tool, so its window
+    furniture is a dark neutral family of its own: title bar, menu bar, toolbar
+    and the workspace behind them. Every text pair below is checked by
+    `npm run check:palette`.
+  */
+  --chrome-title: #191919;
+  --chrome-title-text: #d9d9d9;
+  --chrome-menu: #262626;
+  --chrome-menu-text: #e8e8e8;
+  --chrome-menu-hover: #3a3a3a;
+  --chrome-menu-active: #474747;
+  --chrome-toolbar: #333333;
+  --chrome-toolbar-text: #e6e6e6;
+  --chrome-toolbar-hover: #424242;
+  --chrome-toolbar-active: #282828;
+  --chrome-popup: #2b2b2b;
+  --chrome-popup-hover: #3d3d3d;
+  --chrome-muted: #bdbdbd;
+  --chrome-canvas: #1b1b1b;
+  --chrome-panel: #232323;
+  --chrome-line: #474747;
+  --chrome-focus: #8cc63f;
+  --chrome-danger: #c42b1c;
+  --chrome-danger-text: #ffffff;
+  --chrome-error: #ff9a8c;
+
+  /* Toolbar artwork. These are illustration tints, not UI semantics. */
+  --icon-green: #6cb52e;
+  --icon-green-bright: #8ed94a;
+  --icon-green-deep: #3f7419;
+  --icon-red: #c8382b;
+  --icon-red-bright: #e85a4d;
+  --icon-red-deep: #7c1f18;
+  --icon-silver: #b9c0c7;
+  --icon-silver-bright: #eef1f3;
+  --icon-silver-deep: #6f777f;
+  --icon-purple: #8f6fc9;
+  --icon-purple-bright: #b79ae8;
+  --icon-purple-deep: #4c3574;
+  --icon-blue: #7f92cc;
+  --icon-blue-bright: #b6c4ee;
+  --icon-blue-deep: #4f5f94;
+  --icon-amber: #d99a2b;
+  --icon-amber-bright: #f2bf62;
+}
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 5px);
+  --radius-md: calc(var(--radius) - 3px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-chrome: 3px;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-chrome-title: var(--chrome-title);
+  --color-chrome-title-text: var(--chrome-title-text);
+  --color-chrome-menu: var(--chrome-menu);
+  --color-chrome-menu-text: var(--chrome-menu-text);
+  --color-chrome-menu-hover: var(--chrome-menu-hover);
+  --color-chrome-menu-active: var(--chrome-menu-active);
+  --color-chrome-toolbar: var(--chrome-toolbar);
+  --color-chrome-toolbar-text: var(--chrome-toolbar-text);
+  --color-chrome-toolbar-hover: var(--chrome-toolbar-hover);
+  --color-chrome-toolbar-active: var(--chrome-toolbar-active);
+  --color-chrome-popup: var(--chrome-popup);
+  --color-chrome-popup-hover: var(--chrome-popup-hover);
+  --color-chrome-muted: var(--chrome-muted);
+  --color-chrome-canvas: var(--chrome-canvas);
+  --color-chrome-panel: var(--chrome-panel);
+  --color-chrome-line: var(--chrome-line);
+  --color-chrome-focus: var(--chrome-focus);
+  --color-chrome-danger: var(--chrome-danger);
+  --color-chrome-danger-text: var(--chrome-danger-text);
+  --color-chrome-error: var(--chrome-error);
+
+  /* The toolbar artwork palette, usable as a colour utility as well. */
+  --color-icon-green: var(--icon-green);
+  --color-icon-green-bright: var(--icon-green-bright);
+  --color-icon-red: var(--icon-red);
+  --color-icon-red-bright: var(--icon-red-bright);
+  --color-icon-amber: var(--icon-amber);
+  --color-icon-blue-bright: var(--icon-blue-bright);
+  --color-icon-silver: var(--icon-silver);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family:
+      ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+  }
+}
