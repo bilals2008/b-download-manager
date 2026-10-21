@@ -79,8 +79,10 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
       return;
     }
     const trimmed = url.trim();
-    if (!/^https?:\/\/\S+$/i.test(trimmed)) {
-      setError("Enter the full address of the file, starting with http:// or https://.");
+    if (!/^(https?|ftp):\/\/\S+$/i.test(trimmed)) {
+      setError(
+        "Enter the full address of the file, starting with http://, https:// or ftp://.",
+      );
       return;
     }
     const folder = savePath.trim();
