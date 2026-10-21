@@ -31,14 +31,30 @@ pub struct Segment {
     pub part: PathBuf,
 }
 
+/// The end offset of a range whose length the server did not tell us.
+///
+/// The server answered `Content-Range: bytes 0-0/*`, so the file ends when
+/// the response does.
+pub const UNKNOWN_END: u64 = u64::MAX;
+
 impl Segment {
     /// Number of bytes this segment is responsible for.
     pub fn len(&self) -> u64 {
         self.end.saturating_sub(self.start)
     }
 
+    /// Whether this range holds no bytes at all.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub fn done(&self) -> bool {
         self.downloaded >= self.len()
+    }
+
+    /// Whether the length of this range is known.
+    pub fn is_unknown(&self) -> bool {
+        self.end == UNKNOWN_END
     }
 
     /// Offset of the next byte that still has to be requested.
@@ -55,6 +71,23 @@ pub const SEGMENT_TARGET: u64 = 16 * 1024 * 1024;
 
 /// Smallest remainder worth handing to another connection.
 pub const MIN_SPLIT: u64 = 1024 * 1024;
+
+/// How many bytes one connection should get.
+///
+/// IDM divides the bytes that are still to download by `0x2800` (10,240) to
+/// find the number of connections a file deserves: `FUN_005bad00` computes
+/// `__alldiv(bytes_left, 0x2800)` and takes the smaller of that and the
+/// number of connections that are allowed. A small file therefore gets fewer
+/// connections than a large one.
+pub const BYTES_PER_CONNECTION: u64 = 0x2800;
+
+/// The number of connections a file of this size deserves.
+///
+/// At least one, at most the number that is allowed.
+pub fn connections_for(total: u64, max: u32) -> u32 {
+    let wanted = total / BYTES_PER_CONNECTION;
+    wanted.clamp(1, max.max(1) as u64) as u32
+}
 
 /// Split `total` bytes into at most `max_segments` contiguous ranges.
 pub fn plan(total: u64, max_segments: u32, dir: &Path, stem: &str) -> Vec<Segment> {
@@ -89,6 +122,20 @@ pub fn plan(total: u64, max_segments: u32, dir: &Path, stem: &str) -> Vec<Segmen
     }
 
     out
+}
+
+/// One range that reaches to the end of a file whose size is unknown.
+///
+/// The server answered `Content-Range: bytes 0-0/*`, so the file is fetched
+/// by a single connection, from the first byte to the end of the response.
+pub fn plan_unknown(dir: &Path, stem: &str) -> Vec<Segment> {
+    vec![Segment {
+        id: 0,
+        start: 0,
+        end: UNKNOWN_END,
+        downloaded: 0,
+        part: part_path(dir, stem, 0),
+    }]
 }
 
 /// Split a segment in two and hand the tail to a new connection.
@@ -157,6 +204,22 @@ mod tests {
     fn plan_never_exceeds_the_connection_limit() {
         let segments = plan(64 * 1024 * 1024, 8, Path::new("/tmp"), "file");
         assert!(segments.len() <= 8);
+    }
+
+    #[test]
+    fn a_small_file_gets_fewer_connections() {
+        // One connection per 10 KB that is left, as IDM counts them.
+        assert_eq!(connections_for(1024 * 1024, 8), 8);
+        assert_eq!(connections_for(100 * 1024, 8), 8);
+        assert_eq!(connections_for(20 * 1024, 8), 2);
+        assert_eq!(connections_for(1024, 8), 1);
+        assert_eq!(connections_for(0, 8), 1);
+    }
+
+    #[test]
+    fn the_number_of_connections_never_passes_the_limit() {
+        assert_eq!(connections_for(1024 * 1024 * 1024, 4), 4);
+        assert_eq!(connections_for(1024 * 1024 * 1024, 0), 1);
     }
 
     #[test]

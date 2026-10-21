@@ -4,12 +4,26 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use crate::downloader::{Download, DownloadInfo};
+use idm_core::downloader::{Download, DownloadInfo};
+use idm_core::limits::Limits;
+use idm_core::session::{Index, KnownDownload};
 
-#[derive(Default)]
 pub struct AppState {
     next_id: AtomicU64,
     downloads: Mutex<HashMap<u64, Arc<Download>>>,
+    limits: Limits,
+    index: Mutex<Option<Index>>,
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self {
+            next_id: AtomicU64::new(1),
+            downloads: Mutex::new(HashMap::new()),
+            limits: Limits::default(),
+            index: Mutex::new(None),
+        }
+    }
 }
 
 impl AppState {
@@ -53,5 +67,66 @@ impl AppState {
 
     pub fn infos(&self) -> Vec<DownloadInfo> {
         self.list().iter().map(|d| d.info()).collect()
+    }
+
+    /// The limits that apply to every download.
+    pub fn limits(&self) -> &Limits {
+        &self.limits
+    }
+
+    /// Point the state at the file the index of known downloads lives in.
+    pub fn set_index(&self, index: Index) {
+        *self.index.lock().expect("index lock poisoned") = Some(index);
+    }
+
+    /// Write the resume state of every download to disk.
+    pub fn save_manifests(&self) {
+        for download in self.list() {
+            download.save_manifest();
+        }
+    }
+
+    /// Write the index of known downloads.
+    pub fn save_index(&self) {
+        let index = self.index.lock().expect("index lock poisoned");
+        let Some(index) = index.as_ref() else { return };
+        let known: Vec<KnownDownload> = self.list().iter().map(|d| d.known()).collect();
+        let _ = index.save(&known);
+    }
+
+    /// Bring the downloads of an earlier run back.
+    ///
+    /// A download whose file is on disk is finished, one whose parts and
+    /// manifest are on disk can be resumed, and one that left nothing behind
+    /// is forgotten.
+    pub fn restore_downloads(&self) {
+        let known = {
+            let index = self.index.lock().expect("index lock poisoned");
+            let Some(index) = index.as_ref() else { return };
+            index.load()
+        };
+
+        let mut highest = 0u64;
+        for known in known {
+            highest = highest.max(known.id);
+            match idm_core::session::inspect(&known) {
+                idm_core::session::Recovered::Finished => {
+                    if let Some(download) = Download::from_known(&known) {
+                        download.set_status(idm_core::downloader::Status::Completed);
+                        self.insert(download);
+                    }
+                }
+                idm_core::session::Recovered::Resumable => {
+                    if let Some(download) = Download::from_known(&known) {
+                        self.insert(download);
+                    }
+                }
+                idm_core::session::Recovered::Gone => {}
+            }
+        }
+
+        // The ids of the restored downloads must not be handed out again.
+        self.next_id.fetch_max(highest + 1, Ordering::SeqCst);
+        self.save_index();
     }
 }
