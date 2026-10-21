@@ -17,17 +17,29 @@ npm run tauri dev        # desktop app (the only way to see real window chrome)
 npm run dev              # UI only in a browser; IPC calls are no-ops
 npm run build            # tsc --noEmit + vite build
 npm run check:palette    # WCAG contrast gate for the colour tokens
-cd src-tauri && cargo test
+cd crates/idm-core && cargo test   # the engine, without a window
+cd src-tauri && cargo test         # the application
 ```
 
 ## Layout
 
 ```
+crates/
+  idm-core/       the engine: no window toolkit, no application
+    downloader.rs   engine: probe, ranges, retries, pause, assembly
+    http.rs         the wire format: range headers, Content-Range, retries
+    ftp.rs          the FTP client: login, PASV, REST, RETR
+    transfer.rs     where the bytes come from: HTTP or FTP
+    verify.rs       the check that the data of a range belongs to that range
+    limits.rs       connection budget, per site caps, speed limit, proxy
+    disk.rs         free space, replacing a file safely
+    segmenter.rs    byte ranges, part files, splitting
+    session.rs      the index of known downloads
+    log.rs          the diagnostics log
+  idm-cli/        a headless client for the engine
 src-tauri/src/
   main.rs        process entry
   lib.rs         Tauri builder, commands, event wiring
-  downloader.rs  engine: probe, ranges, retries, pause, assembly
-  segmenter.rs   byte ranges, part files, splitting
   state.rs       the set of known downloads
 src/
   App.tsx        screen composition and command routing only
@@ -47,7 +59,8 @@ Rules:
   `lib.rs`, `downloader.rs` or `menu-bar.tsx` into a second layer of logic;
   extract instead.
 - Rust: keep commands in `lib.rs` thin; engine behaviour stays in the engine
-  modules.
+  crate, and the engine must not know about windows — it reports through the
+  `Reporter` trait.
 - Frontend: no IPC or file-system work inside presentational components.
 - No native `<select>`; use `components/ui/listbox.tsx`.
 - Colours come from tokens in `src/index.css`. No raw hex or palette classes.

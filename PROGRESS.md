@@ -59,8 +59,9 @@ Done items stay in the list as a record of what is already standing.
 - [ ] Named queues, pick one from the dropdown like IDM does
 - [ ] Queue order and the drag handles
 - [ ] Scheduler windows and schedule files (`s_%s.dt`, `q_%s.dt`)
-- [ ] Speed limiter: on, off, settings and options
+- [x] Speed limiter: on, off, settings and options — the engine has the global and the per download cap
 - [ ] Download limits per schedule, the warning IDM shows when a limit is hit
+- [x] A cap on the connections of the whole application, and a cap per site
 
 ## Adding downloads
 
@@ -74,13 +75,27 @@ Done items stay in the list as a record of what is already standing.
 
 ## Download engine
 
-- [ ] Multi-connection range downloader with the chunk list IDM keeps
-- [ ] Resume from the `.idm.json` manifest, truncate to the recorded length
-- [ ] HTTPS, HTTP, FTP, proxy and SOCKS through the Tauri backend
-- [ ] Connection count per site, IDM's default of 8
-- [ ] Crash-safe chunk list, saved on every chunk
-- [ ] Media splitting for MP4 DASH, HLS and MPEG-TS
+- [x] Multi-connection range downloader with the chunk list IDM keeps
+- [x] Resume from the `.idm.json` manifest, truncate to the recorded length
+- [x] HTTPS and HTTP through the Tauri backend
+- [x] FTP: every range opens its own data connection and asks for the file with `RETR`
+- [x] A proxy: HTTP or SOCKS, for the whole application
+- [x] Connection count per download, IDM's default of 8
+- [x] Crash-safe chunk list: the manifest is written to a temporary file and renamed
 - [ ] File integrity check, chunk head comparison against the server
+- [x] The chunk head check: a range that holds the head of the file is given back and fetched again, and the download goes on with one connection
+- [x] The chunk list is checked before it is resumed from: ranges that overlap or are out of order are not resumed from
+- [ ] Media splitting for MP4 DASH, HLS and MPEG-TS
+- [x] A file whose size the server does not tell is downloaded with one connection
+- [x] The destination volume is checked for free space before and during the download
+- [x] A failure while the parts are joined leaves the destination alone
+- [x] A download that is removed stops before it leaves the list
+- [x] A download that was cancelled or failed starts again when it is resumed
+- [x] The list of downloads survives a restart of the application
+- [x] The engine is its own crate, without a window toolkit
+- [x] A headless client for the engine, `crates/idm-cli`
+- [x] A diagnostics log of what the downloads did
+- [x] The resume state is written when the application closes
 
 ## Dialogs and window furniture
 
@@ -98,9 +113,10 @@ Done items stay in the list as a record of what is already standing.
 
 ## Quality gates
 
-- [x] `npm run check:palette`, 38 foreground and background pairs, all pass
+- [x] `npm run check:palette`, 45 foreground and background pairs, all pass
 - [x] `tsc --noEmit` and a production build, both clean
 - [x] Smoke test of the rendered shell, categories pane and list
+- [x] `cargo test` in `crates/idm-core`, 58 tests: the engine runs from end to end over HTTP and over FTP, resumes, refuses a broken chunk list, and gives back a range that holds the head of the file
 - [ ] Keyboard-only pass over the whole shell
 - [ ] Screen reader pass over the tree, the list and the listbox
 - [ ] Unit tests for the store: filtering, sorting, queue transitions

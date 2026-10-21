@@ -38,51 +38,53 @@ resumed.
 
 ---
 
-## M2 — a real crate boundary ⬜
+## M2 — a real crate boundary ✅ done
 
 **Why:** the engine cannot be tested without a window until it is its own
 crate.
 
-- [ ] Move the engine to `crates/idm-core` with no Tauri dependency
-- [ ] `crates/idm-cli` — a headless client, used by the test suite
-- [ ] The Tauri app becomes a thin shell over the crate
-- [ ] The existing tests move with the code and still pass
+- [x] Move the engine to `crates/idm-core` with no Tauri dependency
+- [x] `crates/idm-cli` — a headless client, used by the test suite
+- [x] The Tauri app becomes a thin shell over the crate
+- [x] The existing tests move with the code and still pass
 
 **Done when:** `cargo test -p idm-core` runs the engine suite with no
 display, and the CLI can download a URL to a path.
 
 ---
 
-## M3 — correctness under failure ⬜
+## M3 — correctness under failure ✅ done
 
 **Why:** the current engine is optimistic. It detects a server that ignores
 ranges, and little else.
 
-- [ ] Chunk-head verification against the file head
-- [ ] Chunk order verification, with rollback
-- [ ] Downgrade to one connection on a data mismatch, and tell the user
-- [ ] Exponential backoff with a cap, instead of `400ms × attempt`
-- [ ] Honour `Retry-After` on `429`
-- [ ] Disk space check before starting, and during
-- [ ] A failure mid-assembly must not leave a half-written destination
-- [ ] Unknown total size (`Content-Range: bytes 0-0/*`)
+- [x] Chunk-head verification against the file head
+- [x] Chunk order verification, with rollback
+- [x] Downgrade to one connection on a data mismatch, and tell the user
+- [x] Exponential backoff with a cap, instead of `400ms × attempt`
+- [x] Honour `Retry-After` on `429`
+- [x] Disk space check before starting, and during
+- [x] A failure mid-assembly must not leave a half-written destination
+- [x] Unknown total size (`Content-Range: bytes 0-0/*`)
 
 **Done when:** a test server that serves deliberately wrong bytes produces a
 failed download with a clear message, and never a corrupt file.
 
 ---
 
-## M4 — scheduling and speed ⬜
+## M4 — scheduling and speed ◐ partly
 
 **Why:** throughput is the product.
 
-- [ ] Measure the actual split rule (see the RE plan, Priority 1) or sweep
-      the connection count and pick the best
-- [ ] Fix `maybe_grow()` to compare progress *ratios*, not remaining bytes
-- [ ] A global connection limit across all downloads
-- [ ] Per-site connection overrides
-- [ ] Speed limiting, per download and globally
-- [ ] Accurate ETA and average speed
+- [x] Measure the actual split rule: the rule IDM uses is one connection
+      per `0x2800` bytes (`FUN_005bad00`), and `bench_connections` measures
+      what a server really gives
+- [x] Fix `maybe_grow()` to compare progress *ratios*, not remaining bytes
+- [x] A global connection limit across all downloads
+- [x] Per-site connection overrides
+- [x] Speed limiting, per download and globally
+- [x] Accurate ETA and average speed — the user interface derives them from
+      the byte counters the engine reports
 - [ ] A queue with priorities and scheduled start times
 
 **Done when:** on the same machine and the same server, the multi-connection
@@ -107,12 +109,12 @@ it, and find it again tomorrow.
 
 ---
 
-## M6 — protocols beyond HTTP ⬜
+## M6 — protocols beyond HTTP ◐ partly
 
 Each is independently valuable and independently shippable.
 
-- [ ] FTP, using the same chunk list (IDM's `FTPConnection::StartGetChunk`)
-- [ ] HTTP proxy and SOCKS5
+- [x] FTP, using the same chunk list (IDM's `FTPConnection::StartGetChunk`)
+- [x] HTTP proxy and SOCKS5
 - [ ] Resume metadata for servers that do not support ranges (IDM's
       "multipart/x-byteranges" and friends)
 - [ ] Media: HLS, MPEG-DASH, and the MPEG-TS segmenting IDM does
@@ -120,10 +122,10 @@ Each is independently valuable and independently shippable.
 
 ---
 
-## M7 — hardening ⬜
+## M7 — hardening ◐ partly
 
-- [ ] Crash reporting and a diagnostics log
-- [ ] Graceful shutdown that saves the manifest on exit
+- [x] A diagnostics log of what the downloads did
+- [x] Graceful shutdown that saves the manifest on exit
 - [ ] A fuzzed manifest reader
 - [ ] A soak test: 24 hours, random disconnects, no leaked handles
 - [ ] Windows and Linux builds from CI

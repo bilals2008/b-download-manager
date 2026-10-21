@@ -413,6 +413,8 @@ Being explicit about the edges of the analysis:
   logic, but the exact rule that picks *N* and the boundary offsets was not
   traced. `FUN_005b1330`, the function behind "Change chunk size to %ld", is
   only `ntohl` — the producer of that value is elsewhere and was not found.
+  (A second pass located the caller of that setter, at `0x5b7122`; see
+  section 10.)
 - **Ghidra's string inventory covers defined data only.** Literals in packed
   or undefined regions would be missing; an empty result does not prove the
   text is absent.
@@ -423,14 +425,280 @@ Being explicit about the edges of the analysis:
 
 ---
 
+## 10. The second pass: the resume repair and the chunk check
+
+A second analysis run, with the same Ghidra provider, read the procedures
+that the first pass had only guessed at. The tools were driven through the
+REA command line, because the REA MCP server is not reachable from this
+harness; the analysis profile, the evidence and the limitation list are the
+same either way.
+
+### 10.1 Rebuilding the chunk list (`FUN_005634de`)
+
+This is the function that reads the chunk list back out of the registry when
+a download is resumed. The strings in it are the protocol:
+
+```
+"Loading old file size %I64d Bytes from registry"        (value "FileSize")
+"Rebuilding old downloaded files before resume.\n"
+"Read record num. %s from registry: ID = %ld, startPos = %I64d, nextID = %ld"
+"Deleting record %s from registry"
+"Adding record with ID %ld, startPos %I64d, nextID %ld"
+"Chunk order violation error, cInf.ID %ld, startPos %I64d"
+"Try rollback, set chunksize to %I64d"
+"Set curID %ld, curPos %I64d"
+```
+
+**The record layout is now known.** Each value under
+`Software\DownloadManager\<id>\ChList` is 16 bytes, and the log line names
+the three fields in order:
+
+| Offset | Size | Field |
+|---|---|---|
+| 0 | 4 | `ID` — the chunk id |
+| 4 | 8 | `startPos` — where the chunk starts in the file |
+| 12 | 4 | `nextID` — the chunk that follows it |
+
+The value name is `"<n>a"`, and `n` is the chunk id.
+
+**The order check and the rollback.** The rebuild walks the records and keeps
+the position it has reached. When a record's `startPos` lies *before* that
+position, the chunk list is out of order:
+
+```
+"Chunk order violation error, cInf.ID %ld, startPos %I64d"
+```
+
+and the chunk is rolled back: the expected size of the chunk is computed as
+`startPos(this record) - startPos(the previous record)`, logged as
+
+```
+"Try rollback, set chunksize to %I64d"
+```
+
+and the chunk file is truncated to it with `SetFilePointer` plus
+`SetEndOfFile`. The bytes that are already in the file are then fetched
+again.
+
+**What this changes.** The clone keeps the chunk list in a JSON manifest
+instead of the registry, so the same damage can arrive through a crash in the
+middle of a write. The engine now checks the manifest before it resumes
+from it: the ranges have to be contiguous, in order, and no range may hold
+more bytes than its length. A manifest that fails the check is not resumed
+from — the download starts over. The part files are still cut back to the
+recorded length, the way IDM truncates the file when it resumes.
+
+### 10.2 The chunk check (`FUN_00566f10`)
+
+The strings that the first pass attributed to the rollback path are in
+reality in a different procedure, at `0x566f10`:
+
+```
+"Strart data for this chunk is matched with start of the file!!! s2"
+"Strart data for this chunk is matched with start of the file!!!"
+"Strart data for this chunk is matched with start of the file!!! s3"
+"There is real matching"
+"no match, step 4"
+```
+
+The shape of the procedure, as read from the decompilation:
+
+1. The first time a chunk gets data, the head of the file is read once into
+   a buffer of `0x80c` bytes (2,060) and kept for the whole download
+   (`FUN_0055b130` fills it, the pointer is stored next to the download).
+2. The head of the chunk is compared with that buffer by `FUN_00566730`.
+3. A chunk that holds the *head of the file* is a chunk whose range was not
+   honoured — a server that sends the whole file whatever was asked for.
+4. On that failure the chunk is **rolled back**: the bytes it had are taken
+   off the totals again, the chunk's received counter is set back to zero
+   (`0x567234`: `MOV dword ptr [ESI + 0x80], EBX`), and the chunk is fetched
+   again.
+
+The result codes the procedure returns are `-8`, `-9` and `-10`, which the
+caller turns into "this connection is not usable". The message text reads
+like a success ("is matched") but it is printed on the path that rolls the
+chunk back: the data *is* the head of the file, and that is the fault. The
+clone does not copy the wording.
+
+**What this changes.** The engine keeps the head of the first range and
+compares the head of every other range with it. A range that starts with
+the head of the file is rolled back and fetched again, and the download
+reports the problem instead of writing a file that is quietly wrong.
+
+### 10.3 The comparison itself (`FUN_00566730`)
+
+The function that does the comparison is short enough to read whole:
+
+```c
+uint FUN_00566730(uint param_1, int *param_2, int *param_3, int *param_4, char *param_5)
+{
+  *param_3 = 0;                                    // bytes matched so far
+  *(int *)(in_ECX + 0x804) += 1;                   // a counter of comparisons
+  iVar2 = *param_4;                               // the offset already matched
+  uVar1 = *(int *)(in_ECX + 0x800) - iVar2;        // what is left of the head
+  if ((int)param_1 < (int)uVar1) uVar1 = param_1;  // the length to compare
+  piVar4 = (int *)(iVar2 + in_ECX);                // the head, at that offset
+  for (uVar5 = uVar1; 3 < uVar5; uVar5 = uVar5 - 4) {
+    if (*piVar4 != *param_2) goto mismatch;        // four bytes at a time
+    param_2 = param_2 + 1;
+    piVar4 = piVar4 + 1;
+  }
+  ... the last three bytes ...
+  if (all bytes equal) {
+    iVar2 = uVar1 + iVar2;
+    *param_3 = iVar2;
+    if (((*(int *)(in_ECX + 0x808) == 0) || (iVar2 < 0x40)) && (iVar2 < 0x200)) {
+      *(int *)(in_ECX + 0x804) -= 1;
+      *param_4 = iVar2;          // the matched offset advances
+      *param_5 = 1;
+      return (uint)uVar3 << 8;
+    }
+    *(int *)(in_ECX + 0x808) += 1;                // counted as a mismatch
+    return CONCAT31(uVar3, 1);
+  }
+mismatch:
+  *param_5 = 0;
+  return 0;
+}
+```
+
+Read together with its caller, this says three things:
+
+1. **The comparison is incremental.** The offset that has already been
+   matched (`*param_4`) is kept between calls, and the data is compared with
+   the head of the file from that offset on. The data arrives in pieces, so
+   the check runs over the pieces.
+2. **The head of the file is at most `0x80c` bytes** (the size is kept at
+   `in_ECX + 0x800`), and a match is only *clean* up to `0x200` bytes. A
+   longer match, or a match after a mismatch has been seen
+   (`in_ECX + 0x808`), is counted as a mismatch of its own.
+3. **The return value is zero when the data does not match the head**, and
+   non-zero when it does. The caller acts on the non-zero case: it logs
+   "Strart data for this chunk is matched with start of the file!!!" and
+   rolls the chunk back.
+
+So the check is: *the data of a chunk must not start with the head of the
+file*. A chunk that does holds the beginning of the file where the middle of
+the file belongs — a server that answered the range request with the whole
+file. The rollback gives the bytes back and fetches the range again, and
+when that happens again the download goes on with a single connection.
+
+**What this changes.** The clone compares the first `0x200` bytes of a range
+with the head of the file, keeps a head buffer of `0x80c` bytes, and when a
+range is found to hold the head of the file it gives the bytes back and
+re-fetches the range. The test
+`a_server_that_sends_the_wrong_bytes_goes_on_with_one_connection` in
+`crates/idm-core/src/downloader/tests.rs` drives that path against a server that
+answers every range that does not start at the first byte with the head of
+the file.
+
+### 10.4 The chunk size that is not about files
+
+The first pass left one thread open: `FUN_005b2ae0` logs "Change chunk size
+to %ld" and stores the value at `in_ECX + 0x3488`, and `FUN_005b1330` (only
+`ntohl`) was assumed to be its producer. The caller of the setter is at
+`0x5b7122`, and that address is in the **RTMP** packet dispatcher
+(`FUN_005b70d0`): its cases are "Flex stream send", "Flex shared object",
+"Flex message" and "shared object", and its unknown case reads "Unknown
+packet type received: 0x%02x".
+
+The chunk size that `FUN_005b2ae0` changes is therefore the chunk size of
+the **RTMP stream**, not the size of a range in an HTTP download. The
+initial split arithmetic of the HTTP downloader is not behind that setter,
+and it was not found elsewhere either.
+
+**What this changes.** The clone does not pretend to know IDM's split rule.
+It splits the file into equal ranges, one per connection, and it adds
+connections while the slowest range lags behind. The number of connections
+that is fastest is a question for a measurement, not for the binary; the
+headless client `crates/idm-cli` measures it.
+
+### 10.5 How many connections a file gets
+
+The function that answers that question is `FUN_005bad00`, the one the
+"Need optional connections." branch calls. It is short enough to read whole,
+and it computes the number of connections from the size of the file:
+
+```c
+uVar5 = *(uint *)(in_ECX + 0x1c0);          // the total size, low word
+iVar7 = *(int *)(in_ECX + 0x1c4);           // the total size, high word
+...
+uVar6 = uVar5 - uVar2;                     // the bytes that are left
+...
+lVar8 = __alldiv(uVar6, iVar7, 0x2800, 0); // the bytes left / 10240
+iVar7 = min(*(int *)(in_ECX + 0x1ac), (int)lVar8);
+iVar4 = *(int *)(in_ECX + 0xf0);           // the connections the user allows
+if ((iVar7 < iVar4) && (iVar7 = ..., iVar4 <= ...)) iVar7 = iVar4;
+if (0x20 < iVar7) iVar7 = 0x20;            // never more than 32
+if (*(int *)(in_ECX + 0x188) != 0) {
+   if (protocol == 2 && 4 < iVar7) iVar7 = 4;
+   else if (8 < iVar7) iVar7 = 8;
+}
+```
+
+**The rule is one connection per 10,240 bytes of the file.** The result is
+capped by the number of connections that are allowed, raised to the number
+the user asked for when that number is the smaller one, and never more than
+32 (or 8, or 4 for one protocol, when a flag is set). When less than
+`0x2801` bytes are left, the number the user asked for is used.
+
+The caller adds the optional connections up to that number: the strings
+"Need optional connections.", "Optional connections not needed.",
+"Optional connections, connecting..." and "Optional connections have been
+created." all belong to that path, and the connections themselves are 15,000
+bytes apart in the session (`iVar5 * 15000`).
+
+**What this changes.** The clone uses the same rule:
+`segmenter::connections_for(total, max)` gives one connection per 10 KB of
+the file, at least one and at most the number that is allowed. A 20 KB file
+is fetched with two connections, a 100 KB file with eight.
+
+### 10.6 One difference from IDM, on purpose
+IDM writes every chunk into its own file at the **absolute** offset of the
+chunk, so a chunk file is a sparse container with a hole in front of it
+("The chunk's byte range and its offset inside the part file are the same
+coordinate system"). The clone writes each range into its own part file
+**from the first byte of that range**, and the part files are joined in
+order.
+
+The reason is the size on the disk: with the absolute layout, the part files
+of a 1 GB download with eight connections hold 1 + 2 + … + 7 parts of
+nothing but holes. The coordinate system of the *download* is unchanged —
+every range still knows where it belongs in the file — but the part files
+hold exactly the bytes of their range, so they can be joined by copying them
+one after the other.
+
+This was a bug before it was a decision: the first version wrote at the
+absolute offset and joined the part files from their first byte, which
+produced a file full of holes for every download with more than one range.
+The test `a_file_of_several_ranges_is_joined_in_the_right_order` in
+`crates/idm-core/src/downloader/tests.rs` covers it.
+
+### 10.7 What the measurement found
+
+The rule for the number of connections was put to the test with the headless
+client (`crates/idm-cli`) against a server that allows ranges. The link was
+throttled and the numbers moved by a factor of five between runs, so the
+measurement does not settle the question of how many connections are
+fastest.
+
+It did find a fault of its own. A run that the server answered `429` left a
+**one byte file** behind: a busy server answers `429` with a body of one
+byte, and the probe read the length of that body as the length of the file.
+The probe now fails on every answer that is not a success, and the download
+waits and asks again — the same rule the other requests follow. The test
+`a_server_that_is_busy_is_not_mistaken_for_a_small_file` covers it.
+
+---
+
 ## 8. How the findings map onto `my-idm-clone`
 
 | Finding | Where it lives in this project |
 |---|---|
-| `Range: bytes=%I64d-%I64d` | `src-tauri/src/downloader.rs` → `fetch_range()` |
-| `Accept-Encoding: identity` | `fetch_range()` and `probe()` |
-| `Content-Range` validation | `fetch_range()` |
-| `ChunksList` | `src-tauri/src/segmenter.rs` → `Segment`, `plan()`, `split()` |
+| `Range: bytes=%I64d-%I64d` | `crates/idm-core/src/http.rs` → `open_range()` |
+| `Accept-Encoding: identity` | `open_range()` and `probe()` |
+| `Content-Range` validation | `open_range()` |
+| `ChunksList` | `crates/idm-core/src/segmenter.rs` → `Segment`, `plan()`, `split()` |
 | `ChunksListItem` (own file per range) | `Segment.part` + `segmenter::part_path()` |
 | Registry `ChList` | `<dest>.idm.json` manifest |
 | Truncate on resume | `restore()` → `file.set_len(segment.downloaded)` |
@@ -442,6 +710,19 @@ Being explicit about the edges of the analysis:
 | `0x600000` chunk memory ceiling | `CHUNK_MEM_LIMIT` (documented constant) |
 | `MaxConnectionsNumber` = 8 | `DEFAULT_CONNECTIONS` |
 | Chunked transfer decoding | handled by `reqwest`; IDM's decoder is documented in this file |
+| The 16 byte chunk record (`ID`, `startPos`, `nextID`) | the manifest in `downloader.rs`; the layout is in section 10.1 |
+| "Chunk order violation error" | `Manifest::is_consistent()` — a list that is out of order is not resumed from |
+| "Try rollback, set chunksize to %I64d" | the part file is cut back to the recorded length |
+| "Strart data for this chunk is matched with start of the file!!!" | `verify.rs` → `verify::check()` |
+| "IDM started to download the file using one connection because of data corruption" | `downloader.rs` → `downgrade_to_one_connection()` |
+| `0x80c` head of the file, `0x200` clean match | `verify::HEAD_BUFFER` and `verify::HEAD_BYTES` |
+| "Too many open network connections." | `limits.rs` → `ConnectionBudget` |
+| `HKCU\Software\DownloadManager\MCN` per site overrides | `limits.rs` → `SiteLimits` |
+| The chunk list under `Software\DownloadManager\<id>\ChList` | the index in `session.rs` and the manifest next to the parts |
+| One connection per `0x2800` bytes | `segmenter::connections_for()` |
+| "Optional connections, connecting..." | `downloader.rs` → `maybe_grow()` |
+| `FTPConnection::StartGetChunk`, `SendRetr` | `ftp.rs` — one data connection per range, `RETR`, `REST` for the offset |
+| `ProxyConnection::Connect`, `CSocks` | `limits.rs` → the proxy of the application, HTTP or SOCKS |
 
 ---
 
