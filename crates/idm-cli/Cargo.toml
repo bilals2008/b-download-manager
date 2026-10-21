@@ -1,0 +1,14 @@
+[package]
+name = "idm-cli"
+version = "0.1.0"
+description = "A headless client for the download engine of my-idm-clone"
+edition = "2021"
+rust-version = "1.77"
+
+[[bin]]
+name = "idm-cli"
+path = "src/main.rs"
+
+[dependencies]
+idm-core = { path = "../idm-core" }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
