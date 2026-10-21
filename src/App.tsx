@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { SettingsDialog } from "@/components/settings/settings-dialog";
 import type { ShellCommand } from "@/components/shell/commands";
 import { TopBar } from "@/components/shell/top-bar";
 import { AboutDialog } from "@/components/workspace/about-dialog";
@@ -12,6 +13,7 @@ export default function App() {
   const downloads = useDownloads();
   const [categoriesVisible, setCategoriesVisible] = useState(true);
   const [addDownloadOpen, setAddDownloadOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
 
   function handleCommand(command: ShellCommand) {
@@ -24,6 +26,9 @@ export default function App() {
         break;
       case "add-download":
         setAddDownloadOpen(true);
+        break;
+      case "options":
+        setSettingsOpen(true);
         break;
       case "about":
         setAboutOpen(true);
@@ -90,10 +95,17 @@ export default function App() {
           categories: categoriesVisible ? "Hide categories" : "Show categories",
         }}
       />
-      <Workspace categoriesVisible={categoriesVisible} />
+      <Workspace
+        categoriesVisible={categoriesVisible}
+        onAddDownload={() => setAddDownloadOpen(true)}
+      />
       <AddDownloadDialog
         open={addDownloadOpen}
         onClose={() => setAddDownloadOpen(false)}
+      />
+      <SettingsDialog
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
       />
       <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
     </div>

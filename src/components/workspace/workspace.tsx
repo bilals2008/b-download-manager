@@ -5,13 +5,15 @@ import { StatusBar } from "@/components/workspace/status-bar";
 interface WorkspaceProps {
   /** The View menu hides the categories pane in IDM, so it is app state. */
   categoriesVisible: boolean;
+  /** Opens the "Add new download" dialog from the empty state. */
+  onAddDownload: () => void;
 }
 
 /**
  * The area below the toolbar: the categories pane, the download list and the
  * status bar.
  */
-export function Workspace({ categoriesVisible }: WorkspaceProps) {
+export function Workspace({ categoriesVisible, onAddDownload }: WorkspaceProps) {
   return (
     <main
       aria-label="Download workspace"
@@ -19,7 +21,7 @@ export function Workspace({ categoriesVisible }: WorkspaceProps) {
     >
       <div className="flex min-h-0 flex-1">
         {categoriesVisible ? <CategoriesPane /> : null}
-        <DownloadList />
+        <DownloadList onAddDownload={onAddDownload} />
       </div>
       <StatusBar />
     </main>

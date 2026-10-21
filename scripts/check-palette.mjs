@@ -1,9 +1,9 @@
 // Palette gate. Reads the colour tokens straight out of src/index.css and
 // checks the foreground/background pairs the product actually uses against
-// WCAG 2.2. Run it with `npm run check:palette`.
+// WCAG 2.2, once per theme. Run it with `npm run check:palette`.
 //
 // Exits non-zero when a required pair fails, so a colour change cannot land
-// without a contrast check.
+// without a contrast check in either appearance.
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath, URL } from "node:url";
@@ -13,10 +13,26 @@ const css = readFileSync(
   "utf8",
 );
 
-const tokens = {};
-for (const match of css.matchAll(/--([a-z-]+):\s*(#[0-9a-fA-F]{6})\s*;/g)) {
-  tokens[match[1]] = match[2];
+function tokensIn(text) {
+  const map = {};
+  for (const match of text.matchAll(/--([a-z-]+):\s*(#[0-9a-fA-F]{6})\s*;/g)) {
+    map[match[1]] = match[2];
+  }
+  return map;
 }
+
+// The dark tokens are the base; the light block overrides a subset of them.
+const lightStart = css.indexOf("@media (prefers-color-scheme: light)");
+if (lightStart === -1) {
+  console.error("MISSING  @media (prefers-color-scheme: light) theme block");
+  process.exit(1);
+}
+const dark = tokensIn(css.slice(0, lightStart));
+const light = { ...dark, ...tokensIn(css.slice(lightStart)) };
+const THEMES = [
+  ["dark", dark],
+  ["light", light],
+];
 
 function channel(value) {
   const srgb = value / 255;
@@ -77,28 +93,38 @@ const REQUIRED = [
   ["chrome-focus", "chrome-canvas", 3, "focus ring in the download list"],
   ["chrome-error", "chrome-popup", 4.5, "validation message in a dialog"],
   ["chrome-menu-text", "chrome-popup", 4.5, "dialog text"],
+  ["icon-green-bright", "chrome-canvas", 3, "downloading icon and bar"],
+  ["icon-green", "chrome-canvas", 3, "finished icon"],
+  ["icon-red-bright", "chrome-canvas", 3, "error icon and bar"],
+  ["icon-blue-bright", "chrome-canvas", 3, "paused icon and bar"],
+  ["icon-purple-bright", "chrome-canvas", 3, "music category icon"],
+  ["icon-amber", "chrome-canvas", 3, "queued and document icons"],
+  ["icon-silver", "chrome-canvas", 3, "archive and other icons"],
 ];
 
 let failed = 0;
-for (const [fg, bg, min, label] of REQUIRED) {
-  const a = tokens[fg];
-  const b = tokens[bg];
-  if (!a || !b) {
-    console.error(`MISSING  ${label}: --${fg} / --${bg}`);
-    failed += 1;
-    continue;
+for (const [theme, tokens] of THEMES) {
+  console.log(`\n${theme} appearance`);
+  for (const [fg, bg, min, label] of REQUIRED) {
+    const a = tokens[fg];
+    const b = tokens[bg];
+    if (!a || !b) {
+      console.error(`MISSING  ${label}: --${fg} / --${bg}`);
+      failed += 1;
+      continue;
+    }
+    const value = ratio(a, b);
+    const ok = value >= min;
+    if (!ok) failed += 1;
+    console.log(
+      `${ok ? "PASS" : "FAIL"}  ${value.toFixed(2).padStart(5)}:1  (min ${min})  ${label}`,
+    );
   }
-  const value = ratio(a, b);
-  const ok = value >= min;
-  if (!ok) failed += 1;
-  console.log(
-    `${ok ? "PASS" : "FAIL"}  ${value.toFixed(2).padStart(5)}:1  (min ${min})  ${label}`,
-  );
 }
 
 console.log(
   failed === 0
-    ? `\nall ${REQUIRED.length} pairs pass`
-    : `\n${failed} of ${REQUIRED.length} pairs fail`,
+    ? `\nall ${REQUIRED.length} pairs pass in both appearances`
+    : `\n${failed} of ${REQUIRED.length * THEMES.length} pairs fail`,
 );
 process.exit(failed === 0 ? 0 : 1);

@@ -86,6 +86,8 @@ export const MENUS: MenuDefinition[] = [
       { command: "find-next", label: "Find Next", shortcut: "F3", disabled: true },
       { command: "scheduler", label: "Scheduler", disabled: true },
       "separator",
+      { command: "options", label: "Options..." },
+      "separator",
       {
         command: "start-queue",
         label: "Start queue",

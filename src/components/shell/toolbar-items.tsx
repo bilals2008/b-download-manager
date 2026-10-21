@@ -31,7 +31,7 @@ export const TOOLBAR_ITEMS: ToolbarItem[] = [
   { command: "stop-all", label: "Stop All", icon: StopAllIcon },
   { command: "delete", label: "Delete", icon: DeleteIcon },
   { command: "delete-completed", label: "Delete Completed", icon: DeleteCompletedIcon },
-  { command: "options", label: "Options", icon: OptionsIcon, disabled: true },
+  { command: "options", label: "Options", icon: OptionsIcon },
   { command: "scheduler", label: "Scheduler", icon: SchedulerIcon, disabled: true },
   { command: "start-queue", label: "Start Queue", icon: StartQueueIcon },
   { command: "stop-queue", label: "Stop Queue", icon: StopQueueIcon },

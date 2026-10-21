@@ -1,77 +1,80 @@
 @import "tailwindcss";
 
 /*
-  One theme, one source of truth.
+  One theme, one source of truth, and it follows the operating system.
 
-  The palette is warm and soft on purpose: paper, sand and clay, with a single
-  sage accent that is only ever used for "finished". There is no second
-  accent hue, no gradient and no cool grey anywhere in the product.
+  Two blocks define the same semantic tokens: the dark block below is the
+  original void-black-and-lime view, and the light block overrides the same
+  names when the system asks for a light appearance. Components never ask which
+  theme is active; they read the tokens and the media query does the switching.
 
-  The hex values below are the ones the palette checker
-  (`npm run check:palette`) verifies for WCAG contrast, so change them there
-  and here together, or run the checker.
+  Lime is the only action colour; green marks finished work and red destroys.
+  The hex values are the ones the palette checker (`npm run check:palette`)
+  verifies for WCAG contrast in both themes, so change them there and here
+  together, or run the checker.
 */
 :root {
+  color-scheme: dark;
+
   --radius: 0.75rem;
 
-  /* warm paper neutrals */
-  --background: #f7f3ec;
-  --foreground: #33291f;
-  --card: #fdfbf7;
-  --card-foreground: #33291f;
-  --popover: #fdfbf7;
-  --popover-foreground: #33291f;
+  /* pure black, tinted blacks, no neutral grey */
+  --background: #000000;
+  --foreground: #eef4e9;
+  --card: #060906;
+  --card-foreground: #eef4e9;
+  --popover: #060906;
+  --popover-foreground: #eef4e9;
 
-  /* clay is the only action colour */
-  --primary: #a94e36;
-  --primary-foreground: #fdf8f2;
+  /* lime is the only action colour */
+  --primary: #a8f04a;
+  --primary-foreground: #08130a;
 
-  --secondary: #f0e7db;
-  --secondary-foreground: #4a3b2c;
+  --secondary: #101a0c;
+  --secondary-foreground: #dcead2;
 
-  --muted: #f1ebe2;
-  --muted-foreground: #6e6256;
+  --muted: #0b120a;
+  --muted-foreground: #b3c4a8;
 
-  --accent: #e9e3d5;
-  --accent-foreground: #453629;
+  --accent: #16230e;
+  --accent-foreground: #dcead2;
 
-  /* sage marks finished work and nothing else */
-  --success: #4f6b4c;
-  --success-foreground: #f6f8f3;
+  /* green marks finished work and nothing else */
+  --success: #2fd06b;
+  --success-foreground: #04130a;
 
-  --destructive: #b4514b;
-  --destructive-foreground: #fdf6f4;
+  --destructive: #d63a3a;
+  --destructive-foreground: #ffffff;
 
-  --border: #e5dccf;
-  --input: #948572;
-  --ring: #a94e36;
+  --border: #1b2716;
+  --input: #5f7a52;
+  --ring: #a8f04a;
 
   /*
-    Application chrome. The download manager is a desktop tool, so its window
-    furniture is a dark neutral family of its own: title bar, menu bar, toolbar
-    and the workspace behind them. Every text pair below is checked by
-    `npm run check:palette`.
+    Application chrome. Window furniture is black as well, separated by
+    hairlines; hover and open states are a darker or lighter green-black, never
+    a grey. Every text pair below is checked by `npm run check:palette`.
   */
-  --chrome-title: #191919;
-  --chrome-title-text: #d9d9d9;
-  --chrome-menu: #262626;
-  --chrome-menu-text: #e8e8e8;
-  --chrome-menu-hover: #3a3a3a;
-  --chrome-menu-active: #474747;
-  --chrome-toolbar: #333333;
-  --chrome-toolbar-text: #e6e6e6;
-  --chrome-toolbar-hover: #424242;
-  --chrome-toolbar-active: #282828;
-  --chrome-popup: #2b2b2b;
-  --chrome-popup-hover: #3d3d3d;
-  --chrome-muted: #bdbdbd;
-  --chrome-canvas: #1b1b1b;
-  --chrome-panel: #232323;
-  --chrome-line: #474747;
-  --chrome-focus: #8cc63f;
+  --chrome-title: #000000;
+  --chrome-title-text: #eef4e9;
+  --chrome-menu: #000000;
+  --chrome-menu-text: #eef4e9;
+  --chrome-menu-hover: #101b09;
+  --chrome-menu-active: #18270d;
+  --chrome-toolbar: #040604;
+  --chrome-toolbar-text: #eef4e9;
+  --chrome-toolbar-hover: #101b09;
+  --chrome-toolbar-active: #18270d;
+  --chrome-popup: #060906;
+  --chrome-popup-hover: #16230e;
+  --chrome-muted: #b3c4a8;
+  --chrome-canvas: #000000;
+  --chrome-panel: #030503;
+  --chrome-line: #1b2716;
+  --chrome-focus: #a8f04a;
   --chrome-danger: #c42b1c;
   --chrome-danger-text: #ffffff;
-  --chrome-error: #ff9a8c;
+  --chrome-error: #ff8f80;
 
   /* Toolbar artwork. These are illustration tints, not UI semantics. */
   --icon-green: #6cb52e;
@@ -93,12 +96,97 @@
   --icon-amber-bright: #f2bf62;
 }
 
+/*
+  Light appearance, chosen by the operating system. Same tokens, same names:
+  warm off-white surfaces with green-grey hairlines, near-black text, and the
+  lime accent kept for primary actions where it still carries dark text. Focus
+  rings, borders and icon tints darken so they stay visible on light surfaces.
+*/
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+
+    --background: #f6f8f2;
+    --foreground: #12170d;
+    --card: #fbfcf8;
+    --card-foreground: #12170d;
+    --popover: #ffffff;
+    --popover-foreground: #12170d;
+
+    --primary: #a8f04a;
+    --primary-foreground: #0a1406;
+
+    --secondary: #e6eddd;
+    --secondary-foreground: #1c2615;
+
+    --muted: #ecefe7;
+    --muted-foreground: #4c5a45;
+
+    --accent: #dcefc4;
+    --accent-foreground: #1b2a10;
+
+    --success: #2fd06b;
+    --success-foreground: #04130a;
+
+    --destructive: #c42b1c;
+    --destructive-foreground: #ffffff;
+
+    --border: #d3dcc9;
+    --input: #66795a;
+    --ring: #3f7419;
+
+    --chrome-title: #e9eee2;
+    --chrome-title-text: #12170d;
+    --chrome-menu: #eef2e9;
+    --chrome-menu-text: #12170d;
+    --chrome-menu-hover: #e1e8d7;
+    --chrome-menu-active: #d5e4c0;
+    --chrome-toolbar: #f4f6f0;
+    --chrome-toolbar-text: #12170d;
+    --chrome-toolbar-hover: #e3e9da;
+    --chrome-toolbar-active: #d5e4c0;
+    --chrome-popup: #ffffff;
+    --chrome-popup-hover: #eef3e7;
+    --chrome-muted: #4c5a45;
+    --chrome-canvas: #f8faf5;
+    --chrome-panel: #eef2e9;
+    --chrome-line: #d3dcc9;
+    --chrome-focus: #3f7419;
+    --chrome-danger: #c42b1c;
+    --chrome-danger-text: #ffffff;
+    --chrome-error: #a8221a;
+
+    /* Artwork tints darkened so the same drawings read on a light surface. */
+    --icon-green: #4f8a1f;
+    --icon-green-bright: #356b0f;
+    --icon-green-deep: #2a510c;
+    --icon-red: #b93227;
+    --icon-red-bright: #a8281d;
+    --icon-red-deep: #7c1f18;
+    --icon-silver: #5b656c;
+    --icon-silver-bright: #d5dbe0;
+    --icon-silver-deep: #3f484e;
+    --icon-purple: #7052ad;
+    --icon-purple-bright: #5b3f94;
+    --icon-purple-deep: #3c2a63;
+    --icon-blue: #4a63a8;
+    --icon-blue-bright: #3d5498;
+    --icon-blue-deep: #2f4176;
+    --icon-amber: #8a5906;
+    --icon-amber-bright: #9c6608;
+  }
+}
+
 @theme inline {
   --radius-sm: calc(var(--radius) - 5px);
   --radius-md: calc(var(--radius) - 3px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
   --radius-chrome: 3px;
+
+  /* Secondary metadata, one step below the body size. */
+  --text-chrome-micro: 0.6875rem;
+  --text-chrome-micro--line-height: 1rem;
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -150,6 +238,7 @@
   --color-icon-red-bright: var(--icon-red-bright);
   --color-icon-amber: var(--icon-amber);
   --color-icon-blue-bright: var(--icon-blue-bright);
+  --color-icon-purple-bright: var(--icon-purple-bright);
   --color-icon-silver: var(--icon-silver);
 }
 

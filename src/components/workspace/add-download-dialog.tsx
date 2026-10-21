@@ -1,8 +1,17 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { LoaderCircle } from "lucide-react";
 
 import { Dialog } from "@/components/ui/dialog";
 import { ListBox } from "@/components/ui/listbox";
-import { CATEGORIES, type CategoryName } from "@/lib/downloads";
+import {
+  CATEGORIES,
+  fileNameFromUrl,
+  sanitizeFileName,
+  splitPath,
+  type CategoryName,
+} from "@/lib/downloads";
+import { describeError } from "@/lib/errors";
+import { defaultDestination } from "@/lib/ipc";
 import { useDownloads } from "@/state/download-store";
 
 interface AddDownloadDialogProps {
@@ -27,44 +36,83 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
   const [category, setCategory] = useState<CategoryName>("General");
   const [savePath, setSavePath] = useState("C:\\Downloads");
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  // Start from the real Downloads folder instead of a guess.
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    let active = true;
+    defaultDestination()
+      .then((destination) => {
+        if (!active) {
+          return;
+        }
+        const folder = splitPath(destination).dir;
+        setSavePath(folder || ".");
+      })
+      .catch(() => {
+        // The dialog still works with the typed folder when the engine cannot
+        // answer, which is also what happens in a plain browser window.
+      });
+    return () => {
+      active = false;
+    };
+  }, [open]);
 
   function reset() {
     setUrl("");
     setFileName("");
     setCategory("General");
-    setSavePath("C:\\Downloads");
     setError(null);
   }
 
-  function submit(event: React.FormEvent) {
+  function close() {
+    reset();
+    onClose();
+  }
+
+  async function submit(event: React.FormEvent) {
     event.preventDefault();
+    if (busy) {
+      return;
+    }
     const trimmed = url.trim();
     if (!/^https?:\/\/\S+$/i.test(trimmed)) {
       setError("Enter the full address of the file, starting with http:// or https://.");
       return;
     }
-    const name = fileName.trim() || trimmed.split("/").pop() || "download";
-    addDownload({ url: trimmed, fileName: name, category, savePath: savePath.trim() });
-    reset();
-    onClose();
+    const folder = savePath.trim();
+    if (!folder) {
+      setError("Choose the folder the file should be saved to.");
+      return;
+    }
+
+    const name = sanitizeFileName(fileName.trim() || fileNameFromUrl(trimmed));
+    setBusy(true);
+    setError(null);
+    try {
+      await addDownload({ url: trimmed, fileName: name, category, savePath: folder });
+      reset();
+      onClose();
+    } catch (failure) {
+      setError(describeError(failure));
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
     <Dialog
       open={open}
       title="Add new download"
-      onClose={() => {
-        reset();
-        onClose();
-      }}
+      onClose={close}
       footer={
         <>
           <button
             type="button"
-            onClick={() => {
-              reset();
-              onClose();
-            }}
+            onClick={close}
             className="rounded-chrome border border-chrome-line px-3 py-1 text-xs text-chrome-menu-text hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
           >
             Cancel
@@ -72,14 +120,26 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
           <button
             type="submit"
             form="add-download-form"
-            className="rounded-chrome bg-chrome-menu-active px-3 py-1 text-xs text-chrome-title-text hover:bg-chrome-popup-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
+            disabled={busy}
+            className="inline-flex items-center gap-1.5 rounded-chrome bg-chrome-menu-active px-3 py-1 text-xs text-chrome-title-text hover:bg-chrome-popup-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none disabled:opacity-60"
           >
-            OK
+            {busy ? (
+              <LoaderCircle
+                className="size-3.5 motion-safe:animate-spin"
+                aria-hidden="true"
+              />
+            ) : null}
+            {busy ? "Starting…" : "OK"}
           </button>
         </>
       }
     >
-      <form id="add-download-form" onSubmit={submit} className="flex flex-col gap-3">
+      <form
+        id="add-download-form"
+        onSubmit={submit}
+        aria-busy={busy}
+        className="flex flex-col gap-3"
+      >
         <div>
           <label htmlFor="add-url" className={LABEL}>
             Address of the file
@@ -108,7 +168,7 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
             placeholder="Taken from the address when left empty"
           />
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <span className={LABEL}>Category</span>
             <ListBox
@@ -120,7 +180,7 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
           </div>
           <div>
             <label htmlFor="add-path" className={LABEL}>
-              Save to
+              Save to folder
             </label>
             <input
               id="add-path"

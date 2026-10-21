@@ -28,6 +28,10 @@ Done items stay in the list as a record of what is already standing.
 ## Download list
 
 - [x] Columns File name, Size, Progress, Speed, Time left, Status
+- [x] Rows come from the Rust engine; the list starts empty and fills as downloads run
+- [x] Loading, empty, no-results and engine-error states
+- [x] Drag-resizable columns, with arrow-key resizing and a double-click reset
+- [x] Expandable row details: address, destination, category, connections, received, added, error
 - [x] Sort by every column, click a header to flip the direction
 - [x] Row selection, Ctrl+click to add to the selection
 - [x] Progress bar, transfer rate, time left, status with a dot and a word
@@ -61,6 +65,7 @@ Done items stay in the list as a record of what is already standing.
 ## Adding downloads
 
 - [x] Add new download dialog with URL, file name, category listbox and save path
+- [x] The dialog starts a real engine download and reports a failed start inline
 - [x] The category picker is an ARIA listbox, not a native select
 - [x] Validation on the URL, inline error message
 - [ ] Read the real file name, size and category from the server headers
@@ -80,7 +85,10 @@ Done items stay in the list as a record of what is already standing.
 ## Dialogs and window furniture
 
 - [x] About IDM box
-- [ ] Options dialog, with the Categories page
+- [x] Options dialog shell, with the General page (startup preferences, browser capture list)
+- [ ] Remaining Options pages: File types, Save to, Downloads, Connection, Proxy / Socks, Sites Logins, Dial Up / VPN, Sounds
+- [ ] Browser integration behind the General page: detection, Restart, Add browser, keys and context-menu editors
+- [ ] Apply the startup and clipboard preferences through the operating system
 - [ ] Scheduler dialog
 - [ ] Registration and Order online
 - [ ] Tell a friend, Tip of the Day, Tutorials, Grabber Help

@@ -28,9 +28,9 @@ export function AboutDialog({ open, onClose }: AboutDialogProps) {
         <p className="text-sm text-chrome-title-text">Internet Download Manager 6.43</p>
         <p>
           A rebuild of the IDM 6.43 interface, written from the strings and the
-          behaviour of the original program. The download engine is not part of
-          this build: downloads are simulated, so the list, the categories pane
-          and the queue behave but nothing reaches the network.
+          behaviour of the original program. The Rust engine behind this window
+          splits each file into ranged chunks, resumes from its manifest and
+          reports its real size, speed and progress to this list.
         </p>
         <p className="text-chrome-muted">
           Internet Download Manager is a trademark of Tonec Inc. This is an
