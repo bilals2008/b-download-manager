@@ -18,6 +18,11 @@ export const FONT_OPTIONS: FontOption[] = [
     note: "Neutral screen face. The default.",
   },
   {
+    value: "googlesans",
+    label: "Google Sans",
+    note: "Google's own face: geometric and even.",
+  },
+  {
     value: "geist",
     label: "Geist",
     note: "Geometric, slightly tighter.",

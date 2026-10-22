@@ -325,7 +325,7 @@ export function CategoriesPane() {
         </button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-1.5 py-2">
+      <div className="scrollbar-none min-h-0 flex-1 overflow-y-auto px-1.5 py-2">
         {collapsed ? null : <SectionLabel>Downloads</SectionLabel>}
         <ul className="flex flex-col gap-px">{viewRows.map(renderRow)}</ul>
 

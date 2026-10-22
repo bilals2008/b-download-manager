@@ -132,6 +132,7 @@ export type ThemePreference = "auto" | "light" | "dark";
 export type UiFont =
   | "inter"
   | "geist"
+  | "googlesans"
   | "dmsans"
   | "jakarta"
   | "instrument"
@@ -142,6 +143,7 @@ export type UiFont =
 const UI_FONTS: readonly UiFont[] = [
   "inter",
   "geist",
+  "googlesans",
   "dmsans",
   "jakarta",
   "instrument",
