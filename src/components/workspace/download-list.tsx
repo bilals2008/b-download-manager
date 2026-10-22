@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   AlertTriangle,
   ChevronDown,
@@ -11,9 +11,10 @@ import {
 } from "lucide-react";
 
 import { DOWNLOAD_COLUMNS } from "@/components/workspace/download-columns";
+import { DownloadContextMenu } from "@/components/workspace/download-context-menu";
 import { DownloadRow } from "@/components/workspace/download-row";
 import { useColumnWidths } from "@/components/workspace/use-column-widths";
-import type { SortKey } from "@/lib/downloads";
+import type { Download, SortKey } from "@/lib/downloads";
 import { cn } from "@/lib/utils";
 import { useDownloads } from "@/state/download-store";
 
@@ -44,6 +45,32 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
   const { widths, tableRef, beginResize, moveResize, endResize, resizeBy, resetWidths } =
     useColumnWidths(DOWNLOAD_COLUMNS);
   const [expanded, setExpanded] = useState<number[]>([]);
+  // The row whose menu is open, and where the pointer was.
+  const [menu, setMenu] = useState<{
+    item: Download;
+    at: { x: number; y: number };
+  } | null>(null);
+  // The control that opened the menu, so the focus goes back to it.
+  const menuTrigger = useRef<HTMLElement | null>(null);
+
+  function openMenu(
+    item: Download,
+    at: { x: number; y: number },
+    trigger: HTMLElement | null,
+  ) {
+    menuTrigger.current = trigger;
+    // A right click acts on the row under the pointer, so that row joins the
+    // selection when it was not in it.
+    if (!selected.includes(item.id)) {
+      toggleSelect(item.id, false);
+    }
+    setMenu({ item, at });
+  }
+
+  function closeMenu() {
+    setMenu(null);
+    menuTrigger.current?.focus();
+  }
 
   function toggleExpanded(id: number) {
     setExpanded((current) =>
@@ -280,12 +307,21 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
                   expanded={expanded.includes(item.id)}
                   onSelect={(additive) => toggleSelect(item.id, additive)}
                   onToggleExpand={() => toggleExpanded(item.id)}
+                  onOpenMenu={(at, trigger) => openMenu(item, at, trigger)}
                 />
               ))
             )}
           </tbody>
         </table>
       </div>
+
+      {menu ? (
+        <DownloadContextMenu
+          item={menu.item}
+          at={menu.at}
+          onClose={closeMenu}
+        />
+      ) : null}
     </section>
   );
 }

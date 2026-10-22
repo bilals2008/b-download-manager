@@ -51,3 +51,27 @@ export function saveSettings(settings: Settings): void {
     // Storage can be blocked; the dialog still closes with the chosen values.
   }
 }
+
+/** The size of the toolbar buttons, the way IDM keeps it in the View menu. */
+export type ToolbarSize = "large" | "small";
+
+const TOOLBAR_KEY = "idm-clone.toolbar-size.v1";
+
+/** Read the saved toolbar size, falling back to the large one. */
+export function loadToolbarSize(): ToolbarSize {
+  try {
+    return window.localStorage.getItem(TOOLBAR_KEY) === "small"
+      ? "small"
+      : "large";
+  } catch {
+    return "large";
+  }
+}
+
+export function saveToolbarSize(size: ToolbarSize): void {
+  try {
+    window.localStorage.setItem(TOOLBAR_KEY, size);
+  } catch {
+    // Storage can be blocked; the toolbar still changes for this session.
+  }
+}

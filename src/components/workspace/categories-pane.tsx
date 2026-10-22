@@ -8,6 +8,7 @@ import {
   type LucideProps,
 } from "lucide-react";
 
+import { CategoryContextMenu } from "@/components/workspace/category-context-menu";
 import {
   CATEGORIES,
   type DownloadFilter,
@@ -24,6 +25,8 @@ interface Entry {
   label: string;
   icon: Icon;
   tint?: string;
+  /** True for a category folder, false for the three groups above them. */
+  isFolder?: boolean;
 }
 
 const GROUPS: Entry[] = [
@@ -37,6 +40,7 @@ const FOLDERS: Entry[] = CATEGORIES.map((category) => ({
   label: category,
   icon: CATEGORY_ICONS[category].icon,
   tint: CATEGORY_ICONS[category].tint,
+  isFolder: true,
 }));
 
 const ENTRIES: Entry[] = [...GROUPS, ...FOLDERS];
@@ -50,7 +54,24 @@ export function CategoriesPane() {
   const { filter, setFilter, counts } = useDownloads();
   const [collapsed, setCollapsed] = useState(false);
   const [focusIndex, setFocusIndex] = useState<number | null>(null);
+  // The category whose menu is open, and where the pointer was.
+  const [menu, setMenu] = useState<{
+    filter: DownloadFilter;
+    isFolder: boolean;
+    at: { x: number; y: number };
+  } | null>(null);
   const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  function openMenu(
+    entry: Entry,
+    at: { x: number; y: number },
+  ) {
+    setMenu({
+      filter: entry.id,
+      isFolder: entry.isFolder ?? false,
+      at,
+    });
+  }
 
   function focusItem(index: number) {
     const next = (index + ENTRIES.length) % ENTRIES.length;
@@ -79,6 +100,10 @@ export function CategoriesPane() {
         event.preventDefault();
         focusItem(ENTRIES.length - 1);
         break;
+      case "ContextMenu":
+        event.preventDefault();
+        openMenu(ENTRIES[index], menuSpot(event.currentTarget));
+        break;
     }
   }
 
@@ -104,6 +129,7 @@ export function CategoriesPane() {
             setFocusIndex(index);
             setFilter(entry.id);
           }}
+          onOpenMenu={(at) => openMenu(entry, at)}
           onFocus={() => setFocusIndex(index)}
           onKeyDown={(event) => handleKeyDown(event, index)}
         />
@@ -158,6 +184,14 @@ export function CategoriesPane() {
         <ul className="flex flex-col gap-0.5">{FOLDERS.map((entry, index) => renderEntry(entry, index + GROUPS.length))}</ul>
       </div>
 
+      {menu ? (
+        <CategoryContextMenu
+          filter={menu.filter}
+          isFolder={menu.isFolder}
+          at={menu.at}
+          onClose={() => setMenu(null)}
+        />
+      ) : null}
     </nav>
   );
 }
@@ -189,6 +223,8 @@ interface FilterItemProps {
   tabIndex: number;
   buttonRef: (node: HTMLButtonElement | null) => void;
   onSelect: () => void;
+  /** Open the menu of the category, the way a right click does. */
+  onOpenMenu: (at: { x: number; y: number }) => void;
   onFocus: () => void;
   onKeyDown: (event: KeyboardEvent<HTMLButtonElement>) => void;
 }
@@ -201,6 +237,7 @@ function FilterItem({
   tabIndex,
   buttonRef,
   onSelect,
+  onOpenMenu,
   onFocus,
   onKeyDown,
 }: FilterItemProps) {
@@ -214,6 +251,10 @@ function FilterItem({
       title={collapsed ? `${entry.label} (${count})` : undefined}
       tabIndex={tabIndex}
       onClick={onSelect}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        onOpenMenu({ x: event.clientX, y: event.clientY });
+      }}
       onFocus={onFocus}
       onKeyDown={onKeyDown}
       className={cn(
@@ -255,4 +296,10 @@ function FilterItem({
       )}
     </button>
   );
+}
+
+/** Where the menu of a category opens when the keyboard asked for it. */
+function menuSpot(element: HTMLElement): { x: number; y: number } {
+  const box = element.getBoundingClientRect();
+  return { x: box.left, y: box.bottom };
 }

@@ -1,6 +1,7 @@
 import {
   useEffect,
   useId,
+  useRef,
   useState,
   type ComponentType,
   type ReactNode,
@@ -60,6 +61,8 @@ interface DownloadRowProps {
   columnCount: number;
   onSelect: (additive: boolean) => void;
   onToggleExpand: () => void;
+  /** Open the menu of the row, the way a right click does. */
+  onOpenMenu: (at: { x: number; y: number }, trigger: HTMLElement | null) => void;
 }
 
 /**
@@ -74,8 +77,10 @@ export function DownloadRow({
   columnCount,
   onSelect,
   onToggleExpand,
+  onOpenMenu,
 }: DownloadRowProps) {
   const detailsId = useId();
+  const nameRef = useRef<HTMLButtonElement>(null);
   const fileType = CATEGORY_ICONS[item.category];
   const FileIcon = fileType.icon;
   const status = STATUS_STYLE[item.status];
@@ -83,11 +88,33 @@ export function DownloadRow({
   const percent = progressOf(item);
   const knownSize = item.size > 0;
 
+  /** The menu of a row opens at the pointer, or at the row for the keyboard. */
+  function openMenu(at?: { x: number; y: number }) {
+    const box = nameRef.current?.getBoundingClientRect();
+    onOpenMenu(
+      at ?? { x: box?.left ?? 0, y: box?.bottom ?? 0 },
+      nameRef.current,
+    );
+  }
+
   return (
     <>
       <tr
         aria-selected={selected}
         onClick={(event) => onSelect(event.ctrlKey || event.metaKey)}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          openMenu({ x: event.clientX, y: event.clientY });
+        }}
+        onKeyDown={(event) => {
+          if (
+            event.key === "ContextMenu" ||
+            (event.shiftKey && event.key === "F10")
+          ) {
+            event.preventDefault();
+            openMenu();
+          }
+        }}
         className={cn(
           "cursor-default border-b border-chrome-line/60 transition-colors",
           selected
@@ -125,6 +152,7 @@ export function DownloadRow({
             </span>
 
             <button
+              ref={nameRef}
               type="button"
               title={item.url}
               onClick={(event) => {

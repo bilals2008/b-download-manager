@@ -67,10 +67,14 @@ export interface DownloadStore {
   /** Engine or action error, shown above the list. */
   error: string | null;
   dismissError: () => void;
+  /** Show an error that came from an action outside the list. */
+  reportError: (message: string) => void;
   reload: () => void;
   setFilter: (filter: DownloadFilter) => void;
   toggleSelect: (id: number, additive: boolean) => void;
   selectAll: () => void;
+  /** Select every download a category filter matches. */
+  selectByFilter: (filter: DownloadFilter) => void;
   clearSelection: () => void;
   sortBy: (key: SortKey) => void;
   applyToSelection: (action: DownloadAction) => void;
@@ -324,6 +328,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
     loading,
     error,
     dismissError: () => setError(null),
+    reportError: (message: string) => setError(message),
     reload,
     setFilter: (filter) =>
       setState((current) => ({
@@ -352,6 +357,13 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
       setState((current) => ({
         ...current,
         selected: visible.map((item) => item.id),
+      })),
+    selectByFilter: (filter) =>
+      setState((current) => ({
+        ...current,
+        selected: filterDownloads(current.downloads, filter).map(
+          (item) => item.id,
+        ),
       })),
     clearSelection: () => setState((current) => ({ ...current, selected: [] })),
     sortBy: (key) =>

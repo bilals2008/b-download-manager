@@ -40,3 +40,8 @@ export function removeDownload(id: number): Promise<void> {
 export function defaultDestination(): Promise<string> {
   return invoke<string>("default_destination");
 }
+
+/** Open a file or a folder with the program the system uses for it. */
+export function openPath(path: string): Promise<void> {
+  return invoke<void>("open_path", { path });
+}

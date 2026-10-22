@@ -48,8 +48,8 @@ src/
   lib/           framework-free helpers (ipc, window, formatting)
   state/         React state containers
   components/
-    shell/       title bar, menu bar, toolbar (one file each)
-    workspace/   panes, tables, dialogs (one file each)
+    shell/       title bar, menu bar, toolbar, the popup menu they share
+    workspace/   panes, tables, dialogs, the context menus (one file each)
     ui/          shadcn/ui primitives
 ```
 
@@ -84,9 +84,10 @@ second `onDoubleClick` toggler, it cancels itself out.
 ## Theme
 
 Single source of truth: `src/index.css` (CSS variables + `@theme inline`), read
-by `scripts/check-palette.mjs`. Warm paper/clay workspace, dark chrome family,
-sage only for completed. Changing a colour means changing it there and
-re-running `npm run check:palette`.
+by `scripts/check-palette.mjs`. Black chrome with one lime action colour, a
+light appearance that follows the system, and green only for finished work.
+Changing a colour means changing it there and re-running
+`npm run check:palette`.
 
 Theme references:
 

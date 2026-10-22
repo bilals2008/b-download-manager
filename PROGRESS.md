@@ -9,7 +9,8 @@ Done items stay in the list as a record of what is already standing.
 - [x] Menu bar with IDM's real menus, nested submenus, Alt+key access, hover switching
 - [x] Toolbar with 11 hand-drawn SVG icons, roving tabindex, tooltips
 - [x] Toolbar and menu items that have no screen yet are greyed out instead of dead
-- [ ] Toolbar button size setting (Large / Small Buttons) actually changes the icons
+- [x] Toolbar button size setting (Large / Small Buttons) actually changes the icons
+      — the size is kept between sessions and the menu ticks the one in use
 - [ ] Toolbar customization dialog, icon picker, drag to reorder
 
 ## Categories pane (the sidebar)
@@ -23,7 +24,8 @@ Done items stay in the list as a record of what is already standing.
 - [ ] Add, rename and delete a custom category (IDM: Add category, Editing category properties)
 - [ ] Per-category default folder, file type rules and site rules
 - [ ] Persist the tree state, IDM stores it under `Software\DownloadManager\FoldersTree`
-- [ ] Right-click menu on a category with the IDM entries
+- [x] Right-click menu on a category: Select all downloads works; the entries
+      that need editable categories stay greyed out until they exist
 
 ## Download list
 
@@ -37,7 +39,9 @@ Done items stay in the list as a record of what is already standing.
 - [x] Progress bar, transfer rate, time left, status with a dot and a word
 - [ ] Delete key on a selection, Shift+click for a range
 - [ ] Inline edit of file name and save path
-- [ ] Context menu on a row with the IDM entries
+- [x] Context menu on a row with the IDM entries: Resume, Pause, Stop,
+      Redownload, Remove, Open file, Open containing folder; Properties stays
+      greyed out until there is a properties window
 - [ ] Column chooser and drag to reorder (IDM: Customize URL List, Columns)
 - [ ] Show file description, referer and parent web page columns
 - [ ] Group the list by category or by date
@@ -48,7 +52,8 @@ Done items stay in the list as a record of what is already standing.
 - [x] Pause All, Stop All, Delete All Completed
 - [x] Start queue and Stop queue
 - [x] Arrange files by every supported key
-- [ ] Open file, open folder, refresh download address, Properties
+- [x] Open file and open containing folder, from the menu of a row
+- [ ] Refresh download address, Properties
 - [ ] Move item up, move item down, remove item from download queue
 - [ ] Find (Ctrl+F) and Find next (F3) over the list
 - [ ] Import and export of an IDM export file or a text file

@@ -1,23 +1,11 @@
+import type { MenuRow } from "./menu-popup";
 import type { ShellCommand } from "./commands";
-
-export interface MenuItem {
-  command: ShellCommand;
-  label: string;
-  shortcut?: string;
-  /** Commands whose screen is not built yet stay visible but inert. */
-  disabled?: boolean;
-  /** A nested menu, the way IDM groups "Export", "Arrange files" and friends. */
-  submenu?: MenuRow[];
-}
-
-/** `"separator"` draws the hairline rule between groups of commands. */
-export type MenuRow = MenuItem | "separator";
 
 export interface MenuDefinition {
   id: string;
   label: string;
   accessKey: string;
-  rows: MenuRow[];
+  rows: MenuRow<ShellCommand>[];
 }
 
 /**
@@ -136,8 +124,8 @@ export const MENUS: MenuDefinition[] = [
         label: "Toolbar",
         submenu: [
           { command: "toolbar-customize", label: "Customize...", disabled: true },
-          { command: "toolbar-large", label: "Large Buttons" },
-          { command: "toolbar-small", label: "Small Buttons" },
+          { command: "toolbar-large", label: "Large Buttons", radio: true },
+          { command: "toolbar-small", label: "Small Buttons", radio: true },
           { command: "toolbar-new", label: "Look for new toolbars", disabled: true },
           { command: "toolbar-neon", label: "Neon", disabled: true },
         ],

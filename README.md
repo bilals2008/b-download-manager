@@ -140,6 +140,7 @@ src/
 | `site_connections(host)` | the connection cap of one site, when there is one |
 | `set_proxy(url)` | the proxy new downloads go through, HTTP or SOCKS |
 | `default_destination()` | a sensible starting path |
+| `open_path(path)` | open a finished file, or the folder it sits in |
 
 The backend pushes `download://update` events with the same `DownloadInfo`
 shape, so the table stays live without polling.
@@ -154,7 +155,8 @@ shape, so the table stays live without polling.
 
 ## Colour
 
-The palette is warm and soft on purpose — paper, sand and clay, with sage
-used only for "finished". It lives in `src/index.css` and nothing else
-hardcodes a colour. `npm run check:palette` reads those tokens and fails if
-any pair the product renders drops below its WCAG 2.2 minimum.
+The palette is black with one lime action colour, and it follows the system:
+a light appearance with the same token names. Green means "finished" and
+nothing else. It lives in `src/index.css` and nothing else hardcodes a colour.
+`npm run check:palette` reads those tokens and fails if any pair the product
+renders drops below its WCAG 2.2 minimum.

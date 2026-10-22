@@ -1,15 +1,20 @@
 import { useRef, useState } from "react";
 
+import type { ToolbarSize } from "@/lib/settings";
+
 import type { ShellCommand } from "./commands";
 import { TOOLBAR_ITEMS } from "./toolbar-items";
 
 interface ToolbarProps {
   onCommand: (command: ShellCommand) => void;
+  /** Large buttons are the default; small ones make room for the list. */
+  size: ToolbarSize;
 }
 
-export function Toolbar({ onCommand }: ToolbarProps) {
+export function Toolbar({ onCommand, size }: ToolbarProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const buttonRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const large = size === "large";
 
   function focusButton(index: number) {
     const next = (index + TOOLBAR_ITEMS.length) % TOOLBAR_ITEMS.length;
@@ -46,7 +51,10 @@ export function Toolbar({ onCommand }: ToolbarProps) {
       role="toolbar"
       aria-label="Downloads toolbar"
       aria-orientation="horizontal"
-      className="flex h-16 items-center overflow-x-auto border-b border-chrome-canvas bg-chrome-toolbar px-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className={
+        "flex items-center overflow-x-auto border-b border-chrome-canvas bg-chrome-toolbar px-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden " +
+        (large ? "h-16" : "h-12")
+      }
     >
       {TOOLBAR_ITEMS.map(({ command, label, icon: Icon, disabled }, index) => (
         <button
@@ -66,14 +74,23 @@ export function Toolbar({ onCommand }: ToolbarProps) {
           onFocus={() => setActiveIndex(index)}
           onKeyDown={(event) => handleKeyDown(event, index)}
           className={
-            "flex h-15 min-w-18 shrink-0 flex-col items-center justify-center gap-1 rounded-chrome border border-transparent px-2 text-chrome-toolbar-text focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none " +
+            "flex shrink-0 flex-col items-center justify-center rounded-chrome border border-transparent text-chrome-toolbar-text focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none " +
+            (large
+              ? "h-15 min-w-18 gap-1 px-2"
+              : "h-11 min-w-14 gap-0.5 px-1.5") +
             (disabled
-              ? "cursor-default opacity-45"
-              : "hover:border-chrome-line hover:bg-chrome-toolbar-hover active:bg-chrome-toolbar-active")
+              ? " cursor-default opacity-45"
+              : " hover:border-chrome-line hover:bg-chrome-toolbar-hover active:bg-chrome-toolbar-active")
           }
         >
-          <Icon className="size-8" />
-          <span className="text-xs leading-none whitespace-nowrap">{label}</span>
+          <Icon className={large ? "size-8" : "size-5"} />
+          <span
+            className={
+              large ? "text-xs leading-none whitespace-nowrap" : "text-chrome-micro leading-none whitespace-nowrap"
+            }
+          >
+            {label}
+          </span>
         </button>
       ))}
     </div>

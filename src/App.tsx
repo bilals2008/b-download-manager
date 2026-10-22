@@ -6,6 +6,11 @@ import { TopBar } from "@/components/shell/top-bar";
 import { AboutDialog } from "@/components/workspace/about-dialog";
 import { AddDownloadDialog } from "@/components/workspace/add-download-dialog";
 import { Workspace } from "@/components/workspace/workspace";
+import {
+  loadToolbarSize,
+  saveToolbarSize,
+  type ToolbarSize,
+} from "@/lib/settings";
 import { windowAction } from "@/lib/window";
 import { useDownloads } from "@/state/download-store";
 
@@ -15,6 +20,12 @@ export default function App() {
   const [addDownloadOpen, setAddDownloadOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [toolbarSize, setToolbarSize] = useState<ToolbarSize>(loadToolbarSize);
+
+  function setToolbar(size: ToolbarSize) {
+    setToolbarSize(size);
+    saveToolbarSize(size);
+  }
 
   function handleCommand(command: ShellCommand) {
     switch (command) {
@@ -84,6 +95,12 @@ export default function App() {
       case "arrange-path":
         downloads.sortBy("path");
         break;
+      case "toolbar-large":
+        setToolbar("large");
+        break;
+      case "toolbar-small":
+        setToolbar("small");
+        break;
     }
   }
 
@@ -94,6 +111,11 @@ export default function App() {
         menuLabels={{
           categories: categoriesVisible ? "Hide categories" : "Show categories",
         }}
+        menuChecks={{
+          "toolbar-large": toolbarSize === "large",
+          "toolbar-small": toolbarSize === "small",
+        }}
+        toolbarSize={toolbarSize}
       />
       <Workspace
         categoriesVisible={categoriesVisible}

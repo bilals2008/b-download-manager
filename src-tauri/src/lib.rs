@@ -167,6 +167,59 @@ fn default_destination(app: AppHandle) -> String {
     downloads.join("download.bin").to_string_lossy().to_string()
 }
 
+/// Open a file or a folder with the program the system uses for it.
+///
+/// The path comes from the download list, so it is a place the user picked.
+#[tauri::command]
+fn open_path(path: String) -> Result<(), String> {
+    let target = PathBuf::from(path.trim());
+    if target.as_os_str().is_empty() {
+        return Err("a path is required".to_string());
+    }
+    if !target.exists() {
+        return Err(format!("{} is not there yet", target.display()));
+    }
+    open_in_os(&target)
+}
+
+/// Hand the path to the shell of the system.
+#[cfg(target_os = "windows")]
+fn open_in_os(target: &std::path::Path) -> Result<(), String> {
+    let mut command = if target.is_dir() {
+        let mut command = std::process::Command::new("explorer");
+        command.arg(target);
+        command
+    } else {
+        // `explorer` would open the folder of a file, so a file goes through
+        // the shell handler that opens it with its own program.
+        let mut command = std::process::Command::new("rundll32");
+        command.arg("url.dll,FileProtocolHandler").arg(target);
+        command
+    };
+    command
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("the system could not open it: {error}"))
+}
+
+#[cfg(target_os = "macos")]
+fn open_in_os(target: &std::path::Path) -> Result<(), String> {
+    std::process::Command::new("open")
+        .arg(target)
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("the system could not open it: {error}"))
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+fn open_in_os(target: &std::path::Path) -> Result<(), String> {
+    std::process::Command::new("xdg-open")
+        .arg(target)
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("the system could not open it: {error}"))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -198,6 +251,7 @@ pub fn run() {
             set_site_connections,
             site_connections,
             default_destination,
+            open_path,
         ])
         .build(tauri::generate_context!())
         .expect("error while building my-idm-clone")
@@ -214,4 +268,21 @@ pub fn run() {
                 state.save_index();
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_empty_path_is_refused() {
+        assert!(open_path("   ".to_string()).is_err());
+    }
+
+    #[test]
+    fn a_path_that_is_not_there_is_refused() {
+        let missing = std::env::temp_dir().join("idm-clone-missing-8c41.bin");
+        let error = open_path(missing.to_string_lossy().to_string()).unwrap_err();
+        assert!(error.contains("not there yet"), "the error was: {error}");
+    }
 }

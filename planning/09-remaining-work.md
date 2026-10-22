@@ -59,7 +59,10 @@ this file says what is left to do.
       (`s_%s.dt`, `q_%s.dt`)
 - [ ] **The remaining options pages**: file types, save to, downloads,
       connection, sites logins, sounds
-- [ ] **The context menus** on a row and on a category
+- [ ] **The context menus** on a row and on a category. The row menu is built
+      (Resume, Pause, Stop, Redownload, Remove, Open file, Open containing
+      folder; Properties is greyed out); the menu of a category only has
+      "Select all downloads" until the categories themselves can be edited.
 - [ ] **The export and import** of an IDM export file or a text file
 - [ ] **A first run** that explains the connection setting in one sentence
 
