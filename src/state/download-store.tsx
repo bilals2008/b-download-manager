@@ -39,11 +39,15 @@ import {
   type BridgeDownload,
 } from "@/lib/ipc";
 import { describeError, isDesktop } from "@/lib/errors";
+import { rangeIds } from "@/lib/selection";
 import { loadSettings } from "@/lib/settings";
 import type { DownloadInfo, DownloadStatus as EngineStatus } from "@/types";
 
 /** What a bulk action does to the selected rows. */
 export type DownloadAction = "resume" | "pause" | "stop" | "delete";
+
+/** How a click picks rows: plain, Ctrl or Cmd, Shift for a range, or both for a second range. */
+export type SelectMode = "replace" | "toggle" | "range" | "add-range";
 
 interface WorkspaceState {
   downloads: Download[];
@@ -52,6 +56,10 @@ interface WorkspaceState {
   filterPath: string | null;
   /** Ids of the selected rows. Empty means nothing is selected. */
   selected: number[];
+  /** The row a Shift click measures its range from. */
+  anchor: number | null;
+  /** A batch delete waiting for the confirmation window. */
+  pendingDelete: number[] | null;
   sort: SortState;
 }
 
@@ -92,13 +100,18 @@ export interface DownloadStore {
   setFilter: (filter: DownloadFilter) => void;
   /** Drill into one save folder of a category. */
   setFolder: (category: CategoryName, path: string) => void;
-  toggleSelect: (id: number, additive: boolean) => void;
+  /** A click on a row: replace the selection, toggle it, or add a range. */
+  selectRow: (id: number, mode: SelectMode) => void;
   selectAll: () => void;
   /** Select every download a category filter matches. */
   selectByFilter: (filter: DownloadFilter) => void;
   clearSelection: () => void;
   sortBy: (key: SortKey) => void;
   applyToSelection: (action: DownloadAction) => void;
+  /** A batch delete waiting for the confirmation window. */
+  pendingDelete: number[] | null;
+  confirmDelete: () => void;
+  cancelDelete: () => void;
   addDownload: (input: NewDownload) => Promise<void>;
   pauseAll: () => void;
   stopAll: () => void;
@@ -140,6 +153,8 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
     filter: "all",
     filterPath: null,
     selected: [],
+    anchor: null,
+    pendingDelete: null,
     sort: { key: "order", dir: "asc" },
   }));
   const [loading, setLoading] = useState(true);
@@ -478,17 +493,36 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
           ),
         ),
       })),
-    toggleSelect: (id, additive) =>
+    selectRow: (id, mode) =>
       setState((current) => {
-        if (!additive) {
-          return { ...current, selected: [id] };
+        if (mode === "replace") {
+          return { ...current, selected: [id], anchor: id };
         }
-        const has = current.selected.includes(id);
+        if (mode === "toggle") {
+          const has = current.selected.includes(id);
+          return {
+            ...current,
+            selected: has
+              ? current.selected.filter((value) => value !== id)
+              : [...current.selected, id],
+            anchor: has ? current.anchor : id,
+          };
+        }
+        // Shift picks the range in the order the list shows, not the id order.
+        const ids = sortDownloads(
+          filterDownloads(current.downloads, current.filter, current.filterPath),
+          current.sort,
+        ).map((row) => row.id);
+        const picked = rangeIds(ids, current.anchor, id);
+        const kept = current.anchor !== null && ids.includes(current.anchor);
+        const next =
+          mode === "add-range"
+            ? [...new Set([...current.selected, ...picked])]
+            : picked;
         return {
           ...current,
-          selected: has
-            ? current.selected.filter((value) => value !== id)
-            : [...current.selected, id],
+          selected: next,
+          anchor: kept ? current.anchor : id,
         };
       }),
     selectAll: () =>
@@ -503,7 +537,8 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
           (item) => item.id,
         ),
       })),
-    clearSelection: () => setState((current) => ({ ...current, selected: [] })),
+    clearSelection: () =>
+      setState((current) => ({ ...current, selected: [], anchor: null })),
     sortBy: (key) =>
       setState((current) => ({
         ...current,
@@ -522,28 +557,12 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
       }
 
       if (action === "delete") {
-        setState((current) => ({
-          ...current,
-          downloads: current.downloads.map((item) =>
-            ids.includes(item.id)
-              ? { ...item, status: "stopped", speed: 0, eta: 0 }
-              : item,
-          ),
-          selected: [],
-        }));
-        run(
-          Promise.all(
-            items.map(async (item) => {
-              try {
-                await cancelDownload(item.id);
-              } catch {
-                // A finished download has no task left to cancel.
-              }
-              await removeDownload(item.id);
-              forget(item.id);
-            }),
-          ),
-        );
+        // A batch is worth a confirmation; one row deletes the way a list does.
+        if (ids.length > 1) {
+          setState((current) => ({ ...current, pendingDelete: ids }));
+          return;
+        }
+        removeMany(ids);
         return;
       }
 
@@ -579,6 +598,20 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
         }
       }
     },
+    pendingDelete: state.pendingDelete,
+    confirmDelete: () => {
+      const ids =
+        latest.current.pendingDelete?.filter((id) =>
+          latest.current.downloads.some((item) => item.id === id),
+        ) ?? [];
+      if (ids.length > 0) {
+        removeMany(ids);
+      } else {
+        setState((current) => ({ ...current, pendingDelete: null }));
+      }
+    },
+    cancelDelete: () =>
+      setState((current) => ({ ...current, pendingDelete: null })),
     addDownload: (input) => beginDownload(input),
     pauseAll: () => {
       const items = latest.current.downloads.filter(
@@ -625,24 +658,15 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
       run(Promise.all(items.map((item) => restart(item))));
     },
     deleteCompleted: () => {
-      const items = latest.current.downloads.filter(isFinished);
-      if (items.length === 0) {
+      const ids = latest.current.downloads
+        .filter((item) => isFinished(item))
+        .map((item) => item.id);
+      if (ids.length === 0) {
         return;
       }
-      setState((current) => ({
-        ...current,
-        selected: current.selected.filter(
-          (id) => !items.some((item) => item.id === id),
-        ),
-      }));
-      run(
-        Promise.all(
-          items.map(async (item) => {
-            await removeDownload(item.id);
-            forget(item.id);
-          }),
-        ),
-      );
+      // The command names a group, not the row the user is looking at, so it
+      // always asks - even when only one row is finished.
+      setState((current) => ({ ...current, pendingDelete: ids }));
     },
     startQueue: () => {
       const resumable = latest.current.downloads.filter(
@@ -689,6 +713,33 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
       run(Promise.all(items.map((item) => pauseDownload(item.id))));
     },
   };
+
+  /** Drop a batch locally and in the engine, once the user has confirmed. */
+  function removeMany(ids: number[]) {
+    setState((current) => ({
+      ...current,
+      downloads: current.downloads.map((item) =>
+        ids.includes(item.id)
+          ? { ...item, status: "stopped", speed: 0, eta: 0 }
+          : item,
+      ),
+      selected: [],
+      pendingDelete: null,
+    }));
+    run(
+      Promise.all(
+        ids.map(async (id) => {
+          try {
+            await cancelDownload(id);
+          } catch {
+            // A finished download has no task left to cancel.
+          }
+          await removeDownload(id);
+          forget(id);
+        }),
+      ),
+    );
+  }
 
   /** Drop a row locally once the engine has forgotten it. */
   function forget(id: number) {

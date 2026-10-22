@@ -8,6 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "check:palette": "node scripts/check-palette.mjs",
+    "check:selection": "node scripts/check-selection.mjs",
     "tauri": "tauri"
   },
   "dependencies": {

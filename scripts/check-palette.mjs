@@ -22,9 +22,9 @@ function tokensIn(text) {
 }
 
 // The dark tokens are the base; the light block overrides a subset of them.
-const lightStart = css.indexOf("@media (prefers-color-scheme: light)");
+const lightStart = css.indexOf(':root[data-theme="light"]');
 if (lightStart === -1) {
-  console.error("MISSING  @media (prefers-color-scheme: light) theme block");
+  console.error('MISSING  :root[data-theme="light"] theme block');
   process.exit(1);
 }
 const dark = tokensIn(css.slice(0, lightStart));
@@ -92,6 +92,10 @@ const REQUIRED = [
   ["chrome-focus", "chrome-panel", 3, "focus ring in the categories pane"],
   ["chrome-focus", "chrome-canvas", 3, "focus ring in the download list"],
   ["chrome-error", "chrome-popup", 4.5, "validation message in a dialog"],
+  ["chrome-error", "chrome-panel", 4.5, "delete label in the selection bar"],
+  ["input", "chrome-canvas", 3, "selection checkbox border in a row"],
+  ["input", "chrome-toolbar", 3, "selection checkbox border in the header"],
+  ["primary-foreground", "primary", 4.5, "tick in a picked checkbox"],
   ["chrome-menu-text", "chrome-popup", 4.5, "dialog text"],
   ["icon-green-bright", "chrome-canvas", 3, "downloading icon and bar"],
   ["icon-green", "chrome-canvas", 3, "finished icon"],

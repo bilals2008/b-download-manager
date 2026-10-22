@@ -1,6 +1,7 @@
 import { Checkbox } from "@/components/ui/checkbox";
+import { HINT, LABEL } from "@/components/settings/fields";
 import { Section, SettingsPage } from "@/components/settings/settings-page";
-import type { Settings } from "@/lib/settings";
+import type { Settings, ThemePreference } from "@/lib/settings";
 
 interface GeneralSettingsProps {
   settings: Settings;
@@ -68,6 +69,13 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
         </p>
       </Section>
 
+      <Section title="Appearance">
+        <AppearanceChoice
+          value={settings.theme}
+          onChange={(theme) => onChange("theme", theme)}
+        />
+      </Section>
+
       <Section title="Startup">
         <div className="flex flex-col gap-2.5">
           <Checkbox
@@ -128,5 +136,48 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
         </ul>
       </Section>
     </SettingsPage>
+  );
+}
+
+/** The three appearances, in the order the group shows them. */
+const THEMES: { value: ThemePreference; label: string }[] = [
+  { value: "auto", label: "Auto" },
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark" },
+];
+
+/** As a segmented radio group, so arrows move between them. */
+function AppearanceChoice({
+  value,
+  onChange,
+}: {
+  value: ThemePreference;
+  onChange: (theme: ThemePreference) => void;
+}) {
+  return (
+    <fieldset>
+      <legend className={LABEL}>Theme</legend>
+      <div className="inline-flex rounded-chrome border border-chrome-line bg-chrome-canvas p-0.5">
+        {THEMES.map((option) => (
+          <label key={option.value} className="cursor-pointer">
+            <input
+              type="radio"
+              name="theme"
+              value={option.value}
+              checked={value === option.value}
+              onChange={() => onChange(option.value)}
+              className="peer sr-only"
+            />
+            <span className="flex h-6 items-center rounded-chrome px-2.5 text-xs text-chrome-muted hover:text-chrome-title-text peer-checked:bg-chrome-menu-active peer-checked:text-chrome-title-text peer-focus-visible:ring-2 peer-focus-visible:ring-chrome-focus peer-focus-visible:ring-inset">
+              {option.label}
+            </span>
+          </label>
+        ))}
+      </div>
+      <p className={HINT}>
+        Auto follows the system appearance. The window changes as soon as you
+        pick a theme, and Save keeps it.
+      </p>
+    </fieldset>
   );
 }

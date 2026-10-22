@@ -1,6 +1,7 @@
 import { useRef } from "react";
 
 import { FileTypeIcon, StatusMark } from "@/components/icons/desktop-icons";
+import { SelectionCheckbox } from "@/components/workspace/selection-checkbox";
 import { Progress } from "@/components/ui/progress";
 import {
   formatEta,
@@ -11,11 +12,13 @@ import {
   type Download,
 } from "@/lib/downloads";
 import { cn } from "@/lib/utils";
+import type { SelectMode } from "@/state/download-store";
 
 interface DownloadRowProps {
   item: Download;
   selected: boolean;
-  onSelect: (additive: boolean) => void;
+  /** How the click picks: plain, Ctrl or Cmd, Shift for a range, both to add one. */
+  onSelect: (mode: SelectMode) => void;
   /** Open the menu of the row, the way a right click does. */
   onOpenMenu: (at: { x: number; y: number }, trigger: HTMLElement | null) => void;
 }
@@ -49,8 +52,9 @@ export function DownloadRow({
 
   return (
     <tr
+      data-download-id={item.id}
       aria-selected={selected}
-      onClick={(event) => onSelect(event.ctrlKey || event.metaKey)}
+      onClick={(event) => onSelect(modeOf(event))}
       onContextMenu={(event) => {
         event.preventDefault();
         openMenu({ x: event.clientX, y: event.clientY });
@@ -65,7 +69,7 @@ export function DownloadRow({
         }
       }}
       className={cn(
-        "cursor-default border-b border-chrome-line/60 transition-colors",
+        "cursor-default select-none border-b border-chrome-line/60 transition-colors",
         selected
           ? "bg-chrome-menu-active"
           : "hover:bg-chrome-menu-hover",
@@ -73,6 +77,12 @@ export function DownloadRow({
     >
       <td className="border-b border-chrome-line/60 px-3 py-1.5">
         <div className="flex min-w-0 items-center gap-2.5">
+          <SelectionCheckbox
+            checked={selected}
+            label={`Select ${item.fileName}`}
+            onToggle={() => onSelect("toggle")}
+          />
+
           <FileTypeIcon
             category={item.category}
             className="size-5 shrink-0"
@@ -84,7 +94,7 @@ export function DownloadRow({
             title={item.url}
             onClick={(event) => {
               event.stopPropagation();
-              onSelect(event.ctrlKey || event.metaKey);
+              onSelect(modeOf(event));
             }}
             className="min-w-0 flex-1 text-left focus-visible:rounded-chrome focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
           >
@@ -138,4 +148,16 @@ export function DownloadRow({
       </td>
     </tr>
   );
+}
+
+/** The selection mode the pointer and its modifier keys ask for. */
+function modeOf(event: {
+  shiftKey: boolean;
+  ctrlKey: boolean;
+  metaKey: boolean;
+}): SelectMode {
+  if (event.shiftKey) {
+    return event.ctrlKey || event.metaKey ? "add-range" : "range";
+  }
+  return event.ctrlKey || event.metaKey ? "toggle" : "replace";
 }

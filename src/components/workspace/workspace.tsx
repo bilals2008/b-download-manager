@@ -1,4 +1,5 @@
 import { CategoriesPane } from "@/components/workspace/categories-pane";
+import { DeleteConfirmDialog } from "@/components/workspace/delete-confirm-dialog";
 import { DownloadList } from "@/components/workspace/download-list";
 import { StatusBar } from "@/components/workspace/status-bar";
 
@@ -24,6 +25,7 @@ export function Workspace({ categoriesVisible, onAddDownload }: WorkspaceProps) 
         <DownloadList onAddDownload={onAddDownload} />
       </div>
       <StatusBar />
+      <DeleteConfirmDialog />
     </main>
   );
 }

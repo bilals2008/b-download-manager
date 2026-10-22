@@ -17,7 +17,9 @@ import {
   loadSettings,
   saveSettings,
   type Settings,
+  type ThemePreference,
 } from "@/lib/settings";
+import { applyTheme } from "@/lib/theme";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -45,8 +47,18 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
     }
   }, [open]);
 
+  function cancel() {
+    // A previewed theme that was not saved must not outlive the window.
+    applyTheme(loadSettings().theme);
+    onClose();
+  }
+
   function update<K extends keyof Settings>(key: K, value: Settings[K]) {
     setDraft((current) => ({ ...current, [key]: value }));
+    // The appearance previews at once; Cancel puts the saved one back.
+    if (key === "theme") {
+      applyTheme(value as ThemePreference);
+    }
   }
 
   async function save() {
@@ -71,7 +83,7 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
     <Dialog
       open={open}
       title="Internet Download Manager Configuration"
-      onClose={onClose}
+      onClose={cancel}
       className="h-[min(36rem,calc(100dvh-2rem))] w-[min(52rem,calc(100vw-2rem))] max-w-none"
       bodyClassName="flex p-0"
       footer={
@@ -86,7 +98,7 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
           ) : null}
           <button
             type="button"
-            onClick={onClose}
+            onClick={cancel}
             className="rounded-chrome border border-chrome-line px-3 py-1 text-xs text-chrome-menu-text hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
           >
             Cancel

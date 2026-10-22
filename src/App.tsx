@@ -20,6 +20,7 @@ import {
   saveToolbarSize,
   type ToolbarSize,
 } from "@/lib/settings";
+import { watchTheme } from "@/lib/theme";
 import { useDownloads } from "@/state/download-store";
 
 export default function App() {
@@ -50,6 +51,9 @@ export default function App() {
       // As above.
     });
   }, []);
+
+  // Auto keeps up with the operating system while the window is open.
+  useEffect(() => watchTheme(), []);
 
   // The tray menu drives the same commands as the menu bar.
   useEffect(() => {

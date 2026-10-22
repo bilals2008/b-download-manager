@@ -1,12 +1,14 @@
 @import "tailwindcss";
 
 /*
-  One theme, one source of truth, and it follows the operating system.
+  One theme, one source of truth, and the appearance is the user's choice:
+  Auto follows the operating system, Light and Dark override it.
 
   Two blocks define the same semantic tokens: the dark block below is the
   original void-black-and-lime view, and the light block overrides the same
-  names when the system asks for a light appearance. Components never ask which
-  theme is active; they read the tokens and the media query does the switching.
+  names when the root carries `data-theme="light"`. Components never ask which
+  theme is active; they read the tokens and `src/lib/theme.ts` does the
+  switching.
 
   Lime is the only action colour; green marks finished work and red destroys.
   The hex values are the ones the palette checker (`npm run check:palette`)
@@ -98,16 +100,19 @@
 }
 
 /*
-  Light appearance, chosen by the operating system. Same tokens, same names:
-  warm off-white surfaces with green-grey hairlines, near-black text, and the
-  lime accent kept for primary actions where it still carries dark text. Focus
-  rings, borders and icon tints darken so they stay visible on light surfaces.
-*/
-@media (prefers-color-scheme: light) {
-  :root {
-    color-scheme: light;
+  Light appearance. Same tokens, same names: warm off-white surfaces with
+  green-grey hairlines, near-black text, and the lime accent kept for primary
+  actions where it still carries dark text. Focus rings, borders and icon tints
+  darken so they stay visible on light surfaces.
 
-    --background: #f6f8f2;
+  `data-theme` is set on the root by `src/lib/theme.ts` before the first render,
+  so Auto follows the system and the setting can override it. Components never
+  read the attribute; they read the tokens.
+*/
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --background: #f6f8f2;
     --foreground: #12170d;
     --card: #fbfcf8;
     --card-foreground: #12170d;
@@ -176,7 +181,6 @@
     --icon-amber: #8a5906;
     --icon-amber-bright: #9c6608;
     --icon-amber-deep: #5f3b03;
-  }
 }
 
 @theme inline {

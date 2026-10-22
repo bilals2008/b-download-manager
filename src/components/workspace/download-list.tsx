@@ -18,7 +18,10 @@ import { DOWNLOAD_COLUMNS } from "@/components/workspace/download-columns";
 import { DownloadContextMenu } from "@/components/workspace/download-context-menu";
 import { DownloadPropertiesDialog } from "@/components/workspace/download-properties-dialog";
 import { DownloadRow } from "@/components/workspace/download-row";
+import { SelectionBar } from "@/components/workspace/selection-bar";
+import { SelectionCheckbox } from "@/components/workspace/selection-checkbox";
 import { useColumnWidths } from "@/components/workspace/use-column-widths";
+import { useDragSelect } from "@/components/workspace/use-drag-select";
 import type { Download, SortKey } from "@/lib/downloads";
 import { cn } from "@/lib/utils";
 import { useDownloads } from "@/state/download-store";
@@ -37,7 +40,9 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
     downloads,
     visible,
     selected,
-    toggleSelect,
+    selectRow,
+    selectAll,
+    clearSelection,
     sort,
     sortBy,
     filter,
@@ -56,6 +61,12 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
   } | null>(null);
   // The control that opened the menu, so the focus goes back to it.
   const menuTrigger = useRef<HTMLElement | null>(null);
+  // The list scrolls on its own when a drag reaches its top or bottom edge.
+  const viewport = useRef<HTMLDivElement>(null);
+  const { start, consumeClick } = useDragSelect({
+    scrollRef: viewport,
+    onSelect: selectRow,
+  });
   // The id of the row whose properties window is open, so the window keeps up
   // with the progress of the download while it is on screen.
   const [propertiesId, setPropertiesId] = useState<number | null>(null);
@@ -71,7 +82,7 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
     // A right click acts on the row under the pointer, so that row joins the
     // selection when it was not in it.
     if (!selected.includes(item.id)) {
-      toggleSelect(item.id, false);
+      selectRow(item.id, "replace");
     }
     setMenu({ item, at });
   }
@@ -93,6 +104,10 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
         : filter === "finished"
           ? "Finished"
           : filter;
+
+  const picked = visible.filter((item) => selected.includes(item.id)).length;
+  const allSelected = visible.length > 0 && picked === visible.length;
+  const someSelected = picked > 0 && !allSelected;
 
   return (
     <section
@@ -124,7 +139,27 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
         </div>
       ) : null}
 
-      <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+      <SelectionBar />
+
+      <div
+        ref={viewport}
+        className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
+        onClick={(event) => {
+          // A click on the empty space under the rows drops the selection.
+          if (event.target === event.currentTarget) {
+            clearSelection();
+          }
+        }}
+        onKeyDown={(event) => {
+          if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a") {
+            event.preventDefault();
+            selectAll();
+          } else if (event.key === "Escape") {
+            event.preventDefault();
+            clearSelection();
+          }
+        }}
+      >
         <table
           ref={tableRef}
           className="w-full table-fixed border-separate border-spacing-0 text-xs"
@@ -170,6 +205,22 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
                       column.align === "right" ? "text-right" : "text-left",
                     )}
                   >
+                    {column.id === "name" && visible.length > 0 ? (
+                      <SelectionCheckbox
+                        className="mr-1.5 inline-flex align-middle"
+                        checked={allSelected}
+                        indeterminate={someSelected}
+                        label={
+                          allSelected
+                            ? "Clear selection"
+                            : "Select all downloads"
+                        }
+                        onToggle={() =>
+                          allSelected ? clearSelection() : selectAll()
+                        }
+                      />
+                    ) : null}
+
                     {column.sortKey ? (
                       <button
                         type="button"
@@ -240,7 +291,7 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
             </tr>
           </thead>
 
-          <tbody>
+          <tbody onPointerDown={start}>
             {loading && downloads.length === 0 ? (
               <tr>
                 <td colSpan={DOWNLOAD_COLUMNS.length} className="px-3 py-16">
@@ -296,7 +347,12 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
                   key={item.id}
                   item={item}
                   selected={selected.includes(item.id)}
-                  onSelect={(additive) => toggleSelect(item.id, additive)}
+                  onSelect={(mode) => {
+                    if (consumeClick()) {
+                      return;
+                    }
+                    selectRow(item.id, mode);
+                  }}
                   onOpenMenu={(at, trigger) => openMenu(item, at, trigger)}
                 />
               ))

@@ -13,6 +13,17 @@ Project-specific rules for coding agents. Details: `docs/DEVELOPMENT.md`.
 - Prioritize clean architecture, maintainability, performance, accessibility, and consistency.
 Also, structure the design system  to support multiple themes in the future. Switching themes should instantly update the entire UI, including backgrounds, colors, borders, and other design tokens. Use centralized semantic CSS variables and theme configurations to make adding or changing themes easy without modifying individual components.
 donot use broswer tools to verify user will review manually 
+
+## Problem solving
+
+- When a problem is hard to diagnose or the fix is unclear, research it before
+  writing code. Do not guess, and do not settle for an outdated method.
+- Use the latest stable, recommended approach. No hacks, temporary fixes or
+  workarounds.
+- For anything uncertain, check official sources first: Tauri, Rust crate docs,
+  React/Tailwind docs. Official documentation beats random tutorials.
+- Confirm the version in use before copying a solution from the web.
+
 ## Links
  
 - Design tokens: `src/index.css`

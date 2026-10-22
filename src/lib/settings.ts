@@ -15,6 +15,8 @@ export interface Settings {
   clipboardCapture: boolean;
   /** Whether closing the window hides it into the tray. */
   minimizeToTray: boolean;
+  /** Auto follows the system; the other two override it. */
+  theme: ThemePreference;
   /** Where a new download is saved when the user does not say. */
   defaultFolder: string;
   /** Connections one download gets by default. */
@@ -33,6 +35,7 @@ export const DEFAULT_SETTINGS: Settings = {
   launchOnStartup: false,
   clipboardCapture: false,
   minimizeToTray: true,
+  theme: "auto",
   defaultFolder: "",
   defaultConnections: 8,
   maxConnections: 32,
@@ -62,6 +65,7 @@ export function loadSettings(): Settings {
       launchOnStartup: boolean(value.launchOnStartup, DEFAULT_SETTINGS.launchOnStartup),
       clipboardCapture: boolean(value.clipboardCapture, DEFAULT_SETTINGS.clipboardCapture),
       minimizeToTray: boolean(value.minimizeToTray, DEFAULT_SETTINGS.minimizeToTray),
+      theme: theme(value.theme, DEFAULT_SETTINGS.theme),
       defaultFolder: text(value.defaultFolder, DEFAULT_SETTINGS.defaultFolder),
       defaultConnections: number(
         value.defaultConnections,
@@ -103,6 +107,9 @@ export function saveSettings(settings: Settings): void {
 /** The size of the toolbar buttons, the way IDM keeps it in the View menu. */
 export type ToolbarSize = "large" | "small";
 
+/** How the appearance is chosen. */
+export type ThemePreference = "auto" | "light" | "dark";
+
 const TOOLBAR_KEY = "idm-clone.toolbar-size.v1";
 
 /** Read the saved toolbar size, falling back to the large one. */
@@ -130,6 +137,12 @@ function boolean(value: unknown, fallback: boolean): boolean {
 
 function text(value: unknown, fallback: string): string {
   return typeof value === "string" ? value : fallback;
+}
+
+function theme(value: unknown, fallback: ThemePreference): ThemePreference {
+  return value === "auto" || value === "light" || value === "dark"
+    ? value
+    : fallback;
 }
 
 function number(value: unknown, fallback: number, min: number, max: number): number {
