@@ -1,8 +1,17 @@
 import { useEffect, useState } from "react";
 
+import { ConnectionSettings } from "@/components/settings/connection-settings";
+import { DownloadsSettings } from "@/components/settings/downloads-settings";
 import { GeneralSettings } from "@/components/settings/general-settings";
-import { SettingsNav } from "@/components/settings/settings-nav";
+import { ProxySettings } from "@/components/settings/proxy-settings";
+import { SaveToSettings } from "@/components/settings/save-to-settings";
+import {
+  SettingsNav,
+  type SettingsPageId,
+} from "@/components/settings/settings-nav";
 import { Dialog } from "@/components/ui/dialog";
+import { describeError } from "@/lib/errors";
+import { setMaxConnections, setProxy, setSpeedLimit } from "@/lib/ipc";
 import {
   DEFAULT_SETTINGS,
   loadSettings,
@@ -19,13 +28,20 @@ interface SettingsDialogProps {
  * "Internet Download Manager Configuration" - the Options window. It opens on
  * the General page, keeps edits in a draft, and writes them only on Save so
  * Cancel genuinely discards.
+ *
+ * The settings the engine owns — the proxy, the bandwidth cap, the number of
+ * connections — are pushed to the engine when the window is saved, so they
+ * take effect at once.
  */
 export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
   const [draft, setDraft] = useState<Settings>(DEFAULT_SETTINGS);
+  const [page, setPage] = useState<SettingsPageId>("general");
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
       setDraft(loadSettings());
+      setError(null);
     }
   }, [open]);
 
@@ -33,8 +49,20 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
     setDraft((current) => ({ ...current, [key]: value }));
   }
 
-  function save() {
+  async function save() {
     saveSettings(draft);
+    try {
+      // The engine has to know about the three settings it owns.
+      await setProxy(draft.proxyUrl);
+      await setSpeedLimit(
+        draft.speedLimitEnabled ? draft.speedLimitBytes : 0,
+      );
+      await setMaxConnections(draft.maxConnections);
+      setError(null);
+    } catch (failure) {
+      setError(describeError(failure));
+      return;
+    }
     onClose();
   }
 
@@ -50,6 +78,11 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
           <span className="mr-auto hidden self-center text-chrome-micro text-chrome-muted sm:inline">
             Preferences stay on this device.
           </span>
+          {error ? (
+            <span role="alert" className="mr-auto text-xs text-chrome-error">
+              {error}
+            </span>
+          ) : null}
           <button
             type="button"
             onClick={onClose}
@@ -60,16 +93,30 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
           <button
             type="button"
             onClick={save}
-            className="rounded-chrome bg-primary px-3 py-1 text-xs font-medium text-primary-foreground hover:opacity-90"
+            className="rounded-chrome bg-primary px-3 py-1 text-xs font-medium text-primary-foreground hover:opacity-90 focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
           >
             Save
           </button>
         </>
       }
     >
-      <SettingsNav />
+      <SettingsNav page={page} onSelect={setPage} />
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <GeneralSettings settings={draft} onChange={update} />
+        {page === "general" ? (
+          <GeneralSettings settings={draft} onChange={update} />
+        ) : null}
+        {page === "save-to" ? (
+          <SaveToSettings settings={draft} onChange={update} />
+        ) : null}
+        {page === "downloads" ? (
+          <DownloadsSettings settings={draft} onChange={update} />
+        ) : null}
+        {page === "connection" ? (
+          <ConnectionSettings settings={draft} onChange={update} />
+        ) : null}
+        {page === "proxy" ? (
+          <ProxySettings settings={draft} onChange={update} />
+        ) : null}
       </div>
     </Dialog>
   );

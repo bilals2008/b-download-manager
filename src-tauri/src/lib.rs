@@ -157,6 +157,13 @@ fn site_connections(state: State<'_, AppState>, host: String) -> Option<u32> {
     state.limits().sites.get(&host)
 }
 
+/// How many connections the whole application may have open at once.
+#[tauri::command]
+fn set_max_connections(state: State<'_, AppState>, max: u32) -> u32 {
+    state.limits().budget.resize(max);
+    max
+}
+
 /// A sensible starting point for the destination path.
 #[tauri::command]
 fn default_destination(app: AppHandle) -> String {
@@ -250,6 +257,7 @@ pub fn run() {
             set_download_speed_limit,
             set_site_connections,
             site_connections,
+            set_max_connections,
             default_destination,
             open_path,
         ])

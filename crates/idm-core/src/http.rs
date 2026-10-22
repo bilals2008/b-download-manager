@@ -48,7 +48,7 @@ pub async fn probe(client: &reqwest::Client, url: &str) -> Result<Probe, Transfe
     // of the file.
     if !status.is_success() {
         return Err(TransferError {
-            message: format!("server answered {status}"),
+            message: status_message(status.as_u16()),
             status: Some(status.as_u16()),
             retry_after,
         });
@@ -104,7 +104,7 @@ pub async fn open_range(
     }
     if !status.is_success() {
         return Err(TransferError {
-            message: format!("server answered {status}"),
+            message: status_message(status.as_u16()),
             status: Some(status.as_u16()),
             retry_after,
         });
@@ -204,6 +204,24 @@ pub fn backoff(attempt: u32) -> Duration {
     Duration::from_millis(BASE_MS.saturating_mul(1u64 << shift).min(CAP_MS))
 }
 
+/// What the answer of the server means, in words a user can act on.
+///
+/// The status code alone tells a user nothing. "The link may have expired"
+/// and "the site only answers a browser" are the two answers that matter
+/// most in practice, and both are refusals.
+pub fn status_message(status: u16) -> String {
+    match status {
+        401 => "the server asked us to sign in (401)".to_string(),
+        403 => "the server refused the request (403); the link may have expired, or the site only answers a browser".to_string(),
+        404 => "the file is not on the server any more (404)".to_string(),
+        410 => "the file is gone for good (410)".to_string(),
+        416 => "the server has no such range of bytes (416)".to_string(),
+        429 => "the server is busy (429) and asked us to come back later".to_string(),
+        500..=599 => format!("the server had a problem ({status})"),
+        _ => format!("the server answered {status}"),
+    }
+}
+
 /// Whether the server told us to come back later, so the wait is the
 /// server's choice rather than ours.
 pub fn is_retryable(status: u16) -> bool {
@@ -265,5 +283,16 @@ mod tests {
         assert!(is_retryable(503));
         assert!(!is_retryable(404));
         assert!(!is_retryable(416));
+    }
+
+    #[test]
+    fn a_refusal_says_what_the_user_can_do() {
+        let message = status_message(403);
+        assert!(message.contains("403"), "the message was: {message}");
+        assert!(
+            message.contains("expired") || message.contains("browser"),
+            "the message was: {message}"
+        );
+        assert!(status_message(404).contains("not on the server"));
     }
 }

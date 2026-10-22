@@ -1,7 +1,5 @@
-import type { ReactNode } from "react";
-
-import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Section, SettingsPage } from "@/components/settings/settings-page";
 import type { Settings } from "@/lib/settings";
 
 interface GeneralSettingsProps {
@@ -48,111 +46,78 @@ const OUTLINE_BUTTON =
  */
 export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
   return (
-    <div className="mx-auto flex max-w-[38rem] flex-col px-5 py-6 sm:px-6">
-      <header>
-        <h2 className="text-base font-medium text-chrome-title-text">General</h2>
-        <p className="mt-1 text-xs text-chrome-muted">
-          Choose how the download manager starts and what it captures.
-        </p>
-      </header>
-
-      <div className="mt-5 flex flex-col divide-y divide-chrome-line">
-        <Section title="Browser integration">
-          <div className="flex items-center justify-between gap-4">
-            <p className="flex items-center gap-2 text-xs text-chrome-title-text">
-              <span
-                aria-hidden="true"
-                className="size-1.5 rounded-full bg-chrome-muted"
-              />
-              Not connected
-            </p>
-            <button type="button" disabled className={OUTLINE_BUTTON}>
-              Restart
-            </button>
-          </div>
-          <p className="mt-2 text-xs text-chrome-muted">
-            Browser integration is not part of this build yet.
+    <SettingsPage
+      title="General"
+      description="Choose how the download manager starts and what it captures."
+    >
+      <Section title="Browser integration">
+        <div className="flex items-center justify-between gap-4">
+          <p className="flex items-center gap-2 text-xs text-chrome-title-text">
+            <span
+              aria-hidden="true"
+              className="size-1.5 rounded-full bg-chrome-muted"
+            />
+            Not connected
           </p>
-        </Section>
-
-        <Section title="Startup">
-          <div className="flex flex-col gap-2.5">
-            <Checkbox
-              label="Launch Internet Download Manager on startup"
-              hint="Open the app when you sign in."
-              checked={settings.launchOnStartup}
-              onChange={(event) =>
-                onChange("launchOnStartup", event.target.checked)
-              }
-            />
-            <Checkbox
-              label="Start downloading URLs copied to the clipboard"
-              hint="Pick up a link as soon as it is copied."
-              checked={settings.clipboardCapture}
-              onChange={(event) =>
-                onChange("clipboardCapture", event.target.checked)
-              }
-            />
-          </div>
-        </Section>
-
-        <Section title="Capture from browsers" planned>
-          <div className="grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
-            {BROWSERS.map((browser) => (
-              <Checkbox key={browser} label={browser} defaultChecked disabled />
-            ))}
-          </div>
-          <button type="button" disabled className={OUTLINE_BUTTON + " mt-3"}>
-            Add browser...
+          <button type="button" disabled className={OUTLINE_BUTTON}>
+            Restart
           </button>
-        </Section>
+        </div>
+        <p className="mt-2 text-xs text-chrome-muted">
+          Browser integration is not part of this build yet.
+        </p>
+      </Section>
 
-        <Section title="Integration" planned>
-          <ul className="flex flex-col divide-y divide-chrome-line">
-            {INTEGRATIONS.map(({ label, description, action }) => (
-              <li
-                key={label}
-                className="flex items-center justify-between gap-4 py-2.5 first:pt-0 last:pb-0"
-              >
-                <div className="min-w-0">
-                  <p className="text-xs text-chrome-title-text">{label}</p>
-                  <p className="mt-0.5 text-xs text-chrome-muted">
-                    {description}
-                  </p>
-                </div>
-                <button type="button" disabled className={OUTLINE_BUTTON}>
-                  {action}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </Section>
-      </div>
-    </div>
-  );
-}
+      <Section title="Startup">
+        <div className="flex flex-col gap-2.5">
+          <Checkbox
+            label="Launch Internet Download Manager on startup"
+            hint="Open the app when you sign in."
+            checked={settings.launchOnStartup}
+            onChange={(event) =>
+              onChange("launchOnStartup", event.target.checked)
+            }
+          />
+          <Checkbox
+            label="Start downloading URLs copied to the clipboard"
+            hint="Pick up a link as soon as it is copied."
+            checked={settings.clipboardCapture}
+            onChange={(event) =>
+              onChange("clipboardCapture", event.target.checked)
+            }
+          />
+        </div>
+      </Section>
 
-interface SectionProps {
-  title: string;
-  planned?: boolean;
-  children: ReactNode;
-}
+      <Section title="Capture from browsers" planned>
+        <div className="grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
+          {BROWSERS.map((browser) => (
+            <Checkbox key={browser} label={browser} defaultChecked disabled />
+          ))}
+        </div>
+        <button type="button" disabled className={OUTLINE_BUTTON + " mt-3"}>
+          Add browser...
+        </button>
+      </Section>
 
-function Section({ title, planned, children }: SectionProps) {
-  return (
-    <section aria-label={title} className="py-5 first:pt-0 last:pb-0">
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="text-xs font-medium text-chrome-title-text">{title}</h3>
-        {planned ? (
-          <Badge
-            variant="outline"
-            className="border-chrome-line px-1.5 py-0 text-chrome-micro font-normal text-chrome-muted"
-          >
-            Planned
-          </Badge>
-        ) : null}
-      </div>
-      <div className="mt-3">{children}</div>
-    </section>
+      <Section title="Integration" planned>
+        <ul className="flex flex-col divide-y divide-chrome-line">
+          {INTEGRATIONS.map(({ label, description, action }) => (
+            <li
+              key={label}
+              className="flex items-center justify-between gap-4 py-2.5 first:pt-0 last:pb-0"
+            >
+              <div className="min-w-0">
+                <p className="text-xs text-chrome-title-text">{label}</p>
+                <p className="mt-0.5 text-xs text-chrome-muted">{description}</p>
+              </div>
+              <button type="button" disabled className={OUTLINE_BUTTON}>
+                {action}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </Section>
+    </SettingsPage>
   );
 }

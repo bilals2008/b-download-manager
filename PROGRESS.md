@@ -110,7 +110,9 @@ Done items stay in the list as a record of what is already standing.
 
 - [x] About IDM box
 - [x] Options dialog shell, with the General page (startup preferences, browser capture list)
-- [ ] Remaining Options pages: File types, Save to, Downloads, Connection, Proxy / Socks, Sites Logins, Dial Up / VPN, Sounds
+- [x] Remaining Options pages: Save to, Downloads, Connection and Proxy / Socks
+      work and reach the engine; File types, Sites Logins, Dial Up / VPN and
+      Sounds stay greyed out
 - [ ] Browser integration behind the General page: detection, Restart, Add browser, keys and context-menu editors
 - [ ] Apply the startup and clipboard preferences through the operating system
 - [ ] Scheduler dialog

@@ -45,3 +45,18 @@ export function defaultDestination(): Promise<string> {
 export function openPath(path: string): Promise<void> {
   return invoke<void>("open_path", { path });
 }
+
+/** Cap the bandwidth of the whole application. Zero means no cap. */
+export function setSpeedLimit(bytesPerSecond: number): Promise<number> {
+  return invoke<number>("set_speed_limit", { bytesPerSecond });
+}
+
+/** The proxy new downloads go through. Empty means no proxy. */
+export function setProxy(url: string): Promise<void> {
+  return invoke<void>("set_proxy", { url: url.trim() || null });
+}
+
+/** How many connections the whole application may have open at once. */
+export function setMaxConnections(max: number): Promise<number> {
+  return invoke<number>("set_max_connections", { max });
+}

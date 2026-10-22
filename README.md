@@ -141,6 +141,7 @@ src/
 | `set_site_connections(host, connections)` | the connection cap of one site |
 | `site_connections(host)` | the connection cap of one site, when there is one |
 | `set_proxy(url)` | the proxy new downloads go through, HTTP or SOCKS |
+| `set_max_connections(max)` | how many connections the application may hold open |
 | `default_destination()` | a sensible starting path |
 | `open_path(path)` | open a finished file, or the folder it sits in |
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { SettingsDialog } from "@/components/settings/settings-dialog";
 import type { ShellCommand } from "@/components/shell/commands";
@@ -6,7 +6,9 @@ import { TopBar } from "@/components/shell/top-bar";
 import { AboutDialog } from "@/components/workspace/about-dialog";
 import { AddDownloadDialog } from "@/components/workspace/add-download-dialog";
 import { Workspace } from "@/components/workspace/workspace";
+import { setMaxConnections, setProxy, setSpeedLimit } from "@/lib/ipc";
 import {
+  loadSettings,
   loadToolbarSize,
   saveToolbarSize,
   type ToolbarSize,
@@ -21,6 +23,24 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [toolbarSize, setToolbarSize] = useState<ToolbarSize>(loadToolbarSize);
+
+  // The settings the engine owns are pushed to it when the application
+  // starts, so a proxy or a speed limit that was set yesterday is still in
+  // force today.
+  useEffect(() => {
+    const settings = loadSettings();
+    void setProxy(settings.proxyUrl).catch(() => {
+      // The engine is not there yet; the settings window can set it later.
+    });
+    void setSpeedLimit(
+      settings.speedLimitEnabled ? settings.speedLimitBytes : 0,
+    ).catch(() => {
+      // As above.
+    });
+    void setMaxConnections(settings.maxConnections).catch(() => {
+      // As above.
+    });
+  }, []);
 
   function setToolbar(size: ToolbarSize) {
     setToolbarSize(size);

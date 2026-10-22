@@ -57,8 +57,9 @@ this file says what is left to do.
 - [ ] **The browser integration**: the detection, the keys, the context menu
 - [ ] **The named queues and the scheduler**, with the schedule files
       (`s_%s.dt`, `q_%s.dt`)
-- [ ] **The remaining options pages**: file types, save to, downloads,
-      connection, sites logins, sounds
+- [ ] **The remaining options pages**: Save to, Downloads, Connection and
+      Proxy / Socks work and reach the engine; file types, sites logins, dial
+      up / VPN and sounds are still to be built.
 - [ ] **The context menus** on a row and on a category. The row menu is built
       (Resume, Pause, Stop, Redownload, Remove, Open file, Open containing
       folder; Properties is greyed out); the menu of a category only has
@@ -89,8 +90,10 @@ this file says what is left to do.
 - [x] The number of connections a file gets
 - [ ] **The initial split arithmetic**: the boundaries inside a file, not the
       number of connections. It was not in the binary; the measurement is the
-      way to answer it. The third pass named the method that holds it:
-      `ChunksList::InitFirst()`.
+      way to answer it. The third pass named the method that holds it,
+      `ChunksList::InitFirst()`, and the scope table that protects it
+      (`0x765168` in `.rdata`); the function that installs that handler is
+      the one to find next.
 - [x] **The hand-over of a tail**: `ChunksList::AddAlternative()` (at
       `0x564650`) gives the tail of a range to a new connection, starting at
       the point the parent has reached. The clone already does this.

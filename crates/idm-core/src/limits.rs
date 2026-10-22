@@ -41,6 +41,20 @@ impl ConnectionBudget {
     pub async fn acquire(&self) -> Option<OwnedSemaphorePermit> {
         self.permits.clone().acquire_owned().await.ok()
     }
+
+    /// Change how many connections the application may have open at once.
+    ///
+    /// The settings window owns this number, so the cap can be lowered and
+    /// raised while the application runs.
+    pub fn resize(&self, max: u32) {
+        let target = max.max(1) as usize;
+        let available = self.permits.available_permits();
+        if target > available {
+            self.permits.add_permits(target - available);
+        } else if target < available {
+            self.permits.forget_permits(available - target);
+        }
+    }
 }
 
 /// Per-site connection overrides, keyed by host.
@@ -225,6 +239,19 @@ mod tests {
         assert!(budget.try_take().is_none(), "the third slot must be refused");
         drop(first);
         assert!(budget.try_take().is_some());
+        drop(second);
+    }
+
+    #[test]
+    fn the_budget_can_be_resized_while_it_runs() {
+        let budget = ConnectionBudget::new(4);
+        budget.resize(2);
+        let first = budget.try_take().expect("first slot");
+        let second = budget.try_take().expect("second slot");
+        assert!(budget.try_take().is_none(), "the third slot must be refused");
+        drop(first);
+        budget.resize(6);
+        assert!(budget.try_take().is_some(), "the cap must have grown");
         drop(second);
     }
 

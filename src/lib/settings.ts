@@ -1,21 +1,47 @@
 /**
- * Preferences the settings screen owns.
+ * The preferences the options window owns.
  *
- * shortcut: these two preferences are stored but not enforced by the operating
- * system yet. Wire them to autostart and clipboard monitoring when those
- * subsystems land.
+ * Every value here is stored on this machine and is read back when the
+ * application starts. The ones the engine owns — the proxy, the bandwidth
+ * cap, the number of connections — are pushed to the engine as well, so a
+ * change takes effect at once.
+ *
+ * shortcut: `launchOnStartup` and `clipboardCapture` are stored but not
+ * enforced by the operating system yet. Wire them to autostart and clipboard
+ * monitoring when those subsystems land.
  */
 export interface Settings {
   launchOnStartup: boolean;
   clipboardCapture: boolean;
+  /** Where a new download is saved when the user does not say. */
+  defaultFolder: string;
+  /** Connections one download gets by default. */
+  defaultConnections: number;
+  /** Connections the whole application may have open at once. */
+  maxConnections: number;
+  /** Whether the bandwidth cap is on. */
+  speedLimitEnabled: boolean;
+  /** The bandwidth cap, in bytes per second. */
+  speedLimitBytes: number;
+  /** The proxy new downloads go through, empty for none. */
+  proxyUrl: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   launchOnStartup: false,
   clipboardCapture: false,
+  defaultFolder: "",
+  defaultConnections: 8,
+  maxConnections: 32,
+  speedLimitEnabled: false,
+  speedLimitBytes: 0,
+  proxyUrl: "",
 };
 
 const STORAGE_KEY = "idm-clone.settings.v1";
+
+/** The range the engine accepts for a connection count. */
+export const MAX_CONNECTIONS = 32;
 
 /** Read the saved preferences, falling back field by field on bad data. */
 export function loadSettings(): Settings {
@@ -30,14 +56,32 @@ export function loadSettings(): Settings {
     }
     const value = parsed as Partial<Record<keyof Settings, unknown>>;
     return {
-      launchOnStartup:
-        typeof value.launchOnStartup === "boolean"
-          ? value.launchOnStartup
-          : DEFAULT_SETTINGS.launchOnStartup,
-      clipboardCapture:
-        typeof value.clipboardCapture === "boolean"
-          ? value.clipboardCapture
-          : DEFAULT_SETTINGS.clipboardCapture,
+      launchOnStartup: boolean(value.launchOnStartup, DEFAULT_SETTINGS.launchOnStartup),
+      clipboardCapture: boolean(value.clipboardCapture, DEFAULT_SETTINGS.clipboardCapture),
+      defaultFolder: text(value.defaultFolder, DEFAULT_SETTINGS.defaultFolder),
+      defaultConnections: number(
+        value.defaultConnections,
+        DEFAULT_SETTINGS.defaultConnections,
+        1,
+        MAX_CONNECTIONS,
+      ),
+      maxConnections: number(
+        value.maxConnections,
+        DEFAULT_SETTINGS.maxConnections,
+        1,
+        MAX_CONNECTIONS,
+      ),
+      speedLimitEnabled: boolean(
+        value.speedLimitEnabled,
+        DEFAULT_SETTINGS.speedLimitEnabled,
+      ),
+      speedLimitBytes: number(
+        value.speedLimitBytes,
+        DEFAULT_SETTINGS.speedLimitBytes,
+        0,
+        1024 * 1024 * 1024,
+      ),
+      proxyUrl: text(value.proxyUrl, DEFAULT_SETTINGS.proxyUrl),
     };
   } catch {
     return DEFAULT_SETTINGS;
@@ -74,4 +118,19 @@ export function saveToolbarSize(size: ToolbarSize): void {
   } catch {
     // Storage can be blocked; the toolbar still changes for this session.
   }
+}
+
+function boolean(value: unknown, fallback: boolean): boolean {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function text(value: unknown, fallback: string): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+function number(value: unknown, fallback: number, min: number, max: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, Math.round(value)));
 }

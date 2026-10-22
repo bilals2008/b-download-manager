@@ -979,3 +979,18 @@ The one difference is the layout on the disk, and it is the one that was
 chosen on purpose (section 10.6): IDM moves the *start* of the parent's
 range forward and writes at absolute offsets, the clone shortens the
 *end* of the parent's range and keeps one part file per range.
+
+### 11.6 The next lead: the scope table of `InitFirst`
+
+The method that holds the *first* split of a file is named in the strings:
+`ChunksList::InitFirst()`. Its error string sits at `0x6cac34` and is used
+by the tiny filter routine `Catch@0055ff79` (26 bytes), which the compiler
+puts inside the function it protects. The pointer to that filter lives in
+the MSVC scope table at `0x765168` in `.rdata`, inside the block
+`0x7646ac`–`0x76a428` the plan pointed at.
+
+**What this changes.** The plan can be followed from the other end: the
+table record at `0x765168` belongs to the function that installs the
+handler, and that function is the caller of `InitFirst()`. Reading the
+scope table back is the next step; the addresses are written down here so
+the next pass does not have to find them again.
