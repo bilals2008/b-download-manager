@@ -19,7 +19,6 @@ import { DownloadContextMenu } from "@/components/workspace/download-context-men
 import { DownloadPropertiesDialog } from "@/components/workspace/download-properties-dialog";
 import { DownloadRow } from "@/components/workspace/download-row";
 import { FindBar } from "@/components/workspace/find-bar";
-import { SelectionBar } from "@/components/workspace/selection-bar";
 import { SelectionCheckbox } from "@/components/workspace/selection-checkbox";
 import { useColumnWidths } from "@/components/workspace/use-column-widths";
 import type { Download, SortKey } from "@/lib/downloads";
@@ -179,8 +178,6 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
           }}
         />
       ) : null}
-
-      <SelectionBar />
 
       <div
         ref={viewportRef}

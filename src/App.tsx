@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { SettingsDialog } from "@/components/settings/settings-dialog";
 import type { ShellCommand } from "@/components/shell/commands";
 import { TopBar } from "@/components/shell/top-bar";
+import { toolbarState } from "@/components/shell/toolbar-state";
 import { useShellShortcuts } from "@/components/shell/use-shell-shortcuts";
 import { AboutDialog } from "@/components/workspace/about-dialog";
 import { AddDownloadDialog } from "@/components/workspace/add-download-dialog";
@@ -27,6 +28,12 @@ import { useDownloads } from "@/state/download-store";
 
 export default function App() {
   const downloads = useDownloads();
+  // The bar follows the list: a button whose command cannot act is dimmed
+  // instead of quietly doing nothing.
+  const toolbarDisabled = useMemo(
+    () => toolbarState(downloads.downloads, downloads.selected),
+    [downloads.downloads, downloads.selected],
+  );
   const [categoriesVisible, setCategoriesVisible] = useState(true);
   const [addDownloadOpen, setAddDownloadOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -199,6 +206,7 @@ export default function App() {
           "toolbar-small": toolbarSize === "small",
         }}
         toolbarSize={toolbarSize}
+        toolbarDisabled={toolbarDisabled}
       />
       <Workspace
         categoriesVisible={categoriesVisible}
