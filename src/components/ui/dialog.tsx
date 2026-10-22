@@ -53,26 +53,26 @@ export function Dialog({
         // `open:flex` matters: a plain `flex` would override the native
         // `dialog:not([open]) { display: none }` rule and every dialog would
         // render at once.
-        "m-auto w-96 flex-col overflow-hidden rounded-chrome border border-chrome-line bg-chrome-popup p-0 text-chrome-menu-text backdrop:bg-black/60 open:flex",
+        "m-auto w-96 flex-col overflow-hidden rounded-lg bg-chrome-popup p-0 text-chrome-menu-text shadow-float backdrop:bg-black/60 open:flex",
         className,
       )}
     >
-      <div className="flex shrink-0 items-center justify-between gap-4 border-b border-chrome-line bg-linear-to-b from-chrome-toolbar to-chrome-popup py-1.5 pr-2 pl-4">
+      <div className="flex shrink-0 items-center justify-between gap-4 py-3 pr-2 pl-4">
         <span className="truncate text-sm text-chrome-title-text">{title}</span>
         <button
           type="button"
           onClick={onClose}
           aria-label="Close"
-          className="flex size-6 shrink-0 items-center justify-center rounded-chrome text-chrome-muted hover:bg-chrome-menu-hover hover:text-chrome-menu-text focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
+          className="flex size-7 shrink-0 items-center justify-center rounded-chrome text-chrome-muted transition-colors hover:bg-chrome-menu-hover hover:text-chrome-menu-text focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
         >
           <CloseGlyph className="size-3.5" />
         </button>
       </div>
-      <div className={cn("min-h-0 flex-1 px-4 py-3", bodyClassName)}>
+      <div className={cn("min-h-0 flex-1 px-4 pb-3", bodyClassName)}>
         {children}
       </div>
       {footer ? (
-        <div className="flex shrink-0 justify-end gap-2 border-t border-chrome-line px-4 py-2">
+        <div className="flex shrink-0 justify-end gap-2 px-4 pb-4">
           {footer}
         </div>
       ) : null}

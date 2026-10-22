@@ -608,10 +608,9 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
           run(pauseDownload(item.id));
         } else if (action === "stop") {
           run(cancelDownload(item.id));
-        } else if (item.status === "stopped" || item.status === "error") {
-          // The task is gone, so resuming cannot work: start it again.
-          run(restart(item));
         } else {
+          // Resuming a stopped or failed row is not a new download: the engine
+          // still has its parts and manifest, and picks up from them.
           run(resumeDownload(item.id));
         }
       }
@@ -688,12 +687,12 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
     },
     startQueue: () => {
       const resumable = latest.current.downloads.filter(
-        (item) => item.status === "paused" || item.status === "queued",
+        (item) =>
+          item.status === "paused" ||
+          item.status === "queued" ||
+          item.status === "stopped",
       );
-      const restartable = latest.current.downloads.filter(
-        (item) => item.status === "stopped",
-      );
-      if (resumable.length === 0 && restartable.length === 0) {
+      if (resumable.length === 0) {
         return;
       }
       setState((current) => ({
@@ -706,12 +705,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
             : item,
         ),
       }));
-      run(
-        Promise.all([
-          ...resumable.map((item) => resumeDownload(item.id)),
-          ...restartable.map((item) => restart(item)),
-        ]),
-      );
+      run(Promise.all(resumable.map((item) => resumeDownload(item.id))));
     },
     stopQueue: () => {
       const items = latest.current.downloads.filter(

@@ -47,7 +47,7 @@ export function SelectionCheckbox({
         onClick={(event) => event.stopPropagation()}
         onChange={onToggle}
         className={cn(
-          "peer size-4 appearance-none rounded-chrome border border-input bg-chrome-canvas transition-colors hover:border-chrome-muted checked:border-primary checked:bg-primary focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-offset-1 focus-visible:ring-offset-chrome-canvas focus-visible:outline-none",
+          "peer size-4 appearance-none rounded-sm border border-input bg-chrome-canvas transition-colors hover:border-chrome-muted checked:border-primary checked:bg-primary focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-offset-1 focus-visible:ring-offset-chrome-canvas focus-visible:outline-none",
           indeterminate && "border-primary bg-primary",
         )}
       />

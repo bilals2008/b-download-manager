@@ -44,7 +44,7 @@ export function DownloadCompleteWindow({ info }: { info: DownloadInfo }) {
     <div className="flex h-dvh flex-col overflow-hidden bg-chrome-popup text-chrome-menu-text">
       <div
         data-tauri-drag-region
-        className="flex shrink-0 items-center justify-between gap-4 border-b border-chrome-line bg-linear-to-b from-chrome-toolbar to-chrome-popup py-1.5 pr-2 pl-4"
+        className="flex shrink-0 items-center justify-between gap-4 py-2 pr-2 pl-4"
       >
         <span
           data-tauri-drag-region
@@ -56,7 +56,7 @@ export function DownloadCompleteWindow({ info }: { info: DownloadInfo }) {
           type="button"
           onClick={() => void closeWindow()}
           aria-label="Close"
-          className="flex size-6 shrink-0 items-center justify-center rounded-chrome text-chrome-muted hover:bg-chrome-menu-hover hover:text-chrome-menu-text focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
+          className="flex size-7 shrink-0 items-center justify-center rounded-chrome text-chrome-muted transition-colors hover:bg-chrome-menu-hover hover:text-chrome-menu-text focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
         >
           <CloseGlyph className="size-3.5" />
         </button>
@@ -77,18 +77,18 @@ export function DownloadCompleteWindow({ info }: { info: DownloadInfo }) {
         ) : null}
       </div>
 
-      <div className="flex shrink-0 justify-end gap-2 border-t border-chrome-line px-4 py-2">
+      <div className="flex shrink-0 justify-end gap-2 px-4 pb-4">
         <button
           type="button"
           onClick={() => void reveal(info.dest)}
-          className="rounded-chrome border border-chrome-line px-3 py-1 text-xs text-chrome-menu-text hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
+          className="rounded-chrome bg-chrome-panel px-3 py-1.5 text-xs text-chrome-menu-text transition-colors hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
         >
           Open file
         </button>
         <button
           type="button"
           onClick={() => void reveal(folder)}
-          className="rounded-chrome bg-primary px-3 py-1 text-xs font-medium text-primary-foreground hover:opacity-90 focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
+          className="rounded-chrome bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
         >
           Open folder
         </button>
@@ -96,7 +96,7 @@ export function DownloadCompleteWindow({ info }: { info: DownloadInfo }) {
           type="button"
           autoFocus
           onClick={() => void closeWindow()}
-          className="rounded-chrome border border-chrome-line px-3 py-1 text-xs text-chrome-menu-text hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
+          className="rounded-chrome bg-chrome-panel px-3 py-1.5 text-xs text-chrome-menu-text transition-colors hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
         >
           Close
         </button>

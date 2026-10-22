@@ -84,13 +84,25 @@ and `allow-close`, or the title bar silently stops dragging and the buttons do
 nothing. Double-click maximize is handled by the drag region; do not add a
 second `onDoubleClick` toggler, it cancels itself out.
 
+With decorations off the window has square corners, so
+`src-tauri/src/window_style.rs::round_corners` asks the compositor for rounded
+ones (Windows 11 only, and a no-op elsewhere). It is called for the main window
+in `lib.rs` and for the download-complete window in `complete.rs`.
+
 ## Theme
 
 Single source of truth: `src/index.css` (CSS variables + `@theme inline`), read
-by `scripts/check-palette.mjs`. Black chrome with one lime action colour, a
-light appearance that follows the system, and green only for finished work.
-Changing a colour means changing it there and re-running
+by `scripts/check-palette.mjs`. Slate black chrome with the Windows accent blue
+for actions, a neutral light appearance that follows the system, and green only
+for finished work. Changing a colour means changing it there and re-running
 `npm run check:palette`.
+
+Surfaces are borderless: panes, bars and rows separate by surface colour and
+spacing, not by divider lines. Radii are `rounded-lg` (12px) for panes and
+popups, `rounded-chrome` (8px) for controls and rows, `rounded-sm` (6px) for
+checkboxes. Floating things only (menus, popups, dialogs) get `shadow-float`;
+panes are flat. The only visible borders left are on form fields and
+checkboxes, where they are the affordance.
 
 Theme references:
 

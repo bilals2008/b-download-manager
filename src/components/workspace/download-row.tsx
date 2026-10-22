@@ -2,7 +2,7 @@ import { useRef } from "react";
 
 import { FileTypeIcon, StatusMark } from "@/components/icons/desktop-icons";
 import { SelectionCheckbox } from "@/components/workspace/selection-checkbox";
-import { Progress } from "@/components/ui/progress";
+import { DownloadProgress } from "@/components/workspace/download-progress";
 import {
   formatEta,
   formatSize,
@@ -12,13 +12,12 @@ import {
   type Download,
 } from "@/lib/downloads";
 import { cn } from "@/lib/utils";
-import type { SelectMode } from "@/state/download-store";
 
 interface DownloadRowProps {
   item: Download;
   selected: boolean;
-  /** How the click picks: plain, Ctrl or Cmd, Shift for a range, both to add one. */
-  onSelect: (mode: SelectMode) => void;
+  /** Only the checkbox picks a row; a click anywhere else leaves it alone. */
+  onToggle: () => void;
   /** Open the menu of the row, the way a right click does. */
   onOpenMenu: (at: { x: number; y: number }, trigger: HTMLElement | null) => void;
 }
@@ -33,10 +32,10 @@ interface DownloadRowProps {
 export function DownloadRow({
   item,
   selected,
-  onSelect,
+  onToggle,
   onOpenMenu,
 }: DownloadRowProps) {
-  const nameRef = useRef<HTMLButtonElement>(null);
+  const nameRef = useRef<HTMLDivElement>(null);
   const status = STATUS_LABELS[item.status];
   const percent = progressOf(item);
   const knownSize = item.size > 0;
@@ -52,9 +51,7 @@ export function DownloadRow({
 
   return (
     <tr
-      data-download-id={item.id}
       aria-selected={selected}
-      onClick={(event) => onSelect(modeOf(event))}
       onContextMenu={(event) => {
         event.preventDefault();
         openMenu({ x: event.clientX, y: event.clientY });
@@ -69,18 +66,18 @@ export function DownloadRow({
         }
       }}
       className={cn(
-        "cursor-default select-none border-b border-chrome-line/60 transition-colors",
+        "select-none transition-colors",
         selected
           ? "bg-chrome-menu-active"
           : "hover:bg-chrome-menu-hover",
       )}
     >
-      <td className="border-b border-chrome-line/60 px-3 py-1.5">
+      <td className="px-3 py-2">
         <div className="flex min-w-0 items-center gap-2.5">
           <SelectionCheckbox
             checked={selected}
             label={`Select ${item.fileName}`}
-            onToggle={() => onSelect("toggle")}
+            onToggle={onToggle}
           />
 
           <FileTypeIcon
@@ -88,15 +85,10 @@ export function DownloadRow({
             className="size-5 shrink-0"
           />
 
-          <button
+          <div
             ref={nameRef}
-            type="button"
             title={item.url}
-            onClick={(event) => {
-              event.stopPropagation();
-              onSelect(modeOf(event));
-            }}
-            className="min-w-0 flex-1 text-left focus-visible:rounded-chrome focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
+            className="min-w-0 flex-1"
           >
             <span className="block truncate text-chrome-menu-text">
               {item.fileName}
@@ -106,38 +98,35 @@ export function DownloadRow({
                 {item.error}
               </span>
             ) : null}
-          </button>
+          </div>
         </div>
       </td>
 
-      <td className="border-b border-chrome-line/60 px-3 py-1.5 text-right tabular-nums text-chrome-menu-text">
+      <td className="px-3 py-2 text-right tabular-nums text-chrome-menu-text">
         {knownSize ? formatSize(item.size) : "-"}
       </td>
 
-      <td className="border-b border-chrome-line/60 px-3 py-1.5 text-right tabular-nums text-chrome-menu-text">
+      <td className="px-3 py-2 text-right tabular-nums text-chrome-menu-text">
         {knownSize ? (
-          <>
-            <span>{percent.toFixed(2)}%</span>
-            <Progress
-              value={Math.min(100, percent)}
-              aria-label={`${item.fileName} progress`}
-              className="mt-1 h-1 bg-chrome-popup"
-            />
-          </>
+          <DownloadProgress
+            value={percent}
+            status={item.status}
+            label={`${item.fileName} progress`}
+          />
         ) : (
           "-"
         )}
       </td>
 
-      <td className="border-b border-chrome-line/60 px-3 py-1.5 text-right tabular-nums text-chrome-menu-text">
+      <td className="px-3 py-2 text-right tabular-nums text-chrome-menu-text">
         {formatSpeed(item.speed) || "-"}
       </td>
 
-      <td className="border-b border-chrome-line/60 px-3 py-1.5 text-right tabular-nums text-chrome-menu-text">
+      <td className="px-3 py-2 text-right tabular-nums text-chrome-menu-text">
         {item.status === "downloading" ? formatEta(item.eta) : "-"}
       </td>
 
-      <td className="border-b border-chrome-line/60 px-3 py-1.5">
+      <td className="px-3 py-2">
         <span
           className="inline-flex items-center gap-1.5 text-chrome-menu-text"
           title={item.error ?? status}
@@ -148,16 +137,4 @@ export function DownloadRow({
       </td>
     </tr>
   );
-}
-
-/** The selection mode the pointer and its modifier keys ask for. */
-function modeOf(event: {
-  shiftKey: boolean;
-  ctrlKey: boolean;
-  metaKey: boolean;
-}): SelectMode {
-  if (event.shiftKey) {
-    return event.ctrlKey || event.metaKey ? "add-range" : "range";
-  }
-  return event.ctrlKey || event.metaKey ? "toggle" : "replace";
 }

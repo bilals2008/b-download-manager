@@ -148,7 +148,7 @@ export function MenuBar({ onCommand, menuLabels, menuChecks }: MenuBarProps) {
         {MENUS.map((menu, index) => {
           const isOpen = openIndex === index;
           return (
-            <li key={menu.id} role="none" className="relative">
+            <li key={menu.id} role="none" className="relative flex items-center">
               <button
                 ref={(node) => {
                   triggerRefs.current[index] = node;
@@ -174,7 +174,7 @@ export function MenuBar({ onCommand, menuLabels, menuChecks }: MenuBarProps) {
                 }}
                 onKeyDown={(event) => handleTriggerKeyDown(event, index)}
                 className={
-                  "flex h-full items-center rounded-chrome px-2 text-xs text-chrome-menu-text hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset " +
+                  "flex h-5 items-center rounded-chrome px-2 text-xs text-chrome-menu-text transition-colors hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset " +
                   (isOpen ? "bg-chrome-menu-active" : "")
                 }
               >

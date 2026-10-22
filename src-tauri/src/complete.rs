@@ -52,7 +52,8 @@ pub fn show(app: &AppHandle, info: &DownloadInfo) {
     .decorations(false)
     .center()
     .initialization_script(payload(info))
-    .build();
+    .build()
+    .map(|window| crate::window_style::round_corners(&window));
 }
 
 #[cfg(test)]

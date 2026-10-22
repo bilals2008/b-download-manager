@@ -22,14 +22,14 @@ export function DeleteConfirmDialog() {
           <button
             type="button"
             onClick={cancelDelete}
-            className="rounded-chrome border border-chrome-line px-3 py-1 text-xs text-chrome-menu-text hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
+            className="rounded-chrome bg-chrome-panel px-3 py-1.5 text-xs text-chrome-menu-text transition-colors hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={confirmDelete}
-            className="rounded-chrome bg-chrome-danger px-3 py-1 text-xs font-medium text-chrome-danger-text hover:opacity-90 focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
+            className="rounded-chrome bg-chrome-danger px-3 py-1.5 text-xs font-medium text-chrome-danger-text transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
           >
             {one ? "Remove" : `Remove ${count}`}
           </button>

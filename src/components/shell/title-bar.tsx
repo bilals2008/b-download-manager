@@ -4,7 +4,7 @@ import { windowAction } from "@/lib/window";
 import { AppMark } from "./app-mark";
 
 const WINDOW_BUTTON =
-  "flex h-8 w-12 items-center justify-center text-chrome-title-text hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none";
+  "flex h-7 my-0.5 w-11 items-center justify-center rounded-chrome text-chrome-title-text transition-colors hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none";
 
 export function TitleBar() {
   return (
@@ -19,7 +19,10 @@ export function TitleBar() {
         </span>
       </div>
 
-      <div className="flex" onDoubleClick={(event) => event.stopPropagation()}>
+      <div
+        className="flex items-center gap-0.5 pr-1.5"
+        onDoubleClick={(event) => event.stopPropagation()}
+      >
         <button
           type="button"
           aria-label="Minimize window"

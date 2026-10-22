@@ -45,7 +45,7 @@ export function SettingsNav({ page, onSelect }: SettingsNavProps) {
   return (
     <nav
       aria-label="Settings pages"
-      className="hidden w-44 shrink-0 flex-col gap-0.5 border-r border-chrome-line bg-chrome-panel p-2 sm:flex"
+      className="hidden w-44 shrink-0 flex-col gap-0.5 bg-chrome-panel p-2 sm:flex"
     >
       <p className="px-2 pt-1 pb-2 text-chrome-micro font-medium tracking-wider text-chrome-muted uppercase">
         Configuration

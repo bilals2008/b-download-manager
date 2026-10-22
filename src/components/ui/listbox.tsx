@@ -219,7 +219,7 @@ export function ListBox({ label, options, value, onChange }: ListBoxProps) {
         aria-controls={`${baseId}-list`}
         onClick={() => setOpen((current) => !current)}
         onKeyDown={handleKeyDown}
-        className="flex w-full items-center justify-between gap-2 rounded-chrome border border-chrome-line bg-chrome-canvas px-2 py-1.5 text-left text-xs text-chrome-menu-text hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
+        className="flex w-full items-center justify-between gap-2 rounded-chrome bg-chrome-canvas px-2.5 py-1.5 text-left text-xs text-chrome-menu-text transition-colors hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
       >
         <span className="truncate">{selected?.label ?? label}</span>
         <ChevronDown className="size-3.5 shrink-0 text-chrome-muted" />
@@ -240,7 +240,7 @@ export function ListBox({ label, options, value, onChange }: ListBoxProps) {
                 top: placement.top,
                 bottom: placement.bottom,
               }}
-              className="fixed z-50 overflow-auto rounded-chrome border border-chrome-line bg-chrome-popup py-1 shadow-lg"
+              className="fixed z-50 overflow-auto rounded-lg bg-chrome-popup p-1 shadow-float"
             >
               {options.map((option, index) => {
                 const isSelected = option.value === value;
@@ -256,7 +256,7 @@ export function ListBox({ label, options, value, onChange }: ListBoxProps) {
                       tabIndex={-1}
                       onClick={() => commit(index)}
                       onPointerEnter={() => setActive(index)}
-                      className="flex w-full items-center gap-2 px-2 py-1 text-left text-xs text-chrome-menu-text hover:bg-chrome-popup-hover focus-visible:bg-chrome-popup-hover focus-visible:outline-none"
+                      className="flex w-full items-center gap-2 rounded-chrome px-2 py-1.5 text-left text-xs text-chrome-menu-text transition-colors hover:bg-chrome-popup-hover focus-visible:bg-chrome-popup-hover focus-visible:outline-none"
                     >
                       <CheckGlyph
                         className={`size-3.5 shrink-0 ${isSelected ? "opacity-100" : "opacity-0"}`}

@@ -29,8 +29,8 @@ export const DOWNLOAD_COLUMNS: DownloadColumn[] = [
     id: "progress",
     label: "Progress",
     sortKey: null,
-    width: 9,
-    minWidth: 6,
+    width: 15,
+    minWidth: 12,
     align: "right",
   },
   {

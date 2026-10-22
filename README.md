@@ -183,8 +183,9 @@ shape, so the table stays live without polling.
 
 ## Colour
 
-The palette is black with one lime action colour, and it follows the system:
-a light appearance with the same token names. Green means "finished" and
-nothing else. It lives in `src/index.css` and nothing else hardcodes a colour.
+The palette is neutral slate black in dark mode and neutral light in light mode,
+with the Windows accent blue for actions, and it follows the system. Green means
+"finished" and nothing else. It lives in `src/index.css` and nothing else
+hardcodes a colour.
 `npm run check:palette` reads those tokens and fails if any pair the product
 renders drops below its WCAG 2.2 minimum.

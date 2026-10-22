@@ -38,7 +38,7 @@ const INTEGRATIONS = [
 ];
 
 const OUTLINE_BUTTON =
-  "inline-flex h-7 shrink-0 items-center justify-center rounded-chrome border border-chrome-line px-2.5 text-xs text-chrome-menu-text hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none disabled:cursor-default disabled:opacity-45 disabled:hover:bg-transparent";
+  "inline-flex h-7 shrink-0 items-center justify-center rounded-chrome bg-chrome-canvas px-2.5 text-xs text-chrome-menu-text transition-colors hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none disabled:cursor-default disabled:opacity-45 disabled:hover:bg-chrome-canvas";
 
 /**
  * The General page: startup, browser capture and the integration shortcuts.
@@ -118,7 +118,7 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
       </Section>
 
       <Section title="Integration" planned>
-        <ul className="flex flex-col divide-y divide-chrome-line">
+        <ul className="flex flex-col gap-1">
           {INTEGRATIONS.map(({ label, description, action }) => (
             <li
               key={label}
@@ -157,7 +157,7 @@ function AppearanceChoice({
   return (
     <fieldset>
       <legend className={LABEL}>Theme</legend>
-      <div className="inline-flex rounded-chrome border border-chrome-line bg-chrome-canvas p-0.5">
+      <div className="inline-flex rounded-chrome bg-chrome-canvas p-0.5">
         {THEMES.map((option) => (
           <label key={option.value} className="cursor-pointer">
             <input

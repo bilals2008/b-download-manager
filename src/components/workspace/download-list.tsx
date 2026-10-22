@@ -21,7 +21,6 @@ import { DownloadRow } from "@/components/workspace/download-row";
 import { SelectionBar } from "@/components/workspace/selection-bar";
 import { SelectionCheckbox } from "@/components/workspace/selection-checkbox";
 import { useColumnWidths } from "@/components/workspace/use-column-widths";
-import { useDragSelect } from "@/components/workspace/use-drag-select";
 import type { Download, SortKey } from "@/lib/downloads";
 import { cn } from "@/lib/utils";
 import { useDownloads } from "@/state/download-store";
@@ -61,12 +60,6 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
   } | null>(null);
   // The control that opened the menu, so the focus goes back to it.
   const menuTrigger = useRef<HTMLElement | null>(null);
-  // The list scrolls on its own when a drag reaches its top or bottom edge.
-  const viewport = useRef<HTMLDivElement>(null);
-  const { start, consumeClick } = useDragSelect({
-    scrollRef: viewport,
-    onSelect: selectRow,
-  });
   // The id of the row whose properties window is open, so the window keeps up
   // with the progress of the download while it is on screen.
   const [propertiesId, setPropertiesId] = useState<number | null>(null);
@@ -112,19 +105,19 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
   return (
     <section
       aria-label="Downloads"
-      className="flex min-h-0 min-w-0 flex-1 flex-col bg-chrome-canvas"
+      className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg bg-chrome-panel"
     >
       {error ? (
         <div
           role="alert"
-          className="flex items-start gap-2 border-b border-chrome-line bg-chrome-panel px-3 py-2 text-xs text-chrome-menu-text"
+          className="mx-2 mt-2 flex items-start gap-2 rounded-lg bg-chrome-canvas px-3 py-2 text-xs text-chrome-menu-text"
         >
           <WarningMark className="mt-0.5 size-4 shrink-0" />
           <p className="min-w-0 flex-1 break-words">{error}</p>
           <button
             type="button"
             onClick={reload}
-            className="shrink-0 rounded-chrome border border-chrome-line px-2 py-0.5 text-xs hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
+            className="shrink-0 rounded-chrome bg-chrome-panel px-2 py-0.5 text-xs hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
           >
             Retry
           </button>
@@ -142,7 +135,6 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
       <SelectionBar />
 
       <div
-        ref={viewport}
         className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
         onClick={(event) => {
           // A click on the empty space under the rows drops the selection.
@@ -201,7 +193,7 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
                           : undefined
                     }
                     className={cn(
-                      "sticky top-0 z-10 border-b border-chrome-line bg-linear-to-b from-chrome-toolbar to-chrome-menu px-3 py-1.5 text-chrome-micro font-medium tracking-wide text-chrome-muted",
+                      "sticky top-0 z-10 bg-chrome-panel px-3 py-2 text-chrome-micro font-medium tracking-wide text-chrome-muted",
                       column.align === "right" ? "text-right" : "text-left",
                     )}
                   >
@@ -283,7 +275,7 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
                           resetWidths();
                         }
                       }}
-                      className="absolute inset-y-0 right-0 z-20 w-2 cursor-col-resize touch-none focus-visible:outline-none after:absolute after:inset-y-1 after:right-0 after:w-px after:bg-chrome-line hover:after:bg-chrome-focus focus-visible:after:bg-chrome-focus"
+                      className="absolute inset-y-0 right-0 z-20 w-2 cursor-col-resize touch-none after:absolute after:inset-y-1 after:right-0 after:w-px after:bg-transparent hover:after:bg-chrome-focus focus-visible:outline-none focus-visible:after:bg-chrome-focus"
                     />
                   </th>
                 );
@@ -291,7 +283,7 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
             </tr>
           </thead>
 
-          <tbody onPointerDown={start}>
+          <tbody>
             {loading && downloads.length === 0 ? (
               <tr>
                 <td colSpan={DOWNLOAD_COLUMNS.length} className="px-3 py-16">
@@ -323,7 +315,7 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
                       <button
                         type="button"
                         onClick={onAddDownload}
-                        className="inline-flex items-center gap-1.5 rounded-chrome bg-chrome-menu-active px-3 py-1.5 text-xs text-chrome-title-text hover:bg-chrome-popup-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
+                        className="inline-flex items-center gap-1.5 rounded-chrome bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
                       >
                         <PlusGlyph className="size-3.5" />
                         Add download
@@ -332,7 +324,7 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
                         <button
                           type="button"
                           onClick={() => setFilter("all")}
-                          className="rounded-chrome border border-chrome-line px-3 py-1.5 text-xs text-chrome-menu-text hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
+                          className="rounded-chrome bg-chrome-canvas px-3 py-1.5 text-xs text-chrome-menu-text hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
                         >
                           Show all downloads
                         </button>
@@ -347,12 +339,7 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
                   key={item.id}
                   item={item}
                   selected={selected.includes(item.id)}
-                  onSelect={(mode) => {
-                    if (consumeClick()) {
-                      return;
-                    }
-                    selectRow(item.id, mode);
-                  }}
+                  onToggle={() => selectRow(item.id, "toggle")}
                   onOpenMenu={(at, trigger) => openMenu(item, at, trigger)}
                 />
               ))

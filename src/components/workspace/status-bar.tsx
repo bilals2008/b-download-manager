@@ -1,9 +1,9 @@
 import { formatSize, formatSpeed } from "@/lib/downloads";
 import { useDownloads } from "@/state/download-store";
 
-/** One panel of the status bar. Neighbours are split by a hairline rule. */
+/** One panel of the status bar. Neighbours are separated by space alone. */
 const CELL =
-  "flex shrink-0 items-center gap-1 border-l border-chrome-line px-3 tabular-nums";
+  "flex shrink-0 items-center gap-1 px-3 tabular-nums";
 
 /**
  * The status bar along the bottom of the window: how many downloads the
@@ -20,7 +20,7 @@ export function StatusBar() {
   const active = downloads.filter((item) => item.status === "downloading").length;
 
   return (
-    <footer className="flex h-6 shrink-0 items-stretch overflow-hidden border-t border-chrome-line bg-linear-to-b from-chrome-toolbar to-chrome-menu text-chrome-micro text-chrome-muted">
+    <footer className="flex h-7 shrink-0 items-stretch overflow-hidden bg-chrome-canvas text-chrome-micro text-chrome-muted">
       <span className="flex min-w-0 items-center px-3 tabular-nums">
         <span className="truncate">
           {visible.length} of {downloads.length} downloads

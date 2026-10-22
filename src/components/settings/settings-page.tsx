@@ -22,9 +22,7 @@ export function SettingsPage({
         <h2 className="text-base font-medium text-chrome-title-text">{title}</h2>
         <p className="mt-1 text-xs text-chrome-muted">{description}</p>
       </header>
-      <div className="mt-5 flex flex-col divide-y divide-chrome-line">
-        {children}
-      </div>
+      <div className="mt-5 flex flex-col gap-1">{children}</div>
     </div>
   );
 }
@@ -46,8 +44,8 @@ export function Section({
         <h3 className="text-xs font-medium text-chrome-title-text">{title}</h3>
         {planned ? (
           <Badge
-            variant="outline"
-            className="border-chrome-line px-1.5 py-0 text-chrome-micro font-normal text-chrome-muted"
+            variant="secondary"
+            className="px-1.5 py-0 text-chrome-micro font-normal text-chrome-muted"
           >
             Planned
           </Badge>

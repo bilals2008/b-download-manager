@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 /** The box every field in the options window uses. */
 export const FIELD =
-  "w-full rounded-chrome border border-chrome-line bg-chrome-canvas px-2 py-1.5 text-xs text-chrome-menu-text placeholder:text-chrome-muted/70 focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none";
+  "w-full rounded-chrome border border-transparent bg-chrome-canvas px-2 py-1.5 text-xs text-chrome-menu-text transition-colors placeholder:text-chrome-muted/70 hover:bg-chrome-menu-hover focus-visible:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none";
 
 /** The label above a field. */
 export const LABEL = "mb-1 block text-xs text-chrome-muted";

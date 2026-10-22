@@ -5,41 +5,42 @@
   Auto follows the operating system, Light and Dark override it.
 
   Two blocks define the same semantic tokens: the dark block below is the
-  original void-black-and-lime view, and the light block overrides the same
-  names when the root carries `data-theme="light"`. Components never ask which
-  theme is active; they read the tokens and `src/lib/theme.ts` does the
-  switching.
+  neutral slate view, and the light block overrides the same names when the
+  root carries `data-theme="light"`. Components never ask which theme is
+  active; they read the tokens and `src/lib/theme.ts` does the switching.
 
-  Lime is the only action colour; green marks finished work and red destroys.
-  The hex values are the ones the palette checker (`npm run check:palette`)
-  verifies for WCAG contrast in both themes, so change them there and here
-  together, or run the checker.
+  The accent is the Fluent (Windows) blue in both appearances; green marks
+  finished work and red destroys. The hex values are the ones the palette
+  checker (`npm run check:palette`) verifies for WCAG contrast in both themes,
+  so change them there and here together, or run the checker.
 */
 :root {
   color-scheme: dark;
 
+  /* Surfaces are rounded, never outlined: 12px for panes and windows, 8px for
+     controls. */
   --radius: 0.75rem;
 
-  /* pure black, tinted blacks, no neutral grey */
-  --background: #000000;
-  --foreground: #eef4e9;
-  --card: #060906;
-  --card-foreground: #eef4e9;
-  --popover: #060906;
-  --popover-foreground: #eef4e9;
+  /* slate black, the neutral the Windows shell uses */
+  --background: #0f1115;
+  --foreground: #e9eaec;
+  --card: #16181c;
+  --card-foreground: #e9eaec;
+  --popover: #1c1f24;
+  --popover-foreground: #e9eaec;
 
-  /* lime is the only action colour */
-  --primary: #a8f04a;
-  --primary-foreground: #08130a;
+  /* Windows 11 accent blue, the dimmed variant so it never glows */
+  --primary: #115ea3;
+  --primary-foreground: #ffffff;
 
-  --secondary: #101a0c;
-  --secondary-foreground: #dcead2;
+  --secondary: #1a1d22;
+  --secondary-foreground: #d6d9de;
 
-  --muted: #0b120a;
-  --muted-foreground: #b3c4a8;
+  --muted: #14161a;
+  --muted-foreground: #aab1bb;
 
-  --accent: #16230e;
-  --accent-foreground: #dcead2;
+  --accent: #23272e;
+  --accent-foreground: #d6d9de;
 
   /* green marks finished work and nothing else */
   --success: #2fd06b;
@@ -48,40 +49,46 @@
   --destructive: #d63a3a;
   --destructive-foreground: #ffffff;
 
-  --border: #1b2716;
-  --input: #5f7a52;
-  --ring: #a8f04a;
+  --border: #2a2e35;
+  --input: #8f96a1;
+  --ring: #479ef5;
+
+  /* One soft shadow for surfaces that float above the window: menus, popups
+     and dialogs. Panes are separated by surface contrast, not shadows. */
+  --float-shadow:
+    0 18px 40px -18px rgb(0 0 0 / 0.75), 0 4px 12px -6px rgb(0 0 0 / 0.5);
 
   /*
-    Application chrome. Window furniture is black as well, separated by
-    hairlines; hover and open states are a darker or lighter green-black, never
-    a grey. Every text pair below is checked by `npm run check:palette`.
+    Application chrome. Window furniture shares the canvas surface and is
+    separated by spacing alone; panes and popups step up one surface at a
+    time. Hover and open states are a lighter slate. Every text pair below is
+    checked by `npm run check:palette`.
   */
-  --chrome-title: #000000;
-  --chrome-title-text: #eef4e9;
-  --chrome-menu: #000000;
-  --chrome-menu-text: #eef4e9;
-  --chrome-menu-hover: #101b09;
-  --chrome-menu-active: #18270d;
-  --chrome-toolbar: #040604;
-  --chrome-toolbar-text: #eef4e9;
-  --chrome-toolbar-hover: #101b09;
-  --chrome-toolbar-active: #18270d;
-  --chrome-popup: #060906;
-  --chrome-popup-hover: #16230e;
-  --chrome-muted: #b3c4a8;
-  --chrome-canvas: #000000;
-  --chrome-panel: #030503;
-  --chrome-line: #1b2716;
-  --chrome-focus: #a8f04a;
+  --chrome-title: #121418;
+  --chrome-title-text: #e9eaec;
+  --chrome-menu: #0f1115;
+  --chrome-menu-text: #e9eaec;
+  --chrome-menu-hover: #1a1d22;
+  --chrome-menu-active: #24282f;
+  --chrome-toolbar: #0f1115;
+  --chrome-toolbar-text: #e9eaec;
+  --chrome-toolbar-hover: #1a1d22;
+  --chrome-toolbar-active: #24282f;
+  --chrome-popup: #1c1f24;
+  --chrome-popup-hover: #252a31;
+  --chrome-muted: #aab1bb;
+  --chrome-canvas: #0f1115;
+  --chrome-panel: #16181c;
+  --chrome-line: #2a2e35;
+  --chrome-focus: #479ef5;
   --chrome-danger: #c42b1c;
   --chrome-danger-text: #ffffff;
   --chrome-error: #ff8f80;
 
   /* Toolbar artwork. These are illustration tints, not UI semantics. */
-  --icon-green: #6cb52e;
-  --icon-green-bright: #8ed94a;
-  --icon-green-deep: #3f7419;
+  --icon-green: #3fb950;
+  --icon-green-bright: #56d364;
+  --icon-green-deep: #1f7a33;
   --icon-red: #c8382b;
   --icon-red-bright: #e85a4d;
   --icon-red-deep: #7c1f18;
@@ -100,10 +107,10 @@
 }
 
 /*
-  Light appearance. Same tokens, same names: warm off-white surfaces with
-  green-grey hairlines, near-black text, and the lime accent kept for primary
-  actions where it still carries dark text. Focus rings, borders and icon tints
-  darken so they stay visible on light surfaces.
+  Light appearance. Same tokens, same names: the neutral light the Windows
+  shell uses, near-black text, and the lime accent kept for primary actions
+  where it still carries dark text. Focus rings, borders and icon tints darken
+  so they stay visible on light surfaces.
 
   `data-theme` is set on the root by `src/lib/theme.ts` before the first render,
   so Auto follows the system and the setting can override it. Components never
@@ -112,24 +119,24 @@
 :root[data-theme="light"] {
   color-scheme: light;
 
-  --background: #f6f8f2;
-    --foreground: #12170d;
-    --card: #fbfcf8;
-    --card-foreground: #12170d;
+  --background: #f3f4f6;
+    --foreground: #17181b;
+    --card: #ffffff;
+    --card-foreground: #17181b;
     --popover: #ffffff;
-    --popover-foreground: #12170d;
+    --popover-foreground: #17181b;
 
-    --primary: #a8f04a;
-    --primary-foreground: #0a1406;
+    --primary: #0f6cbd;
+    --primary-foreground: #ffffff;
 
-    --secondary: #e6eddd;
-    --secondary-foreground: #1c2615;
+    --secondary: #e9eaee;
+    --secondary-foreground: #1d1f23;
 
-    --muted: #ecefe7;
-    --muted-foreground: #4c5a45;
+    --muted: #eceef1;
+    --muted-foreground: #565b64;
 
-    --accent: #dcefc4;
-    --accent-foreground: #1b2a10;
+    --accent: #e3e5ea;
+    --accent-foreground: #1d1f23;
 
     --success: #2fd06b;
     --success-foreground: #04130a;
@@ -137,35 +144,38 @@
     --destructive: #c42b1c;
     --destructive-foreground: #ffffff;
 
-    --border: #d3dcc9;
-    --input: #66795a;
-    --ring: #3f7419;
+    --border: #d8dade;
+    --input: #6a6f78;
+    --ring: #0f6cbd;
 
-    --chrome-title: #e9eee2;
-    --chrome-title-text: #12170d;
-    --chrome-menu: #eef2e9;
-    --chrome-menu-text: #12170d;
-    --chrome-menu-hover: #e1e8d7;
-    --chrome-menu-active: #d5e4c0;
-    --chrome-toolbar: #f4f6f0;
-    --chrome-toolbar-text: #12170d;
-    --chrome-toolbar-hover: #e3e9da;
-    --chrome-toolbar-active: #d5e4c0;
+    --float-shadow:
+      0 18px 40px -22px rgb(9 11 16 / 0.3), 0 4px 12px -8px rgb(9 11 16 / 0.16);
+
+    --chrome-title: #e9eaee;
+    --chrome-title-text: #17181b;
+    --chrome-menu: #f3f4f6;
+    --chrome-menu-text: #17181b;
+    --chrome-menu-hover: #e9eaee;
+    --chrome-menu-active: #dcdfe5;
+    --chrome-toolbar: #f3f4f6;
+    --chrome-toolbar-text: #17181b;
+    --chrome-toolbar-hover: #e9eaee;
+    --chrome-toolbar-active: #dcdfe5;
     --chrome-popup: #ffffff;
-    --chrome-popup-hover: #eef3e7;
-    --chrome-muted: #4c5a45;
-    --chrome-canvas: #f8faf5;
-    --chrome-panel: #eef2e9;
-    --chrome-line: #d3dcc9;
-    --chrome-focus: #3f7419;
+    --chrome-popup-hover: #f0f1f4;
+    --chrome-muted: #565b64;
+    --chrome-canvas: #f3f4f6;
+    --chrome-panel: #ffffff;
+    --chrome-line: #d8dade;
+    --chrome-focus: #0f6cbd;
     --chrome-danger: #c42b1c;
     --chrome-danger-text: #ffffff;
     --chrome-error: #a8221a;
 
     /* Artwork tints darkened so the same drawings read on a light surface. */
-    --icon-green: #4f8a1f;
-    --icon-green-bright: #356b0f;
-    --icon-green-deep: #2a510c;
+    --icon-green: #1a7f37;
+    --icon-green-bright: #146c2e;
+    --icon-green-deep: #0f5323;
     --icon-red: #b93227;
     --icon-red-bright: #a8281d;
     --icon-red-deep: #7c1f18;
@@ -184,11 +194,13 @@
 }
 
 @theme inline {
-  --radius-sm: calc(var(--radius) - 5px);
+  --radius-sm: calc(var(--radius) - 6px);
   --radius-md: calc(var(--radius) - 3px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-  --radius-chrome: 3px;
+  --radius-chrome: 0.5rem;
+
+  --shadow-float: var(--float-shadow);
 
   /* Secondary metadata, one step below the body size. */
   --text-chrome-micro: 0.6875rem;
@@ -272,3 +284,4 @@
     outline-offset: 2px;
   }
 }
+                                                                                                            

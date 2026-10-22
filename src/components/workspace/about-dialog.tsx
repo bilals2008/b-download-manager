@@ -18,7 +18,7 @@ export function AboutDialog({ open, onClose }: AboutDialogProps) {
         <button
           type="button"
           onClick={onClose}
-          className="rounded-chrome bg-chrome-menu-active px-3 py-1 text-xs text-chrome-title-text hover:bg-chrome-popup-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
+          className="rounded-chrome bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
         >
           OK
         </button>

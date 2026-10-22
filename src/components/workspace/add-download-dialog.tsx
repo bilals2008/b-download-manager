@@ -27,7 +27,7 @@ interface AddDownloadDialogProps {
 }
 
 const FIELD =
-  "w-full rounded-chrome border border-chrome-line bg-chrome-canvas px-2.5 py-1.5 text-xs text-chrome-menu-text placeholder:text-chrome-muted/70 hover:border-chrome-muted/60 focus-visible:border-chrome-focus focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none";
+  "w-full rounded-chrome border border-transparent bg-chrome-canvas px-2.5 py-1.5 text-xs text-chrome-menu-text transition-colors placeholder:text-chrome-muted/70 hover:bg-chrome-menu-hover focus-visible:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none";
 
 const LABEL = "mb-1 block text-xs text-chrome-muted";
 
@@ -230,7 +230,7 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
           <button
             type="button"
             onClick={close}
-            className="rounded-chrome border border-chrome-line px-3 py-1 text-xs text-chrome-menu-text hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
+            className="rounded-chrome bg-chrome-panel px-3 py-1.5 text-xs text-chrome-menu-text transition-colors hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
           >
             Cancel
           </button>
@@ -238,7 +238,7 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
             type="submit"
             form="add-download-form"
             disabled={busy}
-            className="inline-flex items-center gap-1.5 rounded-chrome bg-primary px-3 py-1 text-xs font-medium text-primary-foreground hover:opacity-90 focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none disabled:opacity-60"
+            className="inline-flex items-center gap-1.5 rounded-chrome bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none disabled:opacity-60"
           >
             {busy ? (
               <SpinnerGlyph className="size-3.5 motion-safe:animate-spin" />
@@ -314,7 +314,7 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
             <button
               type="button"
               onClick={pickFolder}
-              className="shrink-0 rounded-chrome border border-chrome-line px-3 py-1 text-xs text-chrome-menu-text hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
+              className="shrink-0 rounded-chrome bg-chrome-panel px-3 py-1.5 text-xs text-chrome-menu-text transition-colors hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
             >
               Browse…
             </button>

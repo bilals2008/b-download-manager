@@ -43,8 +43,6 @@ type Row =
       path: string;
       label: string;
       count: number;
-      /** The last folder under its category: its guide stops at the row. */
-      last: boolean;
     };
 
 /**
@@ -96,14 +94,13 @@ export function CategoriesPane() {
     }
     return [
       categoryRow,
-      ...children.map<Row>((child, index) => ({
+      ...children.map<Row>((child) => ({
         kind: "folder",
         key: `folder:${category}:${child.path}`,
         id: category,
         path: child.path,
         label: child.label,
         count: child.count,
-        last: index === children.length - 1,
       })),
     ];
   });
@@ -241,30 +238,14 @@ export function CategoriesPane() {
           onFocus={() => setFocusKey(row.key)}
           onKeyDown={(event) => handleKeyDown(event, row)}
           className={cn(
-            "group relative flex h-7 w-full items-center gap-1.5 rounded-chrome pr-1.5 text-left text-xs transition-colors focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none",
-            depth === 0 ? "pl-1.5" : "pl-10",
+            "group relative flex h-8 w-full items-center gap-1.5 rounded-chrome pr-2 text-left text-xs transition-colors focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none",
+            depth === 0 ? "pl-2" : "pl-9",
             selected
               ? "bg-chrome-menu-active text-chrome-title-text"
               : "text-chrome-menu-text hover:bg-chrome-menu-hover active:bg-chrome-toolbar-active",
             collapsed && "justify-center px-0",
           )}
         >
-          {row.kind === "folder" ? (
-            <>
-              <span
-                aria-hidden="true"
-                className={cn(
-                  "pointer-events-none absolute top-0 left-3 w-px bg-chrome-line",
-                  row.last ? "h-1/2" : "h-full",
-                )}
-              />
-              <span
-                aria-hidden="true"
-                className="pointer-events-none absolute top-1/2 left-3 h-px w-6 bg-chrome-line"
-              />
-            </>
-          ) : null}
-
           {collapsed ? null : (
             <span className="grid size-3 shrink-0 place-items-center text-chrome-muted">
               {row.kind === "category" && row.hasFolders ? (
@@ -312,13 +293,13 @@ export function CategoriesPane() {
     <nav
       aria-label="Categories"
       className={cn(
-        "flex shrink-0 flex-col border-r border-chrome-line bg-chrome-panel",
+        "flex shrink-0 flex-col overflow-hidden rounded-lg bg-chrome-panel",
         collapsed ? "w-12" : "w-48 sm:w-56 lg:w-64",
       )}
     >
       <div
         className={cn(
-          "flex h-8 shrink-0 items-center border-b border-chrome-line/70",
+          "flex h-9 shrink-0 items-center",
           collapsed ? "justify-center px-1" : "justify-between pl-2.5 pr-1.5",
         )}
       >
@@ -349,7 +330,7 @@ export function CategoriesPane() {
         <ul className="flex flex-col gap-px">{viewRows.map(renderRow)}</ul>
 
         {collapsed ? (
-          <div className="my-2 border-t border-chrome-line/70" />
+          <div className="my-2 h-1" />
         ) : (
           <SectionLabel className="mt-3">Categories</SectionLabel>
         )}
@@ -378,12 +359,11 @@ function SectionLabel({
   return (
     <p
       className={cn(
-        "flex items-center gap-2 px-1.5 pb-1.5 text-[10px] font-semibold tracking-wider text-chrome-muted uppercase",
+        "flex items-center gap-2 px-2 pb-1.5 text-[10px] font-semibold tracking-wider text-chrome-muted uppercase",
         className,
       )}
     >
-      <span>{children}</span>
-      <span aria-hidden="true" className="h-px flex-1 bg-chrome-line/70" />
+      {children}
     </p>
   );
 }

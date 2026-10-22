@@ -6,9 +6,9 @@ import {
 } from "@/components/icons/action-icons";
 import { useDownloads } from "@/state/download-store";
 
-/** Desk density for the bar's buttons: hairline, 24px tall, plain but Delete. */
+/** Desk density for the bar's buttons: quiet surface, 24px tall, plain but Delete. */
 const BUTTON =
-  "inline-flex h-6 items-center gap-1 rounded-chrome border border-chrome-line bg-chrome-panel px-2 text-chrome-micro whitespace-nowrap hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none disabled:cursor-default disabled:opacity-45";
+  "inline-flex h-6 items-center gap-1 rounded-chrome bg-chrome-canvas px-2 text-chrome-micro whitespace-nowrap transition-colors hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none disabled:cursor-default disabled:opacity-45";
 
 /**
  * The bar above the list while rows are picked. It names the count and puts
@@ -46,7 +46,7 @@ export function SelectionBar() {
     <div
       aria-label="Selected downloads"
       role="group"
-      className="flex h-8 shrink-0 items-center gap-1.5 overflow-x-auto border-b border-chrome-line bg-chrome-panel px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="flex h-9 shrink-0 items-center gap-1.5 overflow-x-auto bg-chrome-panel px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     >
       <span
         aria-live="polite"
@@ -86,7 +86,7 @@ export function SelectionBar() {
       <button
         type="button"
         onClick={() => applyToSelection("delete")}
-        className={`${BUTTON} text-chrome-error hover:border-chrome-danger hover:bg-chrome-danger hover:text-chrome-danger-text`}
+        className={`${BUTTON} text-chrome-error hover:bg-chrome-danger hover:text-chrome-danger-text`}
       >
         <TrashGlyph className="size-3.5" />
         Delete

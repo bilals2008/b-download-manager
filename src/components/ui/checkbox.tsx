@@ -37,7 +37,7 @@ export function Checkbox({
           id={id}
           type="checkbox"
           disabled={disabled}
-          className="peer size-4 appearance-none rounded-chrome border border-input bg-chrome-canvas transition-colors hover:border-chrome-muted checked:border-primary checked:bg-primary disabled:border-chrome-line disabled:bg-chrome-panel disabled:checked:bg-chrome-line/60"
+          className="peer size-4 appearance-none rounded-sm border border-input bg-chrome-canvas transition-colors hover:border-chrome-muted checked:border-primary checked:bg-primary disabled:border-chrome-line disabled:bg-chrome-panel disabled:checked:bg-chrome-line/60"
           {...inputProps}
         />
         <CheckGlyph

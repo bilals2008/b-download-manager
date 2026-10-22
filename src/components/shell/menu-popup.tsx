@@ -204,7 +204,7 @@ export function MenuPopup<T extends string>({
       role="menu"
       aria-label={label}
       style={spot ? { left: spot.x, top: spot.y } : undefined}
-      className={`z-50 rounded-chrome border border-chrome-line bg-chrome-popup py-1 shadow-lg ${placement}`}
+      className={`z-50 rounded-lg bg-chrome-popup p-1 shadow-float ${placement}`}
     >
       {rows.map((row, index) =>
         row === "separator" ? (
@@ -212,7 +212,7 @@ export function MenuPopup<T extends string>({
             key={`separator-${index}`}
             role="separator"
             aria-orientation="horizontal"
-            className="my-1 h-px bg-chrome-line"
+            className="my-1 h-0"
           />
         ) : (
           <li key={row.command + index} role="none" className="relative">
@@ -240,7 +240,7 @@ export function MenuPopup<T extends string>({
               onPointerEnter={() => setOpenSub(row.submenu ? index : null)}
               onKeyDown={(event) => handleItemKeyDown(event, index, row)}
               className={
-                "flex w-full items-center gap-2.5 px-2.5 py-1.5 text-left text-xs focus-visible:bg-chrome-popup-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none " +
+                "flex w-full items-center gap-2.5 rounded-chrome px-2.5 py-1.5 text-left text-xs transition-colors focus-visible:bg-chrome-popup-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none " +
                 (row.disabled
                   ? "cursor-default text-chrome-muted/60"
                   : row.danger

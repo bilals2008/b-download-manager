@@ -1,6 +1,7 @@
 mod bridge;
 mod complete;
 mod state;
+mod window_style;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -376,6 +377,9 @@ pub fn run() {
             state.set_index(Index::new(dir.join("downloads.json")));
             state.restore_downloads();
             build_tray(app.handle())?;
+            if let Some(window) = app.get_webview_window("main") {
+                window_style::round_corners(&window);
+            }
             // The browser extension talks to the application through this.
             bridge::start(app.handle().clone());
             Ok(())

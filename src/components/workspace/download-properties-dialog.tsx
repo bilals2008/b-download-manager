@@ -47,7 +47,7 @@ export function DownloadPropertiesDialog({
           <button
             type="button"
             onClick={copyAddress}
-            className="mr-auto inline-flex items-center gap-1.5 rounded-chrome border border-chrome-line px-3 py-1 text-xs text-chrome-menu-text hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
+            className="mr-auto inline-flex items-center gap-1.5 rounded-chrome bg-chrome-panel px-3 py-1.5 text-xs text-chrome-menu-text transition-colors hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
           >
             <CopyGlyph className="size-3.5" />
             Copy address
@@ -55,7 +55,7 @@ export function DownloadPropertiesDialog({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-chrome bg-primary px-3 py-1 text-xs font-medium text-primary-foreground hover:opacity-90 focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
+            className="rounded-chrome bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
           >
             Close
           </button>
