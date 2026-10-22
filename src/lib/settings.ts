@@ -19,6 +19,12 @@ export interface Settings {
   showCompleteDialog: boolean;
   /** Auto follows the system; the other two override it. */
   theme: ThemePreference;
+  /** The face the whole window is drawn in. */
+  uiFont: UiFont;
+  /** How heavy the text is drawn. */
+  uiWeight: UiWeight;
+  /** How large the text is drawn. */
+  uiSize: UiSize;
   /** Where a new download is saved when the user does not say. */
   defaultFolder: string;
   /** Connections one download gets by default. */
@@ -39,6 +45,9 @@ export const DEFAULT_SETTINGS: Settings = {
   minimizeToTray: true,
   showCompleteDialog: true,
   theme: "auto",
+  uiFont: "inter",
+  uiWeight: "medium",
+  uiSize: "default",
   defaultFolder: "",
   defaultConnections: 8,
   maxConnections: 32,
@@ -73,6 +82,9 @@ export function loadSettings(): Settings {
         DEFAULT_SETTINGS.showCompleteDialog,
       ),
       theme: theme(value.theme, DEFAULT_SETTINGS.theme),
+      uiFont: font(value.uiFont, DEFAULT_SETTINGS.uiFont),
+      uiWeight: weight(value.uiWeight, DEFAULT_SETTINGS.uiWeight),
+      uiSize: size(value.uiSize, DEFAULT_SETTINGS.uiSize),
       defaultFolder: text(value.defaultFolder, DEFAULT_SETTINGS.defaultFolder),
       defaultConnections: number(
         value.defaultConnections,
@@ -117,6 +129,47 @@ export type ToolbarSize = "large" | "small";
 /** How the appearance is chosen. */
 export type ThemePreference = "auto" | "light" | "dark";
 
+/**
+ * The faces the appearance page offers. System is the Windows face, so it
+ * costs no download; the rest ship with the application.
+ */
+export type UiFont =
+  | "inter"
+  | "geist"
+  | "dmsans"
+  | "jakarta"
+  | "instrument"
+  | "plex"
+  | "jetbrains"
+  | "system";
+
+const UI_FONTS: readonly UiFont[] = [
+  "inter",
+  "geist",
+  "dmsans",
+  "jakarta",
+  "instrument",
+  "plex",
+  "jetbrains",
+  "system",
+];
+
+/**
+ * How heavy the window is drawn. The whole scale moves together, so a heading
+ * stays one step above the body it sits in.
+ */
+export type UiWeight = "regular" | "medium" | "semibold";
+
+const UI_WEIGHTS: readonly UiWeight[] = ["regular", "medium", "semibold"];
+
+/**
+ * How large the text is drawn. It scales the type steps only, not the spacing,
+ * so the window keeps its density when the text grows.
+ */
+export type UiSize = "small" | "default" | "large";
+
+const UI_SIZES: readonly UiSize[] = ["small", "default", "large"];
+
 const TOOLBAR_KEY = "idm-clone.toolbar-size.v1";
 
 /** Read the saved toolbar size, falling back to the large one. */
@@ -150,6 +203,20 @@ function theme(value: unknown, fallback: ThemePreference): ThemePreference {
   return value === "auto" || value === "light" || value === "dark"
     ? value
     : fallback;
+}
+
+function font(value: unknown, fallback: UiFont): UiFont {
+  return UI_FONTS.includes(value as UiFont) ? (value as UiFont) : fallback;
+}
+
+function weight(value: unknown, fallback: UiWeight): UiWeight {
+  return UI_WEIGHTS.includes(value as UiWeight)
+    ? (value as UiWeight)
+    : fallback;
+}
+
+function size(value: unknown, fallback: UiSize): UiSize {
+  return UI_SIZES.includes(value as UiSize) ? (value as UiSize) : fallback;
 }
 
 function number(value: unknown, fallback: number, min: number, max: number): number {

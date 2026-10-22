@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { ConnectionSettings } from "@/components/settings/connection-settings";
 import { DownloadsSettings } from "@/components/settings/downloads-settings";
@@ -11,14 +11,9 @@ import {
 } from "@/components/settings/settings-nav";
 import { Dialog } from "@/components/ui/dialog";
 import { describeError } from "@/lib/errors";
+import { applyFont, applySize, applyWeight } from "@/lib/fonts";
 import { setMaxConnections, setMinimizeToTray, setProxy, setShowCompleteDialog, setSpeedLimit } from "@/lib/ipc";
-import {
-  DEFAULT_SETTINGS,
-  loadSettings,
-  saveSettings,
-  type Settings,
-  type ThemePreference,
-} from "@/lib/settings";
+import { DEFAULT_SETTINGS, loadSettings, saveSettings, type Settings } from "@/lib/settings";
 import { applyTheme } from "@/lib/theme";
 
 interface SettingsDialogProps {
@@ -26,71 +21,101 @@ interface SettingsDialogProps {
   onClose: () => void;
 }
 
+/** How long typing settles before the engine hears about it. */
+const ENGINE_PUSH_DELAY = 300;
+
+/** The settings the engine owns; only these are pushed over IPC. */
+const ENGINE_KEYS: readonly (keyof Settings)[] = [
+  "proxyUrl",
+  "speedLimitEnabled",
+  "speedLimitBytes",
+  "maxConnections",
+  "minimizeToTray",
+  "showCompleteDialog",
+];
+
 /**
  * "Internet Download Manager Configuration" - the Options window. It opens on
- * the General page, keeps edits in a draft, and writes them only on Save so
- * Cancel genuinely discards.
+ * the General page and writes every change as it is made: there is no Save to
+ * press and nothing to cancel, which is what makes the appearance previews
+ * honest.
  *
- * The settings the engine owns (the proxy, the bandwidth cap and the number
- * of connections) are pushed to the engine when the window is saved, so they
- * take effect at once.
+ * The settings the engine owns are pushed to it once typing settles, so a
+ * proxy address is not sent on every keystroke.
  */
 export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
-  const [draft, setDraft] = useState<Settings>(DEFAULT_SETTINGS);
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [page, setPage] = useState<SettingsPageId>("general");
   const [error, setError] = useState<string | null>(null);
+  const pushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (open) {
-      setDraft(loadSettings());
+      setSettings(loadSettings());
       setError(null);
     }
   }, [open]);
 
-  function cancel() {
-    // A previewed theme that was not saved must not outlive the window.
-    applyTheme(loadSettings().theme);
-    onClose();
-  }
+  useEffect(
+    () => () => {
+      if (pushTimer.current) {
+        clearTimeout(pushTimer.current);
+      }
+    },
+    [],
+  );
 
   function update<K extends keyof Settings>(key: K, value: Settings[K]) {
-    setDraft((current) => ({ ...current, [key]: value }));
-    // The appearance previews at once; Cancel puts the saved one back.
+    const next = { ...settings, [key]: value };
+    setSettings(next);
+    saveSettings(next);
+
+    // The appearance lands at once; the window is the preview.
     if (key === "theme") {
-      applyTheme(value as ThemePreference);
+      applyTheme(next.theme);
+    } else if (key === "uiFont") {
+      applyFont(next.uiFont);
+    } else if (key === "uiWeight") {
+      applyWeight(next.uiWeight);
+    } else if (key === "uiSize") {
+      applySize(next.uiSize);
     }
+
+    if (!ENGINE_KEYS.includes(key)) {
+      return;
+    }
+    if (pushTimer.current) {
+      clearTimeout(pushTimer.current);
+    }
+    pushTimer.current = setTimeout(() => void pushEngine(next), ENGINE_PUSH_DELAY);
   }
 
-  async function save() {
-    saveSettings(draft);
+  async function pushEngine(next: Settings) {
     try {
-      // The engine has to know about the three settings it owns.
-      await setProxy(draft.proxyUrl);
-      await setSpeedLimit(
-        draft.speedLimitEnabled ? draft.speedLimitBytes : 0,
-      );
-      await setMaxConnections(draft.maxConnections);
-      await setMinimizeToTray(draft.minimizeToTray);
-      await setShowCompleteDialog(draft.showCompleteDialog);
+      await setProxy(next.proxyUrl);
+      await setSpeedLimit(next.speedLimitEnabled ? next.speedLimitBytes : 0);
+      await setMaxConnections(next.maxConnections);
+      await setMinimizeToTray(next.minimizeToTray);
+      await setShowCompleteDialog(next.showCompleteDialog);
       setError(null);
     } catch (failure) {
       setError(describeError(failure));
-      return;
     }
-    onClose();
   }
 
   return (
     <Dialog
       open={open}
       title="Internet Download Manager Configuration"
-      onClose={cancel}
-      className="h-[min(36rem,calc(100dvh-2rem))] w-[min(52rem,calc(100vw-2rem))] max-w-none"
-      bodyClassName="flex p-0"
+      onClose={onClose}
+      // The options window is the main window's sibling, not a popup: the same
+      // canvas, the same two panes, so the two windows read as one product.
+      className="h-[min(36rem,calc(100dvh-2rem))] w-[min(52rem,calc(100vw-2rem))] max-w-none bg-chrome-canvas"
+      bodyClassName="flex gap-1.5 p-1.5"
       footer={
         <>
           <span className="mr-auto hidden self-center text-chrome-micro text-chrome-muted sm:inline">
-            Preferences stay on this device.
+            Changes apply as you make them.
           </span>
           {error ? (
             <span role="alert" className="mr-auto text-xs text-chrome-error">
@@ -99,37 +124,30 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
           ) : null}
           <button
             type="button"
-            onClick={cancel}
+            onClick={onClose}
             className="rounded-chrome bg-chrome-panel px-3 py-1.5 text-xs text-chrome-menu-text transition-colors hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
           >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={save}
-            className="rounded-chrome bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
-          >
-            Save
+            Close
           </button>
         </>
       }
     >
       <SettingsNav page={page} onSelect={setPage} />
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="scrollbar-none min-h-0 flex-1 overflow-y-auto rounded-lg bg-chrome-panel">
         {page === "general" ? (
-          <GeneralSettings settings={draft} onChange={update} />
+          <GeneralSettings settings={settings} onChange={update} />
         ) : null}
         {page === "save-to" ? (
-          <SaveToSettings settings={draft} onChange={update} />
+          <SaveToSettings settings={settings} onChange={update} />
         ) : null}
         {page === "downloads" ? (
-          <DownloadsSettings settings={draft} onChange={update} />
+          <DownloadsSettings settings={settings} onChange={update} />
         ) : null}
         {page === "connection" ? (
-          <ConnectionSettings settings={draft} onChange={update} />
+          <ConnectionSettings settings={settings} onChange={update} />
         ) : null}
         {page === "proxy" ? (
-          <ProxySettings settings={draft} onChange={update} />
+          <ProxySettings settings={settings} onChange={update} />
         ) : null}
       </div>
     </Dialog>

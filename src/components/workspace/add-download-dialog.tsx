@@ -262,7 +262,7 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
           </label>
           <input
             id="add-url"
-            className={FIELD}
+            className={`${FIELD} font-mono`}
             value={url}
             autoFocus
             spellCheck={false}

@@ -20,13 +20,13 @@ export function ConnectionSettings({
   return (
     <SettingsPage
       title="Connection"
-      description="How much of the network the application may use."
+      description="How much of the network the app may use."
     >
       <Section title="Connections">
         <Field
           label="Maximum number of connections"
           htmlFor="connection-max"
-          hint="How many connections the application may hold open at once, over all downloads. IDM keeps this number in the registry and warns when it is reached."
+          hint="Open at once, over all downloads."
         >
           <NumberInput
             id="connection-max"
@@ -53,7 +53,7 @@ export function ConnectionSettings({
           <Field
             label="Speed limit"
             htmlFor="connection-speed"
-            hint="The bytes that may be written to the disk in one second, over all downloads."
+            hint="Total bytes per second, all downloads together."
           >
             <NumberInput
               id="connection-speed"

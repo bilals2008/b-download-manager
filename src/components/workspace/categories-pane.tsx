@@ -274,7 +274,7 @@ export function CategoriesPane() {
               <span className="min-w-0 flex-1 truncate">{row.label}</span>
               <span
                 className={cn(
-                  "shrink-0 text-[11px] tabular-nums",
+                  "shrink-0 text-chrome-micro tabular-nums",
                   selected
                     ? "text-chrome-title-text"
                     : "text-chrome-muted group-hover:text-chrome-menu-text",
@@ -304,7 +304,7 @@ export function CategoriesPane() {
         )}
       >
         {collapsed ? null : (
-          <span className="flex min-w-0 items-center gap-1.5 text-[11px] font-medium tracking-wide text-chrome-muted">
+          <span className="flex min-w-0 items-center gap-1.5 text-chrome-micro font-medium tracking-wide text-chrome-muted">
             <CategoryFolderIcon
               category="General"
               open
@@ -359,7 +359,7 @@ function SectionLabel({
   return (
     <p
       className={cn(
-        "flex items-center gap-2 px-2 pb-1.5 text-[10px] font-semibold tracking-wider text-chrome-muted uppercase",
+        "flex items-center gap-2 px-2 pb-1.5 text-chrome-caption font-semibold tracking-wider text-chrome-muted uppercase",
         className,
       )}
     >

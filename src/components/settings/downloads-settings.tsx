@@ -16,13 +16,13 @@ export function DownloadsSettings({ settings, onChange }: DownloadsSettingsProps
   return (
     <SettingsPage
       title="Downloads"
-      description="How a new download is started and how many connections it gets."
+      description="How a new download starts, and how many connections it gets."
     >
       <Section title="Connections">
         <Field
           label="Default number of connections"
           htmlFor="download-connections"
-          hint="A large file is fetched in as many pieces as this. IDM counts one connection for every 10 KB of the file, so a small file never gets more than it needs."
+          hint="One connection per 10 KB of the file, up to this number."
         >
           <NumberInput
             id="download-connections"
@@ -46,7 +46,7 @@ export function DownloadsSettings({ settings, onChange }: DownloadsSettingsProps
         <Checkbox
           id="download-complete-dialog"
           label="Show download complete dialog"
-          hint="Open the small window with the file, its folder and the way to it."
+          hint="Show a small window when a download finishes."
           checked={settings.showCompleteDialog}
           onChange={(event) =>
             onChange("showCompleteDialog", event.target.checked)

@@ -66,10 +66,10 @@ export function DownloadPropertiesDialog({
         <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-4 gap-y-1.5 text-xs">
           <Field label="File name">{item.fileName}</Field>
           <Field label="Address">
-            <span className="break-all">{item.url}</span>
+            <span className="font-mono break-all">{item.url}</span>
           </Field>
           <Field label="Save folder">
-            <span className="break-all">{item.savePath}</span>
+            <span className="font-mono break-all">{item.savePath}</span>
           </Field>
           <Field label="Size">
             {item.size > 0

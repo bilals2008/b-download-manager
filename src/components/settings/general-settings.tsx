@@ -1,7 +1,11 @@
+import { useId } from "react";
+
 import { Checkbox } from "@/components/ui/checkbox";
+import { ListBox } from "@/components/ui/listbox";
 import { HINT, LABEL } from "@/components/settings/fields";
 import { Section, SettingsPage } from "@/components/settings/settings-page";
-import type { Settings, ThemePreference } from "@/lib/settings";
+import { FONT_OPTIONS, SIZE_OPTIONS, WEIGHT_OPTIONS } from "@/lib/fonts";
+import type { Settings, ThemePreference, UiFont } from "@/lib/settings";
 
 interface GeneralSettingsProps {
   settings: Settings;
@@ -49,7 +53,7 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
   return (
     <SettingsPage
       title="General"
-      description="Choose how the download manager starts and what it captures."
+      description="Startup, appearance and browser capture."
     >
       <Section title="Browser integration">
         <div className="flex items-center justify-between gap-4">
@@ -70,17 +74,42 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
       </Section>
 
       <Section title="Appearance">
-        <AppearanceChoice
+        <Segmented
+          legend="Theme"
+          hint="Auto follows Windows."
           value={settings.theme}
           onChange={(theme) => onChange("theme", theme)}
+          options={THEMES}
         />
+        <FontChoice
+          value={settings.uiFont}
+          onChange={(font) => onChange("uiFont", font)}
+        />
+        <div className="mt-5 grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2">
+          <Segmented
+            legend="Weight"
+            hint={WEIGHT_HINT}
+            value={settings.uiWeight}
+            onChange={(weight) => onChange("uiWeight", weight)}
+            options={WEIGHT_OPTIONS}
+          />
+          <Segmented
+            legend="Text size"
+            hint={SIZE_HINT}
+            value={settings.uiSize}
+            onChange={(size) => onChange("uiSize", size)}
+            options={SIZE_OPTIONS}
+          />
+        </div>
+        <p className="mt-5 truncate rounded-chrome bg-chrome-canvas px-2.5 py-2 text-xs tabular-nums text-chrome-menu-text">
+          Downloading archive.zip · 12.4 MB of 48.0 MB at 2.3 MB/s
+        </p>
       </Section>
 
       <Section title="Startup">
         <div className="flex flex-col gap-2.5">
           <Checkbox
             label="Launch Internet Download Manager on startup"
-            hint="Open the app when you sign in."
             checked={settings.launchOnStartup}
             onChange={(event) =>
               onChange("launchOnStartup", event.target.checked)
@@ -88,7 +117,6 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
           />
           <Checkbox
             label="Start downloading URLs copied to the clipboard"
-            hint="Pick up a link as soon as it is copied."
             checked={settings.clipboardCapture}
             onChange={(event) =>
               onChange("clipboardCapture", event.target.checked)
@@ -100,7 +128,7 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
       <Section title="The tray">
         <Checkbox
           label="Keep the application in the tray when the window is closed"
-          hint="The tray icon brings the window back, and it is the way to exit. The icon sits at the right of the task bar."
+          hint="Closing the window hides it to the tray, and the tray icon brings it back."
           checked={settings.minimizeToTray}
           onChange={(event) => onChange("minimizeToTray", event.target.checked)}
         />
@@ -146,23 +174,35 @@ const THEMES: { value: ThemePreference; label: string }[] = [
   { value: "dark", label: "Dark" },
 ];
 
+const WEIGHT_HINT = "One step heavier or lighter, everywhere.";
+
+const SIZE_HINT = "Type only, so the layout keeps its density.";
+
 /** As a segmented radio group, so arrows move between them. */
-function AppearanceChoice({
+function Segmented<T extends string>({
+  legend,
+  hint,
   value,
   onChange,
+  options,
 }: {
-  value: ThemePreference;
-  onChange: (theme: ThemePreference) => void;
+  legend: string;
+  hint: string;
+  value: T;
+  onChange: (value: T) => void;
+  options: { value: T; label: string }[];
 }) {
+  const name = useId();
+
   return (
     <fieldset>
-      <legend className={LABEL}>Theme</legend>
+      <legend className={LABEL}>{legend}</legend>
       <div className="inline-flex rounded-chrome bg-chrome-canvas p-0.5">
-        {THEMES.map((option) => (
+        {options.map((option) => (
           <label key={option.value} className="cursor-pointer">
             <input
               type="radio"
-              name="theme"
+              name={name}
               value={option.value}
               checked={value === option.value}
               onChange={() => onChange(option.value)}
@@ -174,10 +214,38 @@ function AppearanceChoice({
           </label>
         ))}
       </div>
-      <p className={HINT}>
-        Auto follows the system appearance. The window changes as soon as you
-        pick a theme, and Save keeps it.
-      </p>
+      <p className={HINT}>{hint}</p>
     </fieldset>
+  );
+}
+
+/**
+ * The face the window is drawn in. The line under the picker is real UI text,
+ * so the figures and the spacing can be compared before the window is closed.
+ */
+function FontChoice({
+  value,
+  onChange,
+}: {
+  value: UiFont;
+  onChange: (font: UiFont) => void;
+}) {
+  const current =
+    FONT_OPTIONS.find((option) => option.value === value) ?? FONT_OPTIONS[0];
+
+  return (
+    <div className="mt-5">
+      <span className={LABEL}>Font</span>
+      <ListBox
+        label="Font"
+        value={value}
+        onChange={(next) => onChange(next as UiFont)}
+        options={FONT_OPTIONS.map((option) => ({
+          value: option.value,
+          label: option.label,
+        }))}
+      />
+      <p className={HINT}>{current.note}</p>
+    </div>
   );
 }

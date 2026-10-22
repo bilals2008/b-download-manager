@@ -21,7 +21,7 @@ export function ProxySettings({ settings, onChange }: ProxySettingsProps) {
         <Field
           label="Proxy address"
           htmlFor="proxy-address"
-          hint="An http:// or socks5:// address with the port, for example socks5://127.0.0.1:1080. Leave it empty to go straight to the server."
+          hint="For example socks5://127.0.0.1:1080. Empty connects directly."
         >
           <TextInput
             id="proxy-address"

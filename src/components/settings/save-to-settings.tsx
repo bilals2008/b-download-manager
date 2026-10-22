@@ -21,7 +21,7 @@ export function SaveToSettings({ settings, onChange }: SaveToSettingsProps) {
         <Field
           label="Save the file to"
           htmlFor="save-to-folder"
-          hint="Leave it empty to use the Downloads folder of the system. The add dialog starts from this folder and remembers the last one you typed."
+          hint="Empty uses the Downloads folder of Windows."
         >
           <TextInput
             id="save-to-folder"
