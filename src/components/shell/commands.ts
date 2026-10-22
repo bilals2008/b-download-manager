@@ -67,7 +67,4 @@ export type ShellCommand =
   | "support"
   | "check-updates"
   | "about"
-  | "tell-friend"
-  // Registration
-  | "order-online"
-  | "registration";
+  | "tell-friend";

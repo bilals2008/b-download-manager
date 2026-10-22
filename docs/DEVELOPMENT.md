@@ -72,9 +72,8 @@ Rules:
 
 The native window decorations are off in `src-tauri/tauri.conf.json`
 (`"decorations": false`) so there is exactly **one** title bar: the custom one
-in `src/components/shell/title-bar.tsx`, labelled "Internet Download Manager
-6.43". The window `title` in `tauri.conf.json` carries the same string for the
-taskbar. Turning decorations back on, or renaming one of the two, brings the
+in `src/components/shell/title-bar.tsx`, labelled "B Download Manager". The
+window `title` in `tauri.conf.json` carries the same string for the taskbar. Turning decorations back on, or renaming one of the two, brings the
 duplicate bar back. Title-bar buttons call `windowAction` in `src/lib/window.ts`.
 
 `core:default` does **not** include window dragging or the control buttons. The

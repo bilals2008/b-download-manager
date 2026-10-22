@@ -14,9 +14,7 @@ export function TitleBar() {
     >
       <div className="pointer-events-none flex flex-1 items-center gap-2 px-2">
         <AppMark />
-        <span className="text-xs select-none">
-          Internet Download Manager 6.43
-        </span>
+        <span className="text-xs select-none">B Download Manager</span>
       </div>
 
       <div

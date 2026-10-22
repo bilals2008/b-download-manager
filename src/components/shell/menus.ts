@@ -10,9 +10,10 @@ export interface MenuDefinition {
 
 /**
  * The menus of IDM 6.43, read out of the string table of `IDMan.exe`: the
- * top level is Tasks, File, Downloads, View, Help and Registration, and the
- * groups below them ("Export", "Arrange files", "Toolbar", "Speed Limiter")
- * are nested menus in the original as well.
+ * top level is Tasks, File, Downloads, View and Help, and the groups below
+ * them ("Export", "Arrange files", "Toolbar", "Speed Limiter") are nested
+ * menus in the original as well. Registration is left out: this application
+ * is not licensed or ordered from anywhere.
  */
 export const MENUS: MenuDefinition[] = [
   {
@@ -34,7 +35,7 @@ export const MENUS: MenuDefinition[] = [
         command: "export-list",
         label: "Export",
         submenu: [
-          { command: "export-list", label: "To IDM export file", disabled: true },
+          { command: "export-list", label: "To B Download Manager export file", disabled: true },
           { command: "export-text", label: "To text file", disabled: true },
         ],
       },
@@ -42,7 +43,7 @@ export const MENUS: MenuDefinition[] = [
         command: "import-list",
         label: "Import",
         submenu: [
-          { command: "import-list", label: "From IDM export file", disabled: true },
+          { command: "import-list", label: "From B Download Manager export file", disabled: true },
           { command: "import-text", label: "From text file", disabled: true },
         ],
       },
@@ -132,7 +133,7 @@ export const MENUS: MenuDefinition[] = [
       },
       {
         command: "tray-3d",
-        label: "IDM tray icon",
+        label: "B Download Manager tray icon",
         submenu: [
           { command: "tray-3d", label: "3D style", disabled: true },
           { command: "tray-classic", label: "Classic style", disabled: true },
@@ -167,21 +168,12 @@ export const MENUS: MenuDefinition[] = [
       { command: "grabber-help", label: "Grabber Help", disabled: true },
       { command: "tip-of-the-day", label: "Tip of the Day...", disabled: true },
       "separator",
-      { command: "website", label: "IDM Home Page", disabled: true },
-      { command: "support", label: "Contact IDM Support", disabled: true },
+      { command: "website", label: "B Download Manager Home Page", disabled: true },
+      { command: "support", label: "Contact B Download Manager Support", disabled: true },
       { command: "check-updates", label: "Check for updates...", disabled: true },
       "separator",
-      { command: "about", label: "About IDM..." },
+      { command: "about", label: "About B Download Manager..." },
       { command: "tell-friend", label: "Tell a friend", disabled: true },
-    ],
-  },
-  {
-    id: "registration",
-    label: "Registration",
-    accessKey: "r",
-    rows: [
-      { command: "order-online", label: "Order online", disabled: true },
-      { command: "registration", label: "Registration...", disabled: true },
     ],
   },
 ];

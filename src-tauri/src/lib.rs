@@ -318,7 +318,7 @@ fn build_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let show = MenuItem::with_id(
         app,
         "show",
-        "Show Internet Download Manager",
+        "Show B Download Manager",
         true,
         None::<&str>,
     )?;
@@ -330,7 +330,7 @@ fn build_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let mut builder = TrayIconBuilder::with_id("main-tray")
         .menu(&menu)
         .show_menu_on_left_click(false)
-        .tooltip("Internet Download Manager 6.43");
+        .tooltip("B Download Manager");
 
     if let Some(icon) = app.default_window_icon() {
         builder = builder.icon(icon.clone());
@@ -437,7 +437,7 @@ pub fn run() {
             open_path,
         ])
         .build(tauri::generate_context!())
-        .expect("error while building my-idm-clone")
+        .expect("error while building B Download Manager")
         .run(|app, event| {
             // When the application closes, the resume state of the running
             // downloads is written to disk, so nothing that was fetched is

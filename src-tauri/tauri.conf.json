@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "my-idm-clone",
+  "productName": "B Download Manager",
   "version": "0.1.0",
   "identifier": "com.example.myidmclone",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Internet Download Manager 6.43",
+        "title": "B Download Manager",
         "decorations": false,
         "width": 1180,
         "height": 760,

@@ -102,7 +102,7 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
       <Section title="Startup">
         <div className="flex flex-col gap-2.5">
           <Checkbox
-            label="Launch Internet Download Manager on startup"
+            label="Launch B Download Manager on startup"
             checked={settings.launchOnStartup}
             onChange={(event) =>
               onChange("launchOnStartup", event.target.checked)
