@@ -478,6 +478,30 @@
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// A finished download whose parts and manifest are gone — which is what
+    /// every row restored from the index looks like — reports the whole file as
+    /// downloaded, so the list shows 100% instead of 0%.
+    #[test]
+    fn a_finished_download_reports_the_whole_file() {
+        let dir = temp_dir("finished-bytes");
+        let download = Download::new(
+            17,
+            "https://example.com/file.bin".to_string(),
+            dir.join("out.bin"),
+            4,
+            None,
+            None,
+        )
+        .expect("download");
+
+        download.total.store(4096, Ordering::SeqCst);
+        download.set_status(Status::Completed);
+
+        assert_eq!(download.info().downloaded, 4096);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// A server that is busy: it answers `429` with a body of one byte.
     fn spawn_busy_server() -> String {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");

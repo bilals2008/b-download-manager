@@ -97,6 +97,12 @@ export function isUnfinished(download: Download): boolean {
 }
 
 export function progressOf(download: Download): number {
+  // A finished download is all of itself. The engine drops the parts and the
+  // manifest once the ranges are joined, so a row restored from the index knows
+  // the size and not the bytes; the status is the answer there.
+  if (download.status === "completed") {
+    return 100;
+  }
   if (download.size <= 0) {
     return 0;
   }

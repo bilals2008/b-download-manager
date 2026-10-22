@@ -279,7 +279,7 @@ impl Download {
 
     pub fn info(&self) -> DownloadInfo {
         let total = self.total.load(Ordering::SeqCst);
-        let (downloaded, connections) = {
+        let (mut downloaded, connections) = {
             let segments = self.segments.lock().expect("segments lock poisoned");
             (
                 segments.iter().map(|s| s.downloaded).sum::<u64>(),
@@ -288,6 +288,14 @@ impl Download {
         };
         let status = *self.status.lock().expect("status lock poisoned");
         let error = self.error.lock().expect("error lock poisoned").clone();
+
+        // A finished file is finished. Its ranges were joined and its part
+        // files and manifest removed, so the segment list of a download
+        // restored from the index adds up to nothing; without this the row
+        // would show the full size and 0% of it.
+        if status == Status::Completed {
+            downloaded = downloaded.max(total);
+        }
 
         DownloadInfo {
             id: self.id,
