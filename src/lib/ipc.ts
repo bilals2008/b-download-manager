@@ -37,8 +37,14 @@ export function startDownload(
   url: string,
   dest: string,
   connections: number,
+  referer?: string,
 ): Promise<number> {
-  return invoke<number>("start_download", { url, dest, connections });
+  return invoke<number>("start_download", {
+    url,
+    dest,
+    connections,
+    referer: referer?.trim() || null,
+  });
 }
 
 export function listDownloads(): Promise<DownloadInfo[]> {
@@ -66,8 +72,14 @@ export function defaultDestination(): Promise<string> {
 }
 
 /** The name the server gives the file at an address, when it gives one. */
-export function probeFileName(url: string): Promise<string | null> {
-  return invoke<string | null>("probe_file_name", { url });
+export function probeFileName(
+  url: string,
+  referer?: string,
+): Promise<string | null> {
+  return invoke<string | null>("probe_file_name", {
+    url,
+    referer: referer?.trim() || null,
+  });
 }
 
 /** The system folder picker. Null when the user cancels. */
@@ -103,6 +115,11 @@ export function setMaxConnections(max: number): Promise<number> {
 /** Whether closing the window hides it into the tray. */
 export function setMinimizeToTray(on: boolean): Promise<boolean> {
   return invoke<boolean>("set_minimize_to_tray", { on });
+}
+
+/** Whether a finished download gets its own window. */
+export function setShowCompleteDialog(on: boolean): Promise<boolean> {
+  return invoke<boolean>("set_show_complete_dialog", { on });
 }
 
 /** Leave the application for good. */

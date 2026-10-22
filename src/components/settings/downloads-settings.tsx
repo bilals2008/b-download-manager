@@ -1,3 +1,4 @@
+import { Checkbox } from "@/components/ui/checkbox";
 import { NumberInput, Field } from "@/components/settings/fields";
 import { Section, SettingsPage } from "@/components/settings/settings-page";
 import { MAX_CONNECTIONS, type Settings } from "@/lib/settings";
@@ -39,6 +40,18 @@ export function DownloadsSettings({ settings, onChange }: DownloadsSettingsProps
           The list keeps every download that was started, and a download that
           was stopped can be started again from where it stopped.
         </p>
+      </Section>
+
+      <Section title="When a download finishes">
+        <Checkbox
+          id="download-complete-dialog"
+          label="Show download complete dialog"
+          hint="Open the small window with the file, its folder and the way to it."
+          checked={settings.showCompleteDialog}
+          onChange={(event) =>
+            onChange("showCompleteDialog", event.target.checked)
+          }
+        />
       </Section>
     </SettingsPage>
   );

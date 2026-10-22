@@ -114,7 +114,7 @@ fn main() {
         let limits = Limits::default();
         limits.set_proxy(proxy.as_deref());
 
-        let download = match Download::new(1, url.clone(), path, connections, limits.proxy().as_deref())
+        let download = match Download::new(1, url.clone(), path, connections, limits.proxy().as_deref(), None)
         {
             Ok(download) => download,
             Err(error) => {

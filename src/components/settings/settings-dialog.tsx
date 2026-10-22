@@ -11,7 +11,7 @@ import {
 } from "@/components/settings/settings-nav";
 import { Dialog } from "@/components/ui/dialog";
 import { describeError } from "@/lib/errors";
-import { setMaxConnections, setMinimizeToTray, setProxy, setSpeedLimit } from "@/lib/ipc";
+import { setMaxConnections, setMinimizeToTray, setProxy, setShowCompleteDialog, setSpeedLimit } from "@/lib/ipc";
 import {
   DEFAULT_SETTINGS,
   loadSettings,
@@ -71,6 +71,7 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
       );
       await setMaxConnections(draft.maxConnections);
       await setMinimizeToTray(draft.minimizeToTray);
+      await setShowCompleteDialog(draft.showCompleteDialog);
       setError(null);
     } catch (failure) {
       setError(describeError(failure));

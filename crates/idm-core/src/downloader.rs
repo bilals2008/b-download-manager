@@ -90,6 +90,9 @@ pub struct DownloadInfo {
     pub connections: u32,
     pub status: Status,
     pub error: Option<String>,
+    /// The page the link was on, when the browser knew it. A redownload uses
+    /// it again.
+    pub referer: Option<String>,
 }
 
 /// Pause state shared by every task of one download.
@@ -182,6 +185,8 @@ pub struct Download {
     pub next_segment_id: AtomicU32,
     /// Where the bytes come from: an HTTP server or an FTP server.
     pub source: Source,
+    /// The page the link was on, when the browser knew it.
+    pub referer: Option<String>,
     /// The bandwidth cap for this download.
     limiter: Arc<SpeedLimiter>,
     /// The head of the file, kept once it is known. The head of every other
@@ -214,6 +219,7 @@ impl Download {
         dest: PathBuf,
         connections: u32,
         proxy: Option<&str>,
+        referer: Option<&str>,
     ) -> Result<Arc<Download>, String> {
         let dir = dest
             .parent()
@@ -229,7 +235,10 @@ impl Download {
             .unwrap_or_else(|| format!("download{id}"));
         let manifest = dir.join(format!("{stem}.idm.json"));
 
-        let source = Source::parse(&url, proxy)?;
+        let source = Source::parse(&url, proxy, referer)?;
+        let referer = referer
+            .map(|r| r.trim().to_string())
+            .filter(|r| !r.is_empty());
 
         let last_emit = Instant::now()
             .checked_sub(Duration::from_secs(1))
@@ -250,6 +259,7 @@ impl Download {
             control: Control::new(),
             next_segment_id: AtomicU32::new(0),
             source,
+            referer,
             limiter: Arc::new(SpeedLimiter::unlimited()),
             head: Mutex::new(Vec::new()),
             degraded: AtomicBool::new(false),
@@ -283,6 +293,7 @@ impl Download {
             connections,
             status,
             error,
+            referer: self.referer.clone(),
         }
     }
 
@@ -345,6 +356,7 @@ impl Download {
             PathBuf::from(&known.dest),
             known.connections,
             None,
+            known.referer.as_deref(),
         )
         .ok()?;
 
@@ -384,6 +396,7 @@ impl Download {
             downloaded: info.downloaded,
             status: info.status,
             error: info.error,
+            referer: self.referer.clone(),
         }
     }
 

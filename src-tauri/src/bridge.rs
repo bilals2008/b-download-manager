@@ -7,8 +7,8 @@
 //! any installation on the system.
 //!
 //! The server does nothing itself: it reads the address of the link out of
-//! the request and hands it to the window, which starts the download the way
-//! the add dialog does, with the folder of the options window.
+//! the request and hands it to the window, which asks the user the way the
+//! add dialog does, with the folder of the options window.
 
 use tauri::{AppHandle, Emitter};
 
@@ -73,11 +73,14 @@ async fn serve(app: AppHandle, mut stream: tokio::net::TcpStream) -> std::io::Re
                 "referer": request.referer,
             });
             log::write("info", &format!("the browser asked for {}", request.url));
+            // The dialog the link opens lives in the main window, which may
+            // be in the tray. Bring it out before asking the user.
+            crate::show_window(&app);
             let _ = app.emit(DOWNLOAD_EVENT, payload);
             let _ = reply(
                 &mut stream,
                 200,
-                "the download has started",
+                "the download waits in the add dialog",
                 origin.as_deref(),
             )
             .await;

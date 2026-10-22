@@ -42,7 +42,11 @@ const LABEL = "mb-1 block text-xs text-chrome-muted";
  * keyboard support.
  */
 export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
-  const { addDownload } = useDownloads();
+  const {
+    addDownload,
+    browserRequest,
+    clearBrowserRequest,
+  } = useDownloads();
   const [url, setUrl] = useState("");
   // Null means "follow the address"; a string is the value the user typed or
   // picked, which the address then stops overriding.
@@ -51,6 +55,8 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
     null,
   );
   const [savePath, setSavePath] = useState("");
+  // The page the browser handed over with the link, if any.
+  const [referer, setReferer] = useState("");
   // The name the server gives a link that carries none of its own.
   const [serverName, setServerName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -87,6 +93,20 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
     };
   }, [open]);
 
+  // A link the browser handed over opens this dialog with the address and the
+  // name already in it, and the request is done once they are.
+  useEffect(() => {
+    if (!open || !browserRequest) {
+      return;
+    }
+    setUrl(browserRequest.url);
+    setNameOverride(browserRequest.name || null);
+    setCategoryOverride(null);
+    setReferer(browserRequest.referer);
+    setError(null);
+    clearBrowserRequest();
+  }, [open, browserRequest, clearBrowserRequest]);
+
   // A link like `https://example.org/get?id=12` carries no file name, but the
   // answer of the server does, in its `Content-Disposition` header. Ask once
   // the address has settled, and only when the address gave no name itself.
@@ -104,7 +124,7 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
     }
     let active = true;
     const timer = setTimeout(() => {
-      probeFileName(trimmed)
+      probeFileName(trimmed, referer)
         .then((found) => {
           if (active && found) {
             setServerName(sanitizeFileName(found));
@@ -118,12 +138,13 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
       active = false;
       clearTimeout(timer);
     };
-  }, [open, url]);
+  }, [open, url, referer]);
 
   function reset() {
     setUrl("");
     setNameOverride(null);
     setCategoryOverride(null);
+    setReferer("");
     setError(null);
   }
 
@@ -187,6 +208,7 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
         fileName: name,
         category,
         savePath: folder,
+        referer,
       });
       reset();
       onClose();

@@ -12,6 +12,7 @@ import {
   setMaxConnections,
   setMinimizeToTray,
   setProxy,
+  setShowCompleteDialog,
   setSpeedLimit,
 } from "@/lib/ipc";
 import {
@@ -50,7 +51,18 @@ export default function App() {
     void setMinimizeToTray(settings.minimizeToTray).catch(() => {
       // As above.
     });
+    void setShowCompleteDialog(settings.showCompleteDialog).catch(() => {
+      // As above.
+    });
   }, []);
+
+  // A link that the browser extension handed over opens the add dialog with
+  // its address already in it.
+  useEffect(() => {
+    if (downloads.browserRequest) {
+      setAddDownloadOpen(true);
+    }
+  }, [downloads.browserRequest]);
 
   // Auto keeps up with the operating system while the window is open.
   useEffect(() => watchTheme(), []);

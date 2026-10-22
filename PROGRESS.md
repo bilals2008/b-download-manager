@@ -114,7 +114,16 @@ Done items stay in the list as a record of what is already standing.
       work and reach the engine; File types, Sites Logins, Dial Up / VPN and
       Sounds stay greyed out
 - [x] Browser extension that hands a link to the application: the right click
-      menu on a link, and taking over the downloads the browser starts
+      menu on a link, and taking over the downloads the browser starts; the
+      link opens the add dialog with its address and name filled in
+- [x] Download complete window of its own, in IDM's words ("File ... download
+      complete."), with Open file, Open folder and Close
+- [x] "Show download complete dialog" switch on the Downloads page: the engine
+      reads it before it opens the window, and the saved value is pushed at
+      startup
+- [x] The referer the browser hands over reaches the server: it is kept with
+      the download, set as a default `Referer` header, restored with the index
+      entry, and used again by Redownload and by the name probe
 - [ ] Browser integration behind the General page: detection, Restart, Add browser, keys and context-menu editors
 - [ ] Apply the startup and clipboard preferences through the operating system
 - [ ] Scheduler dialog

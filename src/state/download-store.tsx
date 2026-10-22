@@ -18,7 +18,6 @@ import {
   isFinished,
   isUnfinished,
   joinPath,
-  sanitizeFileName,
   splitPath,
   type CategoryName,
   type Download,
@@ -28,7 +27,6 @@ import {
 } from "@/lib/downloads";
 import {
   cancelDownload,
-  defaultDestination,
   listDownloads,
   onBridgeDownload,
   onDownloadUpdate,
@@ -40,7 +38,6 @@ import {
 } from "@/lib/ipc";
 import { describeError, isDesktop } from "@/lib/errors";
 import { rangeIds } from "@/lib/selection";
-import { loadSettings } from "@/lib/settings";
 import type { DownloadInfo, DownloadStatus as EngineStatus } from "@/types";
 
 /** What a bulk action does to the selected rows. */
@@ -76,6 +73,14 @@ interface SpeedSample {
   speed: number;
 }
 
+/** A link the browser extension handed over, waiting in the add dialog. */
+export interface BrowserRequest {
+  url: string;
+  name: string;
+  /** The page the link was on, so the server accepts the request. */
+  referer: string;
+}
+
 export interface DownloadStore {
   downloads: Download[];
   filter: DownloadFilter;
@@ -89,6 +94,9 @@ export interface DownloadStore {
   counts: Record<string, number>;
   /** Save folders per category, for the tree children. */
   folders: Record<CategoryName, CategoryFolder[]>;
+  /** A link the browser handed over, until the add dialog takes it. */
+  browserRequest: BrowserRequest | null;
+  clearBrowserRequest: () => void;
   /** True while the first list request is in flight. */
   loading: boolean;
   /** Engine or action error, shown above the list. */
@@ -126,6 +134,8 @@ export interface NewDownload {
   fileName: string;
   category: CategoryName;
   savePath: string;
+  /** The page the link was on, when the browser knew it. */
+  referer?: string;
 }
 
 const DownloadContext = createContext<DownloadStore | null>(null);
@@ -159,6 +169,9 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
   }));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [browserRequest, setBrowserRequest] = useState<BrowserRequest | null>(
+    null,
+  );
 
   // The engine sends absolute counters, so speed is the delta between two
   // events. One sample per download, kept out of state to avoid a render per
@@ -219,6 +232,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
           info.status === "running" ? sample.at : (previous?.lastTryAt ?? sample.at),
         savePath: dir,
         dest: info.dest,
+        referer: info.referer,
         connections: info.connections,
         error: info.error,
       };
@@ -403,13 +417,19 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
       item.url,
       item.dest,
       item.connections || DEFAULT_CONNECTIONS,
+      item.referer ?? undefined,
     );
   }
 
   /** Start one download and put its row in the list. */
   async function beginDownload(input: NewDownload) {
     const dest = joinPath(input.savePath, input.fileName);
-    const id = await startDownload(input.url, dest, DEFAULT_CONNECTIONS);
+    const id = await startDownload(
+      input.url,
+      dest,
+      DEFAULT_CONNECTIONS,
+      input.referer,
+    );
     const now = Date.now();
     const { dir, base } = splitPath(dest);
     const row: Download = {
@@ -426,6 +446,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
       lastTryAt: now,
       savePath: dir,
       dest,
+      referer: input.referer?.trim() || null,
       connections: DEFAULT_CONNECTIONS,
       error: null,
     };
@@ -437,24 +458,19 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
     }));
   }
 
-  /** A link the browser extension handed over. */
-  async function takeFromBrowser(payload: BridgeDownload) {
-    try {
-      const chosen = loadSettings().defaultFolder.trim();
-      const folder =
-        chosen || splitPath(await defaultDestination()).dir || ".";
-      const name = sanitizeFileName(
-        payload.name || fileNameFromUrl(payload.url),
-      );
-      await beginDownload({
-        url: payload.url,
-        fileName: name,
-        category: categoryOfFile(name),
-        savePath: folder,
-      });
-    } catch (failure) {
-      setError(describeError(failure));
-    }
+  /**
+   * A link the browser extension handed over.
+   *
+   * The browser waits while the user confirms it, the way IDM's dialog does:
+   * the address and the name the browser gave the file are put in the add
+   * dialog, which starts the download when the user says so.
+   */
+  function takeFromBrowser(payload: BridgeDownload) {
+    setBrowserRequest({
+      url: payload.url,
+      name: splitPath(payload.name).base,
+      referer: payload.referer,
+    });
   }
 
   const store: DownloadStore = {
@@ -466,6 +482,8 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
     visible,
     counts,
     folders,
+    browserRequest,
+    clearBrowserRequest: () => setBrowserRequest(null),
     loading,
     error,
     dismissError: () => setError(null),

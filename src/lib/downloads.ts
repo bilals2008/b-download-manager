@@ -51,6 +51,8 @@ export interface Download {
   savePath: string;
   /** Full destination path, as the engine reports it. */
   dest: string;
+  /** The page the link was on, when the browser knew it. */
+  referer: string | null;
   /** Connections the engine currently holds. */
   connections: number;
   /** Failure text from the engine, when the status is "error". */

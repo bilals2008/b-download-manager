@@ -1,4 +1,5 @@
 mod bridge;
+mod complete;
 mod state;
 
 use std::path::PathBuf;
@@ -27,6 +28,19 @@ struct AppReporter(AppHandle);
 impl Reporter for AppReporter {
     fn report(&self, info: &DownloadInfo) {
         let _ = self.0.emit(UPDATE_EVENT, info.clone());
+
+        // A finished file gets the window IDM opens for it, unless the user
+        // turned that window off in Options. The window is built on the main
+        // thread, the one the window toolkit runs on.
+        if info.status == Status::Completed
+            && self.0.state::<AppState>().show_complete_dialog()
+        {
+            let app = self.0.clone();
+            let info = info.clone();
+            let _ = self
+                .0
+                .run_on_main_thread(move || complete::show(&app, &info));
+        }
     }
 }
 
@@ -37,6 +51,7 @@ fn start_download(
     url: String,
     dest: String,
     connections: Option<u32>,
+    referer: Option<String>,
 ) -> Result<u64, String> {
     let url = url.trim().to_string();
     if url.is_empty() {
@@ -57,6 +72,7 @@ fn start_download(
         dest,
         connections.unwrap_or(DEFAULT_CONNECTIONS).clamp(1, 32),
         state.limits().proxy().as_deref(),
+        referer.as_deref(),
     )?;
 
     let id = download.id;
@@ -187,6 +203,13 @@ fn set_minimize_to_tray(state: State<'_, AppState>, on: bool) -> bool {
     on
 }
 
+/// Whether a finished download gets its own window.
+#[tauri::command]
+fn set_show_complete_dialog(state: State<'_, AppState>, on: bool) -> bool {
+    state.set_show_complete_dialog(on);
+    on
+}
+
 /// A sensible starting point for the destination path.
 #[tauri::command]
 fn default_destination(app: AppHandle) -> String {
@@ -206,13 +229,14 @@ fn default_destination(app: AppHandle) -> String {
 async fn probe_file_name(
     state: State<'_, AppState>,
     url: String,
+    referer: Option<String>,
 ) -> Result<Option<String>, String> {
     let url = url.trim();
     if url.is_empty() {
         return Ok(None);
     }
     let proxy = state.limits().proxy();
-    let source = Source::parse(url, proxy.as_deref())?;
+    let source = Source::parse(url, proxy.as_deref(), referer.as_deref())?;
     let probe = source.probe().await.map_err(|error| error.message)?;
     Ok(probe.name)
 }
@@ -326,7 +350,7 @@ fn build_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Bring the window back from the tray.
-fn show_window(app: &AppHandle) {
+pub(crate) fn show_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.unminimize();
         let _ = window.show();
@@ -358,8 +382,12 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             // Closing the window hides it into the tray, the way IDM does.
-            // The tray menu is the way out.
+            // The tray menu is the way out. Only the main window is kept;
+            // the smaller windows of the application really close.
             if let WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() != "main" {
+                    return;
+                }
                 let state = window.app_handle().state::<AppState>();
                 if state.minimize_to_tray() {
                     api.prevent_close();
@@ -381,6 +409,7 @@ pub fn run() {
             site_connections,
             set_max_connections,
             set_minimize_to_tray,
+            set_show_complete_dialog,
             quit_app,
             default_destination,
             probe_file_name,

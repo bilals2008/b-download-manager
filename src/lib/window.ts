@@ -21,3 +21,8 @@ export async function windowAction(action: WindowAction): Promise<void> {
 export function toggleMaximize(): Promise<void> {
   return windowAction("toggleMaximize");
 }
+
+/** Close the window this page is in. The main window uses the menu instead. */
+export function closeWindow(): Promise<void> {
+  return windowAction("close");
+}

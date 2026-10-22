@@ -106,7 +106,7 @@
         let (url, requests) = spawn_range_server(data.clone());
         let dir = temp_dir("range");
 
-        let download = Download::new(1, url, dir.join("out.bin"), 4, None).expect("download");
+        let download = Download::new(1, url, dir.join("out.bin"), 4, None, None).expect("download");
         let mut segments = segmenter::plan(data.len() as u64, 1, &dir, "out");
         segments[0].end = 512;
         *download.segments.lock().expect("lock") = segments;
@@ -137,7 +137,7 @@
     async fn the_request_carries_the_browser_user_agent() {
         let data = sample_data();
         let (url, requests) = spawn_range_server(data.clone());
-        let source = crate::transfer::Source::parse(&url, None).expect("source");
+        let source = crate::transfer::Source::parse(&url, None, None).expect("source");
         source.probe().await.expect("probe");
 
         let head = requests.recv().expect("request head");
@@ -153,7 +153,7 @@
         let url = spawn_ignoring_server(data.clone());
         let dir = temp_dir("ignore");
 
-        let download = Download::new(2, url, dir.join("out.bin"), 4, None).expect("download");
+        let download = Download::new(2, url, dir.join("out.bin"), 4, None, None).expect("download");
         let mut segments = segmenter::plan(data.len() as u64, 1, &dir, "out");
         segments[0].downloaded = 100;
         *download.segments.lock().expect("lock") = segments;
@@ -280,7 +280,7 @@
         let dir = temp_dir("lying");
         let dest = dir.join("out.bin");
 
-        let download = Download::new(12, url, dest.clone(), 4, None).expect("download");
+        let download = Download::new(12, url, dest.clone(), 4, None, None).expect("download");
         // Keep the test quick: the download fails after two attempts.
         download.max_attempts.store(2, Ordering::SeqCst);
         run(silent(), Limits::default(), download.clone()).await;
@@ -326,7 +326,7 @@
 
             let started = Instant::now();
             let download =
-                Download::new(connections as u64, url.clone(), dest.clone(), connections, None)
+                Download::new(connections as u64, url.clone(), dest.clone(), connections, None, None)
                     .expect("download");
             run(silent(), Limits::default(), download.clone()).await;
 
@@ -352,7 +352,7 @@
         let dir = temp_dir("several-ranges");
         let dest = dir.join("out.bin");
 
-        let download = Download::new(13, url, dest.clone(), 4, None).expect("download");
+        let download = Download::new(13, url, dest.clone(), 4, None, None).expect("download");
         run(silent(), Limits::default(), download.clone()).await;
 
         assert_eq!(download.info().status, Status::Completed);
@@ -381,7 +381,7 @@
         let dir = temp_dir("ftp");
         let dest = dir.join("out.bin");
 
-        let download = Download::new(14, url, dest.clone(), 4, None).expect("download");
+        let download = Download::new(14, url, dest.clone(), 4, None, None).expect("download");
         run(silent(), Limits::default(), download.clone()).await;
 
         assert_eq!(
@@ -408,6 +408,7 @@
             "ftp://user:secret@example.com/file.bin".to_string(),
             dir.join("out.bin"),
             4,
+            None,
             None,
         )
         .expect("download");
@@ -447,7 +448,7 @@
         let dir = temp_dir("busy");
         let dest = dir.join("out.bin");
 
-        let download = Download::new(16, url, dest.clone(), 4, None).expect("download");
+        let download = Download::new(16, url, dest.clone(), 4, None, None).expect("download");
         // Keep the test quick.
         download.max_attempts.store(2, Ordering::SeqCst);
         run(silent(), Limits::default(), download.clone()).await;
@@ -467,7 +468,7 @@
     #[tokio::test]
     async fn a_cancelled_download_does_not_take_its_task_with_it() {
         let dir = temp_dir("epoch");
-        let download = Download::new(11, "https://example.com/a.bin".into(), dir.join("out.bin"), 4, None)
+        let download = Download::new(11, "https://example.com/a.bin".into(), dir.join("out.bin"), 4, None, None)
             .expect("download");
 
         let first = download.next_epoch();
@@ -491,7 +492,7 @@
         let dir = temp_dir("end-to-end");
         let dest = dir.join("out.bin");
 
-        let download = Download::new(7, url, dest.clone(), 4, None).expect("download");
+        let download = Download::new(7, url, dest.clone(), 4, None, None).expect("download");
         run(silent(), Limits::default(), download.clone()).await;
 
         assert_eq!(download.info().status, Status::Completed);
@@ -518,7 +519,7 @@
         let dir = temp_dir("resume");
         let dest = dir.join("out.bin");
 
-        let download = Download::new(8, url, dest.clone(), 4, None).expect("download");
+        let download = Download::new(8, url, dest.clone(), 4, None, None).expect("download");
 
         // The first run got 400 bytes in and then the app was closed.
         let mut segments = segmenter::plan(data.len() as u64, 1, &dir, &download.stem);
@@ -559,7 +560,7 @@
         let dir = temp_dir("unknown-size");
         let dest = dir.join("out.bin");
 
-        let download = Download::new(9, url, dest.clone(), 4, None).expect("download");
+        let download = Download::new(9, url, dest.clone(), 4, None, None).expect("download");
         run(silent(), Limits::default(), download.clone()).await;
 
         assert_eq!(download.info().status, Status::Completed);
@@ -577,7 +578,7 @@
 
         // Two ranges that overlap: the chunk list of this manifest is
         // damaged, the way a crash in the middle of a write can damage it.
-        let download = Download::new(10, url, dest.clone(), 4, None).expect("download");
+        let download = Download::new(10, url, dest.clone(), 4, None, None).expect("download");
         let segments = vec![
             Segment {
                 id: 0,

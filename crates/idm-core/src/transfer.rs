@@ -66,7 +66,15 @@ impl Source {
     ///
     /// `proxy` is the proxy the user set, if there is one. Both HTTP and
     /// SOCKS proxies are addresses that reqwest understands.
-    pub fn parse(url: &str, proxy: Option<&str>) -> Result<Self, String> {
+    ///
+    /// `referer` is the page the link was on, when the browser knew it. It is
+    /// a default header of the client, so every range carries it, the way IDM
+    /// sends the page a file was linked from.
+    pub fn parse(
+        url: &str,
+        proxy: Option<&str>,
+        referer: Option<&str>,
+    ) -> Result<Self, String> {
         if let Some(rest) = url.strip_prefix("ftp://") {
             return Self::parse_ftp(rest);
         }
@@ -79,6 +87,16 @@ impl Source {
                 let proxy = reqwest::Proxy::all(proxy)
                     .map_err(|e| format!("the proxy address is not usable: {e}"))?;
                 builder = builder.proxy(proxy);
+            }
+
+            // The referer comes from the browser, so it is untrusted input.
+            // `from_str` refuses a value that would start a new header line.
+            if let Some(referer) = referer.map(str::trim).filter(|r| !r.is_empty()) {
+                let value = reqwest::header::HeaderValue::from_str(referer)
+                    .map_err(|_| "the referer is not a usable header".to_string())?;
+                let mut headers = reqwest::header::HeaderMap::new();
+                headers.insert(reqwest::header::REFERER, value);
+                builder = builder.default_headers(headers);
             }
 
             let client = builder.build().map_err(|e| e.to_string())?;
@@ -201,7 +219,7 @@ mod tests {
 
     #[test]
     fn an_ftp_url_is_read() {
-        let source = Source::parse("ftp://user:secret@example.com/pub/file.bin", None).expect("ftp url");
+        let source = Source::parse("ftp://user:secret@example.com/pub/file.bin", None, None).expect("ftp url");
         match source {
             Source::Ftp {
                 host,
@@ -222,7 +240,7 @@ mod tests {
 
     #[test]
     fn an_ftp_url_without_a_port_uses_the_default_one() {
-        let source = Source::parse("ftp://example.com/file.bin", None).expect("ftp url");
+        let source = Source::parse("ftp://example.com/file.bin", None, None).expect("ftp url");
         match source {
             Source::Ftp { host, port, user, path, .. } => {
                 assert_eq!(host, "example.com");
@@ -236,7 +254,7 @@ mod tests {
 
     #[test]
     fn an_ftp_url_with_a_port_is_read() {
-        let source = Source::parse("ftp://example.com:2121/file.bin", None).expect("ftp url");
+        let source = Source::parse("ftp://example.com:2121/file.bin", None, None).expect("ftp url");
         match source {
             Source::Ftp { port, .. } => assert_eq!(port, 2121),
             Source::Http { .. } => panic!("the url must be an ftp url"),
@@ -245,14 +263,14 @@ mod tests {
 
     #[test]
     fn a_url_of_another_scheme_is_refused() {
-        assert!(Source::parse("magnet:?xt=urn:btih:1", None).is_err());
-        assert!(Source::parse("file:///c:/windows", None).is_err());
+        assert!(Source::parse("magnet:?xt=urn:btih:1", None, None).is_err());
+        assert!(Source::parse("file:///c:/windows", None, None).is_err());
     }
 
     #[test]
     fn an_http_url_is_read() {
         assert!(matches!(
-            Source::parse("https://example.com/a.bin", None).expect("http url"),
+            Source::parse("https://example.com/a.bin", None, None).expect("http url"),
             Source::Http { .. }
         ));
     }
@@ -278,8 +296,20 @@ mod tests {
     }
 
     #[test]
+    fn a_referer_that_would_start_a_header_is_refused() {
+        let error = Source::parse(
+            "https://example.com/a.bin",
+            None,
+            Some("https://example.com/\r\nX-Injected: 1"),
+        )
+        .err()
+        .expect("the referer must be refused");
+        assert!(error.contains("referer"), "error was: {error}");
+    }
+
+    #[test]
     fn a_proxy_that_cannot_be_used_is_reported() {
-        let error = match Source::parse("https://example.com/a.bin", Some("not a proxy")) {
+        let error = match Source::parse("https://example.com/a.bin", Some("not a proxy"), None) {
             Ok(_) => panic!("the proxy must be refused"),
             Err(error) => error,
         };

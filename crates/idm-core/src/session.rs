@@ -25,6 +25,10 @@ pub struct KnownDownload {
     /// The status the download had when the app was closed.
     pub status: Status,
     pub error: Option<String>,
+    /// The page the link was on, when the browser knew it. Older index files
+    /// do not have it.
+    #[serde(default)]
+    pub referer: Option<String>,
 }
 
 /// What is left on disk for a remembered download.
@@ -124,6 +128,7 @@ mod tests {
             downloaded: 40,
             status: Status::Paused,
             error: None,
+            referer: None,
         }
     }
 

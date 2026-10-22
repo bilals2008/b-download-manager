@@ -813,6 +813,40 @@ Hide categories
 categories pane is a tree with those three groups and the eight categories,
 and View > Hide categories takes it off the screen.
 
+### 9.4 The download complete window
+
+A finished file gets a window of its own, not a box in the list. The strings
+that describe it are in the same table:
+
+```
+0x6bb1d4  Download complete
+0x6be2e0  File %s download complete.\n\nDownloaded %s (%I64d Bytes)\nFile saved as %s
+0x6c9d30  Show download complete dialog
+0x69fd78  CompleteDlg.htm
+```
+
+The first is the title, the second is the body with the file name, the
+formatted size, the byte count and the save path, and the third is the option
+that turns the window on. `CompleteDlg.htm` is the name of the page the
+dialog shows, which is why IDM's window carries more text than a message box.
+
+The "Open folder" button is in the same block (`0x6be2e0` has no buttons of
+its own, but `Open folder` is one of the strings around it), and
+`0x6bc5b4` (`Download complete. Downloaded %I64d Bytes Total`) is the line the
+status bar writes at the same moment.
+
+The clone opens its own window from `src-tauri/src/complete.rs` with those
+words, a second webview so the list stays usable, and the buttons Open file,
+Open folder and Close. The option at `0x6c9d30` lives on the Downloads page of
+the options window as "Show download complete dialog"; it is stored with the
+other preferences and pushed to the engine, which reads it before it builds
+the window.
+
+The referer the browser hands over is kept with the download and set as a
+default `Referer` header on the HTTP client, so every range request carries
+the page the link was on. It is validated as a header value, because it comes
+from the browser, and it survives a restart with the rest of the index entry.
+
 
 ---
 

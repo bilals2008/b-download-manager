@@ -15,6 +15,8 @@ pub struct AppState {
     index: Mutex<Option<Index>>,
     /// Whether closing the window hides it into the tray.
     minimize_to_tray: AtomicBool,
+    /// Whether the window of a finished download is shown.
+    show_complete_dialog: AtomicBool,
 }
 
 impl Default for AppState {
@@ -25,6 +27,7 @@ impl Default for AppState {
             limits: Limits::default(),
             index: Mutex::new(None),
             minimize_to_tray: AtomicBool::new(true),
+            show_complete_dialog: AtomicBool::new(true),
         }
     }
 }
@@ -85,6 +88,16 @@ impl AppState {
     /// Choose whether closing the window hides it into the tray.
     pub fn set_minimize_to_tray(&self, on: bool) {
         self.minimize_to_tray.store(on, Ordering::SeqCst);
+    }
+
+    /// Whether a finished download gets its own window.
+    pub fn show_complete_dialog(&self) -> bool {
+        self.show_complete_dialog.load(Ordering::SeqCst)
+    }
+
+    /// Choose whether a finished download gets its own window.
+    pub fn set_show_complete_dialog(&self, on: bool) {
+        self.show_complete_dialog.store(on, Ordering::SeqCst);
     }
 
     /// Point the state at the file the index of known downloads lives in.

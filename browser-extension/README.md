@@ -21,9 +21,9 @@ listens on `127.0.0.1:27500`.
 
 - The right click menu on a link has **Download with Internet Download
   Manager**.
-- A download the browser starts is taken over by the application, the way
-  the "advanced integration" of IDM does. The switch in the popup turns that
-  off.
+- A download the browser starts is taken over by the application, which
+  opens its add dialog with the address and the name of the file already
+  filled in. The switch in the popup turns that off.
 
 ## What it does not do yet
 

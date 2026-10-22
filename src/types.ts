@@ -15,6 +15,7 @@ export interface DownloadInfo {
   connections: number;
   status: DownloadStatus;
   error: string | null;
+  referer: string | null;
 }
 
 export const ACTIVE_STATUSES: DownloadStatus[] = ["queued", "running", "paused"];

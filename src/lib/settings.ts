@@ -15,6 +15,8 @@ export interface Settings {
   clipboardCapture: boolean;
   /** Whether closing the window hides it into the tray. */
   minimizeToTray: boolean;
+  /** Whether a finished download gets its own window. */
+  showCompleteDialog: boolean;
   /** Auto follows the system; the other two override it. */
   theme: ThemePreference;
   /** Where a new download is saved when the user does not say. */
@@ -35,6 +37,7 @@ export const DEFAULT_SETTINGS: Settings = {
   launchOnStartup: false,
   clipboardCapture: false,
   minimizeToTray: true,
+  showCompleteDialog: true,
   theme: "auto",
   defaultFolder: "",
   defaultConnections: 8,
@@ -65,6 +68,10 @@ export function loadSettings(): Settings {
       launchOnStartup: boolean(value.launchOnStartup, DEFAULT_SETTINGS.launchOnStartup),
       clipboardCapture: boolean(value.clipboardCapture, DEFAULT_SETTINGS.clipboardCapture),
       minimizeToTray: boolean(value.minimizeToTray, DEFAULT_SETTINGS.minimizeToTray),
+      showCompleteDialog: boolean(
+        value.showCompleteDialog,
+        DEFAULT_SETTINGS.showCompleteDialog,
+      ),
       theme: theme(value.theme, DEFAULT_SETTINGS.theme),
       defaultFolder: text(value.defaultFolder, DEFAULT_SETTINGS.defaultFolder),
       defaultConnections: number(
