@@ -813,3 +813,169 @@ Hide categories
 categories pane is a tree with those three groups and the eight categories,
 and View > Hide categories takes it off the screen.
 
+
+---
+
+## 11. The third pass: the request header, the method names, the scheduler
+
+A third run of the same tools (REA command line, Ghidra 12.1.4 headless, the
+same binary and the same digest) added three things the earlier passes had
+left open: the name the client gives itself on the wire, the full corpus of
+IDM's own method names, and the function that starts the optional
+connections.
+
+### 11.1 The User-Agent
+
+Two strings in the table say who the client is:
+
+```
+U16  Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko)
+A8   Mozilla/5.0 (compatible; MSIE 10.0; Windows NT 6.1; Trident/6.0)
+A8   Referer:
+A8   User-Agent for manually added downloads:
+```
+
+The first is the name IDM sends on a normal request; the second is the older
+IE name it keeps for the servers that want it. The clone sent its own name
+(`my-idm-clone/0.1.0`), and a server that only serves browsers answered
+`403 Forbidden` — the video links of Google are the everyday case.
+
+**What this changes.** `http::USER_AGENT` now carries the string that was read
+out of the binary, and every request goes out with it. The test
+`the_request_carries_the_browser_user_agent` covers it.
+
+### 11.2 The names of the methods
+
+IDM names its own methods in the strings it uses for error reporting. The
+pattern is always the same:
+
+```
+Unknown error during <Class>::<Method>()
+```
+
+One run of the string table lists the engine's classes and their methods:
+
+```
+ChunksList::AddAlternative()      ChunksList::AppendFile()
+ChunksList::ApplyAlternative()     ChunksList::CheckAlternative()
+ChunksList::FindMaxFreeChunk()     ChunksList::InitFirst()
+ChunksList::InsertFromReg()        ChunksList::JoinFile()
+ChunksList::NeedNewConnection()    ChunksListItem::JoinWithNext()
+Connection::CheckConnect()         Connection::OnChangeBounds()
+Connection::OnComplete()           Connection::ProcessRecv()
+Connection::ReceiveData()          Connection::SelectForRead()
+Connection::SetCompleted()         HTTPConnection::GetRetrRangeReply()
+HTTPSession::GetSlowestConnection()  HTTPSession::TryStartNewOptionalConnections()
+HTTPSession::ReceiveData()         HTTPSession::InitSession()
+FTPSession::CreateOptionalConnections()  FTPSession::GetSlowestConnection()
+FTPSession::InitSession()          FTPConnection::StartGetChunk()
+FTPConnection::SendRetr()          FTPConnection::InsInChunksList()
+FTPConnection::CheckRetrReply()    FTPConnection::RollBack()
+Session::set_fileSize()            Session::CheckFormat()
+CContentTypeChecker::Check()       CContentTypeChecker::CheckHTML()
+```
+
+**This is the map the earlier passes were missing.** `InitFirst` is the
+initial split, `FindMaxFreeChunk` is the chunk with the most room left,
+`AddAlternative` and `ApplyAlternative` are the hand-over of a tail to a new
+connection, and `NeedNewConnection` is the question "is another connection
+warranted". The names are evidence of the *existence* of the methods; the
+addresses behind them are still to be bound.
+
+The window furniture is named the same way, and it confirms the two context
+menus the clone now has:
+
+```
+CDownloaderDlg::OnRclickUrllist()     the right click on a row
+CDownloaderDlg::CreateTreePopupMenu() the right click on a category
+CDownloaderDlg::OnProperties()        the properties of a row
+CIDMListCtrl::OnBegindrag()           the drag handles of the queue
+```
+
+### 11.3 The optional connections
+
+`FUN_0057cfa0` starts the extra connections. Its strings give it a name:
+
+```
+"Need optional connections.\n"
+"Optional connections not needed.\n"
+```
+
+and it calls `FUN_005bad00` — the function that counts the connections a file
+deserves (section 10.5) — before it decides. The connections live in one
+array, 15,000 bytes apart (`iVar5 * 15000`), and each one has an "optional"
+flag. The count it works to is the number the user allows, at
+`in_ECX + 0xf0`, and it never goes past what `FUN_005bad00` asks for.
+
+The check that opens the way for another connection is `FUN_00572000`, a
+160-byte function that asks a virtual method of the session and returns zero
+when the way is clear:
+
+```c
+iVar1 = (**(code **)(*in_ECX + 0x18))(in_ECX + 0xc81);
+if (iVar1 != 0) { *(int *)(in_ECX[0xc85] + 0x14c) = iVar1; return iVar1; }
+FUN_005b0a80(1);
+_memset(in_ECX + 0xc94, 0, 0x3ff);
+return 0;
+```
+
+**Observed:** the structure above. **Inferred:** that `FUN_0057cfa0` is the
+FTP session's `CreateOptionalConnections` and not the HTTP one, because the
+HTTP family of routines sits in the `0x597xxx` range
+(`Catch@005973d2`, `HTTPSession::TryStartNewOptionalConnections`) while this
+one sits at `0x57cfa0`, next to the FTP machinery. The binding of the HTTP
+routine is still open.
+
+**What this changes.** The clone already asks the same two questions before
+it adds a connection: how many the file deserves (`segmenter::connections_for`)
+and how many are allowed (`limits::ConnectionBudget`, `limits::SiteLimits`).
+The order of the answers is now known: the count of the file first, the
+allowance second.
+
+### 11.4 The progress is a percentage
+
+IDM writes the progress of a download as a plain number with a percent sign
+(`%d %%`), and the string table also holds the window furniture that shows
+it. The clone shows the same number in its Progress column.
+
+### 11.5 The hand-over of a tail (the hypothesis, confirmed)
+
+`FUN_00564650` carries the string
+
+```
+"Add alternative connection (%ld) for connection %ld\n"
+```
+
+so it is `ChunksList::AddAlternative()` — the function that gives the tail of
+one connection to another. Its body is short enough to read whole, and it
+answers the question the plan had left open.
+
+The record of a connection holds a start (`+0x60`), an end (`+0x78`), the
+bytes that have arrived (`+0x80`) and the position it has reached (`+0x70`).
+What `AddAlternative` does is:
+
+```c
+// the parent moves on by what it has already received
+parent.start  += parent.received;
+parent.received = 0;
+
+// the new connection takes the tail
+new.start  = parent.start;      // the point the parent has reached
+new.end    = parent.end;        // the end of the parent's range
+new.received = 0;
+```
+
+**Observed.** The new connection starts exactly where the parent has got to
+and runs to the end of the parent's range; the parent keeps the bytes it has
+already written and starts counting again from zero.
+
+**This confirms the hypothesis** of section 5 of the plan: the new connection
+takes the tail of the parent's range at the parent's current position. The
+clone does the same thing in `segmenter::split()` — the parent keeps
+`[start, split_at)` with the bytes it has, and the new segment takes
+`[split_at, end)`.
+
+The one difference is the layout on the disk, and it is the one that was
+chosen on purpose (section 10.6): IDM moves the *start* of the parent's
+range forward and writes at absolute offsets, the clone shortens the
+*end* of the parent's range and keeps one part file per range.

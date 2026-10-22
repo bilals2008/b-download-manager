@@ -44,7 +44,6 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
   } = useDownloads();
   const { widths, tableRef, beginResize, moveResize, endResize, resizeBy, resetWidths } =
     useColumnWidths(DOWNLOAD_COLUMNS);
-  const [expanded, setExpanded] = useState<number[]>([]);
   // The row whose menu is open, and where the pointer was.
   const [menu, setMenu] = useState<{
     item: Download;
@@ -70,14 +69,6 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
   function closeMenu() {
     setMenu(null);
     menuTrigger.current?.focus();
-  }
-
-  function toggleExpanded(id: number) {
-    setExpanded((current) =>
-      current.includes(id)
-        ? current.filter((value) => value !== id)
-        : [...current, id],
-    );
   }
 
   const filterLabel =
@@ -302,11 +293,8 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
                 <DownloadRow
                   key={item.id}
                   item={item}
-                  columnCount={DOWNLOAD_COLUMNS.length}
                   selected={selected.includes(item.id)}
-                  expanded={expanded.includes(item.id)}
                   onSelect={(additive) => toggleSelect(item.id, additive)}
-                  onToggleExpand={() => toggleExpanded(item.id)}
                   onOpenMenu={(at, trigger) => openMenu(item, at, trigger)}
                 />
               ))

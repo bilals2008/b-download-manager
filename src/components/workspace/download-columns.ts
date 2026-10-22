@@ -16,7 +16,7 @@ export interface DownloadColumn {
  * table width so the table keeps filling the window at every size.
  */
 export const DOWNLOAD_COLUMNS: DownloadColumn[] = [
-  { id: "name", label: "File name", sortKey: "name", width: 30, minWidth: 18 },
+  { id: "name", label: "File name", sortKey: "name", width: 34, minWidth: 18 },
   {
     id: "size",
     label: "Size",
@@ -25,7 +25,14 @@ export const DOWNLOAD_COLUMNS: DownloadColumn[] = [
     minWidth: 7,
     align: "right",
   },
-  { id: "progress", label: "Progress", sortKey: null, width: 20, minWidth: 12 },
+  {
+    id: "progress",
+    label: "Progress",
+    sortKey: null,
+    width: 9,
+    minWidth: 6,
+    align: "right",
+  },
   {
     id: "speed",
     label: "Speed",

@@ -17,6 +17,14 @@ use crate::transfer::{ByteStream, Probe, TransferError};
 /// stay equal to the byte offsets in the file.
 pub const IDENTITY_ENCODING: &str = "identity";
 
+/// The User-Agent IDM sends, read out of the string table of `IDMan.exe`.
+///
+/// A server that only serves browsers answers `403 Forbidden` to anything
+/// else: the video links of Google are the everyday example, and a download
+/// manager that identifies itself honestly is refused there.
+pub const USER_AGENT: &str =
+    "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko)";
+
 /// Ask the server for the first byte only.
 ///
 /// The answer reveals the total size and proves whether the server honours

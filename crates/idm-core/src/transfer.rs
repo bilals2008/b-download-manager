@@ -70,7 +70,7 @@ impl Source {
         }
         if url.starts_with("http://") || url.starts_with("https://") {
             let mut builder = reqwest::Client::builder()
-                .user_agent(concat!("my-idm-clone/", env!("CARGO_PKG_VERSION")))
+                .user_agent(http::USER_AGENT)
                 .redirect(reqwest::redirect::Policy::limited(10));
 
             if let Some(proxy) = proxy {

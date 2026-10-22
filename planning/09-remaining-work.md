@@ -89,9 +89,15 @@ this file says what is left to do.
 - [x] The number of connections a file gets
 - [ ] **The initial split arithmetic**: the boundaries inside a file, not the
       number of connections. It was not in the binary; the measurement is the
-      way to answer it.
+      way to answer it. The third pass named the method that holds it:
+      `ChunksList::InitFirst()`.
+- [x] **The hand-over of a tail**: `ChunksList::AddAlternative()` (at
+      `0x564650`) gives the tail of a range to a new connection, starting at
+      the point the parent has reached. The clone already does this.
 - [ ] **The method names of the classes**, bound to their routines. The names
       come from assertion strings; the routines behind `Connection::ProcessRecv`,
-      `ChunksList::NeedNewConnection` and the others are still not bound.
+      `ChunksList::NeedNewConnection` and the others are still not bound. Two
+      are bound so far: `ChunksList::AddAlternative()` at `0x564650` and, by
+      inference, `FTPSession::CreateOptionalConnections()` at `0x57cfa0`.
 - [ ] **The `multipart/byteranges` path**, which was only seen as a string.
 - [ ] **The media splitting** in the binary, which was not investigated.

@@ -20,7 +20,9 @@ on, and for an explicit list of what could *not* be established.
 3. **Download.** Every connection asks for its own range with
    `Range: bytes=<start>-<end>` and `Accept-Encoding: identity`, and writes
    into its part file. Over FTP every range opens its own data connection and
-   asks for the file with `RETR`.
+   asks for the file with `RETR`. The requests name themselves like a
+   browser, the way IDM does — a server that only serves browsers answers
+   `403 Forbidden` to anything else.
 4. **Check.** The head of the file is kept and compared with the head of
    every other range. A range that holds the head of the file is a range the
    server did not honour: its bytes are given back, the range is fetched

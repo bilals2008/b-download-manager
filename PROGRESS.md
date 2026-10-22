@@ -33,10 +33,12 @@ Done items stay in the list as a record of what is already standing.
 - [x] Rows come from the Rust engine; the list starts empty and fills as downloads run
 - [x] Loading, empty, no-results and engine-error states
 - [x] Drag-resizable columns, with arrow-key resizing and a double-click reset
-- [x] Expandable row details: address, destination, category, connections, received, added, error
 - [x] Sort by every column, click a header to flip the direction
 - [x] Row selection, Ctrl+click to add to the selection
-- [x] Progress bar, transfer rate, time left, status with a dot and a word
+- [x] Progress as a percentage, transfer rate, time left, status with a dot and
+      a word; the row stays one line and opens nothing under it
+- [x] The error of a failed download shows under its name, the way IDM shows
+      it in the row
 - [ ] Delete key on a selection, Shift+click for a range
 - [ ] Inline edit of file name and save path
 - [x] Context menu on a row with the IDM entries: Resume, Pause, Stop,
@@ -83,6 +85,8 @@ Done items stay in the list as a record of what is already standing.
 - [x] Multi-connection range downloader with the chunk list IDM keeps
 - [x] Resume from the `.idm.json` manifest, truncate to the recorded length
 - [x] HTTPS and HTTP through the Tauri backend
+- [x] The requests name themselves like a browser, the way IDM does; a server
+      that only serves browsers answered `403 Forbidden` before that
 - [x] FTP: every range opens its own data connection and asks for the file with `RETR`
 - [x] A proxy: HTTP or SOCKS, for the whole application
 - [x] Connection count per download, IDM's default of 8

@@ -131,6 +131,22 @@
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// A server that only serves browsers answers `403` to a download manager
+    /// that does not name itself like one.
+    #[tokio::test]
+    async fn the_request_carries_the_browser_user_agent() {
+        let data = sample_data();
+        let (url, requests) = spawn_range_server(data.clone());
+        let source = crate::transfer::Source::parse(&url, None).expect("source");
+        source.probe().await.expect("probe");
+
+        let head = requests.recv().expect("request head");
+        assert!(
+            head.contains(crate::http::USER_AGENT),
+            "the request must name itself like a browser, it was: {head}"
+        );
+    }
+
     #[tokio::test]
     async fn a_server_that_ignores_the_range_is_rejected() {
         let data = sample_data();
