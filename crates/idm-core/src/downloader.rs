@@ -111,6 +111,11 @@ impl Control {
         let _ = self.paused_tx.send(true);
     }
 
+    /// Whether the download is paused right now.
+    pub fn is_paused(&self) -> bool {
+        *self.paused_rx.borrow()
+    }
+
     pub fn resume(&self) {
         let _ = self.paused_tx.send(false);
     }
@@ -647,6 +652,7 @@ async fn fetch_range(
     seg_start: u64,
     from: u64,
     to: Option<u64>,
+    epoch: u64,
 ) -> Result<(), TransferError> {
     // One connection slot of the whole application. The slot is held for the
     // length of the request and given back when the response is done.
@@ -681,6 +687,14 @@ async fn fetch_range(
     let mut written = 0u64;
 
     while let Some(item) = stream.next().await {
+        // A pause or a cancel reaches a range that is streaming: the response
+        // is dropped, which closes its connection, and the task waits for the
+        // resume or ends. A resume asks for the range again from the byte the
+        // part file ended on.
+        if download.control.is_paused() || download.is_cancelled(epoch) {
+            break;
+        }
+
         let bytes = item.map_err(TransferError::msg)?;
         if bytes.is_empty() {
             continue;
@@ -890,7 +904,7 @@ async fn segment_task(
         let from = start + downloaded;
         let to = if unknown { None } else { Some(end - 1) };
 
-        match fetch_range(&download, &limits, seg_id, start, from, to).await {
+        match fetch_range(&download, &limits, seg_id, start, from, to, epoch).await {
             Ok(()) => {
                 // The first range of the download is the head of the file.
                 if start == 0 {

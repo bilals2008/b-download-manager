@@ -84,6 +84,61 @@
         format!("http://127.0.0.1:{port}/file.bin")
     }
 
+    /// A server that drips the range it was asked for, a chunk at a time, so a
+    /// test has a transfer that is still running when it pauses it.
+    fn spawn_slow_server(data: Vec<u8>) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let port = listener.local_addr().expect("addr").port();
+
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { break };
+                let mut buf = [0u8; 4096];
+                let Ok(read) = stream.read(&mut buf) else { break };
+                let head = String::from_utf8_lossy(&buf[..read]).to_string();
+
+                let range = head
+                    .lines()
+                    .find(|line| line.to_ascii_lowercase().starts_with("range:"))
+                    .map(|line| line.split(':').nth(1).unwrap_or("").trim().to_string())
+                    .map(|value| {
+                        let value = value.trim_start_matches("bytes=");
+                        let mut parts = value.split('-');
+                        let start: usize = parts.next().unwrap_or("0").parse().unwrap_or(0);
+                        let end: usize = parts
+                            .next()
+                            .unwrap_or("")
+                            .parse()
+                            .unwrap_or(data.len().saturating_sub(1));
+                        (start, end)
+                    })
+                    .unwrap_or((0, data.len().saturating_sub(1)));
+                let (start, end) = (range.0.min(data.len() - 1), range.1.min(data.len() - 1));
+
+                let response = format!(
+                    "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {}-{}/{}\r\nAccept-Ranges: bytes\r\nConnection: close\r\n\r\n",
+                    end - start + 1,
+                    start,
+                    end,
+                    data.len()
+                );
+                let _ = stream.write_all(response.as_bytes());
+
+                // The probe asks for one byte; the rest is streamed slowly.
+                let step = if start == 0 && end == 0 { 1 } else { 1024 };
+                for chunk in data[start..=end].chunks(step) {
+                    if stream.write_all(chunk).is_err() {
+                        break;
+                    }
+                    let _ = stream.flush();
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+            }
+        });
+
+        format!("http://127.0.0.1:{port}/file.bin")
+    }
+
     fn temp_dir(tag: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
             "my-idm-clone-{tag}-{}-{:?}",
@@ -111,7 +166,7 @@
         segments[0].end = 512;
         *download.segments.lock().expect("lock") = segments;
 
-        fetch_range(&download, &Limits::default(), 0, 0, 0, Some(511))
+        fetch_range(&download, &Limits::default(), 0, 0, 0, Some(511), download.next_epoch())
             .await
             .expect("fetch");
 
@@ -158,7 +213,7 @@
         segments[0].downloaded = 100;
         *download.segments.lock().expect("lock") = segments;
 
-        let error = fetch_range(&download, &Limits::default(), 0, 0, 100, Some(999))
+        let error = fetch_range(&download, &Limits::default(), 0, 0, 100, Some(999), download.next_epoch())
             .await
             .expect_err("must fail");
         assert!(
@@ -482,6 +537,42 @@
         let second = download.next_epoch();
         assert!(!download.is_cancelled(second));
 
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn a_paused_download_stops_writing_its_bytes() {
+        let data: Vec<u8> = (0..32 * 1024u32).map(|i| (i % 251) as u8).collect();
+        let url = spawn_slow_server(data);
+        let dir = temp_dir("pause");
+        let download = Download::new(12, url, dir.join("out.bin"), 4, None, None).expect("download");
+
+        let task = tokio::spawn(run(silent(), Limits::default(), download.clone()));
+
+        // Wait until the bytes are flowing.
+        let started = Instant::now();
+        while download.info().downloaded == 0 {
+            assert!(
+                started.elapsed() < Duration::from_secs(5),
+                "the download never started"
+            );
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        download.control.pause();
+        // The chunk that was already in the socket lands; the next one is not
+        // written, because the range sees the pause before it takes the bytes.
+        tokio::time::sleep(Duration::from_millis(80)).await;
+        let frozen = download.info().downloaded;
+        tokio::time::sleep(Duration::from_millis(250)).await;
+        assert_eq!(
+            download.info().downloaded,
+            frozen,
+            "a paused download must stop writing"
+        );
+
+        download.cancel();
+        let _ = tokio::time::timeout(Duration::from_secs(2), task).await;
         let _ = std::fs::remove_dir_all(&dir);
     }
 
