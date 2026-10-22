@@ -46,7 +46,7 @@ pub fn show(app: &AppHandle, info: &DownloadInfo) {
         WebviewUrl::App("index.html".into()),
     )
     .title("Download complete")
-    .inner_size(470.0, 240.0)
+    .inner_size(500.0, 284.0)
     .resizable(false)
     .maximizable(false)
     .decorations(false)

@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
 
-import { CloseGlyph } from "@/components/icons/ui-icons";
-import { formatSize, splitPath } from "@/lib/downloads";
+import { FileTypeIcon } from "@/components/icons/desktop-icons";
+import { CheckGlyph, CloseGlyph } from "@/components/icons/ui-icons";
+import { categoryOfFile, formatSize, splitPath } from "@/lib/downloads";
 import { describeError } from "@/lib/errors";
 import { openPath } from "@/lib/ipc";
 import { closeWindow } from "@/lib/window";
 import type { DownloadInfo } from "@/types";
+
+const BUTTON =
+  "rounded-chrome px-3 py-1.5 text-xs transition-colors focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none";
 
 /**
  * The window IDM opens when a file finishes.
@@ -41,14 +45,14 @@ export function DownloadCompleteWindow({ info }: { info: DownloadInfo }) {
   }
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden bg-chrome-popup text-chrome-menu-text">
+    <div className="flex h-dvh flex-col overflow-hidden rounded-lg border border-chrome-line bg-chrome-popup text-chrome-menu-text">
       <div
         data-tauri-drag-region
         className="flex shrink-0 items-center justify-between gap-4 py-2 pr-2 pl-4"
       >
         <span
           data-tauri-drag-region
-          className="truncate text-sm text-chrome-title-text"
+          className="truncate text-chrome-micro font-medium tracking-wide text-chrome-muted uppercase"
         >
           Download complete
         </span>
@@ -62,41 +66,61 @@ export function DownloadCompleteWindow({ info }: { info: DownloadInfo }) {
         </button>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-2 px-4 py-3 text-xs">
-        <p className="text-sm text-chrome-title-text">
-          File {name} download complete.
-        </p>
-        <p className="text-chrome-muted">
-          Downloaded {formatSize(bytes)} ({bytes} Bytes)
-        </p>
-        <p className="break-all text-chrome-muted">File saved as {info.dest}</p>
+      <div className="flex min-h-0 flex-1 flex-col gap-3 px-4 pb-1 text-xs">
+        <div className="flex items-start gap-3">
+          <span className="relative shrink-0">
+            <FileTypeIcon category={categoryOfFile(name)} className="size-9" />
+            <span className="absolute -right-1 -bottom-1 grid size-4 place-items-center rounded-full bg-success text-success-foreground ring-2 ring-chrome-popup">
+              <CheckGlyph className="size-2.5" />
+            </span>
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm break-words text-chrome-title-text">
+              File {name} download complete.
+            </p>
+            <p className="mt-0.5 text-chrome-micro tabular-nums text-chrome-muted">
+              Downloaded {formatSize(bytes)} ({bytes} Bytes)
+            </p>
+          </div>
+        </div>
+
+        <div className="min-h-0 flex-1 rounded-chrome border border-chrome-line bg-chrome-canvas px-2.5 py-2">
+          <p className="text-chrome-micro text-chrome-muted">File saved as</p>
+          <p
+            title={info.dest}
+            className="mt-0.5 line-clamp-2 font-mono text-chrome-micro break-all text-chrome-menu-text"
+          >
+            {info.dest}
+          </p>
+        </div>
+
         {error ? (
-          <p role="alert" className="break-words text-chrome-error">
+          <p role="alert" className="break-words text-chrome-micro text-chrome-error">
             {error}
           </p>
         ) : null}
       </div>
 
-      <div className="flex shrink-0 justify-end gap-2 px-4 pb-4">
-        <button
-          type="button"
-          onClick={() => void reveal(info.dest)}
-          className="rounded-chrome bg-chrome-panel px-3 py-1.5 text-xs text-chrome-menu-text transition-colors hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
-        >
-          Open file
-        </button>
+      <div className="flex shrink-0 justify-end gap-2 px-4 py-3">
         <button
           type="button"
           onClick={() => void reveal(folder)}
-          className="rounded-chrome bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
+          className={`${BUTTON} bg-chrome-panel text-chrome-menu-text hover:bg-chrome-menu-hover`}
         >
           Open folder
         </button>
         <button
           type="button"
+          onClick={() => void reveal(info.dest)}
+          className={`${BUTTON} bg-chrome-panel text-chrome-menu-text hover:bg-chrome-menu-hover`}
+        >
+          Open file
+        </button>
+        <button
+          type="button"
           autoFocus
           onClick={() => void closeWindow()}
-          className="rounded-chrome bg-chrome-panel px-3 py-1.5 text-xs text-chrome-menu-text transition-colors hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
+          className={`${BUTTON} bg-primary font-medium text-primary-foreground hover:opacity-90`}
         >
           Close
         </button>
