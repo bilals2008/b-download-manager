@@ -10,6 +10,7 @@
     "check:palette": "node scripts/check-palette.mjs",
     "check:fonts": "node scripts/check-fonts.mjs",
     "check:selection": "node scripts/check-selection.mjs",
+    "check:find": "node scripts/check-find.mjs",
     "tauri": "tauri"
   },
   "dependencies": {

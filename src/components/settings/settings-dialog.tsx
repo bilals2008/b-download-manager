@@ -11,7 +11,7 @@ import {
 } from "@/components/settings/settings-nav";
 import { Dialog } from "@/components/ui/dialog";
 import { describeError } from "@/lib/errors";
-import { applyFont, applySize, applyWeight } from "@/lib/fonts";
+import { applyFont, applyWeight } from "@/lib/fonts";
 import { setMaxConnections, setMinimizeToTray, setProxy, setShowCompleteDialog, setSpeedLimit } from "@/lib/ipc";
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type Settings } from "@/lib/settings";
 import { applyTheme } from "@/lib/theme";
@@ -35,7 +35,7 @@ const ENGINE_KEYS: readonly (keyof Settings)[] = [
 ];
 
 /**
- * "Internet Download Manager Configuration" - the Options window. It opens on
+ * The Settings window. It opens on
  * the General page and writes every change as it is made: there is no Save to
  * press and nothing to cancel, which is what makes the appearance previews
  * honest.
@@ -77,8 +77,6 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
       applyFont(next.uiFont);
     } else if (key === "uiWeight") {
       applyWeight(next.uiWeight);
-    } else if (key === "uiSize") {
-      applySize(next.uiSize);
     }
 
     if (!ENGINE_KEYS.includes(key)) {
@@ -106,7 +104,7 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
   return (
     <Dialog
       open={open}
-      title="Internet Download Manager Configuration"
+      title="Settings"
       onClose={onClose}
       // The options window is the main window's sibling, not a popup: the same
       // canvas, the same two panes, so the two windows read as one product.

@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 
 import App from "./App";
 import { DownloadCompleteWindow } from "./components/windows/download-complete-window";
-import { applyFont, applySize, applyWeight } from "./lib/fonts";
+import { applyFont, applyWeight } from "./lib/fonts";
 import { loadSettings } from "./lib/settings";
 import { applyTheme } from "./lib/theme";
 import { DownloadProvider } from "./state/download-store";
@@ -16,7 +16,6 @@ const saved = loadSettings();
 applyTheme(saved.theme);
 applyFont(saved.uiFont);
 applyWeight(saved.uiWeight);
-applySize(saved.uiSize);
 
 // The backend opens the completion window with this script, so the page knows
 // the finished download before it renders. Every other window is the app.

@@ -11,7 +11,7 @@ interface DownloadProgressProps {
 
 /** The meter changes colour with the state, so a paused row never looks alive. */
 const FILL: Record<Download["status"], string> = {
-  downloading: "bg-primary",
+  downloading: "bg-progress",
   completed: "bg-success",
   paused: "bg-chrome-muted",
   queued: "bg-chrome-muted",

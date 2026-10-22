@@ -12,12 +12,15 @@ import {
   type Download,
 } from "@/lib/downloads";
 import { cn } from "@/lib/utils";
+import type { SelectMode } from "@/state/download-store";
 
 interface DownloadRowProps {
   item: Download;
   selected: boolean;
-  /** Only the checkbox picks a row; a click anywhere else leaves it alone. */
+  /** The checkbox picks this row alone. */
   onToggle: () => void;
+  /** A click on the row: replace the selection, or extend it with Shift/Ctrl. */
+  onSelect: (mode: SelectMode) => void;
   /** Open the menu of the row, the way a right click does. */
   onOpenMenu: (at: { x: number; y: number }, trigger: HTMLElement | null) => void;
 }
@@ -33,6 +36,7 @@ export function DownloadRow({
   item,
   selected,
   onToggle,
+  onSelect,
   onOpenMenu,
 }: DownloadRowProps) {
   const nameRef = useRef<HTMLDivElement>(null);
@@ -51,7 +55,17 @@ export function DownloadRow({
 
   return (
     <tr
+      data-download-id={item.id}
       aria-selected={selected}
+      onClick={(event) => {
+        if (event.shiftKey) {
+          onSelect("range");
+        } else if (event.ctrlKey || event.metaKey) {
+          onSelect("toggle");
+        } else {
+          onSelect("replace");
+        }
+      }}
       onContextMenu={(event) => {
         event.preventDefault();
         openMenu({ x: event.clientX, y: event.clientY });
@@ -66,7 +80,9 @@ export function DownloadRow({
         }
       }}
       className={cn(
-        "select-none transition-colors",
+        // The scroll margin keeps a row clear of the sticky header when the
+        // list brings it into view for the keyboard or for Find.
+        "scroll-mt-9 select-none transition-colors",
         selected
           ? "bg-chrome-menu-active"
           : "hover:bg-chrome-menu-hover",

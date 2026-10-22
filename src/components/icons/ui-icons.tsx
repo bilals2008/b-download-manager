@@ -81,6 +81,15 @@ export function CloseGlyph({ className }: GlyphProps) {
   );
 }
 
+export function SearchGlyph({ className }: GlyphProps) {
+  return (
+    <Glyph className={className}>
+      <circle cx="7" cy="7" r="4.2" />
+      <path d="m10.2 10.2 3.1 3.1" />
+    </Glyph>
+  );
+}
+
 export function PlusGlyph({ className }: GlyphProps) {
   return (
     <Glyph className={className} width={1.7}>
@@ -104,10 +113,13 @@ export function PanelGlyph({
   className,
 }: GlyphProps & { collapsed: boolean }) {
   return (
-    <Glyph className={className} width={1.3}>
-      <rect x="2.1" y="3.1" width="11.8" height="9.8" rx="1.6" />
-      <path d="M6.2 3.3v9.4" />
-      <path d={collapsed ? "M8.4 6.1 10.3 8l-1.9 1.9" : "M10 6.1 8.1 8l1.9 1.9"} />
+    <Glyph className={className} width={1.4}>
+      <rect x="2.2" y="3.4" width="11.6" height="9.2" rx="2.2" />
+      <path d="M6.5 3.6v8.8" />
+      <path d="M11.4 8H8.8" />
+      <path
+        d={collapsed ? "m10 6.4 1.5 1.6-1.5 1.6" : "M10.2 6.4 8.6 8l1.6 1.6"}
+      />
     </Glyph>
   );
 }

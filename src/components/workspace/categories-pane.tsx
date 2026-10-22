@@ -293,7 +293,7 @@ export function CategoriesPane() {
     <nav
       aria-label="Categories"
       className={cn(
-        "flex shrink-0 flex-col overflow-hidden rounded-lg bg-chrome-panel",
+        "flex shrink-0 flex-col overflow-hidden rounded-lg bg-chrome-panel transition-[width] duration-200 ease-out motion-reduce:transition-none",
         collapsed ? "w-12" : "w-48 sm:w-56 lg:w-64",
       )}
     >
@@ -359,7 +359,7 @@ function SectionLabel({
   return (
     <p
       className={cn(
-        "flex items-center gap-2 px-2 pb-1.5 text-chrome-caption font-semibold tracking-wider text-chrome-muted uppercase",
+        "flex items-center gap-2 px-2 pb-1.5 text-chrome-caption font-medium tracking-wider text-chrome-muted uppercase",
         className,
       )}
     >

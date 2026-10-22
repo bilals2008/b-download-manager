@@ -23,8 +23,6 @@ export interface Settings {
   uiFont: UiFont;
   /** How heavy the text is drawn. */
   uiWeight: UiWeight;
-  /** How large the text is drawn. */
-  uiSize: UiSize;
   /** Where a new download is saved when the user does not say. */
   defaultFolder: string;
   /** Connections one download gets by default. */
@@ -47,7 +45,6 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: "auto",
   uiFont: "inter",
   uiWeight: "medium",
-  uiSize: "default",
   defaultFolder: "",
   defaultConnections: 8,
   maxConnections: 32,
@@ -84,7 +81,6 @@ export function loadSettings(): Settings {
       theme: theme(value.theme, DEFAULT_SETTINGS.theme),
       uiFont: font(value.uiFont, DEFAULT_SETTINGS.uiFont),
       uiWeight: weight(value.uiWeight, DEFAULT_SETTINGS.uiWeight),
-      uiSize: size(value.uiSize, DEFAULT_SETTINGS.uiSize),
       defaultFolder: text(value.defaultFolder, DEFAULT_SETTINGS.defaultFolder),
       defaultConnections: number(
         value.defaultConnections,
@@ -162,14 +158,6 @@ export type UiWeight = "regular" | "medium" | "semibold";
 
 const UI_WEIGHTS: readonly UiWeight[] = ["regular", "medium", "semibold"];
 
-/**
- * How large the text is drawn. It scales the type steps only, not the spacing,
- * so the window keeps its density when the text grows.
- */
-export type UiSize = "small" | "default" | "large";
-
-const UI_SIZES: readonly UiSize[] = ["small", "default", "large"];
-
 const TOOLBAR_KEY = "idm-clone.toolbar-size.v1";
 
 /** Read the saved toolbar size, falling back to the large one. */
@@ -213,10 +201,6 @@ function weight(value: unknown, fallback: UiWeight): UiWeight {
   return UI_WEIGHTS.includes(value as UiWeight)
     ? (value as UiWeight)
     : fallback;
-}
-
-function size(value: unknown, fallback: UiSize): UiSize {
-  return UI_SIZES.includes(value as UiSize) ? (value as UiSize) : fallback;
 }
 
 function number(value: unknown, fallback: number, min: number, max: number): number {

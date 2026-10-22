@@ -61,7 +61,7 @@ for (const option of options) {
 // 4. The weights. Regular is the base step, so it needs no attribute rule.
 const weights = [
   ...fonts
-    .slice(fonts.indexOf("WEIGHT_OPTIONS"), fonts.indexOf("SIZE_OPTIONS"))
+    .slice(fonts.indexOf("WEIGHT_OPTIONS"))
     .matchAll(/value:\s*"([a-z]+)"/g),
 ].map((match) => match[1]);
 if (weights.length === 0) {
@@ -76,34 +76,13 @@ for (const weight of weights) {
   }
 }
 
-// 5. The sizes, the same way. Default is the base step.
-const sizes = [
-  ...fonts
-    .slice(fonts.indexOf("SIZE_OPTIONS"))
-    .matchAll(/value:\s*"([a-z]+)"/g),
-].map((match) => match[1]);
-if (sizes.length === 0) {
-  failures.push("no size options parsed out of src/lib/fonts.ts");
-}
-for (const size of sizes) {
-  if (!settings.includes(`"${size}"`)) {
-    failures.push(`src/lib/settings.ts does not accept the size "${size}"`);
-  }
-  if (size !== "default" && !css.includes(`:root[data-size="${size}"]`)) {
-    failures.push(`no :root[data-size="${size}"] scale in src/index.css`);
-  }
-}
-
-// 6. The face is a reference, not a compiled-in value; a literal font list in
+// 5. The face is a reference, not a compiled-in value; a literal font list in
 //    the theme block would freeze the picker.
 if (!/--font-sans:\s*var\(--app-font-ui\)/.test(css)) {
   failures.push("--font-sans is not a var(--app-font-ui) reference");
 }
 if (!/--font-weight-medium:\s*var\(--app-font-weight-medium\)/.test(css)) {
   failures.push("--font-weight-medium does not follow the weight scale");
-}
-if (!/--text-xs:\s*calc\([^)]*var\(--app-text-scale\)/.test(css)) {
-  failures.push("--text-xs does not follow the text scale");
 }
 
 if (failures.length > 0) {
@@ -115,5 +94,5 @@ if (failures.length > 0) {
 
 console.log(
   `fonts    ${options.length} faces, ${files.length} files, ` +
-    `${weights.length} weights, ${sizes.length} sizes, all wired`,
+    `${weights.length} weights, all wired`,
 );

@@ -37,6 +37,7 @@ import {
   type BridgeDownload,
 } from "@/lib/ipc";
 import { describeError, isDesktop } from "@/lib/errors";
+import { nextMatch } from "@/lib/find";
 import { rangeIds } from "@/lib/selection";
 import type { DownloadInfo, DownloadStatus as EngineStatus } from "@/types";
 
@@ -55,9 +56,17 @@ interface WorkspaceState {
   selected: number[];
   /** The row a Shift click measures its range from. */
   anchor: number | null;
+  /** The row the keyboard is on, which the arrows step from. */
+  cursor: number | null;
   /** A batch delete waiting for the confirmation window. */
   pendingDelete: number[] | null;
   sort: SortState;
+  /** What the Find bar searches for, by file name or address. */
+  find: string;
+  /** Whether the Find bar is on screen. */
+  findOpen: boolean;
+  /** The row Find Next landed on. */
+  matchId: number | null;
 }
 
 /** A save folder under a category in the tree, with what it holds. */
@@ -87,9 +96,23 @@ export interface DownloadStore {
   /** The save folder the tree has drilled into, or null for the whole category. */
   filterPath: string | null;
   selected: number[];
+  /** The row the keyboard is on, or null. */
+  cursor: number | null;
   sort: SortState;
   /** Rows after the categories pane filter and the sort order are applied. */
   visible: Download[];
+  /** What the Find bar searches for. */
+  find: string;
+  findOpen: boolean;
+  /** The rows the query matches, in the order the list shows. */
+  findMatches: number[];
+  /** Where the current match sits in "findMatches", or -1. */
+  findIndex: number;
+  setFind: (text: string) => void;
+  openFind: () => void;
+  closeFind: () => void;
+  /** Step through the matches; opens the bar when it is closed. */
+  findNext: (step: 1 | -1) => void;
   /** Row count per categories pane entry. */
   counts: Record<string, number>;
   /** Save folders per category, for the tree children. */
@@ -164,8 +187,12 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
     filterPath: null,
     selected: [],
     anchor: null,
+    cursor: null,
     pendingDelete: null,
     sort: { key: "order", dir: "asc" },
+    find: "",
+    findOpen: false,
+    matchId: null,
   }));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -357,6 +384,19 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
     [state.downloads, state.filter, state.filterPath, state.sort],
   );
 
+  const findMatches = useMemo(() => {
+    const query = state.find.trim().toLowerCase();
+    if (!query) {
+      return [];
+    }
+    return visible
+      .filter((item) => matchesQuery(item, query))
+      .map((item) => item.id);
+  }, [state.find, visible]);
+
+  const findIndex =
+    state.matchId === null ? -1 : findMatches.indexOf(state.matchId);
+
   const counts = useMemo(() => {
     const result: Record<string, number> = { all: 0, unfinished: 0, finished: 0 };
     for (const category of CATEGORIES) {
@@ -478,8 +518,13 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
     filter: state.filter,
     filterPath: state.filterPath,
     selected: state.selected,
+    cursor: state.cursor,
     sort: state.sort,
     visible,
+    find: state.find,
+    findOpen: state.findOpen,
+    findMatches,
+    findIndex,
     counts,
     folders,
     browserRequest,
@@ -514,7 +559,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
     selectRow: (id, mode) =>
       setState((current) => {
         if (mode === "replace") {
-          return { ...current, selected: [id], anchor: id };
+          return { ...current, selected: [id], anchor: id, cursor: id };
         }
         if (mode === "toggle") {
           const has = current.selected.includes(id);
@@ -524,6 +569,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
               ? current.selected.filter((value) => value !== id)
               : [...current.selected, id],
             anchor: has ? current.anchor : id,
+            cursor: id,
           };
         }
         // Shift picks the range in the order the list shows, not the id order.
@@ -541,6 +587,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
           ...current,
           selected: next,
           anchor: kept ? current.anchor : id,
+          cursor: id,
         };
       }),
     selectAll: () =>
@@ -556,7 +603,12 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
         ),
       })),
     clearSelection: () =>
-      setState((current) => ({ ...current, selected: [], anchor: null })),
+      setState((current) => ({
+        ...current,
+        selected: [],
+        anchor: null,
+        cursor: null,
+      })),
     sortBy: (key) =>
       setState((current) => ({
         ...current,
@@ -565,6 +617,37 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
             ? { key, dir: current.sort.dir === "asc" ? "desc" : "asc" }
             : { key, dir: "asc" },
       })),
+    setFind: (text) =>
+      setState((current) => ({ ...current, find: text, matchId: null })),
+    openFind: () => setState((current) => ({ ...current, findOpen: true })),
+    // The query is kept, so F3 after closing the bar repeats the search.
+    closeFind: () =>
+      setState((current) => ({ ...current, findOpen: false })),
+    findNext: (step) =>
+      setState((current) => {
+        const query = current.find.trim().toLowerCase();
+        // A closed bar has no query in it; the first press only brings it up.
+        if (!query) {
+          return { ...current, findOpen: true };
+        }
+        const ids = sortDownloads(
+          filterDownloads(current.downloads, current.filter, current.filterPath),
+          current.sort,
+        )
+          .filter((item) => matchesQuery(item, query))
+          .map((item) => item.id);
+        const id = nextMatch(ids, current.matchId, step);
+        return id === null
+          ? { ...current, findOpen: true }
+          : {
+              ...current,
+              findOpen: true,
+              matchId: id,
+              selected: [id],
+              anchor: id,
+              cursor: id,
+            };
+      }),
     applyToSelection: (action) => {
       const ids = latest.current.selected;
       const items = latest.current.downloads.filter((item) =>
@@ -761,11 +844,20 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
       ...current,
       downloads: current.downloads.filter((item) => item.id !== id),
       selected: current.selected.filter((value) => value !== id),
+      cursor: current.cursor === id ? null : current.cursor,
     }));
   }
 
   return (
     <DownloadContext.Provider value={store}>{children}</DownloadContext.Provider>
+  );
+}
+
+/** What the Find bar looks at: the file name and the address it came from. */
+function matchesQuery(item: Download, query: string): boolean {
+  return (
+    item.fileName.toLowerCase().includes(query) ||
+    item.url.toLowerCase().includes(query)
   );
 }
 

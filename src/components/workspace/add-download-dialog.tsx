@@ -11,13 +11,14 @@ import {
   CATEGORIES,
   categoryOfFile,
   fileNameFromUrl,
+  formatSize,
   joinPath,
   sanitizeFileName,
   splitPath,
   type CategoryName,
 } from "@/lib/downloads";
 import { describeError, isDesktop } from "@/lib/errors";
-import { chooseFolder, defaultDestination, probeFileName } from "@/lib/ipc";
+import { chooseFolder, defaultDestination, probeLink } from "@/lib/ipc";
 import { loadSettings } from "@/lib/settings";
 import { useDownloads } from "@/state/download-store";
 
@@ -57,8 +58,12 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
   const [savePath, setSavePath] = useState("");
   // The page the browser handed over with the link, if any.
   const [referer, setReferer] = useState("");
-  // The name the server gives a link that carries none of its own.
-  const [serverName, setServerName] = useState<string | null>(null);
+  // What the server said about the address: the name it gives the file and
+  // its size.
+  const [probe, setProbe] = useState<{
+    name: string | null;
+    total: number | null;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -107,11 +112,12 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
     clearBrowserRequest();
   }, [open, browserRequest, clearBrowserRequest]);
 
-  // A link like `https://example.org/get?id=12` carries no file name, but the
-  // answer of the server does, in its `Content-Disposition` header. Ask once
-  // the address has settled, and only when the address gave no name itself.
+  // Ask the server what the address holds once it has settled: the name it
+  // gives the file, and the size. A link like
+  // `https://example.org/get?id=12` carries no name of its own, so the answer
+  // is the only source for one. The size is shown either way.
   useEffect(() => {
-    setServerName(null);
+    setProbe(null);
     if (!open || !isDesktop()) {
       return;
     }
@@ -119,15 +125,12 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
     if (!/^(https?|ftp):\/\/\S+$/i.test(trimmed)) {
       return;
     }
-    if (/\.[a-z0-9]{1,8}$/i.test(fileNameFromUrl(trimmed))) {
-      return;
-    }
     let active = true;
     const timer = setTimeout(() => {
-      probeFileName(trimmed, referer)
-        .then((found) => {
-          if (active && found) {
-            setServerName(sanitizeFileName(found));
+      probeLink(trimmed, referer)
+        .then((answer) => {
+          if (active) {
+            setProbe(answer);
           }
         })
         .catch(() => {
@@ -144,6 +147,7 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
     setUrl("");
     setNameOverride(null);
     setCategoryOverride(null);
+    setProbe(null);
     setReferer("");
     setError(null);
   }
@@ -159,10 +163,17 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
     () => (url.trim() ? sanitizeFileName(fileNameFromUrl(url.trim())) : ""),
     [url],
   );
+  // A name of its own in the address beats the one the server answers with,
+  // which is what the user typed and can see.
+  const urlNamesTheFile = /\.[a-z0-9]{1,8}$/i.test(fileNameFromUrl(url.trim()));
+  const serverName = probe?.name ? sanitizeFileName(probe.name) : null;
   const name = sanitizeFileName(
     nameOverride ??
-      (serverName || detectedName || fileNameFromUrl(url.trim())),
+      (urlNamesTheFile
+        ? detectedName
+        : serverName || detectedName || fileNameFromUrl(url.trim())),
   );
+  const size = probe?.total ? formatSize(probe.total) : null;
   const category =
     categoryOverride ?? (url.trim() ? categoryOfFile(name) : "General");
 
@@ -323,6 +334,7 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
             {name && savePath.trim()
               ? `Saves as ${joinPath(savePath.trim(), name)}`
               : "The file name is taken from the address when the box is left empty."}
+            {size ? ` (${size})` : ""}
           </p>
         </div>
 

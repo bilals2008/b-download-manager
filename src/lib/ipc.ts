@@ -71,12 +71,20 @@ export function defaultDestination(): Promise<string> {
   return invoke<string>("default_destination");
 }
 
-/** The name the server gives the file at an address, when it gives one. */
-export function probeFileName(
+/** What a server says about a link before the download starts. */
+export interface LinkProbe {
+  /** The name the server gives the file, when it gives one. */
+  name: string | null;
+  /** The size of the file. Null when the server did not tell it. */
+  total: number | null;
+}
+
+/** The name and the size the server gives the file at an address. */
+export function probeLink(
   url: string,
   referer?: string,
-): Promise<string | null> {
-  return invoke<string | null>("probe_file_name", {
+): Promise<LinkProbe> {
+  return invoke<LinkProbe>("probe_link", {
     url,
     referer: referer?.trim() || null,
   });

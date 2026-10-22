@@ -39,11 +39,11 @@ Done items stay in the list as a record of what is already standing.
       a word; the row stays one line and opens nothing under it
 - [x] The error of a failed download shows under its name, the way IDM shows
       it in the row
-- [ ] Delete key on a selection, Shift+click for a range
+- [x] Delete key on a selection, Shift+click for a range
+- [x] Arrow keys, Home and End walk the list, Shift+arrow extends the range
 - [ ] Inline edit of file name and save path
 - [x] Context menu on a row with the IDM entries: Resume, Pause, Stop,
-      Redownload, Remove, Open file, Open containing folder; Properties stays
-      greyed out until there is a properties window
+      Redownload, Remove, Open file, Open containing folder, Properties
 - [ ] Column chooser and drag to reorder (IDM: Customize URL List, Columns)
 - [ ] Show file description, referer and parent web page columns
 - [ ] Group the list by category or by date
@@ -57,7 +57,8 @@ Done items stay in the list as a record of what is already standing.
 - [x] Open file and open containing folder, from the menu of a row
 - [ ] Refresh download address, Properties
 - [ ] Move item up, move item down, remove item from download queue
-- [ ] Find (Ctrl+F) and Find next (F3) over the list
+- [x] Find (Ctrl+F) and Find next (F3) over the list, by name or address;
+      the match is selected and scrolled into view
 - [ ] Import and export of an IDM export file or a text file
 
 ## Queue and scheduler
@@ -76,7 +77,8 @@ Done items stay in the list as a record of what is already standing.
 - [x] The dialog starts a real engine download and reports a failed start inline
 - [x] The category picker is an ARIA listbox, not a native select
 - [x] Validation on the URL, inline error message
-- [ ] Read the real file name, size and category from the server headers
+- [x] Read the real file name and size from the server headers; the category
+      follows the name the server gives
 - [ ] Batch download, many URLs in one dialog
 - [ ] Add from clipboard, drop target, site grabber
 
@@ -138,7 +140,8 @@ Done items stay in the list as a record of what is already standing.
 
 ## Quality gates
 
-- [x] `npm run check:palette`, 45 foreground and background pairs, all pass
+- [x] `npm run check:palette`, 49 foreground and background pairs, all pass
+- [x] `npm run check:find`, 8 checks: the walk, the wrap and the first press
 - [x] `tsc --noEmit` and a production build, both clean
 - [x] Smoke test of the rendered shell, categories pane and list
 - [x] `cargo test` in `crates/idm-core`, 58 tests: the engine runs from end to end over HTTP and over FTP, resumes, refuses a broken chunk list, and gives back a range that holds the head of the file

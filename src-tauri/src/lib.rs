@@ -221,25 +221,42 @@ fn default_destination(app: AppHandle) -> String {
     downloads.join("download.bin").to_string_lossy().to_string()
 }
 
-/// The name the server gives the file at this address.
+/// What the server says about a link before the download starts.
+#[derive(serde::Serialize)]
+struct LinkProbe {
+    /// The name the server gives the file, when it gives one.
+    name: Option<String>,
+    /// The size of the file. `None` means the server did not tell it.
+    total: Option<u64>,
+}
+
+/// What the server says about the link at this address.
 ///
 /// A link like `https://example.org/get?id=12` carries no name, but the
-/// answer of the server does, in its `Content-Disposition` header. The
-/// dialog asks for it so the user does not have to invent one.
+/// answer of the server does, in its `Content-Disposition` header. The same
+/// answer tells the size, out of `Content-Range` or `Content-Length`. The
+/// dialog asks for both so the user sees what they are about to download and
+/// does not have to invent a name.
 #[tauri::command]
-async fn probe_file_name(
+async fn probe_link(
     state: State<'_, AppState>,
     url: String,
     referer: Option<String>,
-) -> Result<Option<String>, String> {
+) -> Result<LinkProbe, String> {
     let url = url.trim();
     if url.is_empty() {
-        return Ok(None);
+        return Ok(LinkProbe {
+            name: None,
+            total: None,
+        });
     }
     let proxy = state.limits().proxy();
     let source = Source::parse(url, proxy.as_deref(), referer.as_deref())?;
     let probe = source.probe().await.map_err(|error| error.message)?;
-    Ok(probe.name)
+    Ok(LinkProbe {
+        name: probe.name,
+        total: probe.total,
+    })
 }
 
 /// Open a file or a folder with the program the system uses for it.
@@ -416,7 +433,7 @@ pub fn run() {
             set_show_complete_dialog,
             quit_app,
             default_destination,
-            probe_file_name,
+            probe_link,
             open_path,
         ])
         .build(tauri::generate_context!())

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { MenuCloseReason } from "@/components/shell/menu-popup";
 import {
@@ -18,6 +18,7 @@ import { DOWNLOAD_COLUMNS } from "@/components/workspace/download-columns";
 import { DownloadContextMenu } from "@/components/workspace/download-context-menu";
 import { DownloadPropertiesDialog } from "@/components/workspace/download-properties-dialog";
 import { DownloadRow } from "@/components/workspace/download-row";
+import { FindBar } from "@/components/workspace/find-bar";
 import { SelectionBar } from "@/components/workspace/selection-bar";
 import { SelectionCheckbox } from "@/components/workspace/selection-checkbox";
 import { useColumnWidths } from "@/components/workspace/use-column-widths";
@@ -39,6 +40,7 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
     downloads,
     visible,
     selected,
+    cursor,
     selectRow,
     selectAll,
     clearSelection,
@@ -50,7 +52,13 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
     error,
     dismissError,
     reload,
+    findOpen,
+    closeFind,
+    applyToSelection,
   } = useDownloads();
+  // The box the rows scroll in, so arrow keys can follow the selection and
+  // Find Next can bring its match into view.
+  const viewportRef = useRef<HTMLDivElement>(null);
   const { widths, tableRef, beginResize, moveResize, endResize, resizeBy, resetWidths } =
     useColumnWidths(DOWNLOAD_COLUMNS);
   // The row whose menu is open, and where the pointer was.
@@ -87,6 +95,37 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
     if (reason !== "pointer") {
       menuTrigger.current?.focus();
     }
+  }
+
+  // The row the keyboard is on: bring it into view when a key, Find Next or a
+  // click moves it.
+  useEffect(() => {
+    if (cursor === null) {
+      return;
+    }
+    viewportRef.current
+      ?.querySelector(`[data-download-id="${cursor}"]`)
+      ?.scrollIntoView({ block: "nearest" });
+  }, [cursor]);
+
+  /** Arrow keys walk the rows the user can see; Shift extends the range. */
+  function moveCursor(to: "up" | "down" | "first" | "last", extend: boolean) {
+    if (visible.length === 0) {
+      return;
+    }
+    const at =
+      cursor === null ? -1 : visible.findIndex((item) => item.id === cursor);
+    let next: number;
+    if (to === "first") {
+      next = 0;
+    } else if (to === "last") {
+      next = visible.length - 1;
+    } else if (to === "down") {
+      next = at < 0 ? 0 : Math.min(at + 1, visible.length - 1);
+    } else {
+      next = at < 0 ? visible.length - 1 : Math.max(at - 1, 0);
+    }
+    selectRow(visible[next].id, extend ? "range" : "replace");
   }
 
   const filterLabel =
@@ -132,10 +171,22 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
         </div>
       ) : null}
 
+      {findOpen ? (
+        <FindBar
+          onClose={() => {
+            closeFind();
+            viewportRef.current?.focus();
+          }}
+        />
+      ) : null}
+
       <SelectionBar />
 
       <div
-        className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
+        ref={viewportRef}
+        tabIndex={0}
+        aria-label="Download list"
+        className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
         onClick={(event) => {
           // A click on the empty space under the rows drops the selection.
           if (event.target === event.currentTarget) {
@@ -143,9 +194,22 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
           }
         }}
         onKeyDown={(event) => {
+          // A header control that already took the key keeps it.
+          if (event.defaultPrevented) {
+            return;
+          }
           if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a") {
             event.preventDefault();
             selectAll();
+          } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            moveCursor(event.key === "ArrowDown" ? "down" : "up", event.shiftKey);
+          } else if (event.key === "Home" || event.key === "End") {
+            event.preventDefault();
+            moveCursor(event.key === "Home" ? "first" : "last", event.shiftKey);
+          } else if (event.key === "Delete") {
+            event.preventDefault();
+            applyToSelection("delete");
           } else if (event.key === "Escape") {
             event.preventDefault();
             clearSelection();
@@ -340,6 +404,12 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
                   item={item}
                   selected={selected.includes(item.id)}
                   onToggle={() => selectRow(item.id, "toggle")}
+                  onSelect={(mode) => {
+                    selectRow(item.id, mode);
+                    // A click moves the keyboard into the list, so the arrow
+                    // keys have somewhere to start from.
+                    viewportRef.current?.focus({ preventScroll: true });
+                  }}
                   onOpenMenu={(at, trigger) => openMenu(item, at, trigger)}
                 />
               ))

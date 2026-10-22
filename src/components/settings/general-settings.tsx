@@ -4,7 +4,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ListBox } from "@/components/ui/listbox";
 import { HINT, LABEL } from "@/components/settings/fields";
 import { Section, SettingsPage } from "@/components/settings/settings-page";
-import { FONT_OPTIONS, SIZE_OPTIONS, WEIGHT_OPTIONS } from "@/lib/fonts";
+import { FONT_OPTIONS, WEIGHT_OPTIONS } from "@/lib/fonts";
 import type { Settings, ThemePreference, UiFont } from "@/lib/settings";
 
 interface GeneralSettingsProps {
@@ -85,20 +85,13 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
           value={settings.uiFont}
           onChange={(font) => onChange("uiFont", font)}
         />
-        <div className="mt-5 grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2">
+        <div className="mt-5">
           <Segmented
             legend="Weight"
             hint={WEIGHT_HINT}
             value={settings.uiWeight}
             onChange={(weight) => onChange("uiWeight", weight)}
             options={WEIGHT_OPTIONS}
-          />
-          <Segmented
-            legend="Text size"
-            hint={SIZE_HINT}
-            value={settings.uiSize}
-            onChange={(size) => onChange("uiSize", size)}
-            options={SIZE_OPTIONS}
           />
         </div>
         <p className="mt-5 truncate rounded-chrome bg-chrome-canvas px-2.5 py-2 text-xs tabular-nums text-chrome-menu-text">
@@ -175,8 +168,6 @@ const THEMES: { value: ThemePreference; label: string }[] = [
 ];
 
 const WEIGHT_HINT = "One step heavier or lighter, everywhere.";
-
-const SIZE_HINT = "Type only, so the layout keeps its density.";
 
 /** As a segmented radio group, so arrows move between them. */
 function Segmented<T extends string>({

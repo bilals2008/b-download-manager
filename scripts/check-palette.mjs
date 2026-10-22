@@ -98,6 +98,7 @@ const REQUIRED = [
   ["primary-foreground", "primary", 4.5, "tick in a picked checkbox"],
   ["chrome-menu-text", "chrome-popup", 4.5, "dialog text"],
   ["icon-green-bright", "chrome-canvas", 3, "downloading icon and bar"],
+  ["progress", "chrome-canvas", 3, "downloading progress bar"],
   ["icon-green", "chrome-canvas", 3, "finished icon"],
   ["icon-red-bright", "chrome-canvas", 3, "error icon and bar"],
   ["icon-blue-bright", "chrome-canvas", 3, "paused icon and bar"],

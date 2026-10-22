@@ -1,4 +1,4 @@
-﻿import type { UiFont, UiSize, UiWeight } from "@/lib/settings";
+﻿import type { UiFont, UiWeight } from "@/lib/settings";
 
 /**
  * The faces the appearance page offers. The stacks live in `src/index.css`,
@@ -61,13 +61,6 @@ export const WEIGHT_OPTIONS: { value: UiWeight; label: string }[] = [
   { value: "semibold", label: "Semibold" },
 ];
 
-/** How large the text is. Default is what the window shipped with. */
-export const SIZE_OPTIONS: { value: UiSize; label: string }[] = [
-  { value: "small", label: "Small" },
-  { value: "default", label: "Default" },
-  { value: "large", label: "Large" },
-];
-
 /**
  * Appearance, the same way `theme.ts` does it: one attribute on the root picks
  * the block of `--app-font-ui` or `--app-font-weight` that every component
@@ -80,8 +73,4 @@ export function applyFont(font: UiFont): void {
 
 export function applyWeight(weight: UiWeight): void {
   document.documentElement.dataset.weight = weight;
-}
-
-export function applySize(size: UiSize): void {
-  document.documentElement.dataset.size = size;
 }

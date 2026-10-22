@@ -152,14 +152,14 @@
   Auto follows the operating system, Light and Dark override it.
 
   Two blocks define the same semantic tokens: the dark block below is the
-  neutral slate view, and the light block overrides the same names when the
+  deep green-black view, and the light block overrides the same names when the
   root carries `data-theme="light"`. Components never ask which theme is
   active; they read the tokens and `src/lib/theme.ts` does the switching.
 
-  The accent is the Fluent (Windows) blue in both appearances; green marks
-  finished work and red destroys. The hex values are the ones the palette
-  checker (`npm run check:palette`) verifies for WCAG contrast in both themes,
-  so change them there and here together, or run the checker.
+  The accent is lime on deep green in both appearances; green marks finished
+  work and red destroys. The hex values are the ones the palette checker
+  (`npm run check:palette`) verifies for WCAG contrast in both themes, so
+  change them there and here together, or run the checker.
 */
 :root {
   color-scheme: dark;
@@ -184,76 +184,82 @@
   --app-font-weight-semibold: 600;
   --app-font-weight-bold: 700;
 
-  /* How large the type steps are drawn. Spacing is not scaled with it. */
-  --app-text-scale: 1;
-
   /* Surfaces are rounded, never outlined: 12px for panes and windows, 8px for
      controls. */
   --radius: 0.75rem;
 
-  /* slate black, the neutral the Windows shell uses */
-  --background: #0f1115;
-  --foreground: #e9eaec;
-  --card: #16181c;
-  --card-foreground: #e9eaec;
-  --popover: #1c1f24;
-  --popover-foreground: #e9eaec;
+  /*
+    One canvas, one colour: every surface is the same near-black, and panes,
+    popups, fields and buttons find their edge with a hairline instead of a
+    second shade. Text is a soft off-white, never pure white.
+  */
+  --background: #03080a;
+  --foreground: #d7e3df;
+  --card: #03080a;
+  --card-foreground: #d7e3df;
+  --popover: #03080a;
+  --popover-foreground: #d7e3df;
 
-  /* Windows 11 accent blue, the dimmed variant so it never glows */
-  --primary: #115ea3;
-  --primary-foreground: #ffffff;
+  /* Lime on deep green: the accent, kept to one main action at a time. The
+     meter is the one place the lime fills an area, so a download in flight
+     reads at a glance. */
+  --primary: #022c1e;
+  --primary-foreground: #c8ff00;
+  --progress: #c8ff00;
 
-  --secondary: #1a1d22;
-  --secondary-foreground: #d6d9de;
+  --secondary: #03080a;
+  --secondary-foreground: #c3d6d1;
 
-  --muted: #14161a;
-  --muted-foreground: #aab1bb;
+  --muted: #03080a;
+  --muted-foreground: #869a93;
 
-  --accent: #23272e;
-  --accent-foreground: #d6d9de;
+  /* Hover and open tints only; no surface in the window uses a second base. */
+  --accent: #081512;
+  --accent-foreground: #cfe6dc;
 
   /* green marks finished work and nothing else */
   --success: #2fd06b;
   --success-foreground: #04130a;
 
-  --destructive: #d63a3a;
+  --destructive: #c2413a;
   --destructive-foreground: #ffffff;
 
-  --border: #2a2e35;
-  --input: #8f96a1;
-  --ring: #479ef5;
+  --border: #13312a;
+  --input: #6b8a81;
+  --ring: #b4e34f;
 
   /* One soft shadow for surfaces that float above the window: menus, popups
-     and dialogs. Panes are separated by surface contrast, not shadows. */
+     and dialogs. Panes sit on the same canvas and are separated by a
+     hairline, not a shadow. */
   --float-shadow:
     0 18px 40px -18px rgb(0 0 0 / 0.75), 0 4px 12px -6px rgb(0 0 0 / 0.5);
 
   /*
-    Application chrome. Window furniture shares the canvas surface and is
-    separated by spacing alone; panes and popups step up one surface at a
-    time. Hover and open states are a lighter slate. Every text pair below is
-    checked by `npm run check:palette`.
+    Application chrome. Window furniture and panes share the one canvas
+    surface, and edges come from a hairline, never a second shade. Hover and
+    open are the only tints. Every text pair below is checked by
+    `npm run check:palette`.
   */
-  --chrome-title: #121418;
-  --chrome-title-text: #e9eaec;
-  --chrome-menu: #0f1115;
-  --chrome-menu-text: #e9eaec;
-  --chrome-menu-hover: #1a1d22;
-  --chrome-menu-active: #24282f;
-  --chrome-toolbar: #0f1115;
-  --chrome-toolbar-text: #e9eaec;
-  --chrome-toolbar-hover: #1a1d22;
-  --chrome-toolbar-active: #24282f;
-  --chrome-popup: #1c1f24;
-  --chrome-popup-hover: #252a31;
-  --chrome-muted: #aab1bb;
-  --chrome-canvas: #0f1115;
-  --chrome-panel: #16181c;
-  --chrome-line: #2a2e35;
-  --chrome-focus: #479ef5;
-  --chrome-danger: #c42b1c;
+  --chrome-title: #03080a;
+  --chrome-title-text: #d7e3df;
+  --chrome-menu: #03080a;
+  --chrome-menu-text: #d7e3df;
+  --chrome-menu-hover: #081512;
+  --chrome-menu-active: #0d2a21;
+  --chrome-toolbar: #03080a;
+  --chrome-toolbar-text: #d7e3df;
+  --chrome-toolbar-hover: #081512;
+  --chrome-toolbar-active: #0d2a21;
+  --chrome-popup: #03080a;
+  --chrome-popup-hover: #0d221f;
+  --chrome-muted: #869a93;
+  --chrome-canvas: #03080a;
+  --chrome-panel: #03080a;
+  --chrome-line: #13312a;
+  --chrome-focus: #b4e34f;
+  --chrome-danger: #b23a30;
   --chrome-danger-text: #ffffff;
-  --chrome-error: #ff8f80;
+  --chrome-error: #ff9d90;
 
   /* Toolbar artwork. These are illustration tints, not UI semantics. */
   --icon-green: #3fb950;
@@ -341,15 +347,6 @@
   --app-font-weight-bold: 900;
 }
 
-/* Text size. The line heights move with the sizes, so the leading stays even. */
-:root[data-size="small"] {
-  --app-text-scale: 0.93;
-}
-
-:root[data-size="large"] {
-  --app-text-scale: 1.12;
-}
-
 /*
   Light appearance. Same tokens, same names: the neutral light the Windows
   shell uses, near-black text, and the lime accent kept for primary actions
@@ -370,8 +367,11 @@
     --popover: #ffffff;
     --popover-foreground: #17181b;
 
-    --primary: #0f6cbd;
-    --primary-foreground: #ffffff;
+    /* Same lime-on-deep-green accent as the dark appearance, carried over so
+       the app keeps one identity when the theme switches. */
+    --primary: #022c1e;
+    --primary-foreground: #c8ff00;
+    --progress: #022c1e;
 
     --secondary: #e9eaee;
     --secondary-foreground: #1d1f23;
@@ -390,7 +390,7 @@
 
     --border: #d8dade;
     --input: #6a6f78;
-    --ring: #0f6cbd;
+    --ring: #4d7a12;
 
     --float-shadow:
       0 18px 40px -22px rgb(9 11 16 / 0.3), 0 4px 12px -8px rgb(9 11 16 / 0.16);
@@ -411,7 +411,7 @@
     --chrome-canvas: #f3f4f6;
     --chrome-panel: #ffffff;
     --chrome-line: #d8dade;
-    --chrome-focus: #0f6cbd;
+    --chrome-focus: #4d7a12;
     --chrome-danger: #c42b1c;
     --chrome-danger-text: #ffffff;
     --chrome-error: #a8221a;
@@ -464,19 +464,18 @@
 
   --shadow-float: var(--float-shadow);
 
-  /* Secondary metadata, one step below the body size. The four steps the
-     window uses are multiplied by the size the appearance page picks. */
-  --text-chrome-micro: calc(0.6875rem * var(--app-text-scale));
-  --text-chrome-micro--line-height: calc(1rem * var(--app-text-scale));
-  /* The smallest step: counts and group captions, never running text. */
-  --text-chrome-caption: calc(0.625rem * var(--app-text-scale));
-  --text-chrome-caption--line-height: calc(0.875rem * var(--app-text-scale));
-  --text-xs: calc(0.75rem * var(--app-text-scale));
-  --text-xs--line-height: calc(1rem * var(--app-text-scale));
-  --text-sm: calc(0.875rem * var(--app-text-scale));
-  --text-sm--line-height: calc(1.25rem * var(--app-text-scale));
-  --text-base: calc(1rem * var(--app-text-scale));
-  --text-base--line-height: calc(1.5rem * var(--app-text-scale));
+  /* Secondary metadata, one step below the body size. */
+  --text-chrome-micro: 0.6875rem;
+  --text-chrome-micro--line-height: 1rem;
+  /* The smallest step: the group captions at the top of a pane. */
+  --text-chrome-caption: 0.5625rem;
+  --text-chrome-caption--line-height: 0.75rem;
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 1rem;
+  --text-base--line-height: 1.5rem;
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -494,6 +493,7 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
+  --color-progress: var(--progress);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);

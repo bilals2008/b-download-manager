@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { SettingsDialog } from "@/components/settings/settings-dialog";
 import type { ShellCommand } from "@/components/shell/commands";
 import { TopBar } from "@/components/shell/top-bar";
+import { useShellShortcuts } from "@/components/shell/use-shell-shortcuts";
 import { AboutDialog } from "@/components/workspace/about-dialog";
 import { AddDownloadDialog } from "@/components/workspace/add-download-dialog";
 import { Workspace } from "@/components/workspace/workspace";
@@ -31,6 +32,14 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [toolbarSize, setToolbarSize] = useState<ToolbarSize>(loadToolbarSize);
+
+  // The accelerators the menus print work anywhere in the shell, but not while
+  // a menu or a window of its own has the keyboard.
+  useShellShortcuts({
+    onAddDownload: () => setAddDownloadOpen(true),
+    onFind: downloads.openFind,
+    onFindNext: downloads.findNext,
+  });
 
   // The settings the engine owns are pushed to it when the application
   // starts, so a proxy or a speed limit that was set yesterday is still in
@@ -132,6 +141,12 @@ export default function App() {
         break;
       case "delete-completed":
         downloads.deleteCompleted();
+        break;
+      case "find":
+        downloads.openFind();
+        break;
+      case "find-next":
+        downloads.findNext(1);
         break;
       case "start-queue":
         downloads.startQueue();
