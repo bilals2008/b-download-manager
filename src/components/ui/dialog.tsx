@@ -1,6 +1,6 @@
 import { useEffect, useRef, type ReactNode } from "react";
-import { X } from "lucide-react";
 
+import { CloseGlyph } from "@/components/icons/ui-icons";
 import { cn } from "@/lib/utils";
 
 interface DialogProps {
@@ -57,7 +57,7 @@ export function Dialog({
         className,
       )}
     >
-      <div className="flex shrink-0 items-center justify-between gap-4 border-b border-chrome-line py-1.5 pr-2 pl-4">
+      <div className="flex shrink-0 items-center justify-between gap-4 border-b border-chrome-line bg-linear-to-b from-chrome-toolbar to-chrome-popup py-1.5 pr-2 pl-4">
         <span className="truncate text-sm text-chrome-title-text">{title}</span>
         <button
           type="button"
@@ -65,7 +65,7 @@ export function Dialog({
           aria-label="Close"
           className="flex size-6 shrink-0 items-center justify-center rounded-chrome text-chrome-muted hover:bg-chrome-menu-hover hover:text-chrome-menu-text focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
         >
-          <X className="size-3.5" aria-hidden="true" />
+          <CloseGlyph className="size-3.5" />
         </button>
       </div>
       <div className={cn("min-h-0 flex-1 px-4 py-3", bodyClassName)}>

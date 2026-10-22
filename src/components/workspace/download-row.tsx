@@ -1,15 +1,7 @@
-import { useRef, type ComponentType } from "react";
-import {
-  AlertTriangle,
-  ArrowDownToLine,
-  CheckCircle2,
-  Clock,
-  Pause,
-  Square,
-  type LucideProps,
-} from "lucide-react";
+import { useRef } from "react";
 
-import { CATEGORY_ICONS } from "@/components/workspace/category-icons";
+import { FileTypeIcon, StatusMark } from "@/components/icons/desktop-icons";
+import { Progress } from "@/components/ui/progress";
 import {
   formatEta,
   formatSize,
@@ -19,20 +11,6 @@ import {
   type Download,
 } from "@/lib/downloads";
 import { cn } from "@/lib/utils";
-
-interface StatusStyle {
-  icon: ComponentType<LucideProps>;
-  tint: string;
-}
-
-const STATUS_STYLE: Record<Download["status"], StatusStyle> = {
-  downloading: { icon: ArrowDownToLine, tint: "text-chrome-focus" },
-  queued: { icon: Clock, tint: "text-icon-amber" },
-  paused: { icon: Pause, tint: "text-icon-blue-bright" },
-  stopped: { icon: Square, tint: "text-chrome-muted" },
-  completed: { icon: CheckCircle2, tint: "text-icon-green" },
-  error: { icon: AlertTriangle, tint: "text-icon-red-bright" },
-};
 
 interface DownloadRowProps {
   item: Download;
@@ -44,8 +22,10 @@ interface DownloadRowProps {
 
 /**
  * One download, the way IDM shows it: the name, the size, the progress as a
- * percentage, the speed, the time left and the status. Nothing opens under
- * the row, so the list stays a list.
+ * percentage, the speed, the time left and the status. The folder is not
+ * repeated under the name; it is there when the row is opened, in its menu
+ * and in the categories pane. Nothing opens under the row, so the list stays
+ * a list.
  */
 export function DownloadRow({
   item,
@@ -54,10 +34,7 @@ export function DownloadRow({
   onOpenMenu,
 }: DownloadRowProps) {
   const nameRef = useRef<HTMLButtonElement>(null);
-  const fileType = CATEGORY_ICONS[item.category];
-  const FileIcon = fileType.icon;
-  const status = STATUS_STYLE[item.status];
-  const StatusIcon = status.icon;
+  const status = STATUS_LABELS[item.status];
   const percent = progressOf(item);
   const knownSize = item.size > 0;
 
@@ -94,14 +71,12 @@ export function DownloadRow({
           : "hover:bg-chrome-menu-hover",
       )}
     >
-      <td className="border-b border-chrome-line/60 px-3 py-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <span
-            className="grid size-6 shrink-0 place-items-center rounded-chrome bg-chrome-popup"
-            aria-hidden="true"
-          >
-            <FileIcon className={cn("size-3.5", fileType.tint)} strokeWidth={1.75} />
-          </span>
+      <td className="border-b border-chrome-line/60 px-3 py-1.5">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <FileTypeIcon
+            category={item.category}
+            className="size-5 shrink-0"
+          />
 
           <button
             ref={nameRef}
@@ -116,44 +91,49 @@ export function DownloadRow({
             <span className="block truncate text-chrome-menu-text">
               {item.fileName}
             </span>
-            <span
-              className={cn(
-                "mt-0.5 block truncate text-chrome-micro",
-                item.error ? "text-icon-red-bright" : "text-chrome-muted",
-              )}
-            >
-              {item.error ?? item.savePath}
-            </span>
+            {item.error ? (
+              <span className="mt-0.5 block truncate text-chrome-micro text-icon-red-bright">
+                {item.error}
+              </span>
+            ) : null}
           </button>
         </div>
       </td>
 
-      <td className="border-b border-chrome-line/60 px-3 py-2 text-right tabular-nums text-chrome-menu-text">
+      <td className="border-b border-chrome-line/60 px-3 py-1.5 text-right tabular-nums text-chrome-menu-text">
         {knownSize ? formatSize(item.size) : "-"}
       </td>
 
-      <td className="border-b border-chrome-line/60 px-3 py-2 text-right tabular-nums text-chrome-menu-text">
-        {knownSize ? `${percent.toFixed(2)}%` : "-"}
+      <td className="border-b border-chrome-line/60 px-3 py-1.5 text-right tabular-nums text-chrome-menu-text">
+        {knownSize ? (
+          <>
+            <span>{percent.toFixed(2)}%</span>
+            <Progress
+              value={Math.min(100, percent)}
+              aria-label={`${item.fileName} progress`}
+              className="mt-1 h-1 bg-chrome-popup"
+            />
+          </>
+        ) : (
+          "-"
+        )}
       </td>
 
-      <td className="border-b border-chrome-line/60 px-3 py-2 text-right tabular-nums text-chrome-menu-text">
+      <td className="border-b border-chrome-line/60 px-3 py-1.5 text-right tabular-nums text-chrome-menu-text">
         {formatSpeed(item.speed) || "-"}
       </td>
 
-      <td className="border-b border-chrome-line/60 px-3 py-2 text-right tabular-nums text-chrome-menu-text">
+      <td className="border-b border-chrome-line/60 px-3 py-1.5 text-right tabular-nums text-chrome-menu-text">
         {item.status === "downloading" ? formatEta(item.eta) : "-"}
       </td>
 
-      <td className="border-b border-chrome-line/60 px-3 py-2">
+      <td className="border-b border-chrome-line/60 px-3 py-1.5">
         <span
           className="inline-flex items-center gap-1.5 text-chrome-menu-text"
-          title={item.error ?? STATUS_LABELS[item.status]}
+          title={item.error ?? status}
         >
-          <StatusIcon
-            className={cn("size-3.5 shrink-0", status.tint)}
-            aria-hidden="true"
-          />
-          {STATUS_LABELS[item.status]}
+          <StatusMark status={item.status} className="size-4 shrink-0" />
+          {status}
         </span>
       </td>
     </tr>

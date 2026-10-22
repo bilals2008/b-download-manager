@@ -1,6 +1,6 @@
 import { useId, type ComponentProps } from "react";
-import { Check } from "lucide-react";
 
+import { CheckGlyph } from "@/components/icons/ui-icons";
 import { cn } from "@/lib/utils";
 
 interface CheckboxProps extends Omit<ComponentProps<"input">, "type"> {
@@ -40,9 +40,7 @@ export function Checkbox({
           className="peer size-4 appearance-none rounded-chrome border border-input bg-chrome-canvas transition-colors hover:border-chrome-muted checked:border-primary checked:bg-primary disabled:border-chrome-line disabled:bg-chrome-panel disabled:checked:bg-chrome-line/60"
           {...inputProps}
         />
-        <Check
-          aria-hidden="true"
-          strokeWidth={3}
+        <CheckGlyph
           className="pointer-events-none absolute size-3 text-primary-foreground opacity-0 peer-checked:opacity-100 peer-disabled:text-chrome-muted"
         />
       </span>

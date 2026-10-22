@@ -36,12 +36,14 @@ impl TransferError {
 pub type ByteStream = std::pin::Pin<Box<dyn Stream<Item = Result<Vec<u8>, String>> + Send>>;
 
 /// What the server said about the file when we asked.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Probe {
     /// Total size of the file. `None` means the server did not know it.
     pub total: Option<u64>,
     /// Whether the file can be read in ranges.
     pub ranges: bool,
+    /// The name the server gives the file, when it gives one.
+    pub name: Option<String>,
 }
 
 /// A place to download from.
@@ -145,6 +147,7 @@ impl Source {
                 Ok(Probe {
                     total: Some(total),
                     ranges: true,
+                    name: None,
                 })
             }
         }

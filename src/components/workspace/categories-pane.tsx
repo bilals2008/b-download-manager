@@ -1,138 +1,309 @@
-import { useRef, useState, type ComponentType, type KeyboardEvent } from "react";
-import {
-  CircleCheck,
-  CircleDashed,
-  Inbox,
-  PanelLeftClose,
-  PanelLeftOpen,
-  type LucideProps,
-} from "lucide-react";
+import { useRef, useState, type KeyboardEvent } from "react";
 
+import { CategoryFolderIcon, ViewIcon } from "@/components/icons/desktop-icons";
+import { ChevronRight, PanelGlyph } from "@/components/icons/ui-icons";
 import { CategoryContextMenu } from "@/components/workspace/category-context-menu";
 import {
   CATEGORIES,
+  type CategoryName,
   type DownloadFilter,
 } from "@/lib/downloads";
 import { cn } from "@/lib/utils";
 import { useDownloads } from "@/state/download-store";
 
-import { CATEGORY_ICONS } from "./category-icons";
+const VIEWS = [
+  { id: "all", label: "All Downloads" },
+  { id: "unfinished", label: "Unfinished" },
+  { id: "finished", label: "Finished" },
+] as const;
 
-type Icon = ComponentType<LucideProps>;
+type ViewId = (typeof VIEWS)[number]["id"];
 
-interface Entry {
-  id: DownloadFilter;
-  label: string;
-  icon: Icon;
-  tint?: string;
-  /** True for a category folder, false for the three groups above them. */
-  isFolder?: boolean;
-}
-
-const GROUPS: Entry[] = [
-  { id: "all", label: "All Downloads", icon: Inbox },
-  { id: "unfinished", label: "Unfinished", icon: CircleDashed },
-  { id: "finished", label: "Finished", icon: CircleCheck },
-];
-
-const FOLDERS: Entry[] = CATEGORIES.map((category) => ({
-  id: category,
-  label: category,
-  icon: CATEGORY_ICONS[category].icon,
-  tint: CATEGORY_ICONS[category].tint,
-  isFolder: true,
-}));
-
-const ENTRIES: Entry[] = [...GROUPS, ...FOLDERS];
+type Row =
+  | {
+      kind: "view";
+      key: string;
+      id: ViewId;
+      label: string;
+      count: number;
+    }
+  | {
+      kind: "category";
+      key: string;
+      id: CategoryName;
+      label: string;
+      count: number;
+      expanded: boolean;
+      hasFolders: boolean;
+    }
+  | {
+      kind: "folder";
+      key: string;
+      id: CategoryName;
+      path: string;
+      label: string;
+      count: number;
+      /** The last folder under its category: its guide stops at the row. */
+      last: boolean;
+    };
 
 /**
- * The categories pane: IDM's three groups over the download categories,
- * grouped like folders and collapsible to an icon rail. Every entry carries
- * the number of downloads behind it.
+ * The categories tree: the three download views over the categories, each
+ * category unfolding into the save folders its downloads actually live in.
+ * Rows are real tree rows, so the keyboard walks them with the arrows the way
+ * a file manager does.
  */
 export function CategoriesPane() {
-  const { filter, setFilter, counts } = useDownloads();
+  const { filter, filterPath, setFilter, setFolder, counts, folders } =
+    useDownloads();
   const [collapsed, setCollapsed] = useState(false);
-  const [focusIndex, setFocusIndex] = useState<number | null>(null);
-  // The category whose menu is open, and where the pointer was.
+  // Only categories the user opened or closed explicitly are recorded; the
+  // rest follow their content, so a category fills out as files arrive.
+  const [openCategories, setOpenCategories] = useState<Record<string, boolean>>(
+    {},
+  );
+  const [focusKey, setFocusKey] = useState<string | null>(null);
   const [menu, setMenu] = useState<{
     filter: DownloadFilter;
     isFolder: boolean;
     at: { x: number; y: number };
   } | null>(null);
-  const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const itemRefs = useRef(new Map<string, HTMLButtonElement | null>());
 
-  function openMenu(
-    entry: Entry,
-    at: { x: number; y: number },
-  ) {
-    setMenu({
-      filter: entry.id,
-      isFolder: entry.isFolder ?? false,
-      at,
-    });
+  const viewRows: Row[] = VIEWS.map((view) => ({
+    kind: "view",
+    key: `view:${view.id}`,
+    id: view.id,
+    label: view.label,
+    count: counts[view.id] ?? 0,
+  }));
+
+  const treeRows: Row[] = CATEGORIES.flatMap<Row>((category) => {
+    const children = folders[category];
+    const expanded =
+      !collapsed && (openCategories[category] ?? children.length > 0);
+    const categoryRow: Row = {
+      kind: "category",
+      key: `category:${category}`,
+      id: category,
+      label: category,
+      count: counts[category] ?? 0,
+      expanded,
+      hasFolders: children.length > 0,
+    };
+    if (!expanded) {
+      return [categoryRow];
+    }
+    return [
+      categoryRow,
+      ...children.map<Row>((child, index) => ({
+        kind: "folder",
+        key: `folder:${category}:${child.path}`,
+        id: category,
+        path: child.path,
+        label: child.label,
+        count: child.count,
+        last: index === children.length - 1,
+      })),
+    ];
+  });
+
+  const rows = [...viewRows, ...treeRows];
+
+  function isSelected(row: Row): boolean {
+    if (row.kind === "folder") {
+      return filter === row.id && filterPath === row.path;
+    }
+    return filter === row.id && filterPath === null;
   }
 
-  function focusItem(index: number) {
-    const next = (index + ENTRIES.length) % ENTRIES.length;
-    setFocusIndex(next);
-    itemRefs.current[next]?.focus();
+  function toggleCategory(category: CategoryName) {
+    const children = folders[category];
+    const expanded = openCategories[category] ?? children.length > 0;
+    // Collapsing a category must not leave its folder filtered behind hidden rows.
+    if (expanded && filter === category && filterPath !== null) {
+      setFilter(category);
+    }
+    setOpenCategories((current) => ({ ...current, [category]: !expanded }));
+  }
+
+  function focusRow(key: string) {
+    setFocusKey(key);
+    itemRefs.current.get(key)?.focus();
+  }
+
+  function openMenu(row: Row, at: { x: number; y: number }) {
+    setMenu({ filter: row.id, isFolder: row.kind !== "view", at });
   }
 
   function handleKeyDown(
     event: KeyboardEvent<HTMLButtonElement>,
-    index: number,
+    row: Row,
   ) {
+    const index = rows.findIndex((candidate) => candidate.key === row.key);
+    const step = (delta: number) =>
+      rows[(index + delta + rows.length) % rows.length];
+
     switch (event.key) {
       case "ArrowDown":
         event.preventDefault();
-        focusItem(index + 1);
+        focusRow(step(1).key);
         break;
       case "ArrowUp":
         event.preventDefault();
-        focusItem(index - 1);
+        focusRow(step(-1).key);
         break;
       case "Home":
         event.preventDefault();
-        focusItem(0);
+        focusRow(rows[0].key);
         break;
       case "End":
         event.preventDefault();
-        focusItem(ENTRIES.length - 1);
+        focusRow(rows[rows.length - 1].key);
         break;
+      case "ArrowRight": {
+        if (row.kind !== "category") {
+          break;
+        }
+        event.preventDefault();
+        if (!row.expanded && row.hasFolders) {
+          toggleCategory(row.id);
+        } else if (row.expanded) {
+          const child = rows[index + 1];
+          if (child?.kind === "folder") {
+            focusRow(child.key);
+          }
+        }
+        break;
+      }
+      case "ArrowLeft": {
+        event.preventDefault();
+        if (row.kind === "folder") {
+          focusRow(`category:${row.id}`);
+        } else if (row.kind === "category" && row.expanded) {
+          toggleCategory(row.id);
+        }
+        break;
+      }
       case "ContextMenu":
         event.preventDefault();
-        openMenu(ENTRIES[index], menuSpot(event.currentTarget));
+        openMenu(row, menuSpot(event.currentTarget));
         break;
     }
   }
 
-  const selectedIndex = Math.max(
-    0,
-    ENTRIES.findIndex((entry) => entry.id === filter),
-  );
-  const rovingIndex = focusIndex ?? selectedIndex;
+  const selectedRow = rows.find(isSelected);
+  const focusedKey = rows.some((row) => row.key === focusKey) ? focusKey : null;
+  const rovingKey = focusedKey ?? selectedRow?.key ?? rows[0]?.key;
 
-  function renderEntry(entry: Entry, index: number) {
+  function renderRow(row: Row) {
+    const selected = isSelected(row);
+    const depth = row.kind === "folder" ? 1 : 0;
+
     return (
-      <li key={entry.id}>
-        <FilterItem
-          entry={entry}
-          count={counts[entry.id] ?? 0}
-          selected={entry.id === filter}
-          collapsed={collapsed}
-          tabIndex={index === rovingIndex ? 0 : -1}
-          buttonRef={(node) => {
-            itemRefs.current[index] = node;
+      <li key={row.key}>
+        <button
+          ref={(node) => {
+            if (node) {
+              itemRefs.current.set(row.key, node);
+            } else {
+              itemRefs.current.delete(row.key);
+            }
           }}
-          onSelect={() => {
-            setFocusIndex(index);
-            setFilter(entry.id);
+          type="button"
+          aria-current={selected ? "true" : undefined}
+          aria-expanded={
+            row.kind === "category" && row.hasFolders ? row.expanded : undefined
+          }
+          title={
+            collapsed
+              ? `${row.label} (${row.count})`
+              : row.kind === "folder"
+                ? row.path
+                : undefined
+          }
+          tabIndex={row.key === rovingKey ? 0 : -1}
+          onClick={() => {
+            setFocusKey(row.key);
+            if (row.kind === "folder") {
+              setFolder(row.id, row.path);
+            } else {
+              setFilter(row.id);
+              if (row.kind === "category") {
+                toggleCategory(row.id);
+              }
+            }
           }}
-          onOpenMenu={(at) => openMenu(entry, at)}
-          onFocus={() => setFocusIndex(index)}
-          onKeyDown={(event) => handleKeyDown(event, index)}
-        />
+          onContextMenu={(event) => {
+            event.preventDefault();
+            openMenu(row, { x: event.clientX, y: event.clientY });
+          }}
+          onFocus={() => setFocusKey(row.key)}
+          onKeyDown={(event) => handleKeyDown(event, row)}
+          className={cn(
+            "group relative flex h-7 w-full items-center gap-1.5 rounded-chrome pr-1.5 text-left text-xs transition-colors focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none",
+            depth === 0 ? "pl-1.5" : "pl-10",
+            selected
+              ? "bg-chrome-menu-active text-chrome-title-text"
+              : "text-chrome-menu-text hover:bg-chrome-menu-hover active:bg-chrome-toolbar-active",
+            collapsed && "justify-center px-0",
+          )}
+        >
+          {row.kind === "folder" ? (
+            <>
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "pointer-events-none absolute top-0 left-3 w-px bg-chrome-line",
+                  row.last ? "h-1/2" : "h-full",
+                )}
+              />
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute top-1/2 left-3 h-px w-6 bg-chrome-line"
+              />
+            </>
+          ) : null}
+
+          {collapsed ? null : (
+            <span className="grid size-3 shrink-0 place-items-center text-chrome-muted">
+              {row.kind === "category" && row.hasFolders ? (
+                <ChevronRight
+                  className={cn(
+                    "size-3 transition-transform duration-100",
+                    row.expanded && "rotate-90",
+                  )}
+                />
+              ) : null}
+            </span>
+          )}
+
+          {row.kind === "view" ? (
+            <ViewIcon view={row.id} className="size-5 shrink-0" />
+          ) : (
+            <CategoryFolderIcon
+              category={row.id}
+              open={row.kind === "category" && row.expanded}
+              className="size-5 shrink-0"
+            />
+          )}
+
+          {collapsed ? null : (
+            <>
+              <span className="min-w-0 flex-1 truncate">{row.label}</span>
+              <span
+                className={cn(
+                  "shrink-0 text-[11px] tabular-nums",
+                  selected
+                    ? "text-chrome-title-text"
+                    : "text-chrome-muted group-hover:text-chrome-menu-text",
+                )}
+              >
+                {row.count}
+              </span>
+            </>
+          )}
+        </button>
       </li>
     );
   }
@@ -142,18 +313,23 @@ export function CategoriesPane() {
       aria-label="Categories"
       className={cn(
         "flex shrink-0 flex-col border-r border-chrome-line bg-chrome-panel",
-        collapsed ? "w-12" : "w-44 sm:w-52 lg:w-60",
+        collapsed ? "w-12" : "w-48 sm:w-56 lg:w-64",
       )}
     >
       <div
         className={cn(
           "flex h-8 shrink-0 items-center border-b border-chrome-line/70",
-          collapsed ? "justify-center px-1" : "justify-between pl-3 pr-1.5",
+          collapsed ? "justify-center px-1" : "justify-between pl-2.5 pr-1.5",
         )}
       >
         {collapsed ? null : (
-          <span className="text-[11px] font-medium tracking-wide text-chrome-muted">
-            Library
+          <span className="flex min-w-0 items-center gap-1.5 text-[11px] font-medium tracking-wide text-chrome-muted">
+            <CategoryFolderIcon
+              category="General"
+              open
+              className="size-4 shrink-0"
+            />
+            <span className="truncate">Categories</span>
           </span>
         )}
         <button
@@ -164,24 +340,20 @@ export function CategoriesPane() {
           onClick={() => setCollapsed((value) => !value)}
           className="grid size-6 shrink-0 place-items-center rounded-chrome text-chrome-muted hover:bg-chrome-menu-hover hover:text-chrome-menu-text focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
         >
-          {collapsed ? (
-            <PanelLeftOpen className="size-3.5" aria-hidden="true" />
-          ) : (
-            <PanelLeftClose className="size-3.5" aria-hidden="true" />
-          )}
+          <PanelGlyph collapsed={collapsed} className="size-3.5" />
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-1.5 py-2">
+      <div className="min-h-0 flex-1 overflow-y-auto px-1.5 py-2">
         {collapsed ? null : <SectionLabel>Downloads</SectionLabel>}
-        <ul className="flex flex-col gap-0.5">{GROUPS.map(renderEntry)}</ul>
+        <ul className="flex flex-col gap-px">{viewRows.map(renderRow)}</ul>
 
         {collapsed ? (
           <div className="my-2 border-t border-chrome-line/70" />
         ) : (
-          <SectionLabel className="mt-3">Folders</SectionLabel>
+          <SectionLabel className="mt-3">Categories</SectionLabel>
         )}
-        <ul className="flex flex-col gap-0.5">{FOLDERS.map((entry, index) => renderEntry(entry, index + GROUPS.length))}</ul>
+        <ul className="flex flex-col gap-px">{treeRows.map(renderRow)}</ul>
       </div>
 
       {menu ? (
@@ -206,95 +378,13 @@ function SectionLabel({
   return (
     <p
       className={cn(
-        "px-2 pb-1 text-[10px] font-semibold tracking-wider text-chrome-muted uppercase",
+        "flex items-center gap-2 px-1.5 pb-1.5 text-[10px] font-semibold tracking-wider text-chrome-muted uppercase",
         className,
       )}
     >
-      {children}
+      <span>{children}</span>
+      <span aria-hidden="true" className="h-px flex-1 bg-chrome-line/70" />
     </p>
-  );
-}
-
-interface FilterItemProps {
-  entry: Entry;
-  count: number;
-  selected: boolean;
-  collapsed: boolean;
-  tabIndex: number;
-  buttonRef: (node: HTMLButtonElement | null) => void;
-  onSelect: () => void;
-  /** Open the menu of the category, the way a right click does. */
-  onOpenMenu: (at: { x: number; y: number }) => void;
-  onFocus: () => void;
-  onKeyDown: (event: KeyboardEvent<HTMLButtonElement>) => void;
-}
-
-function FilterItem({
-  entry,
-  count,
-  selected,
-  collapsed,
-  tabIndex,
-  buttonRef,
-  onSelect,
-  onOpenMenu,
-  onFocus,
-  onKeyDown,
-}: FilterItemProps) {
-  const Icon = entry.icon;
-
-  return (
-    <button
-      ref={buttonRef}
-      type="button"
-      aria-current={selected ? "true" : undefined}
-      title={collapsed ? `${entry.label} (${count})` : undefined}
-      tabIndex={tabIndex}
-      onClick={onSelect}
-      onContextMenu={(event) => {
-        event.preventDefault();
-        onOpenMenu({ x: event.clientX, y: event.clientY });
-      }}
-      onFocus={onFocus}
-      onKeyDown={onKeyDown}
-      className={cn(
-        "group flex w-full items-center gap-2 rounded-chrome px-1.5 py-1.5 text-left text-xs transition-colors focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none",
-        selected
-          ? "bg-chrome-menu-active text-chrome-title-text"
-          : "text-chrome-menu-text hover:bg-chrome-menu-hover active:bg-chrome-toolbar-active",
-        collapsed && "justify-center px-0",
-      )}
-    >
-      <span
-        className={cn(
-          "grid size-6 shrink-0 place-items-center rounded-chrome",
-          selected
-            ? "bg-chrome-title/60"
-            : "bg-chrome-popup group-hover:bg-chrome-toolbar",
-        )}
-      >
-        <Icon
-          className={cn("size-3.5", entry.tint ?? "text-chrome-muted")}
-          strokeWidth={1.75}
-          aria-hidden="true"
-        />
-      </span>
-      {collapsed ? null : (
-        <>
-          <span className="min-w-0 flex-1 truncate">{entry.label}</span>
-          <span
-            className={cn(
-              "shrink-0 text-[11px] tabular-nums",
-              selected
-                ? "text-chrome-title-text"
-                : "text-chrome-muted group-hover:text-chrome-menu-text",
-            )}
-          >
-            {count}
-          </span>
-        </>
-      )}
-    </button>
   );
 }
 

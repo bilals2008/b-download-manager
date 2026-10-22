@@ -188,6 +188,15 @@ export function joinPath(dir: string, fileName: string): string {
   return `${folder}${separator}${fileName}`;
 }
 
+/** Last segment of a folder path, for the tree rows. */
+export function folderLabel(path: string): string {
+  const segments = path
+    .replace(/[\\/]+$/, "")
+    .split(/[\\/]/)
+    .filter(Boolean);
+  return segments.pop() ?? path;
+}
+
 const EXTENSION_CATEGORY: Record<string, CategoryName> = {
   mp4: "Video",
   mkv: "Video",

@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { open } from "@tauri-apps/plugin-dialog";
 
 import type { DownloadInfo } from "@/types";
 
@@ -62,6 +63,21 @@ export function removeDownload(id: number): Promise<void> {
 
 export function defaultDestination(): Promise<string> {
   return invoke<string>("default_destination");
+}
+
+/** The name the server gives the file at an address, when it gives one. */
+export function probeFileName(url: string): Promise<string | null> {
+  return invoke<string | null>("probe_file_name", { url });
+}
+
+/** The system folder picker. Null when the user cancels. */
+export async function chooseFolder(defaultPath: string): Promise<string | null> {
+  const picked = await open({
+    directory: true,
+    multiple: false,
+    defaultPath: defaultPath.trim() || undefined,
+  });
+  return typeof picked === "string" ? picked : null;
 }
 
 /** Open a file or a folder with the program the system uses for it. */

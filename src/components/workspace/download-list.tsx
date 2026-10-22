@@ -1,17 +1,22 @@
 import { useRef, useState } from "react";
+
+import type { MenuCloseReason } from "@/components/shell/menu-popup";
 import {
-  AlertTriangle,
+  EmptyDownloadsArt,
+  WarningMark,
+} from "@/components/icons/desktop-icons";
+import {
   ChevronDown,
   ChevronUp,
   ChevronsUpDown,
-  Inbox,
-  LoaderCircle,
-  Plus,
-  X,
-} from "lucide-react";
+  CloseGlyph,
+  PlusGlyph,
+  SpinnerGlyph,
+} from "@/components/icons/ui-icons";
 
 import { DOWNLOAD_COLUMNS } from "@/components/workspace/download-columns";
 import { DownloadContextMenu } from "@/components/workspace/download-context-menu";
+import { DownloadPropertiesDialog } from "@/components/workspace/download-properties-dialog";
 import { DownloadRow } from "@/components/workspace/download-row";
 import { useColumnWidths } from "@/components/workspace/use-column-widths";
 import type { Download, SortKey } from "@/lib/downloads";
@@ -51,6 +56,11 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
   } | null>(null);
   // The control that opened the menu, so the focus goes back to it.
   const menuTrigger = useRef<HTMLElement | null>(null);
+  // The id of the row whose properties window is open, so the window keeps up
+  // with the progress of the download while it is on screen.
+  const [propertiesId, setPropertiesId] = useState<number | null>(null);
+  const properties =
+    downloads.find((download) => download.id === propertiesId) ?? null;
 
   function openMenu(
     item: Download,
@@ -66,9 +76,13 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
     setMenu({ item, at });
   }
 
-  function closeMenu() {
+  function closeMenu(reason?: MenuCloseReason) {
     setMenu(null);
-    menuTrigger.current?.focus();
+    // A click somewhere else moves the focus where the user clicked, so only
+    // a keyboard close gives it back to the row.
+    if (reason !== "pointer") {
+      menuTrigger.current?.focus();
+    }
   }
 
   const filterLabel =
@@ -90,10 +104,7 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
           role="alert"
           className="flex items-start gap-2 border-b border-chrome-line bg-chrome-panel px-3 py-2 text-xs text-chrome-menu-text"
         >
-          <AlertTriangle
-            className="mt-0.5 size-4 shrink-0 text-icon-amber"
-            aria-hidden="true"
-          />
+          <WarningMark className="mt-0.5 size-4 shrink-0" />
           <p className="min-w-0 flex-1 break-words">{error}</p>
           <button
             type="button"
@@ -108,7 +119,7 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
             onClick={dismissError}
             className="grid size-5 shrink-0 place-items-center rounded-chrome text-chrome-muted hover:bg-chrome-menu-hover hover:text-chrome-menu-text focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
           >
-            <X className="size-3.5" aria-hidden="true" />
+            <CloseGlyph className="size-3.5" />
           </button>
         </div>
       ) : null}
@@ -155,7 +166,7 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
                           : undefined
                     }
                     className={cn(
-                      "sticky top-0 z-10 border-b border-chrome-line bg-chrome-menu px-3 py-2 text-chrome-micro font-medium tracking-wide text-chrome-muted",
+                      "sticky top-0 z-10 border-b border-chrome-line bg-linear-to-b from-chrome-toolbar to-chrome-menu px-3 py-1.5 text-chrome-micro font-medium tracking-wide text-chrome-muted",
                       column.align === "right" ? "text-right" : "text-left",
                     )}
                   >
@@ -175,7 +186,6 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
                             "size-3.5",
                             !isSorted && "opacity-40",
                           )}
-                          aria-hidden="true"
                         />
                       </button>
                     ) : (
@@ -238,10 +248,7 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
                     role="status"
                     className="flex items-center justify-center gap-2 text-xs text-chrome-muted"
                   >
-                    <LoaderCircle
-                      className="size-4 motion-safe:animate-spin"
-                      aria-hidden="true"
-                    />
+                    <SpinnerGlyph className="size-4 motion-safe:animate-spin" />
                     Reading downloads from the engine…
                   </p>
                 </td>
@@ -250,12 +257,7 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
               <tr>
                 <td colSpan={DOWNLOAD_COLUMNS.length} className="px-6 py-16">
                   <div className="mx-auto flex max-w-sm flex-col items-center text-center">
-                    <span className="grid size-12 place-items-center rounded-full border border-chrome-line bg-chrome-panel">
-                      <Inbox
-                        className="size-5 text-chrome-muted"
-                        aria-hidden="true"
-                      />
-                    </span>
+                    <EmptyDownloadsArt className="size-14" />
                     <h2 className="mt-3 text-sm font-medium text-chrome-menu-text">
                       {downloads.length === 0
                         ? "No downloads yet"
@@ -272,7 +274,7 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
                         onClick={onAddDownload}
                         className="inline-flex items-center gap-1.5 rounded-chrome bg-chrome-menu-active px-3 py-1.5 text-xs text-chrome-title-text hover:bg-chrome-popup-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
                       >
-                        <Plus className="size-3.5" aria-hidden="true" />
+                        <PlusGlyph className="size-3.5" />
                         Add download
                       </button>
                       {filter !== "all" ? (
@@ -307,9 +309,15 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
         <DownloadContextMenu
           item={menu.item}
           at={menu.at}
+          onShowProperties={(item) => setPropertiesId(item.id)}
           onClose={closeMenu}
         />
       ) : null}
+
+      <DownloadPropertiesDialog
+        item={properties}
+        onClose={() => setPropertiesId(null)}
+      />
     </section>
   );
 }

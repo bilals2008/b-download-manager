@@ -94,6 +94,7 @@
   --icon-blue-deep: #4f5f94;
   --icon-amber: #d99a2b;
   --icon-amber-bright: #f2bf62;
+  --icon-amber-deep: #7a4f07;
 }
 
 /*
@@ -174,6 +175,7 @@
     --icon-blue-deep: #2f4176;
     --icon-amber: #8a5906;
     --icon-amber-bright: #9c6608;
+    --icon-amber-deep: #5f3b03;
   }
 }
 

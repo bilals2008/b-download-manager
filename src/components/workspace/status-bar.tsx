@@ -1,11 +1,16 @@
 import { formatSize, formatSpeed } from "@/lib/downloads";
 import { useDownloads } from "@/state/download-store";
 
+/** One panel of the status bar. Neighbours are split by a hairline rule. */
+const CELL =
+  "flex shrink-0 items-center gap-1 border-l border-chrome-line px-3 tabular-nums";
+
 /**
  * The status bar along the bottom of the window: how many downloads the
  * current category holds, how many are active or selected, and the total
- * transfer rate. The size and the active count step aside on a narrow window so
- * the rate always has room.
+ * transfer rate. Panels are separated by rules, the way a desktop status bar
+ * is, and the size and the active count step aside on a narrow window so the
+ * rate always has room.
  */
 export function StatusBar() {
   const { visible, selected, downloads } = useDownloads();
@@ -15,21 +20,23 @@ export function StatusBar() {
   const active = downloads.filter((item) => item.status === "downloading").length;
 
   return (
-    <footer className="flex h-7 shrink-0 items-center gap-3 overflow-hidden border-t border-chrome-line bg-chrome-menu px-3 text-xs text-chrome-muted">
-      <span className="truncate tabular-nums">
-        {visible.length} of {downloads.length} downloads
+    <footer className="flex h-6 shrink-0 items-stretch overflow-hidden border-t border-chrome-line bg-linear-to-b from-chrome-toolbar to-chrome-menu text-chrome-micro text-chrome-muted">
+      <span className="flex min-w-0 items-center px-3 tabular-nums">
+        <span className="truncate">
+          {visible.length} of {downloads.length} downloads
+        </span>
       </span>
       {active > 0 ? (
-        <span className="hidden shrink-0 tabular-nums sm:inline">
-          {active} active
-        </span>
+        <span className={`${CELL} hidden sm:flex`}>{active} active</span>
       ) : null}
       {selected.length > 0 ? (
-        <span className="shrink-0 tabular-nums">{selected.length} selected</span>
+        <span className={CELL}>{selected.length} selected</span>
       ) : null}
-      <span className="ml-auto flex shrink-0 items-center gap-3 tabular-nums">
-        <span className="hidden sm:inline">{formatSize(totalSize)}</span>
-        <span className="w-20 text-right">
+      <span className="ml-auto flex items-stretch">
+        <span className={`${CELL} hidden sm:flex`}>
+          {formatSize(totalSize)}
+        </span>
+        <span className={`${CELL} w-24 justify-end`}>
           {totalSpeed > 0 ? formatSpeed(totalSpeed) : "Idle"}
         </span>
       </span>

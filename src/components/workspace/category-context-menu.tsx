@@ -1,3 +1,8 @@
+import {
+  InfoGlyph,
+  TrashGlyph,
+} from "@/components/icons/action-icons";
+import { CheckGlyph, PlusGlyph } from "@/components/icons/ui-icons";
 import { MenuPopup, type MenuRow } from "@/components/shell/menu-popup";
 import type { DownloadFilter } from "@/lib/downloads";
 import { useDownloads } from "@/state/download-store";
@@ -41,15 +46,35 @@ export function CategoryContextMenu({
   }
 
   const rows: MenuRow<CategoryCommand>[] = [
-    { command: "select-all", label: "Select all downloads" },
+    {
+      command: "select-all",
+      label: "Select all downloads",
+      icon: <CheckGlyph className="size-3.5" />,
+    },
     "separator",
-    { command: "add-category", label: "Add category...", disabled: true },
+    {
+      command: "add-category",
+      label: "Add category...",
+      icon: <PlusGlyph className="size-3.5" />,
+      disabled: true,
+    },
   ];
 
   if (isFolder) {
     rows.push(
-      { command: "category-properties", label: "Category properties...", disabled: true },
-      { command: "remove-category", label: "Remove category", disabled: true },
+      {
+        command: "category-properties",
+        label: "Category properties...",
+        icon: <InfoGlyph className="size-3.5" />,
+        disabled: true,
+      },
+      {
+        command: "remove-category",
+        label: "Remove category",
+        icon: <TrashGlyph className="size-3.5" />,
+        danger: true,
+        disabled: true,
+      },
     );
   }
 

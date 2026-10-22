@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use futures_util::StreamExt;
 use reqwest::header::HeaderMap;
-use reqwest::header::{ACCEPT_ENCODING, CONTENT_RANGE, RANGE, RETRY_AFTER};
+use reqwest::header::{ACCEPT_ENCODING, CONTENT_DISPOSITION, CONTENT_RANGE, RANGE, RETRY_AFTER};
 
 use crate::transfer::{ByteStream, Probe, TransferError};
 
@@ -69,7 +69,15 @@ pub async fn probe(client: &reqwest::Client, url: &str) -> Result<Probe, Transfe
         total = response.content_length();
     }
 
-    Ok(Probe { total, ranges })
+    Ok(Probe {
+        total,
+        ranges,
+        name: response
+            .headers()
+            .get(CONTENT_DISPOSITION)
+            .and_then(|value| value.to_str().ok())
+            .and_then(file_name_from_disposition),
+    })
 }
 
 /// Open a transfer that yields the bytes of a range.
@@ -182,6 +190,68 @@ pub fn parse_content_range_start(value: &str) -> Option<u64> {
     start.trim().parse().ok()
 }
 
+/// The file name a `Content-Disposition` header carries, if it carries one.
+///
+/// `filename*=UTF-8''na%C3%AFve.txt` (RFC 5987) wins over a plain
+/// `filename="naive.txt"`, because it is the one a server sends when it has
+/// already solved the encoding. Some servers send a whole path in the field,
+/// so only the last segment is kept.
+pub fn file_name_from_disposition(value: &str) -> Option<String> {
+    let mut plain = None;
+
+    for part in value.split(';') {
+        let part = part.trim();
+        if let Some(raw) = part.strip_prefix("filename*=") {
+            let raw = raw.trim().trim_matches('"');
+            let encoded = raw.rsplit_once("''").map(|(_, rest)| rest).unwrap_or(raw);
+            if let Some(name) = clean_file_name(&percent_decode(encoded)) {
+                return Some(name);
+            }
+        } else if let Some(raw) = part.strip_prefix("filename=") {
+            plain = clean_file_name(raw.trim().trim_matches('"'));
+        }
+    }
+
+    plain
+}
+
+/// The last segment of a name a server sent, without quotes or separators.
+fn clean_file_name(value: &str) -> Option<String> {
+    let last = value.rsplit(['/', '\\']).next()?.trim();
+    if last.is_empty() || last == "." || last == ".." {
+        return None;
+    }
+    Some(last.to_string())
+}
+
+/// Decode `%XX` escapes; anything else is kept as it came.
+fn percent_decode(value: &str) -> String {
+    fn digit(byte: u8) -> Option<u8> {
+        match byte {
+            b'0'..=b'9' => Some(byte - b'0'),
+            b'a'..=b'f' => Some(byte - b'a' + 10),
+            b'A'..=b'F' => Some(byte - b'A' + 10),
+            _ => None,
+        }
+    }
+
+    let bytes = value.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' && index + 2 < bytes.len() {
+            if let (Some(high), Some(low)) = (digit(bytes[index + 1]), digit(bytes[index + 2])) {
+                out.push(high * 16 + low);
+                index += 3;
+                continue;
+            }
+        }
+        out.push(bytes[index]);
+        index += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
 /// How long the server asked us to wait before trying again.
 ///
 /// shortcut: only the delta-seconds form of `Retry-After` is honoured. The
@@ -267,6 +337,35 @@ mod tests {
     #[test]
     fn a_missing_retry_after_is_not_an_error() {
         assert_eq!(parse_retry_after(&HeaderMap::new()), None);
+    }
+
+    #[test]
+    fn a_plain_name_is_read_out_of_the_disposition() {
+        assert_eq!(
+            file_name_from_disposition("attachment; filename=\"report.pdf\""),
+            Some("report.pdf".to_string())
+        );
+        assert_eq!(
+            file_name_from_disposition("attachment; filename=report.pdf"),
+            Some("report.pdf".to_string())
+        );
+    }
+
+    #[test]
+    fn an_encoded_name_wins_over_a_plain_one() {
+        assert_eq!(
+            file_name_from_disposition("attachment; filename=\"naive.txt\"; filename*=UTF-8''na%C3%AFve.txt"),
+            Some("naïve.txt".to_string())
+        );
+    }
+
+    #[test]
+    fn only_the_last_segment_of_a_disposition_name_is_kept() {
+        assert_eq!(
+            file_name_from_disposition("attachment; filename=\"C:\\\\temp\\\\clip.mp4\""),
+            Some("clip.mp4".to_string())
+        );
+        assert_eq!(file_name_from_disposition("inline"), None);
     }
 
     #[test]

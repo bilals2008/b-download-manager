@@ -11,6 +11,7 @@ use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
 use idm_core::downloader::{Download, DownloadInfo, Reporter, Status, DEFAULT_CONNECTIONS};
 use idm_core::limits::Limits;
 use idm_core::session::Index;
+use idm_core::transfer::Source;
 use state::AppState;
 
 /// Event carrying the state of one download to the UI.
@@ -196,6 +197,26 @@ fn default_destination(app: AppHandle) -> String {
     downloads.join("download.bin").to_string_lossy().to_string()
 }
 
+/// The name the server gives the file at this address.
+///
+/// A link like `https://example.org/get?id=12` carries no name, but the
+/// answer of the server does, in its `Content-Disposition` header. The
+/// dialog asks for it so the user does not have to invent one.
+#[tauri::command]
+async fn probe_file_name(
+    state: State<'_, AppState>,
+    url: String,
+) -> Result<Option<String>, String> {
+    let url = url.trim();
+    if url.is_empty() {
+        return Ok(None);
+    }
+    let proxy = state.limits().proxy();
+    let source = Source::parse(url, proxy.as_deref())?;
+    let probe = source.probe().await.map_err(|error| error.message)?;
+    Ok(probe.name)
+}
+
 /// Open a file or a folder with the program the system uses for it.
 ///
 /// The path comes from the download list, so it is a place the user picked.
@@ -316,6 +337,7 @@ fn show_window(app: &AppHandle) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(AppState::default())
         .setup(|app| {
             // The downloads of an earlier run are brought back, so the list is
@@ -361,6 +383,7 @@ pub fn run() {
             set_minimize_to_tray,
             quit_app,
             default_destination,
+            probe_file_name,
             open_path,
         ])
         .build(tauri::generate_context!())

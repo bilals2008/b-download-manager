@@ -1,14 +1,19 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Check, ChevronRight } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+
+import { CheckGlyph, ChevronRight } from "@/components/icons/ui-icons";
 
 /** One command in a menu. */
 export interface MenuItem<T extends string = string> {
   /** What the command does; the app maps it to an action. */
   command: T;
   label: string;
+  /** A glyph that names the command, drawn on the left of the row. */
+  icon?: ReactNode;
   shortcut?: string;
   /** Commands whose screen is not built yet stay visible but inert. */
   disabled?: boolean;
+  /** A command that removes or overwrites data is drawn in the error tone. */
+  danger?: boolean;
   /** A radio row: the menu shows which one is picked. */
   radio?: boolean;
   /** A nested menu, the way IDM groups "Export", "Arrange files" and friends. */
@@ -20,6 +25,9 @@ export type MenuRow<T extends string = string> = MenuItem<T> | "separator";
 
 /** Where the keyboard focus lands when a menu opens. */
 export type FocusTarget = "first" | "last" | null;
+
+/** Why a menu closed, so the owner knows whether to take the focus back. */
+export type MenuCloseReason = "pointer" | "keyboard";
 
 export interface MenuPopupProps<T extends string> {
   id: string;
@@ -35,7 +43,7 @@ export interface MenuPopupProps<T extends string> {
   /** Where a context menu opens. A menu of the bar is placed by its trigger. */
   at?: { x: number; y: number };
   onChoose: (item: MenuItem<T>) => void;
-  onClose: () => void;
+  onClose: (reason?: MenuCloseReason) => void;
   onBack?: () => void;
 }
 
@@ -99,19 +107,27 @@ export function MenuPopup<T extends string>({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [at?.x, at?.y]);
 
-  // A click outside a context menu closes it.
+  // A click outside a context menu closes it, and so does anything that moves
+  // the page under it: the pointer is the reason, so focus is left alone.
   useEffect(() => {
     if (!at) {
       return;
     }
     function closeOnOutsidePointer(event: PointerEvent) {
       if (!listRef.current?.contains(event.target as Node)) {
-        onClose();
+        onClose("pointer");
       }
     }
+    function closeOnMove() {
+      onClose("pointer");
+    }
     document.addEventListener("pointerdown", closeOnOutsidePointer);
+    window.addEventListener("resize", closeOnMove);
+    window.addEventListener("scroll", closeOnMove, true);
     return () => {
       document.removeEventListener("pointerdown", closeOnOutsidePointer);
+      window.removeEventListener("resize", closeOnMove);
+      window.removeEventListener("scroll", closeOnMove, true);
     };
   }, [at, onClose]);
 
@@ -169,7 +185,7 @@ export function MenuPopup<T extends string>({
         if (onBack) {
           onBack();
         } else {
-          onClose();
+          onClose("keyboard");
         }
         break;
     }
@@ -224,29 +240,30 @@ export function MenuPopup<T extends string>({
               onPointerEnter={() => setOpenSub(row.submenu ? index : null)}
               onKeyDown={(event) => handleItemKeyDown(event, index, row)}
               className={
-                "flex w-full items-center gap-6 px-3 py-1.5 text-left text-xs focus-visible:bg-chrome-popup-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none " +
+                "flex w-full items-center gap-2.5 px-2.5 py-1.5 text-left text-xs focus-visible:bg-chrome-popup-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none " +
                 (row.disabled
                   ? "cursor-default text-chrome-muted/60"
-                  : "text-chrome-menu-text hover:bg-chrome-popup-hover")
+                  : row.danger
+                    ? "text-chrome-error hover:bg-chrome-popup-hover"
+                    : "text-chrome-menu-text hover:bg-chrome-popup-hover")
               }
             >
+              {row.icon ? (
+                <span className="grid size-4 shrink-0 place-items-center">
+                  {row.icon}
+                </span>
+              ) : null}
               <span className="truncate">
                 {menuLabels?.[row.command] ?? row.label}
               </span>
               {row.submenu ? (
-                <ChevronRight
-                  className="ml-auto size-3.5 shrink-0 text-chrome-muted"
-                  aria-hidden="true"
-                />
+                <ChevronRight className="ml-auto size-3.5 shrink-0 text-chrome-muted" />
               ) : row.radio && checked?.[row.command] ? (
-                <Check
-                  className="ml-auto size-3.5 shrink-0 text-chrome-focus"
-                  aria-hidden="true"
-                />
+                <CheckGlyph className="ml-auto size-3.5 shrink-0 text-chrome-focus" />
               ) : row.shortcut ? (
                 <span
                   aria-hidden="true"
-                  className="ml-auto shrink-0 text-xs text-chrome-muted"
+                  className="ml-auto shrink-0 pl-4 text-xs text-chrome-muted"
                 >
                   {row.shortcut}
                 </span>
