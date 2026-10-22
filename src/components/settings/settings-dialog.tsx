@@ -29,8 +29,8 @@ interface SettingsDialogProps {
  * the General page, keeps edits in a draft, and writes them only on Save so
  * Cancel genuinely discards.
  *
- * The settings the engine owns — the proxy, the bandwidth cap, the number of
- * connections — are pushed to the engine when the window is saved, so they
+ * The settings the engine owns (the proxy, the bandwidth cap and the number
+ * of connections) are pushed to the engine when the window is saved, so they
  * take effect at once.
  */
 export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
