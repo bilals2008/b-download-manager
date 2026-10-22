@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { WarningMark } from "@/components/icons/desktop-icons";
+import { FileTypeIcon, WarningMark } from "@/components/icons/desktop-icons";
 import {
   DownloadGlyph,
   SpinnerGlyph,
@@ -285,6 +285,27 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
           />
         </div>
 
+        {/*
+          What the address adds up to, before the user changes any of it: the
+          badge the row will wear in the list, the name and what the server
+          said the file weighs. It is the answer to "did I paste the right
+          link", which is the question this dialog is asked most often.
+        */}
+        {url.trim() ? (
+          <div className="flex items-center gap-2.5 rounded-chrome border border-chrome-line bg-chrome-canvas px-3 py-2">
+            <FileTypeIcon category={category} className="size-7 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs text-chrome-title-text">
+                {name || "Taking the name from the address…"}
+              </p>
+              <p className="truncate text-chrome-micro text-chrome-muted">
+                {category}
+                {size ? ` · ${size}` : ""}
+              </p>
+            </div>
+          </div>
+        ) : null}
+
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label htmlFor="add-name" className={LABEL}>
@@ -330,11 +351,13 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
               Browse…
             </button>
           </div>
-          <p className="mt-1.5 truncate text-chrome-micro text-chrome-muted">
+          <p
+            title={name && savePath.trim() ? joinPath(savePath.trim(), name) : undefined}
+            className="mt-1.5 truncate text-chrome-micro text-chrome-muted"
+          >
             {name && savePath.trim()
               ? `Saves as ${joinPath(savePath.trim(), name)}`
               : "The file name is taken from the address when the box is left empty."}
-            {size ? ` (${size})` : ""}
           </p>
         </div>
 
