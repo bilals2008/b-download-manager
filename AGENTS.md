@@ -1,7 +1,7 @@
 # AGENTS.md
 
 Project-specific rules for coding agents. Details: `docs/DEVELOPMENT.md`.
-
+Organize files properly: Keep folders and files logically structured by feature and responsibility.
 - Keep folders and files well-organized, modular, and maintainable.
 - Use skills for UI/UX and for the desktop-app feel.
 - Never put the entire application logic in one file. Separate concerns into appropriate modules and reusable components.
@@ -24,6 +24,9 @@ donot use broswer tools to verify user will review manually
   React/Tailwind docs. Official documentation beats random tutorials.
 - Confirm the version in use before copying a solution from the web.
 
+## React
+
+-Avoid useEffect: Do not use React's useEffect by default. Prefer event handlers, derived state, and proper data flow. Use it only when genuinely necessary.
 ## Links
  
 - Design tokens: `src/index.css`
