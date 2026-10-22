@@ -41,6 +41,9 @@ src-tauri/src/
   main.rs        process entry
   lib.rs         Tauri builder, commands, event wiring
   state.rs       the set of known downloads
+  bridge.rs      the server the browser extension talks to
+browser-extension/
+  manifest.json  the extension that hands a link to the application
 src/
   App.tsx        screen composition and command routing only
   main.tsx       React root

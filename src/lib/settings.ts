@@ -13,6 +13,8 @@
 export interface Settings {
   launchOnStartup: boolean;
   clipboardCapture: boolean;
+  /** Whether closing the window hides it into the tray. */
+  minimizeToTray: boolean;
   /** Where a new download is saved when the user does not say. */
   defaultFolder: string;
   /** Connections one download gets by default. */
@@ -30,6 +32,7 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   launchOnStartup: false,
   clipboardCapture: false,
+  minimizeToTray: true,
   defaultFolder: "",
   defaultConnections: 8,
   maxConnections: 32,
@@ -58,6 +61,7 @@ export function loadSettings(): Settings {
     return {
       launchOnStartup: boolean(value.launchOnStartup, DEFAULT_SETTINGS.launchOnStartup),
       clipboardCapture: boolean(value.clipboardCapture, DEFAULT_SETTINGS.clipboardCapture),
+      minimizeToTray: boolean(value.minimizeToTray, DEFAULT_SETTINGS.minimizeToTray),
       defaultFolder: text(value.defaultFolder, DEFAULT_SETTINGS.defaultFolder),
       defaultConnections: number(
         value.defaultConnections,

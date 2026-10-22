@@ -53,8 +53,13 @@ this file says what is left to do.
       download list
 - [x] The list of downloads survives a restart
 - [ ] **The tray icon**, in the three styles IDM offers, and the tray only
-      mode
-- [ ] **The browser integration**: the detection, the keys, the context menu
+      mode. The icon itself is there, with the mark of the application, and
+      closing the window keeps the application in the tray.
+- [ ] **The browser integration**: the detection, the keys, the context menu.
+      The extension in `browser-extension/` hands a link to the application
+      today (a right click menu, and taking over the downloads the browser
+      starts); the rest of it is still to be built, and the address of the
+      page is not used as a referer yet.
 - [ ] **The named queues and the scheduler**, with the schedule files
       (`s_%s.dt`, `q_%s.dt`)
 - [ ] **The remaining options pages**: Save to, Downloads, Connection and

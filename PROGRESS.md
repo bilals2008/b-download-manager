@@ -113,12 +113,17 @@ Done items stay in the list as a record of what is already standing.
 - [x] Remaining Options pages: Save to, Downloads, Connection and Proxy / Socks
       work and reach the engine; File types, Sites Logins, Dial Up / VPN and
       Sounds stay greyed out
+- [x] Browser extension that hands a link to the application: the right click
+      menu on a link, and taking over the downloads the browser starts
 - [ ] Browser integration behind the General page: detection, Restart, Add browser, keys and context-menu editors
 - [ ] Apply the startup and clipboard preferences through the operating system
 - [ ] Scheduler dialog
 - [ ] Registration and Order online
 - [ ] Tell a friend, Tip of the Day, Tutorials, Grabber Help
-- [ ] Tray icon: 3D style, classic style, don't show, dark mode support
+- [x] Tray icon with the mark of the application, and "keep the application in
+      the tray when the window is closed": the tray menu brings the window
+      back, starts and stops the queue, and is the way out
+- [ ] Tray icon in the three styles IDM offers, and the tray only mode
 - [ ] Font picker and language list
 - [ ] Single instance behaviour and a tray-only mode
 

@@ -14,9 +14,11 @@ import {
   categoryOfFile,
   DEFAULT_CONNECTIONS,
   fileNameFromUrl,
+  folderLabel,
   isFinished,
   isUnfinished,
   joinPath,
+  sanitizeFileName,
   splitPath,
   type CategoryName,
   type Download,
@@ -26,14 +28,18 @@ import {
 } from "@/lib/downloads";
 import {
   cancelDownload,
+  defaultDestination,
   listDownloads,
+  onBridgeDownload,
   onDownloadUpdate,
   pauseDownload,
   removeDownload,
   resumeDownload,
   startDownload,
+  type BridgeDownload,
 } from "@/lib/ipc";
 import { describeError, isDesktop } from "@/lib/errors";
+import { loadSettings } from "@/lib/settings";
 import type { DownloadInfo, DownloadStatus as EngineStatus } from "@/types";
 
 /** What a bulk action does to the selected rows. */
@@ -42,9 +48,18 @@ export type DownloadAction = "resume" | "pause" | "stop" | "delete";
 interface WorkspaceState {
   downloads: Download[];
   filter: DownloadFilter;
+  /** Save folder picked in the tree, on top of the category filter. */
+  filterPath: string | null;
   /** Ids of the selected rows. Empty means nothing is selected. */
   selected: number[];
   sort: SortState;
+}
+
+/** A save folder under a category in the tree, with what it holds. */
+export interface CategoryFolder {
+  path: string;
+  label: string;
+  count: number;
 }
 
 interface SpeedSample {
@@ -56,12 +71,16 @@ interface SpeedSample {
 export interface DownloadStore {
   downloads: Download[];
   filter: DownloadFilter;
+  /** The save folder the tree has drilled into, or null for the whole category. */
+  filterPath: string | null;
   selected: number[];
   sort: SortState;
   /** Rows after the categories pane filter and the sort order are applied. */
   visible: Download[];
   /** Row count per categories pane entry. */
   counts: Record<string, number>;
+  /** Save folders per category, for the tree children. */
+  folders: Record<CategoryName, CategoryFolder[]>;
   /** True while the first list request is in flight. */
   loading: boolean;
   /** Engine or action error, shown above the list. */
@@ -71,6 +90,8 @@ export interface DownloadStore {
   reportError: (message: string) => void;
   reload: () => void;
   setFilter: (filter: DownloadFilter) => void;
+  /** Drill into one save folder of a category. */
+  setFolder: (category: CategoryName, path: string) => void;
   toggleSelect: (id: number, additive: boolean) => void;
   selectAll: () => void;
   /** Select every download a category filter matches. */
@@ -117,6 +138,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<WorkspaceState>(() => ({
     downloads: [],
     filter: "all",
+    filterPath: null,
     selected: [],
     sort: { key: "order", dir: "asc" },
   }));
@@ -271,13 +293,39 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
     };
   }, [applyInfo, load]);
 
+  // A link that the browser extension handed over.
+  useEffect(() => {
+    if (!isDesktop()) {
+      return;
+    }
+    let dispose: (() => void) | undefined;
+    let closed = false;
+    void onBridgeDownload((payload) => {
+      void takeFromBrowser(payload);
+    }).then((unlisten) => {
+      if (closed) {
+        unlisten();
+      } else {
+        dispose = unlisten;
+      }
+    });
+    return () => {
+      closed = true;
+      dispose?.();
+    };
+  }, []);
+
   const reload = useCallback(() => {
     void load();
   }, [load]);
 
   const visible = useMemo(
-    () => sortDownloads(filterDownloads(state.downloads, state.filter), state.sort),
-    [state.downloads, state.filter, state.sort],
+    () =>
+      sortDownloads(
+        filterDownloads(state.downloads, state.filter, state.filterPath),
+        state.sort,
+      ),
+    [state.downloads, state.filter, state.filterPath, state.sort],
   );
 
   const counts = useMemo(() => {
@@ -294,6 +342,31 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
         result.unfinished += 1;
       }
       result[item.category] += 1;
+    }
+    return result;
+  }, [state.downloads]);
+
+  const folders = useMemo(() => {
+    const result = {} as Record<CategoryName, CategoryFolder[]>;
+    for (const category of CATEGORIES) {
+      result[category] = [];
+    }
+    const paths = new Map<CategoryName, Map<string, number>>();
+    for (const item of state.downloads) {
+      if (!item.savePath) {
+        continue;
+      }
+      let bucket = paths.get(item.category);
+      if (!bucket) {
+        bucket = new Map<string, number>();
+        paths.set(item.category, bucket);
+      }
+      bucket.set(item.savePath, (bucket.get(item.savePath) ?? 0) + 1);
+    }
+    for (const [category, bucket] of paths) {
+      result[category] = [...bucket.entries()]
+        .map(([path, count]) => ({ path, label: folderLabel(path), count }))
+        .sort((left, right) => left.path.localeCompare(right.path));
     }
     return result;
   }, [state.downloads]);
@@ -318,13 +391,66 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
     );
   }
 
+  /** Start one download and put its row in the list. */
+  async function beginDownload(input: NewDownload) {
+    const dest = joinPath(input.savePath, input.fileName);
+    const id = await startDownload(input.url, dest, DEFAULT_CONNECTIONS);
+    const now = Date.now();
+    const { dir, base } = splitPath(dest);
+    const row: Download = {
+      id,
+      fileName: base || input.fileName,
+      url: input.url,
+      category: input.category,
+      size: 0,
+      downloaded: 0,
+      status: "queued",
+      speed: 0,
+      eta: 0,
+      addedAt: now,
+      lastTryAt: now,
+      savePath: dir,
+      dest,
+      connections: DEFAULT_CONNECTIONS,
+      error: null,
+    };
+    setState((current) => ({
+      ...current,
+      downloads: current.downloads.some((item) => item.id === id)
+        ? current.downloads
+        : [...current.downloads, row],
+    }));
+  }
+
+  /** A link the browser extension handed over. */
+  async function takeFromBrowser(payload: BridgeDownload) {
+    try {
+      const chosen = loadSettings().defaultFolder.trim();
+      const folder =
+        chosen || splitPath(await defaultDestination()).dir || ".";
+      const name = sanitizeFileName(
+        payload.name || fileNameFromUrl(payload.url),
+      );
+      await beginDownload({
+        url: payload.url,
+        fileName: name,
+        category: categoryOfFile(name),
+        savePath: folder,
+      });
+    } catch (failure) {
+      setError(describeError(failure));
+    }
+  }
+
   const store: DownloadStore = {
     downloads: state.downloads,
     filter: state.filter,
+    filterPath: state.filterPath,
     selected: state.selected,
     sort: state.sort,
     visible,
     counts,
+    folders,
     loading,
     error,
     dismissError: () => setError(null),
@@ -334,8 +460,20 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
       setState((current) => ({
         ...current,
         filter,
+        filterPath: null,
         selected: current.selected.filter((id) =>
-          filterDownloads(current.downloads, filter).some(
+          filterDownloads(current.downloads, filter, null).some(
+            (item) => item.id === id,
+          ),
+        ),
+      })),
+    setFolder: (category, path) =>
+      setState((current) => ({
+        ...current,
+        filter: category,
+        filterPath: path,
+        selected: current.selected.filter((id) =>
+          filterDownloads(current.downloads, category, path).some(
             (item) => item.id === id,
           ),
         ),
@@ -361,7 +499,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
     selectByFilter: (filter) =>
       setState((current) => ({
         ...current,
-        selected: filterDownloads(current.downloads, filter).map(
+        selected: filterDownloads(current.downloads, filter, null).map(
           (item) => item.id,
         ),
       })),
@@ -441,35 +579,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    addDownload: async (input) => {
-      const dest = joinPath(input.savePath, input.fileName);
-      const id = await startDownload(input.url, dest, DEFAULT_CONNECTIONS);
-      const now = Date.now();
-      const { dir, base } = splitPath(dest);
-      const row: Download = {
-        id,
-        fileName: base || input.fileName,
-        url: input.url,
-        category: input.category,
-        size: 0,
-        downloaded: 0,
-        status: "queued",
-        speed: 0,
-        eta: 0,
-        addedAt: now,
-        lastTryAt: now,
-        savePath: dir,
-        dest,
-        connections: DEFAULT_CONNECTIONS,
-        error: null,
-      };
-      setState((current) => ({
-        ...current,
-        downloads: current.downloads.some((item) => item.id === id)
-          ? current.downloads
-          : [...current.downloads, row],
-      }));
-    },
+    addDownload: (input) => beginDownload(input),
     pauseAll: () => {
       const items = latest.current.downloads.filter(
         (item) => item.status === "downloading",
@@ -599,16 +709,21 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
 function filterDownloads(
   downloads: Download[],
   filter: DownloadFilter,
+  path: string | null,
 ): Download[] {
+  const scoped =
+    path === null
+      ? downloads
+      : downloads.filter((item) => item.savePath === path);
   switch (filter) {
     case "all":
-      return downloads;
+      return scoped;
     case "finished":
-      return downloads.filter(isFinished);
+      return scoped.filter(isFinished);
     case "unfinished":
-      return downloads.filter(isUnfinished);
+      return scoped.filter(isUnfinished);
     default:
-      return downloads.filter((item) => item.category === (filter as CategoryName));
+      return scoped.filter((item) => item.category === (filter as CategoryName));
   }
 }
 

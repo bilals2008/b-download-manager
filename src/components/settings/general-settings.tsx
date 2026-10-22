@@ -89,6 +89,15 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
         </div>
       </Section>
 
+      <Section title="The tray">
+        <Checkbox
+          label="Keep the application in the tray when the window is closed"
+          hint="The tray icon brings the window back, and it is the way to exit. The icon sits at the right of the task bar."
+          checked={settings.minimizeToTray}
+          onChange={(event) => onChange("minimizeToTray", event.target.checked)}
+        />
+      </Section>
+
       <Section title="Capture from browsers" planned>
         <div className="grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
           {BROWSERS.map((browser) => (

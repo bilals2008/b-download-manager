@@ -6,14 +6,20 @@ import { TopBar } from "@/components/shell/top-bar";
 import { AboutDialog } from "@/components/workspace/about-dialog";
 import { AddDownloadDialog } from "@/components/workspace/add-download-dialog";
 import { Workspace } from "@/components/workspace/workspace";
-import { setMaxConnections, setProxy, setSpeedLimit } from "@/lib/ipc";
+import {
+  onTrayCommand,
+  quitApp,
+  setMaxConnections,
+  setMinimizeToTray,
+  setProxy,
+  setSpeedLimit,
+} from "@/lib/ipc";
 import {
   loadSettings,
   loadToolbarSize,
   saveToolbarSize,
   type ToolbarSize,
 } from "@/lib/settings";
-import { windowAction } from "@/lib/window";
 import { useDownloads } from "@/state/download-store";
 
 export default function App() {
@@ -40,7 +46,33 @@ export default function App() {
     void setMaxConnections(settings.maxConnections).catch(() => {
       // As above.
     });
+    void setMinimizeToTray(settings.minimizeToTray).catch(() => {
+      // As above.
+    });
   }, []);
+
+  // The tray menu drives the same commands as the menu bar.
+  useEffect(() => {
+    let dispose: (() => void) | undefined;
+    let closed = false;
+    void onTrayCommand((command) => {
+      if (command === "start-queue") {
+        downloads.startQueue();
+      } else if (command === "stop-queue") {
+        downloads.stopQueue();
+      }
+    }).then((unlisten) => {
+      if (closed) {
+        unlisten();
+      } else {
+        dispose = unlisten;
+      }
+    });
+    return () => {
+      closed = true;
+      dispose?.();
+    };
+  }, [downloads]);
 
   function setToolbar(size: ToolbarSize) {
     setToolbarSize(size);
@@ -50,7 +82,7 @@ export default function App() {
   function handleCommand(command: ShellCommand) {
     switch (command) {
       case "exit":
-        void windowAction("close");
+        void quitApp();
         break;
       case "categories":
         setCategoriesVisible((visible) => !visible);

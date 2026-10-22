@@ -9,6 +9,29 @@ export function onDownloadUpdate(
   return listen<DownloadInfo>("download://update", (event) => handler(event.payload));
 }
 
+/** The commands the tray menu sends to the window. */
+export function onTrayCommand(
+  handler: (command: string) => void,
+): Promise<UnlistenFn> {
+  return listen<string>("tray://command", (event) => handler(event.payload));
+}
+
+/** A link the browser extension handed over. */
+export interface BridgeDownload {
+  url: string;
+  name: string;
+  referer: string;
+}
+
+/** A link that the browser asked the application to download. */
+export function onBridgeDownload(
+  handler: (payload: BridgeDownload) => void,
+): Promise<UnlistenFn> {
+  return listen<BridgeDownload>("bridge://download", (event) =>
+    handler(event.payload),
+  );
+}
+
 export function startDownload(
   url: string,
   dest: string,
@@ -59,4 +82,14 @@ export function setProxy(url: string): Promise<void> {
 /** How many connections the whole application may have open at once. */
 export function setMaxConnections(max: number): Promise<number> {
   return invoke<number>("set_max_connections", { max });
+}
+
+/** Whether closing the window hides it into the tray. */
+export function setMinimizeToTray(on: boolean): Promise<boolean> {
+  return invoke<boolean>("set_minimize_to_tray", { on });
+}
+
+/** Leave the application for good. */
+export function quitApp(): Promise<void> {
+  return invoke<void>("quit_app");
 }

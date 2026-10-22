@@ -84,6 +84,27 @@ probe now fails on any answer that is not a success, and the download asks
 again; the test `a_server_that_is_busy_is_not_mistaken_for_a_small_file`
 covers it.
 
+## The tray and the browser
+
+The application keeps a tray icon. Clicking it brings the window back, its
+menu starts and stops the queue, and it is the way out: closing the window
+only hides it, the way IDM does. The switch is on the General page of the
+options window.
+
+A click in the browser can start a download here. The extension in
+[`browser-extension/`](./browser-extension/) hands the address of a link to
+the application, which listens on `127.0.0.1:27500`:
+
+- the right click menu on a link has **Download with Internet Download
+  Manager**,
+- a download the browser starts is taken over by the application, the way
+  the advanced integration of IDM does.
+
+Load the folder in `chrome://extensions` with the developer mode on. IDM does
+the same thing with a native messaging host (`com.tonec.idm`, the name is in
+the string table of `IDMan.exe`); the loopback server is the simpler way to
+reach the same result.
+
 ## Where the planning lives
 
 [`planning/`](./planning/) holds everything needed to finish the alternative
@@ -125,6 +146,8 @@ src/
   App.tsx        the single screen: new download, live table
   lib/ipc.ts     typed wrappers over the Tauri commands
   components/ui/ shadcn/ui primitives (button, progress, table, input, card, badge)
+browser-extension/
+  manifest.json  the extension that hands a link to the application
 ```
 
 ## Tauri commands
@@ -142,6 +165,8 @@ src/
 | `site_connections(host)` | the connection cap of one site, when there is one |
 | `set_proxy(url)` | the proxy new downloads go through, HTTP or SOCKS |
 | `set_max_connections(max)` | how many connections the application may hold open |
+| `set_minimize_to_tray(on)` | whether closing the window hides it into the tray |
+| `quit_app()` | leave the application for good |
 | `default_destination()` | a sensible starting path |
 | `open_path(path)` | open a finished file, or the folder it sits in |
 

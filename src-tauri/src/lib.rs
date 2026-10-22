@@ -1,9 +1,12 @@
+mod bridge;
 mod state;
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::menu::{Menu, MenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
 
 use idm_core::downloader::{Download, DownloadInfo, Reporter, Status, DEFAULT_CONNECTIONS};
 use idm_core::limits::Limits;
@@ -12,6 +15,9 @@ use state::AppState;
 
 /// Event carrying the state of one download to the UI.
 const UPDATE_EVENT: &str = "download://update";
+
+/// Event carrying a command from the tray to the UI.
+const TRAY_EVENT: &str = "tray://command";
 
 /// The reporter the desktop app hands to the engine: it pushes the state of
 /// a download into the user interface.
@@ -157,11 +163,27 @@ fn site_connections(state: State<'_, AppState>, host: String) -> Option<u32> {
     state.limits().sites.get(&host)
 }
 
+/// Leave the application for good, the way the Exit item of the menu does.
+///
+/// Closing the window only hides it into the tray, so the menu needs a way
+/// out.
+#[tauri::command]
+fn quit_app(app: AppHandle) {
+    app.exit(0);
+}
+
 /// How many connections the whole application may have open at once.
 #[tauri::command]
 fn set_max_connections(state: State<'_, AppState>, max: u32) -> u32 {
     state.limits().budget.resize(max);
     max
+}
+
+/// Whether closing the window hides it into the tray.
+#[tauri::command]
+fn set_minimize_to_tray(state: State<'_, AppState>, on: bool) -> bool {
+    state.set_minimize_to_tray(on);
+    on
 }
 
 /// A sensible starting point for the destination path.
@@ -227,6 +249,70 @@ fn open_in_os(target: &std::path::Path) -> Result<(), String> {
         .map_err(|error| format!("the system could not open it: {error}"))
 }
 
+/// The tray icon: the window comes back from it, the queue is started and
+/// stopped from it, and it is the way out of the application.
+fn build_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
+    let show = MenuItem::with_id(
+        app,
+        "show",
+        "Show Internet Download Manager",
+        true,
+        None::<&str>,
+    )?;
+    let start = MenuItem::with_id(app, "start-queue", "Start queue", true, None::<&str>)?;
+    let stop = MenuItem::with_id(app, "stop-queue", "Stop queue", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Exit", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show, &start, &stop, &quit])?;
+
+    let mut builder = TrayIconBuilder::with_id("main-tray")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .tooltip("Internet Download Manager 6.43");
+
+    if let Some(icon) = app.default_window_icon() {
+        builder = builder.icon(icon.clone());
+    }
+
+    builder
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "show" => show_window(app),
+            "start-queue" => {
+                let _ = app.emit(TRAY_EVENT, "start-queue");
+            }
+            "stop-queue" => {
+                let _ = app.emit(TRAY_EVENT, "stop-queue");
+            }
+            "quit" => {
+                let state = app.state::<AppState>();
+                state.save_manifests();
+                state.save_index();
+                app.exit(0);
+            }
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                show_window(tray.app_handle());
+            }
+        })
+        .build(app)?;
+    Ok(())
+}
+
+/// Bring the window back from the tray.
+fn show_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -243,7 +329,21 @@ pub fn run() {
             idm_core::log::open(dir.join("idm-clone.log"));
             state.set_index(Index::new(dir.join("downloads.json")));
             state.restore_downloads();
+            build_tray(app.handle())?;
+            // The browser extension talks to the application through this.
+            bridge::start(app.handle().clone());
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            // Closing the window hides it into the tray, the way IDM does.
+            // The tray menu is the way out.
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                let state = window.app_handle().state::<AppState>();
+                if state.minimize_to_tray() {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             start_download,
@@ -258,6 +358,8 @@ pub fn run() {
             set_site_connections,
             site_connections,
             set_max_connections,
+            set_minimize_to_tray,
+            quit_app,
             default_destination,
             open_path,
         ])

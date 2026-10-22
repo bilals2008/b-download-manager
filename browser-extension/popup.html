@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Internet Download Manager</title>
+    <style>
+      body {
+        width: 15rem;
+        margin: 0;
+        padding: 0.75rem;
+        font: 12px system-ui, sans-serif;
+        color: #12170d;
+        background: #f8faf5;
+      }
+      h1 {
+        margin: 0 0 0.5rem;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      label {
+        display: flex;
+        gap: 0.5rem;
+        align-items: flex-start;
+        line-height: 1.4;
+      }
+      p {
+        margin: 0.5rem 0 0;
+        color: #4c5a45;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Internet Download Manager</h1>
+    <label>
+      <input type="checkbox" id="takeover" />
+      <span>Take over the downloads the browser starts</span>
+    </label>
+    <p id="state">The application has to be running.</p>
+    <script src="popup.js"></script>
+  </body>
+</html>

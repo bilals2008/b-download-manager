@@ -1,28 +1,24 @@
 import {
-  ArrowDownToLine,
-  Cable,
-  FileType,
-  FolderDown,
-  KeyRound,
-  Phone,
-  Shield,
-  SlidersHorizontal,
-  Volume2,
-  type LucideIcon,
-} from "lucide-react";
+  SettingsGlyph,
+  type SettingsGlyphKind,
+} from "@/components/icons/ui-icons";
 
 /** The pages of the options window, in the order IDM lists them. */
 export const SETTINGS_PAGES = [
-  { id: "general", label: "General", icon: SlidersHorizontal },
-  { id: "file-types", label: "File types", icon: FileType },
-  { id: "save-to", label: "Save to", icon: FolderDown },
-  { id: "downloads", label: "Downloads", icon: ArrowDownToLine },
-  { id: "connection", label: "Connection", icon: Cable },
-  { id: "proxy", label: "Proxy / Socks", icon: Shield },
-  { id: "sites", label: "Sites Logins", icon: KeyRound },
-  { id: "dial-up", label: "Dial Up / VPN", icon: Phone },
-  { id: "sounds", label: "Sounds", icon: Volume2 },
-] as const satisfies readonly { id: string; label: string; icon: LucideIcon }[];
+  { id: "general", label: "General", glyph: "general" },
+  { id: "file-types", label: "File types", glyph: "file-types" },
+  { id: "save-to", label: "Save to", glyph: "save-to" },
+  { id: "downloads", label: "Downloads", glyph: "downloads" },
+  { id: "connection", label: "Connection", glyph: "connection" },
+  { id: "proxy", label: "Proxy / Socks", glyph: "proxy" },
+  { id: "sites", label: "Sites Logins", glyph: "sites" },
+  { id: "dial-up", label: "Dial Up / VPN", glyph: "dial-up" },
+  { id: "sounds", label: "Sounds", glyph: "sounds" },
+] as const satisfies readonly {
+  id: string;
+  label: string;
+  glyph: SettingsGlyphKind;
+}[];
 
 export type SettingsPageId = (typeof SETTINGS_PAGES)[number]["id"];
 
@@ -54,7 +50,7 @@ export function SettingsNav({ page, onSelect }: SettingsNavProps) {
       <p className="px-2 pt-1 pb-2 text-chrome-micro font-medium tracking-wider text-chrome-muted uppercase">
         Configuration
       </p>
-      {SETTINGS_PAGES.map(({ id, label, icon: Icon }) => {
+      {SETTINGS_PAGES.map(({ id, label, glyph }) => {
         const built = BUILT_PAGES.includes(id);
         const active = id === page;
         return (
@@ -74,10 +70,10 @@ export function SettingsNav({ page, onSelect }: SettingsNavProps) {
                   : "cursor-default text-chrome-muted/60")
             }
           >
-            <Icon
-              aria-hidden="true"
+            <SettingsGlyph
+              kind={glyph}
               className={
-                "size-3.5 shrink-0 " + (active ? "text-chrome-focus" : "")
+                "size-4 shrink-0 " + (active ? "text-chrome-focus" : "")
               }
             />
             <span className="truncate">{label}</span>

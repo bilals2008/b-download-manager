@@ -1,7 +1,7 @@
 //! Shared application state: the set of downloads known to the app.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use idm_core::downloader::{Download, DownloadInfo};
@@ -13,6 +13,8 @@ pub struct AppState {
     downloads: Mutex<HashMap<u64, Arc<Download>>>,
     limits: Limits,
     index: Mutex<Option<Index>>,
+    /// Whether closing the window hides it into the tray.
+    minimize_to_tray: AtomicBool,
 }
 
 impl Default for AppState {
@@ -22,6 +24,7 @@ impl Default for AppState {
             downloads: Mutex::new(HashMap::new()),
             limits: Limits::default(),
             index: Mutex::new(None),
+            minimize_to_tray: AtomicBool::new(true),
         }
     }
 }
@@ -72,6 +75,16 @@ impl AppState {
     /// The limits that apply to every download.
     pub fn limits(&self) -> &Limits {
         &self.limits
+    }
+
+    /// Whether closing the window hides it into the tray.
+    pub fn minimize_to_tray(&self) -> bool {
+        self.minimize_to_tray.load(Ordering::SeqCst)
+    }
+
+    /// Choose whether closing the window hides it into the tray.
+    pub fn set_minimize_to_tray(&self, on: bool) {
+        self.minimize_to_tray.store(on, Ordering::SeqCst);
     }
 
     /// Point the state at the file the index of known downloads lives in.
