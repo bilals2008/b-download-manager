@@ -1,7 +1,7 @@
 # The browser extension
 
 This is the piece that makes a click in the browser start a download in
-`my-idm-clone`, the way the IDM extension does.
+`B Download Manager`, the way the IDM extension does.
 
 IDM hands a link to the application the other way round: the browser asks
 the application to take a download over. The clone does the same thing with

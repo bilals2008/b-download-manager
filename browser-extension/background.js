@@ -44,7 +44,7 @@ function fileNameOf(url) {
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: "idm-download",
-    title: "Download with Internet Download Manager",
+    title: "Download with B Download Manager",
     contexts: ["link"],
   });
 });

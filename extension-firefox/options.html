@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="color-scheme" content="light dark" />
+    <title>B Download Manager settings</title>
+    <link rel="stylesheet" href="theme.css" />
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main>
+      <header class="head">
+        <img class="mark" src="icons/icon-48.png" alt="" width="22" height="22" />
+        <div>
+          <h1>B Download Manager</h1>
+          <p class="sub">Browser bridge settings</p>
+        </div>
+      </header>
+
+      <form id="form" novalidate>
+        <fieldset>
+          <legend>Browser takeover</legend>
+          <label class="check" for="takeover">
+            <input type="checkbox" id="takeover" />
+            <span>Take over the downloads the browser starts</span>
+          </label>
+          <label class="check" for="panel">
+            <input type="checkbox" id="panel" />
+            <span>Show the download button on pages with media</span>
+          </label>
+          <p class="hint">
+            The link is handed to the application before the browser copy is
+            stopped, so a closed application never loses a file.
+          </p>
+        </fieldset>
+
+        <fieldset>
+          <legend>File types</legend>
+          <p class="hint" id="types-hint">
+            Leave it empty to take over every type. Paste a list separated by
+            spaces or commas. Drag a row to reorder, or focus its handle and
+            press Up and Down.
+          </p>
+          <div class="list-editor" id="types-editor">
+            <ul class="list" aria-label="File types" aria-describedby="types-hint"></ul>
+            <p class="empty">Every type is taken over.</p>
+            <div class="add-row">
+              <input
+                class="add-input"
+                type="text"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="mp4"
+                aria-label="Add a file type"
+              />
+              <button class="add-button secondary" type="button">Add</button>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Sites left alone</legend>
+          <p class="hint" id="sites-hint">
+            A subdomain follows its domain, and a full address is reduced to its
+            host. Drag a row to reorder, or focus its handle and press Up and
+            Down.
+          </p>
+          <div class="list-editor" id="sites-editor">
+            <ul class="list" aria-label="Sites left alone" aria-describedby="sites-hint"></ul>
+            <p class="empty">Every site is taken over.</p>
+            <div class="add-row">
+              <input
+                class="add-input"
+                type="text"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="example.org"
+                aria-label="Add a site"
+              />
+              <button class="add-button secondary" type="button">Add</button>
+            </div>
+          </div>
+        </fieldset>
+
+        <div class="actions">
+          <button type="submit" class="primary">Save</button>
+          <p class="saved" id="saved" role="status" aria-live="polite"></p>
+          <button type="button" class="secondary reset" id="reset">Reset</button>
+        </div>
+      </form>
+    </main>
+
+    <script src="settings.js"></script>
+    <script src="list-editor.js"></script>
+    <script src="options.js"></script>
+  </body>
+</html>

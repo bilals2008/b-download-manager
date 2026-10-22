@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "B Download Manager Bridge",
+  "version": "0.3.0",
+  "description": "Hands links and downloads to B Download Manager.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "idm-bridge@my-idm-clone.local",
+      "strict_min_version": "128.0"
+    }
+  },
+  "permissions": ["activeTab", "contextMenus", "downloads", "scripting", "storage"],
+  "host_permissions": ["http://127.0.0.1:27500/*"],
+  "background": {
+    "scripts": ["settings.js", "bridge.js", "background.js"]
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["settings.js", "panel.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "action": {
+    "default_title": "B Download Manager",
+    "default_popup": "popup.html",
+    "default_icon": "icons/icon-48.png"
+  },
+  "icons": {
+    "48": "icons/icon-48.png",
+    "96": "icons/icon-96.png",
+    "128": "icons/icon-128.png"
+  }
+}

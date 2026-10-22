@@ -1,15 +1,23 @@
 {
   "manifest_version": 3,
-  "name": "Internet Download Manager Integration",
+  "name": "B Download Manager Integration",
   "version": "0.1.0",
-  "description": "Hands links and downloads to my-idm-clone, the way the IDM extension does.",
+  "description": "Hands links and downloads to B Download Manager, the way the IDM extension does.",
   "permissions": ["contextMenus", "downloads", "storage"],
   "host_permissions": ["http://127.0.0.1:27500/*"],
   "background": {
     "service_worker": "background.js"
   },
   "action": {
-    "default_title": "Internet Download Manager",
-    "default_popup": "popup.html"
+    "default_title": "B Download Manager",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "icons": {
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
   }
 }

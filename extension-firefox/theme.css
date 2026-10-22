@@ -1,0 +1,61 @@
+/*
+  The palette of the application (src/index.css), shared by the popup and the
+  settings page so the extension and the window read as one product. Dark is
+  the base; light follows the operating system because an extension cannot
+  read the app's own theme setting.
+*/
+
+:root {
+  color-scheme: light dark;
+
+  --canvas: #03080a;
+  --text: #d7e3df;
+  --text-muted: #869a93;
+  --line: #13312a;
+  --hover: #081512;
+  --accent: #c8ff00;
+  --focus: #b4e34f;
+  --ok: #2fd06b;
+  --warn: #e3b341;
+  --off: #ff9d90;
+  --danger: #ff9d90;
+  --on-accent: #022c1e;
+
+  --radius: 6px;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+
+  --font-ui: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --text-micro: 0.6875rem;
+  --text-body: 0.8125rem;
+  --text-title: 1rem;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --canvas: #ffffff;
+    --text: #17181b;
+    --text-muted: #565b64;
+    --line: #d8dade;
+    --hover: #f0f1f4;
+    --accent: #022c1e;
+    --focus: #4d7a12;
+    --ok: #1a7f37;
+    --warn: #8a6100;
+    --off: #b3261e;
+    --danger: #b3261e;
+    --on-accent: #c8ff00;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
