@@ -1,7 +1,7 @@
 import { useRef, useState, type KeyboardEvent } from "react";
 
 import { CategoryFolderIcon, ViewIcon } from "@/components/icons/desktop-icons";
-import { ChevronRight, PanelGlyph } from "@/components/icons/ui-icons";
+import { DisclosureGlyph, PanelGlyph } from "@/components/icons/ui-icons";
 import { CategoryContextMenu } from "@/components/workspace/category-context-menu";
 import {
   CATEGORIES,
@@ -247,11 +247,11 @@ export function CategoriesPane() {
           )}
         >
           {collapsed ? null : (
-            <span className="grid size-3 shrink-0 place-items-center text-chrome-muted">
+            <span className="grid size-4 shrink-0 place-items-center text-chrome-muted">
               {row.kind === "category" && row.hasFolders ? (
-                <ChevronRight
+                <DisclosureGlyph
                   className={cn(
-                    "size-3 transition-transform duration-100",
+                    "size-3.5 transition-transform duration-150 ease-out motion-reduce:transition-none",
                     row.expanded && "rotate-90",
                   )}
                 />
@@ -359,7 +359,7 @@ function SectionLabel({
   return (
     <p
       className={cn(
-        "flex items-center gap-2 px-2 pb-1.5 text-chrome-caption font-medium tracking-wider text-chrome-muted uppercase",
+        "flex items-center gap-2 px-2 pb-1.5 text-chrome-caption font-medium text-chrome-muted",
         className,
       )}
     >

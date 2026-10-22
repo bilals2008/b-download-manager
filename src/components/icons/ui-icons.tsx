@@ -56,6 +56,18 @@ export function ChevronRight({ className }: GlyphProps) {
   );
 }
 
+/**
+ * The tree disclosure chevron: wider, rounder and a step heavier than the menu
+ * arrows, so opening a category reads as a control and not as decoration.
+ */
+export function DisclosureGlyph({ className }: GlyphProps) {
+  return (
+    <Glyph className={className} width={2}>
+      <path d="m6.1 4.1 3.9 3.9-3.9 3.9" />
+    </Glyph>
+  );
+}
+
 export function ChevronsUpDown({ className }: GlyphProps) {
   return (
     <Glyph className={className} width={1.3}>
@@ -113,12 +125,11 @@ export function PanelGlyph({
   className,
 }: GlyphProps & { collapsed: boolean }) {
   return (
-    <Glyph className={className} width={1.4}>
-      <rect x="2.2" y="3.4" width="11.6" height="9.2" rx="2.2" />
-      <path d="M6.5 3.6v8.8" />
-      <path d="M11.4 8H8.8" />
+    <Glyph className={className} width={1.6}>
+      <rect x="2.3" y="3.4" width="11.4" height="9.2" rx="2.4" />
+      <path d="M6.2 3.7v8.6" />
       <path
-        d={collapsed ? "m10 6.4 1.5 1.6-1.5 1.6" : "M10.2 6.4 8.6 8l1.6 1.6"}
+        d={collapsed ? "m8.9 6.5 1.5 1.5-1.5 1.5" : "M10.4 6.5 8.9 8l1.5 1.5"}
       />
     </Glyph>
   );
