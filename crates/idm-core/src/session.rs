@@ -29,6 +29,10 @@ pub struct KnownDownload {
     /// do not have it.
     #[serde(default)]
     pub referer: Option<String>,
+    /// The bandwidth cap the download had, in bytes per second. Older index
+    /// files have no cap.
+    #[serde(default)]
+    pub speed_limit: u64,
 }
 
 /// What is left on disk for a remembered download.
@@ -129,6 +133,7 @@ mod tests {
             status: Status::Paused,
             error: None,
             referer: None,
+            speed_limit: 0,
         }
     }
 

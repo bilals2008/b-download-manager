@@ -24,7 +24,11 @@ pub fn open(path: PathBuf) {
 pub fn write(level: &str, message: &str) {
     let Some(path) = LOG.get() else { return };
 
-    let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(path) else {
+    let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    else {
         return;
     };
     let _ = writeln!(file, "{}", line(level, message));
@@ -56,7 +60,10 @@ mod tests {
     #[test]
     fn a_line_carries_the_time_and_the_level() {
         let text = line("warn", "the disk is full");
-        assert!(text.ends_with("[warn] the disk is full"), "line was: {text}");
+        assert!(
+            text.ends_with("[warn] the disk is full"),
+            "line was: {text}"
+        );
     }
 
     #[test]

@@ -29,13 +29,13 @@ use std::time::{Duration, Instant};
 
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
-use tokio::sync::watch;
+use tokio::sync::{watch, Mutex as AsyncMutex};
 
 use crate::disk;
 use crate::http;
 use crate::limits::{Limits, SpeedLimiter};
 use crate::log;
-use crate::segmenter::{self, Segment, MIN_SPLIT, UNKNOWN_END};
+use crate::segmenter::{self, Segment, SegmentStatus, MIN_SPLIT, UNKNOWN_END};
 use crate::transfer::{Probe, Source, TransferError};
 use crate::verify;
 
@@ -61,6 +61,18 @@ const MAX_ATTEMPTS: u32 = 8;
 /// Minimum interval between two progress events pushed to the UI.
 const EMIT_INTERVAL: Duration = Duration::from_millis(120);
 
+/// How often the resume state is written to disk while bytes are arriving.
+///
+/// The manifest changes on every chunk, but writing it that often would wear
+/// the disk for no gain: a crash loses at most this much progress, and the
+/// bytes that are already on disk are truncated back to the recorded length
+/// when the download resumes.
+const MANIFEST_INTERVAL: Duration = Duration::from_secs(2);
+
+/// How often a waiting task looks up from a backoff to see whether the user
+/// stopped or paused the download.
+const STOP_CHECK_INTERVAL: Duration = Duration::from_millis(200);
+
 /// How often the engine looks at the free space of the destination volume.
 const SPACE_CHECK_INTERVAL: Duration = Duration::from_secs(2);
 
@@ -79,6 +91,19 @@ pub enum Status {
     Cancelled,
 }
 
+/// One connection of a download, as the progress window lists it.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SegmentInfo {
+    pub id: u32,
+    pub start: u64,
+    /// The length of the range. `None` when the server did not tell the size
+    /// of the file, so the range ends with the response.
+    pub size: Option<u64>,
+    pub downloaded: u64,
+    pub status: SegmentStatus,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DownloadInfo {
@@ -87,12 +112,21 @@ pub struct DownloadInfo {
     pub dest: String,
     pub total: u64,
     pub downloaded: u64,
+    /// The number of ranges the download was split into.
     pub connections: u32,
     pub status: Status,
     pub error: Option<String>,
     /// The page the link was on, when the browser knew it. A redownload uses
     /// it again.
     pub referer: Option<String>,
+    /// The connections of the download, with what each one has and is doing.
+    pub segments: Vec<SegmentInfo>,
+    /// Whether the download can be resumed after a stop. `None` until the
+    /// server has answered the probe.
+    pub resumable: Option<bool>,
+    /// The bandwidth cap of this download, in bytes per second. Zero means
+    /// no cap.
+    pub speed_limit: u64,
 }
 
 /// Pause state shared by every task of one download.
@@ -104,7 +138,10 @@ pub struct Control {
 impl Control {
     fn new() -> Self {
         let (paused_tx, paused_rx) = watch::channel(false);
-        Self { paused_tx, paused_rx }
+        Self {
+            paused_tx,
+            paused_rx,
+        }
     }
 
     pub fn pause(&self) {
@@ -194,6 +231,13 @@ pub struct Download {
     pub referer: Option<String>,
     /// The bandwidth cap for this download.
     limiter: Arc<SpeedLimiter>,
+    /// Whether the file can be resumed from the parts on disk, once the probe
+    /// has answered.
+    resumable: Mutex<Option<bool>>,
+    /// Held for the length of a run, so two tasks never drive the same
+    /// download at once. A resume that arrives while a cancelled task is still
+    /// winding down waits here instead of writing over its range plan.
+    driver: AsyncMutex<()>,
     /// The head of the file, kept once it is known. The head of every other
     /// range is compared with it, the way IDM compares the start of a chunk
     /// with the start of the file.
@@ -212,6 +256,12 @@ pub struct Download {
     cancelled_epoch: AtomicU64,
     /// The newest epoch that was stopped because something went wrong.
     stopped_epoch: AtomicU64,
+    /// The number of runs the application has asked for. A request is claimed
+    /// before the task is spawned, so a stop that arrives while the task waits
+    /// for the previous run to finish still covers it.
+    run_requests: AtomicU64,
+    /// The newest run request that a cancel covered.
+    cancelled_request: AtomicU64,
     /// Whether a task is running this download right now.
     running: AtomicBool,
     last_emit: Mutex<Instant>,
@@ -266,12 +316,16 @@ impl Download {
             source,
             referer,
             limiter: Arc::new(SpeedLimiter::unlimited()),
+            resumable: Mutex::new(None),
+            driver: AsyncMutex::new(()),
             head: Mutex::new(Vec::new()),
             degraded: AtomicBool::new(false),
             max_attempts: AtomicU32::new(MAX_ATTEMPTS),
             epoch: AtomicU64::new(0),
             cancelled_epoch: AtomicU64::new(0),
             stopped_epoch: AtomicU64::new(0),
+            run_requests: AtomicU64::new(0),
+            cancelled_request: AtomicU64::new(0),
             running: AtomicBool::new(false),
             last_emit: Mutex::new(last_emit),
         }))
@@ -279,15 +333,26 @@ impl Download {
 
     pub fn info(&self) -> DownloadInfo {
         let total = self.total.load(Ordering::SeqCst);
-        let (mut downloaded, connections) = {
+        let (mut downloaded, connections, segments) = {
             let segments = self.segments.lock().expect("segments lock poisoned");
             (
                 segments.iter().map(|s| s.downloaded).sum::<u64>(),
                 segments.len() as u32,
+                segments
+                    .iter()
+                    .map(|s| SegmentInfo {
+                        id: s.id,
+                        start: s.start,
+                        size: if s.is_unknown() { None } else { Some(s.len()) },
+                        downloaded: s.downloaded,
+                        status: s.status,
+                    })
+                    .collect::<Vec<_>>(),
             )
         };
         let status = *self.status.lock().expect("status lock poisoned");
         let error = self.error.lock().expect("error lock poisoned").clone();
+        let resumable = *self.resumable.lock().expect("resumable lock poisoned");
 
         // A finished file is finished. Its ranges were joined and its part
         // files and manifest removed, so the segment list of a download
@@ -307,16 +372,55 @@ impl Download {
             status,
             error,
             referer: self.referer.clone(),
+            segments,
+            resumable,
+            speed_limit: self.limiter.rate(),
         }
+    }
+
+    /// The bandwidth cap of this download, in bytes per second. Zero means no
+    /// cap.
+    pub fn speed_limit(&self) -> u64 {
+        self.limiter.rate()
+    }
+
+    /// Record whether the file can be resumed, once the probe has answered.
+    pub fn set_resumable(&self, resumable: bool) {
+        *self.resumable.lock().expect("resumable lock poisoned") = Some(resumable);
+    }
+
+    /// The epoch of the newest task of this download.
+    pub fn current_epoch(&self) -> u64 {
+        self.epoch.load(Ordering::SeqCst)
+    }
+
+    /// The state the engine reports for this download.
+    pub fn status(&self) -> Status {
+        *self.status.lock().expect("status lock poisoned")
     }
 
     pub fn set_status(&self, status: Status) {
         *self.status.lock().expect("status lock poisoned") = status;
     }
 
+    /// Forget the message of the last failure, before a new attempt starts.
+    pub fn clear_error(&self) {
+        *self.error.lock().expect("error lock poisoned") = None;
+    }
+
     /// Cap the bandwidth of this download. Zero means no cap.
     pub fn set_speed_limit(&self, bytes_per_second: u64) {
         self.limiter.set_rate(bytes_per_second);
+    }
+
+    /// Hold every connection of this download back.
+    ///
+    /// The connections are marked here as well as told to wait, so the table
+    /// of the progress window says `Paused` at once instead of waiting for
+    /// every stream to notice.
+    pub fn pause(&self) {
+        self.control.pause();
+        self.mark_segments(SegmentStatus::Paused, true);
     }
 
     /// Start a new task for this download and return its epoch.
@@ -327,10 +431,34 @@ impl Download {
         self.epoch.fetch_add(1, Ordering::SeqCst) + 1
     }
 
+    /// Ask for a new run of this download.
+    ///
+    /// The request is claimed here rather than inside the task, because a
+    /// cancel can arrive while the task is still waiting for the previous run
+    /// to let go of the driver. A request that a cancel has covered must not
+    /// start afterwards.
+    pub fn request_run(&self) -> u64 {
+        self.run_requests.fetch_add(1, Ordering::SeqCst) + 1
+    }
+
+    /// Whether a run request was stopped or replaced before it started.
+    pub fn is_superseded(&self, request: u64) -> bool {
+        request <= self.cancelled_request.load(Ordering::SeqCst)
+            || request < self.run_requests.load(Ordering::SeqCst)
+    }
+
     /// Stop the task that runs this download.
     pub fn cancel(&self) {
         let current = self.epoch.load(Ordering::SeqCst);
         self.cancelled_epoch.fetch_max(current, Ordering::SeqCst);
+        // Every run request made so far is covered by this cancel, including
+        // one whose task has not reached the driver yet.
+        let request = self.run_requests.load(Ordering::SeqCst);
+        self.cancelled_request.fetch_max(request, Ordering::SeqCst);
+        // A paused range waits on the pause channel, not on the network, so a
+        // cancel has to release it or the task would wait forever. The recheck
+        // of the epoch in every loop is what stops it once it wakes.
+        self.control.resume();
     }
 
     /// Stop the tasks of this download without calling it cancelled.
@@ -340,6 +468,7 @@ impl Download {
     pub fn stop(&self) {
         let current = self.epoch.load(Ordering::SeqCst);
         self.stopped_epoch.fetch_max(current, Ordering::SeqCst);
+        self.control.resume();
     }
 
     /// Whether the task with this epoch was stopped.
@@ -382,6 +511,13 @@ impl Download {
             download.total.store(known.total, Ordering::SeqCst);
         }
 
+        // The manifest on disk is the proof that the file can be resumed.
+        if download.manifest.exists() {
+            download.set_resumable(true);
+        }
+        download.set_speed_limit(known.speed_limit);
+        download.reset_segment_statuses();
+
         download.set_status(match known.status {
             Status::Completed => Status::Completed,
             Status::Failed => Status::Failed,
@@ -410,6 +546,7 @@ impl Download {
             status: info.status,
             error: info.error,
             referer: self.referer.clone(),
+            speed_limit: self.speed_limit(),
         }
     }
 
@@ -432,9 +569,49 @@ impl Download {
     }
 
     fn set_seg_downloaded(&self, id: u32, value: u64) {
+        self.record_progress(id, value, SegmentStatus::Receiving);
+    }
+
+    /// Record how far a connection has got and what it is doing, in one lock.
+    fn record_progress(&self, id: u32, downloaded: u64, status: SegmentStatus) {
         let mut segments = self.segments.lock().expect("segments lock poisoned");
         if let Some(segment) = segments.iter_mut().find(|s| s.id == id) {
-            segment.downloaded = value.min(segment.len());
+            segment.downloaded = downloaded.min(segment.len());
+            segment.status = status;
+        }
+    }
+
+    /// Set the state of one connection.
+    fn set_seg_status(&self, id: u32, status: SegmentStatus) {
+        let mut segments = self.segments.lock().expect("segments lock poisoned");
+        if let Some(segment) = segments.iter_mut().find(|s| s.id == id) {
+            segment.status = status;
+        }
+    }
+
+    /// Mark every connection of the plan. Ranges that are already complete
+    /// keep their state.
+    fn mark_segments(&self, status: SegmentStatus, only_unfinished: bool) {
+        let mut segments = self.segments.lock().expect("segments lock poisoned");
+        for segment in segments.iter_mut() {
+            if only_unfinished && segment.done() {
+                segment.status = SegmentStatus::Done;
+            } else {
+                segment.status = status;
+            }
+        }
+    }
+
+    /// A download that is read back from disk has no connections open, so its
+    /// ranges are waiting. The bytes they hold are still there.
+    fn reset_segment_statuses(&self) {
+        let mut segments = self.segments.lock().expect("segments lock poisoned");
+        for segment in segments.iter_mut() {
+            segment.status = if segment.done() {
+                SegmentStatus::Done
+            } else {
+                SegmentStatus::Pending
+            };
         }
     }
 
@@ -445,6 +622,7 @@ impl Download {
         if let Some(segment) = segments.iter_mut().find(|s| s.id == id) {
             if segment.end == UNKNOWN_END {
                 segment.end = segment.start + segment.downloaded;
+                segment.status = SegmentStatus::Done;
             }
         }
     }
@@ -485,6 +663,26 @@ fn emit_throttled(reporter: &Arc<dyn Reporter>, download: &Arc<Download>, force:
     emit(reporter, download);
 }
 
+/// Wait between attempts, but let a pause or a stop be seen before the wait
+/// is over.
+///
+/// A backoff can be half a minute long. Sleeping through it would leave a
+/// cancelled download holding the driver for the rest of it, and a resume
+/// would sit behind a task the user had already stopped.
+async fn wait_while_active(download: &Arc<Download>, epoch: u64, wait: Duration) -> bool {
+    let deadline = Instant::now() + wait;
+    loop {
+        if download.is_cancelled(epoch) {
+            return false;
+        }
+        let left = deadline.saturating_duration_since(Instant::now());
+        if left.is_zero() {
+            return true;
+        }
+        tokio::time::sleep(left.min(STOP_CHECK_INTERVAL)).await;
+    }
+}
+
 /// Rebuild the segment list, resuming from the manifest when possible.
 fn restore(download: &Arc<Download>, total: Option<u64>, max_connections: u32) -> Vec<Segment> {
     if let Some(total) = total {
@@ -498,6 +696,12 @@ fn restore(download: &Arc<Download>, total: Option<u64>, max_connections: u32) -
                     if let Ok(file) = OpenOptions::new().write(true).open(&segment.part) {
                         let _ = file.set_len(segment.downloaded);
                     }
+                    // The connections of a manifest are not running now.
+                    segment.status = if segment.done() {
+                        SegmentStatus::Done
+                    } else {
+                        SegmentStatus::Pending
+                    };
                 }
                 let next_id = segments.iter().map(|s| s.id).max().unwrap_or(0) + 1;
                 download.next_segment_id.store(next_id, Ordering::SeqCst);
@@ -598,6 +802,7 @@ fn maybe_grow(
     let mut slowest: Option<usize> = None;
     let mut slowest_ratio = f64::MAX;
     let mut fastest_ratio = 0.0f64;
+    let mut unfinished = 0usize;
 
     for (index, segment) in segments.iter().enumerate() {
         if segment.done() {
@@ -607,6 +812,7 @@ fn maybe_grow(
         if len == 0 || len == UNKNOWN_END {
             continue;
         }
+        unfinished += 1;
         let ratio = segment.downloaded as f64 / len as f64;
         if ratio > fastest_ratio {
             fastest_ratio = ratio;
@@ -623,9 +829,11 @@ fn maybe_grow(
     if left < MIN_SPLIT {
         return;
     }
-    // A connection is only worth adding when the slowest one really lags
-    // behind the others.
-    if slowest_ratio > fastest_ratio * 0.8 {
+    // A single unfinished range has nothing to lag behind: the next
+    // alternative connection is what gives the file another one. With more
+    // than one, a new connection is only worth it when the slowest really
+    // lags the fastest, or every range would be split in half for no gain.
+    if unfinished > 1 && slowest_ratio > fastest_ratio * 0.8 {
         return;
     }
 
@@ -664,9 +872,13 @@ async fn fetch_range(
 ) -> Result<(), TransferError> {
     // One connection slot of the whole application. The slot is held for the
     // length of the request and given back when the response is done.
-    let _permit = limits.budget.acquire().await.ok_or_else(|| {
-        TransferError::msg("the connection budget is closed")
-    })?;
+    let _permit = limits
+        .budget
+        .acquire()
+        .await
+        .ok_or_else(|| TransferError::msg("the connection budget is closed"))?;
+
+    download.set_seg_status(seg_id, SegmentStatus::Connecting);
 
     // The whole file in one range, or a file whose size is unknown: the
     // server may answer with the whole file instead of the range.
@@ -674,10 +886,11 @@ async fn fetch_range(
     let covers_all = to.is_none() || (total > 0 && download.seg_end(seg_id) == Some(total));
 
     let mut stream = download.source.open(from, to, covers_all).await?;
+    download.set_seg_status(seg_id, SegmentStatus::Receiving);
 
-    let part = download.seg_part(seg_id).ok_or_else(|| {
-        TransferError::msg("segment disappeared")
-    })?;
+    let part = download
+        .seg_part(seg_id)
+        .ok_or_else(|| TransferError::msg("segment disappeared"))?;
     let mut file = OpenOptions::new()
         .create(true)
         // The part file holds the bytes of one range, from the first byte of
@@ -693,6 +906,10 @@ async fn fetch_range(
         .map_err(|e| TransferError::msg(e.to_string()))?;
 
     let mut written = 0u64;
+    // Set when the response was dropped because the user paused or stopped
+    // the download. Such a response is not the end of a file whose size the
+    // server never told, so the range must not be closed as if it were.
+    let mut interrupted = false;
 
     while let Some(item) = stream.next().await {
         // A pause or a cancel reaches a range that is streaming: the response
@@ -700,6 +917,10 @@ async fn fetch_range(
         // resume or ends. A resume asks for the range again from the byte the
         // part file ended on.
         if download.control.is_paused() || download.is_cancelled(epoch) {
+            interrupted = true;
+            if download.control.is_paused() {
+                download.set_seg_status(seg_id, SegmentStatus::Paused);
+            }
             break;
         }
 
@@ -710,7 +931,9 @@ async fn fetch_range(
 
         // The segment may have been shortened while this request was running,
         // because a new connection took over the tail of the range.
-        let seg_end = download.seg_end(seg_id).unwrap_or(to.map(|t| t + 1).unwrap_or(UNKNOWN_END));
+        let seg_end = download
+            .seg_end(seg_id)
+            .unwrap_or(to.map(|t| t + 1).unwrap_or(UNKNOWN_END));
         let position = from + written;
         if position >= seg_end {
             break;
@@ -726,7 +949,7 @@ async fn fetch_range(
             .map_err(|e| TransferError::msg(e.to_string()))?;
         written += take as u64;
 
-        download.set_seg_downloaded(seg_id, base + written);
+        download.record_progress(seg_id, base + written, SegmentStatus::Receiving);
 
         // The head of the file is the data of the first range. It is kept
         // while it streams in, so the other ranges can be compared with it
@@ -749,11 +972,23 @@ async fn fetch_range(
         }
     }
 
-    file.flush().map_err(|e| TransferError::msg(e.to_string()))?;
+    file.flush()
+        .map_err(|e| TransferError::msg(e.to_string()))?;
 
     // A segment whose length the server never told us ends with the response.
+    // An interrupted response is not an end: the rest is asked for again after
+    // the resume, from the byte the part file stopped on.
     if download.seg_end(seg_id) == Some(UNKNOWN_END) {
-        download.finish_unknown_segment(seg_id);
+        if !interrupted {
+            download.finish_unknown_segment(seg_id);
+        }
+    } else if download
+        .seg_snapshot(seg_id)
+        .is_some_and(|(start, end, downloaded)| downloaded >= end - start)
+    {
+        // A known range that has every byte is done even if the pause landed
+        // exactly on the last one.
+        download.set_seg_status(seg_id, SegmentStatus::Done);
     }
 
     Ok(())
@@ -811,6 +1046,7 @@ fn downgrade_to_one_connection(download: &Arc<Download>, total: Option<u64>) -> 
         end: total.unwrap_or(UNKNOWN_END),
         downloaded: 0,
         part,
+        status: SegmentStatus::Pending,
     };
     segments.clear();
     segments.push(segment.clone());
@@ -906,6 +1142,7 @@ async fn segment_task(
         };
         let unknown = end == UNKNOWN_END;
         if !unknown && downloaded >= end - start {
+            download.set_seg_status(seg_id, SegmentStatus::Done);
             return Ok(());
         }
 
@@ -931,10 +1168,12 @@ async fn segment_task(
                 // again: a 404 stays a 404.
                 if let Some(status) = error.status {
                     if !http::is_retryable(status) {
+                        download.set_seg_status(seg_id, SegmentStatus::Failed);
                         return Err(format!("segment {seg_id} failed: {}", error.message));
                     }
                 }
                 if attempt >= download.max_attempts.load(Ordering::SeqCst) {
+                    download.set_seg_status(seg_id, SegmentStatus::Failed);
                     return Err(format!(
                         "segment {seg_id} failed after {attempt} attempts: {}",
                         error.message
@@ -942,10 +1181,12 @@ async fn segment_task(
                 }
                 // The server may tell us how long to wait; otherwise the wait
                 // grows with every attempt.
-                let wait = error
-                    .retry_after
-                    .unwrap_or_else(|| http::backoff(attempt));
-                tokio::time::sleep(wait).await;
+                download.set_seg_status(seg_id, SegmentStatus::Retrying);
+                emit_throttled(&reporter, &download, true);
+                let wait = error.retry_after.unwrap_or_else(|| http::backoff(attempt));
+                if !wait_while_active(&download, epoch, wait).await {
+                    return Ok(());
+                }
             }
         }
     }
@@ -1003,10 +1244,7 @@ async fn assemble(download: &Arc<Download>) -> Result<(), String> {
         // The file that is about to replace the destination has to be the
         // size the server promised, or it is not the file that was asked for.
         if total > 0 {
-            let length = out
-                .metadata()
-                .map_err(|e| e.to_string())?
-                .len();
+            let length = out.metadata().map_err(|e| e.to_string())?.len();
             if length != total {
                 return Err(format!(
                     "the assembled file is {length} bytes, the server promised {total}"
@@ -1067,10 +1305,13 @@ fn check_free_space(download: &Arc<Download>, total: Option<u64>) -> Result<(), 
 /// A server that is busy answers `429`; the answer carries a body, and that
 /// body is not the size of the file. The probe therefore fails on such an
 /// answer, and the download waits and asks again.
-async fn probe_with_retries(download: &Arc<Download>) -> Result<Probe, String> {
+async fn probe_with_retries(download: &Arc<Download>, epoch: u64) -> Result<Probe, String> {
     let mut attempt = 0u32;
 
     loop {
+        if download.is_cancelled(epoch) {
+            return Err("cancelled".to_string());
+        }
         match download.source.probe().await {
             Ok(probe) => return Ok(probe),
             Err(error) => {
@@ -1083,10 +1324,10 @@ async fn probe_with_retries(download: &Arc<Download>) -> Result<Probe, String> {
                 if attempt >= download.max_attempts.load(Ordering::SeqCst) {
                     return Err(error.message);
                 }
-                let wait = error
-                    .retry_after
-                    .unwrap_or_else(|| http::backoff(attempt));
-                tokio::time::sleep(wait).await;
+                let wait = error.retry_after.unwrap_or_else(|| http::backoff(attempt));
+                if !wait_while_active(download, epoch, wait).await {
+                    return Err("cancelled".to_string());
+                }
             }
         }
     }
@@ -1098,7 +1339,14 @@ async fn drive(
     download: &Arc<Download>,
     epoch: u64,
 ) -> Result<(), String> {
-    download.set_status(Status::Running);
+    // A pause that arrived between the command that started this run and the
+    // run itself holds the connections back; the status says so from the
+    // first event instead of claiming traffic that is not moving.
+    download.set_status(if download.control.is_paused() {
+        Status::Paused
+    } else {
+        Status::Running
+    });
     emit(reporter, download);
     log::write(
         "info",
@@ -1110,7 +1358,12 @@ async fn drive(
         ),
     );
 
-    let probe = probe_with_retries(download).await?;
+    let probe = probe_with_retries(download, epoch).await?;
+
+    // A file can be resumed when the server honours ranges and knows how big
+    // the file is: the manifest of a download is only used again when the size
+    // the probe reports matches the size it recorded.
+    download.set_resumable(probe.ranges && probe.total.is_some());
 
     // A server that answers a range request with 200 cannot be segmented.
     let host = crate::limits::host_of(&download.url);
@@ -1143,7 +1396,10 @@ async fn drive(
         "info",
         &format!(
             "the file is {} bytes in {} ranges, the server honours ranges: {}",
-            probe.total.map(|total| total.to_string()).unwrap_or_else(|| "of an unknown size".to_string()),
+            probe
+                .total
+                .map(|total| total.to_string())
+                .unwrap_or_else(|| "of an unknown size".to_string()),
             segments.len(),
             probe.ranges
         ),
@@ -1162,6 +1418,7 @@ async fn drive(
 
     let mut failure: Option<String> = None;
     let mut last_space_check = Instant::now();
+    let mut last_manifest_save = Instant::now();
     loop {
         tokio::select! {
             joined = set.join_next() => {
@@ -1205,17 +1462,30 @@ async fn drive(
                 }
             }
             _ = tokio::time::sleep(Duration::from_millis(300)) => {
-                maybe_grow(reporter, limits, download, &mut set, epoch);
-                save_manifest(download);
-                emit_throttled(reporter, download, false);
-
-                if last_space_check.elapsed() >= SPACE_CHECK_INTERVAL {
-                    last_space_check = Instant::now();
-                    if let Err(error) = check_free_space(download, probe.total) {
-                        failure = Some(error);
-                        download.stop();
+                // A paused download writes nothing, so it has no new resume
+                // state to record, no new connection to open, and no new
+                // reason to look at the free space of the disk.
+                if !download.control.is_paused() {
+                    maybe_grow(reporter, limits, download, &mut set, epoch);
+                    // The manifest is the resume state. Writing it on every
+                    // tick would rewrite the same JSON several times a second
+                    // for the length of the download; a couple of seconds of
+                    // lost progress after a crash is the cheaper trade.
+                    if last_manifest_save.elapsed() >= MANIFEST_INTERVAL {
+                        last_manifest_save = Instant::now();
+                        save_manifest(download);
+                    }
+                    if last_space_check.elapsed() >= SPACE_CHECK_INTERVAL {
+                        last_space_check = Instant::now();
+                        if let Err(error) = check_free_space(download, probe.total) {
+                            failure = Some(error);
+                            download.stop();
+                        }
                     }
                 }
+                // The bytes that were in flight when the pause arrived still
+                // land, so the count keeps being reported while paused.
+                emit_throttled(reporter, download, false);
             }
         }
 
@@ -1237,34 +1507,89 @@ async fn drive(
 
 /// Entry point of one download.
 ///
-/// Every call gets a new epoch, so a download that was cancelled and started
-/// again does not fight with the task that was left over.
+/// The whole run is claimed with a request number at this call, so a stop that
+/// arrives after the task was spawned covers it. A caller that needs to cover
+/// the time between spawning the task and its first poll has to claim the
+/// request itself with [`Download::request_run`] and call [`run_claimed`].
 pub async fn run(reporter: Arc<dyn Reporter>, limits: Limits, download: Arc<Download>) {
+    let request = download.request_run();
+    run_claimed(reporter, limits, download, request).await;
+}
+
+/// Run one download whose start was claimed with a request number.
+///
+/// Every run gets a new epoch, so a download that was cancelled and started
+/// again does not fight with the task that was left over. Only one task drives
+/// a download at a time: a resume that arrives while the task of a cancelled
+/// run is still closing its ranges waits here, then continues from the parts
+/// and the manifest the previous task left, instead of writing a second range
+/// plan over the first.
+pub async fn run_claimed(
+    reporter: Arc<dyn Reporter>,
+    limits: Limits,
+    download: Arc<Download>,
+    request: u64,
+) {
+    let _driver = download.driver.lock().await;
+
+    // A request that was stopped or replaced while this task waited for the
+    // driver must not start. The download may have been removed, cancelled, or
+    // resumed by a newer request; either way, this task is stale.
+    if download.is_superseded(request) {
+        return;
+    }
+    // A finished download has nothing to fetch. A second resume that slipped
+    // in before the complete window opened must not download the file again.
+    if download.status() == Status::Completed {
+        return;
+    }
+
     let epoch = download.next_epoch();
     download.running.store(true, Ordering::SeqCst);
+    // A download that is started again is not the download that failed: its
+    // old message goes before the first byte of the new attempt.
+    *download.error.lock().expect("error lock poisoned") = None;
     let outcome = drive(&reporter, &limits, &download, epoch).await;
-    download.running.store(false, Ordering::SeqCst);
+
+    // A newer task that was started while this one ran owns the state now.
+    if download.epoch.load(Ordering::SeqCst) != epoch {
+        return;
+    }
 
     match outcome {
         Ok(()) => {
             log::write("info", &format!("finished {}", download.dest.display()));
+            download.mark_segments(SegmentStatus::Done, false);
+            *download.error.lock().expect("error lock poisoned") = None;
             download.set_status(Status::Completed)
         }
         Err(error) => {
             if download.is_cancelled_by_user(epoch) {
+                // Nothing is in flight on a download that was stopped. The
+                // ranges hold what they got; a resume asks for the rest. They
+                // say so, instead of claiming to be waiting for a connection
+                // that will never come.
+                download.mark_segments(SegmentStatus::Stopped, true);
                 download.set_status(Status::Cancelled);
             } else {
                 log::write("error", &format!("{} failed: {error}", download.url));
+                download.mark_segments(SegmentStatus::Failed, true);
                 *download.error.lock().expect("error lock poisoned") = Some(error);
                 download.set_status(Status::Failed);
             }
         }
     }
 
+    // The part files are gone once the file is assembled, so a finished
+    // download has no resume state to write. Everything else does: the last
+    // bytes a stopped or failed run received are what the next run continues
+    // from.
+    if download.status() != Status::Completed {
+        save_manifest(&download);
+    }
+    download.running.store(false, Ordering::SeqCst);
     emit(&reporter, &download);
 }
 
-
 #[cfg(test)]
 mod tests;
-

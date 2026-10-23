@@ -102,7 +102,10 @@ mod tests {
 
     #[test]
     fn a_bare_name_is_measured_in_the_working_directory() {
-        assert_eq!(directory_of(Path::new("file.bin")), std::path::PathBuf::from("."));
+        assert_eq!(
+            directory_of(Path::new("file.bin")),
+            std::path::PathBuf::from(".")
+        );
     }
 
     #[cfg(windows)]

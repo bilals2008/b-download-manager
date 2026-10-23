@@ -70,11 +70,7 @@ impl Source {
     /// `referer` is the page the link was on, when the browser knew it. It is
     /// a default header of the client, so every range carries it, the way IDM
     /// sends the page a file was linked from.
-    pub fn parse(
-        url: &str,
-        proxy: Option<&str>,
-        referer: Option<&str>,
-    ) -> Result<Self, String> {
+    pub fn parse(url: &str, proxy: Option<&str>, referer: Option<&str>) -> Result<Self, String> {
         if let Some(rest) = url.strip_prefix("ftp://") {
             return Self::parse_ftp(rest);
         }
@@ -130,7 +126,8 @@ impl Source {
         let (host, port) = match host_port.rsplit_once(':') {
             Some((host, port)) => (
                 host.to_string(),
-                port.parse::<u16>().map_err(|_| "the port must be a number")?,
+                port.parse::<u16>()
+                    .map_err(|_| "the port must be a number")?,
             ),
             None => (host_port.to_string(), 21),
         };
@@ -181,7 +178,9 @@ impl Source {
         covers_all: bool,
     ) -> Result<ByteStream, TransferError> {
         match self {
-            Source::Http { url, client } => http::open_range(client, url, from, to, covers_all).await,
+            Source::Http { url, client } => {
+                http::open_range(client, url, from, to, covers_all).await
+            }
             Source::Ftp {
                 host,
                 port,
@@ -212,14 +211,14 @@ pub fn redacted(url: &str) -> String {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn an_ftp_url_is_read() {
-        let source = Source::parse("ftp://user:secret@example.com/pub/file.bin", None, None).expect("ftp url");
+        let source = Source::parse("ftp://user:secret@example.com/pub/file.bin", None, None)
+            .expect("ftp url");
         match source {
             Source::Ftp {
                 host,
@@ -242,7 +241,13 @@ mod tests {
     fn an_ftp_url_without_a_port_uses_the_default_one() {
         let source = Source::parse("ftp://example.com/file.bin", None, None).expect("ftp url");
         match source {
-            Source::Ftp { host, port, user, path, .. } => {
+            Source::Ftp {
+                host,
+                port,
+                user,
+                path,
+                ..
+            } => {
                 assert_eq!(host, "example.com");
                 assert_eq!(port, 21);
                 assert_eq!(user, "anonymous");

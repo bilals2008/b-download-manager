@@ -16,6 +16,36 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+/// What one connection is doing right now.
+///
+/// The window lists a row per connection, so every range carries the state
+/// of the connection that owns it. The state lives beside the bytes in the
+/// manifest, but it is never trusted from there: a manifest describes a
+/// download that is not running, and its connections are reset to `Pending`
+/// when they are read back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SegmentStatus {
+    /// In the plan, no connection is working on it yet.
+    #[default]
+    Pending,
+    /// A connection is being opened.
+    Connecting,
+    /// Bytes are arriving.
+    Receiving,
+    /// The connection failed and will be tried again.
+    Retrying,
+    /// Held back by the pause control.
+    Paused,
+    /// The user stopped the download. The bytes of the range stay on disk, so
+    /// a resume can pick them up again.
+    Stopped,
+    /// The whole range is on disk.
+    Done,
+    /// The range will not be fetched again without a new run.
+    Failed,
+}
+
 /// One contiguous byte range of the target file.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -29,6 +59,10 @@ pub struct Segment {
     pub downloaded: u64,
     /// Temporary file holding the bytes of this range.
     pub part: PathBuf,
+    /// What the connection of this range is doing. An older manifest has no
+    /// status, and its ranges are waiting.
+    #[serde(default)]
+    pub status: SegmentStatus,
 }
 
 /// The end offset of a range whose length the server did not tell us.
@@ -117,6 +151,7 @@ pub fn plan(total: u64, max_segments: u32, dir: &Path, stem: &str) -> Vec<Segmen
             end,
             downloaded: 0,
             part: part_path(dir, stem, i as u32),
+            status: SegmentStatus::Pending,
         });
         start = end;
     }
@@ -135,6 +170,7 @@ pub fn plan_unknown(dir: &Path, stem: &str) -> Vec<Segment> {
         end: UNKNOWN_END,
         downloaded: 0,
         part: part_path(dir, stem, 0),
+        status: SegmentStatus::Pending,
     }]
 }
 
@@ -165,6 +201,7 @@ pub fn split(seg: &mut Segment, new_id: u32, dir: &Path, stem: &str) -> Option<S
         end: old_end,
         downloaded: 0,
         part: part_path(dir, stem, new_id),
+        status: SegmentStatus::Pending,
     })
 }
 
@@ -234,6 +271,13 @@ mod tests {
         assert_eq!(new_segment.end, original_end);
         assert_eq!(new_segment.downloaded, 0);
         assert_ne!(new_segment.part, segments[0].part);
+    }
+
+    #[test]
+    fn a_range_from_an_older_manifest_is_waiting() {
+        let json = r#"{"id":0,"start":0,"end":10,"downloaded":0,"part":"a.part0"}"#;
+        let segment: Segment = serde_json::from_str(json).expect("a range without a status");
+        assert_eq!(segment.status, SegmentStatus::Pending);
     }
 
     #[test]

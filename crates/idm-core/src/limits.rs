@@ -191,8 +191,16 @@ impl SpeedLimiter {
     }
 
     /// Wait until `bytes` may be written.
+    ///
+    /// The bucket never holds more than one second of bytes, so a request
+    /// larger than the rate is paid for in pieces: the bytes that fit are
+    /// taken at once and the rest waits for the bucket to fill again. Asking
+    /// for the whole request at once would never be satisfied at a rate below
+    /// the size of a single read, and the download would stop instead of slow
+    /// down.
     pub async fn reserve(&self, bytes: u64) {
-        loop {
+        let mut left = bytes;
+        while left > 0 {
             let wait = {
                 let mut bucket = self.state.lock().expect("bucket lock poisoned");
                 if bucket.rate == 0 {
@@ -201,16 +209,23 @@ impl SpeedLimiter {
                 bucket.tokens = refill(bucket.tokens, bucket.rate, bucket.last.elapsed());
                 bucket.last = Instant::now();
 
-                if bucket.tokens >= bytes {
-                    bucket.tokens -= bytes;
-                    return;
+                if bucket.tokens > 0 {
+                    let take = left.min(bucket.tokens);
+                    bucket.tokens -= take;
+                    left -= take;
+                    if left == 0 {
+                        return;
+                    }
                 }
 
-                let missing = bytes - bucket.tokens;
+                let target = left.min(bucket.rate).max(1);
+                let missing = target.saturating_sub(bucket.tokens);
                 Duration::from_secs_f64(missing as f64 / bucket.rate as f64)
             };
 
-            tokio::time::sleep(wait).await;
+            // The sleep is never zero, so a limiter that is being reconfigured
+            // cannot spin the task while it waits.
+            tokio::time::sleep(wait.max(Duration::from_millis(1))).await;
         }
     }
 }
@@ -224,7 +239,9 @@ fn refill(tokens: u64, rate: u64, elapsed: Duration) -> u64 {
         return tokens;
     }
     let accrued = (rate as u128).saturating_mul(elapsed.as_nanos()) / 1_000_000_000;
-    tokens.saturating_add(accrued.min(u64::MAX as u128) as u64).min(rate)
+    tokens
+        .saturating_add(accrued.min(u64::MAX as u128) as u64)
+        .min(rate)
 }
 
 #[cfg(test)]
@@ -236,7 +253,10 @@ mod tests {
         let budget = ConnectionBudget::new(2);
         let first = budget.try_take().expect("first slot");
         let second = budget.try_take().expect("second slot");
-        assert!(budget.try_take().is_none(), "the third slot must be refused");
+        assert!(
+            budget.try_take().is_none(),
+            "the third slot must be refused"
+        );
         drop(first);
         assert!(budget.try_take().is_some());
         drop(second);
@@ -248,7 +268,10 @@ mod tests {
         budget.resize(2);
         let first = budget.try_take().expect("first slot");
         let second = budget.try_take().expect("second slot");
-        assert!(budget.try_take().is_none(), "the third slot must be refused");
+        assert!(
+            budget.try_take().is_none(),
+            "the third slot must be refused"
+        );
         drop(first);
         budget.resize(6);
         assert!(budget.try_take().is_some(), "the cap must have grown");
@@ -266,7 +289,10 @@ mod tests {
 
     #[test]
     fn the_host_of_a_url_is_read_out_of_it() {
-        assert_eq!(host_of("https://Example.com/a/b"), Some("example.com".into()));
+        assert_eq!(
+            host_of("https://Example.com/a/b"),
+            Some("example.com".into())
+        );
         assert_eq!(host_of("not a url"), None);
     }
 
@@ -274,7 +300,11 @@ mod tests {
     fn the_bucket_fills_at_the_configured_rate() {
         let one_second = Duration::from_secs(1);
         assert_eq!(refill(0, 1000, one_second), 1000);
-        assert_eq!(refill(500, 1000, one_second), 1000, "the bucket holds one second");
+        assert_eq!(
+            refill(500, 1000, one_second),
+            1000,
+            "the bucket holds one second"
+        );
     }
 
     #[test]
@@ -288,5 +318,35 @@ mod tests {
         let limiter = SpeedLimiter::unlimited();
         limiter.reserve(1024 * 1024).await;
         assert_eq!(limiter.rate(), 0);
+    }
+
+    #[tokio::test]
+    async fn a_request_larger_than_the_bucket_is_still_let_through() {
+        // The bucket holds one second of bytes, so a read of 6 KB against a
+        // cap of 4 KB/s can only be paid for in pieces. Asking for the whole
+        // read at once used to wait forever at this size.
+        let limiter = SpeedLimiter::new(4096);
+        let started = Instant::now();
+        tokio::time::timeout(Duration::from_secs(5), limiter.reserve(6144))
+            .await
+            .expect("a reserve larger than the bucket must finish");
+        let elapsed = started.elapsed();
+        assert!(
+            elapsed >= Duration::from_millis(300),
+            "the cap must slow the bytes down, it took {elapsed:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_limiter_that_is_turned_off_releases_a_waiting_reserve() {
+        let limiter = SpeedLimiter::new(1024);
+        let waiting = limiter.clone();
+        let task = tokio::spawn(async move { waiting.reserve(4096).await });
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        limiter.set_rate(0);
+        tokio::time::timeout(Duration::from_secs(2), task)
+            .await
+            .expect("the waiting request must be released")
+            .expect("the task must not panic");
     }
 }

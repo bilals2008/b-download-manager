@@ -16,7 +16,6 @@ use crate::transfer::ByteStream;
 #[cfg(test)]
 pub mod server;
 
-
 /// The greeting the server sends when the control connection is open.
 const GREETING: &str = "220";
 

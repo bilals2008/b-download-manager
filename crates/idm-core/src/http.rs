@@ -317,7 +317,10 @@ mod tests {
 
     #[test]
     fn the_start_offset_is_read_out_of_a_content_range() {
-        assert_eq!(parse_content_range_start("bytes 4096-8191/1234"), Some(4096));
+        assert_eq!(
+            parse_content_range_start("bytes 4096-8191/1234"),
+            Some(4096)
+        );
         assert_eq!(parse_content_range_start("bytes */1234"), None);
     }
 
@@ -354,7 +357,9 @@ mod tests {
     #[test]
     fn an_encoded_name_wins_over_a_plain_one() {
         assert_eq!(
-            file_name_from_disposition("attachment; filename=\"naive.txt\"; filename*=UTF-8''na%C3%AFve.txt"),
+            file_name_from_disposition(
+                "attachment; filename=\"naive.txt\"; filename*=UTF-8''na%C3%AFve.txt"
+            ),
             Some("naïve.txt".to_string())
         );
     }
