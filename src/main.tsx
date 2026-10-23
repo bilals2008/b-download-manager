@@ -25,6 +25,16 @@ const completed = (
   window as Window & { __IDM_COMPLETE__?: DownloadInfo }
 ).__IDM_COMPLETE__;
 
+// The two small windows round their own corners. The page behind them has to
+// be the same surface, or the curve shows a sliver of the app canvas outside
+// it. The token is overridden here, before the first paint.
+if (progress || completed) {
+  document.documentElement.style.setProperty(
+    "--background",
+    "var(--chrome-popup)",
+  );
+}
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     {progress ? (

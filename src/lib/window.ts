@@ -36,3 +36,55 @@ export function hideWindow(): Promise<void> {
 export function closeWindow(): Promise<void> {
   return windowAction("close");
 }
+
+/**
+ * Show a window the backend built hidden, once its page has painted.
+ *
+ * The backend keeps the two small windows hidden until this call, because a
+ * webview that is visible while it loads shows an empty white frame first.
+ * Two animation frames: one for React to commit, one for the paint itself.
+ */
+export async function showWindowWhenPainted(): Promise<void> {
+  if (!runningInTauri()) {
+    return;
+  }
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
+  const { invoke } = await import("@tauri-apps/api/core");
+  try {
+    await invoke("show_ready");
+  } catch {
+    // The window stays hidden rather than opening on a white frame. The
+    // backend still has its row, so the next open can try again.
+  }
+}
+
+/**
+ * Give the native window the same fill as the page.
+ *
+ * Whatever the webview has not painted yet shows the window's own background,
+ * which is white by default. Keeping it on the theme's `--background` makes
+ * the gap during a load, a restore from the tray, or a theme switch invisible
+ * instead of a white flash.
+ */
+export async function syncWindowBackground(): Promise<void> {
+  if (!runningInTauri()) {
+    return;
+  }
+  const color = getComputedStyle(document.documentElement)
+    .getPropertyValue("--background")
+    .trim();
+  if (!color) {
+    return;
+  }
+  const { invoke } = await import("@tauri-apps/api/core");
+  try {
+    await invoke("set_window_background", { color });
+  } catch {
+    // Cosmetic only: the page still draws the theme it has.
+  }
+}

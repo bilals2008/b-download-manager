@@ -2,6 +2,7 @@ import { onSettingsChanged } from "@/lib/app-events";
 import { applyFont, applyWeight } from "@/lib/fonts";
 import { loadSettings } from "@/lib/settings";
 import { applyTheme, watchTheme } from "@/lib/theme";
+import { syncWindowBackground } from "@/lib/window";
 
 /**
  * Read the saved appearance and put it on the root element.
@@ -14,6 +15,9 @@ function applySavedAppearance(): void {
   applyTheme(settings.theme);
   applyFont(settings.uiFont);
   applyWeight(settings.uiWeight);
+  // The native fill follows the same token, so a repaint before the page is
+  // drawn never shows the webview's default white.
+  void syncWindowBackground();
 }
 
 let started = false;

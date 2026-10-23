@@ -5,7 +5,7 @@ import { CheckGlyph, CloseGlyph } from "@/components/icons/ui-icons";
 import { categoryOfFile, formatSize, splitPath } from "@/lib/downloads";
 import { describeError } from "@/lib/errors";
 import { openPath } from "@/lib/ipc";
-import { closeWindow } from "@/lib/window";
+import { closeWindow, showWindowWhenPainted } from "@/lib/window";
 import type { DownloadInfo } from "@/types";
 
 const BUTTON =
@@ -27,6 +27,10 @@ export function DownloadCompleteWindow({ info }: { info: DownloadInfo }) {
   const bytes = info.total || info.downloaded;
 
   useEffect(() => {
+    void showWindowWhenPainted();
+  }, []);
+
+  useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") {
         void closeWindow();
@@ -45,9 +49,9 @@ export function DownloadCompleteWindow({ info }: { info: DownloadInfo }) {
   }
 
   return (
-    // The frame comes from the compositor (`window_style.rs`); the content
-    // stays square so every corner of the window is the same shape.
-    <div className="flex h-dvh flex-col overflow-hidden border border-chrome-line bg-chrome-popup text-chrome-menu-text">
+    // The rounded edge is the frame, the same way the progress window draws
+    // its own: no border, one corner shape.
+    <div className="flex h-dvh flex-col overflow-hidden rounded-lg bg-chrome-popup text-chrome-menu-text">
       <div
         data-tauri-drag-region
         className="flex shrink-0 items-center justify-between gap-4 py-2 pr-2 pl-4"
