@@ -18,6 +18,21 @@ use crate::state::AppState;
 /// Event carrying the state of one download to the UI.
 pub const UPDATE_EVENT: &str = "download://update";
 
+/// What a new download carries besides its address and destination.
+#[derive(Default)]
+pub struct StartOptions {
+    /// The number of ranges, or the engine default.
+    pub connections: Option<u32>,
+    /// The page the link was on, when the browser knew it.
+    pub referer: Option<String>,
+    /// Start the rows in the queue instead of starting the transfer now.
+    pub queue: bool,
+    /// The category the add dialog showed.
+    pub category: Option<String>,
+    /// The note the user typed in the add dialog.
+    pub description: Option<String>,
+}
+
 /// The reporter the desktop app hands to the engine: it pushes the state of
 /// a download into the user interface.
 struct AppReporter(AppHandle);
@@ -48,8 +63,7 @@ pub fn start(
     state: &AppState,
     url: String,
     dest: PathBuf,
-    connections: Option<u32>,
-    referer: Option<String>,
+    options: StartOptions,
 ) -> Result<u64, String> {
     let url = url.trim().to_string();
     if url.is_empty() {
@@ -61,19 +75,29 @@ pub fn start(
     if dest.as_os_str().is_empty() {
         return Err("a destination file is required".to_string());
     }
+    crate::dest::validate(&dest)?;
 
     let download = Download::new(
         state.next_id(),
         url,
         dest,
-        connections.unwrap_or(DEFAULT_CONNECTIONS).clamp(1, 32),
+        options.connections.unwrap_or(DEFAULT_CONNECTIONS).clamp(1, 32),
         state.limits().proxy().as_deref(),
-        referer.as_deref(),
+        options.referer.as_deref(),
     )?;
+    download.set_meta(options.category, options.description);
 
     let id = download.id;
     state.insert(download.clone());
     state.save_index();
+
+    // A download that was added to the queue waits for Start Queue. The row
+    // is there at once, in the state the queue expects, and no task is
+    // spawned: the queue starts it the same way a paused one is started.
+    if options.queue {
+        let _ = app.emit(UPDATE_EVENT, download.info());
+        return Ok(id);
+    }
 
     let limits: Limits = state.limits().clone();
     let request = download.request_run();

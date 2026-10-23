@@ -47,6 +47,9 @@ pub fn show(app: &AppHandle, info: &DownloadInfo) {
         .maximizable(false)
         .decorations(false)
         .center()
+        // Hidden until the page has painted, so the window never opens on an
+        // empty white webview. The page calls `show_ready` when it is ready.
+        .visible(false)
         .initialization_script(payload(info))
         .build()
         .map(|window| crate::window_style::round_corners(&window));
@@ -76,6 +79,8 @@ mod tests {
             segments: vec![],
             resumable: Some(true),
             speed_limit: 0,
+            category: None,
+            description: None,
         };
         let script = payload(&info);
         assert!(script.starts_with("window.__IDM_COMPLETE__ = {"));

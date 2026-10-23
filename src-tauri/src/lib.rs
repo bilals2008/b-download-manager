@@ -1,6 +1,7 @@
 mod actions;
 mod bridge;
 mod complete;
+mod dest;
 mod progress;
 mod state;
 mod window_style;
@@ -29,14 +30,22 @@ fn start_download(
     dest: String,
     connections: Option<u32>,
     referer: Option<String>,
+    queue: Option<bool>,
+    category: Option<String>,
+    description: Option<String>,
 ) -> Result<u64, String> {
     actions::start(
         &app,
         &state,
         url,
         PathBuf::from(dest.trim()),
-        connections,
-        referer,
+        actions::StartOptions {
+            connections,
+            referer,
+            queue: queue.unwrap_or(false),
+            category,
+            description,
+        },
     )
 }
 
@@ -82,8 +91,8 @@ async fn open_progress_window(
 /// The window sizes itself from this, so the page does not have to know the
 /// height of its own chrome.
 #[tauri::command]
-fn set_progress_details(window: tauri::WebviewWindow, open: bool) {
-    progress::set_details(&window, open);
+fn set_progress_details(window: tauri::WebviewWindow, open: bool, animated: bool) {
+    progress::set_details(&window, open, animated);
 }
 
 #[tauri::command]
@@ -216,6 +225,12 @@ struct LinkProbe {
     name: Option<String>,
     /// The size of the file. `None` means the server did not tell it.
     total: Option<u64>,
+    /// Whether the server honours a range request.
+    ranges: bool,
+    /// Whether a stopped download of this link could continue: the server
+    /// honours ranges and knows how big the file is. This is the engine's own
+    /// rule, so the dialog cannot promise a resume the engine would not make.
+    resumable: bool,
 }
 
 /// What the server says about the link at this address.
@@ -236,6 +251,8 @@ async fn probe_link(
         return Ok(LinkProbe {
             name: None,
             total: None,
+            ranges: false,
+            resumable: false,
         });
     }
     let proxy = state.limits().proxy();
@@ -244,7 +261,61 @@ async fn probe_link(
     Ok(LinkProbe {
         name: probe.name,
         total: probe.total,
+        ranges: probe.ranges,
+        resumable: probe.ranges && probe.total.is_some(),
     })
+}
+
+/// Show the window this page is in, once it has painted.
+///
+/// The two small windows are built hidden: a webview that is visible while it
+/// loads shows an empty white frame first, which reads as a broken window. The
+/// page calls this after its first frames, so the window appears with its
+/// content already drawn.
+#[tauri::command]
+fn show_ready(window: tauri::WebviewWindow) -> Result<(), String> {
+    window.show().map_err(|error| error.to_string())?;
+    window.set_focus().map_err(|error| error.to_string())
+}
+
+/// Paint the window itself in the theme's background.
+///
+/// What the webview has not drawn yet shows the window's own fill. The webview
+/// default is white, so every load or repaint of a hidden window could flash
+/// white before the page arrived. The page sends the colour of its
+/// `--background` token, and a theme change sends the next one.
+#[tauri::command]
+fn set_window_background(window: tauri::WebviewWindow, color: String) -> Result<(), String> {
+    let (red, green, blue) = parse_hex_color(&color).ok_or("expected a #rgb or #rrggbb colour")?;
+    window
+        .set_background_color(Some(tauri::window::Color(red, green, blue, 255)))
+        .map_err(|error| error.to_string())
+}
+
+/// Read the tokens' hex form (`#0b1416`, `#fff`) into the channels Tauri wants.
+fn parse_hex_color(value: &str) -> Option<(u8, u8, u8)> {
+    let hex = value.trim().strip_prefix('#')?;
+    let channel = |digits: &str| u8::from_str_radix(digits, 16).ok();
+    match hex.len() {
+        3 => {
+            let cell = |index: usize| channel(&hex[index..index + 1]).map(|value| value * 17);
+            Some((cell(0)?, cell(1)?, cell(2)?))
+        }
+        6 => Some((
+            channel(&hex[0..2])?,
+            channel(&hex[2..4])?,
+            channel(&hex[4..6])?,
+        )),
+        _ => None,
+    }
+}
+
+/// Whether a destination can hold the file, and whether a file is already
+/// there. The add dialog asks before it starts, so a bad name is a line in
+/// the dialog instead of a failed download.
+#[tauri::command]
+fn inspect_destination(dest: String) -> Result<dest::Destination, String> {
+    dest::inspect(&PathBuf::from(dest.trim()))
 }
 
 /// Open a file or a folder with the program the system uses for it.
@@ -433,6 +504,9 @@ pub fn run() {
             quit_app,
             default_destination,
             probe_link,
+            inspect_destination,
+            show_ready,
+            set_window_background,
             open_path,
         ])
         .build(tauri::generate_context!())
@@ -459,6 +533,14 @@ mod tests {
     #[test]
     fn an_empty_path_is_refused() {
         assert!(open_path("   ".to_string()).is_err());
+    }
+
+    #[test]
+    fn a_theme_colour_is_read_for_the_window() {
+        assert_eq!(parse_hex_color("#0b1416"), Some((11, 20, 22)));
+        assert_eq!(parse_hex_color(" #fff "), Some((255, 255, 255)));
+        assert_eq!(parse_hex_color("0b1416"), None);
+        assert_eq!(parse_hex_color("#12345"), None);
     }
 
     #[test]

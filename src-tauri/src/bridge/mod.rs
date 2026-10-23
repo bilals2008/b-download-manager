@@ -276,7 +276,16 @@ async fn add_download(app: &AppHandle, body: &[u8]) -> (u16, Value) {
                 Some(referer)
             };
 
-            match crate::actions::start(app, &state, url.clone(), target.clone(), None, referer) {
+            match crate::actions::start(
+                app,
+                &state,
+                url.clone(),
+                target.clone(),
+                crate::actions::StartOptions {
+                    referer,
+                    ..crate::actions::StartOptions::default()
+                },
+            ) {
                 Ok(id) => {
                     log::write("info", &format!("the browser started {url} as {id}"));
                     (

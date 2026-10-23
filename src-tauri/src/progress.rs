@@ -13,6 +13,8 @@
 
 use idm_core::downloader::DownloadInfo;
 use idm_core::log;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, LogicalSize, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
@@ -41,6 +43,15 @@ const COMPACT_HEIGHT: f64 = 380.0;
 // A folded window is shorter than an open one; the geometry is settled when
 // the crate is compiled, so a later change to either height cannot invert them.
 const _: () = assert!(COMPACT_HEIGHT < DETAILS_HEIGHT);
+
+/// How long the window takes to travel between the two heights.
+const FOLD_MS: u64 = 180;
+
+/// The steps that travel is spread over, one per frame at rest.
+const FOLD_STEPS: u64 = 12;
+
+/// Bumped by every fold, so the newest toggle owns the window.
+static FOLD: AtomicU64 = AtomicU64::new(0);
 
 /// The window label of one download.
 pub fn label(id: u64) -> String {
@@ -235,6 +246,9 @@ pub fn show(app: &AppHandle, info: &DownloadInfo) {
         .maximizable(false)
         .decorations(false)
         .center()
+        // Hidden until the page has painted: a visible webview shows a white
+        // frame while it loads. The page calls `show_ready` when it is ready.
+        .visible(false)
         .initialization_script(payload(info))
         .build();
     match built {
@@ -262,15 +276,60 @@ pub fn close(app: &AppHandle, id: u64) {
 /// Fold the connection details away, or open them again.
 ///
 /// The window is not resizable, so the height is chosen here rather than by
-/// the user. The page asks for this when its details control is used.
-pub fn set_details(window: &WebviewWindow, open: bool) {
-    let height = if open { DETAILS_HEIGHT } else { COMPACT_HEIGHT };
-    if let Err(error) = window.set_size(LogicalSize::new(WIDTH, height)) {
-        log::write(
-            "warn",
-            &format!("the progress window did not resize: {error}"),
-        );
+/// the user. The page asks for this when its details control is used, and the
+/// height travels to the new value instead of jumping, so the section is
+/// revealed rather than replaced.
+pub fn set_details(window: &WebviewWindow, open: bool, animated: bool) {
+    let target = if open { DETAILS_HEIGHT } else { COMPACT_HEIGHT };
+    let from = inner_height(window);
+
+    if !animated || (from - target).abs() < 0.5 {
+        resize(window, target);
+        return;
     }
+
+    // The last toggle owns the window: an earlier loop that is still in flight
+    // sees the newer token and stops instead of fighting it for the height.
+    let token = FOLD.fetch_add(1, Ordering::Relaxed) + 1;
+    let window = window.clone();
+    std::thread::spawn(move || {
+        for step in 1..=FOLD_STEPS {
+            if FOLD.load(Ordering::Relaxed) != token {
+                return;
+            }
+            let progress = step as f64 / FOLD_STEPS as f64;
+            // Ease out: most of the distance is covered at once, which reads as
+            // the window opening rather than being dragged.
+            let eased = 1.0 - (1.0 - progress).powi(3);
+            if !resize(&window, from + (target - from) * eased) {
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(FOLD_MS / FOLD_STEPS));
+        }
+    });
+}
+
+/// Set the height of the window, keeping the width it was given.
+fn resize(window: &WebviewWindow, height: f64) -> bool {
+    match window.set_size(LogicalSize::new(WIDTH, height)) {
+        Ok(()) => true,
+        Err(error) => {
+            log::write(
+                "warn",
+                &format!("the progress window did not resize: {error}"),
+            );
+            false
+        }
+    }
+}
+
+/// The height of the content, which is the height the page lays out against.
+fn inner_height(window: &WebviewWindow) -> f64 {
+    let scale = window.scale_factor().unwrap_or(1.0);
+    window
+        .inner_size()
+        .map(|size| size.to_logical::<f64>(scale).height)
+        .unwrap_or(COMPACT_HEIGHT)
 }
 
 #[cfg(test)]
@@ -291,6 +350,8 @@ mod tests {
             segments: vec![],
             resumable: Some(true),
             speed_limit: 0,
+            category: None,
+            description: None,
         }
     }
 
