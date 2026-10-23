@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en" data-bdm-theme="auto">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="color-scheme" content="light dark" />
+    <title>B Download Manager settings</title>
+    <link rel="stylesheet" href="../theme.css" />
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="head">
+        <img class="mark" src="../icons/icon-32.png" alt="" width="24" height="24" />
+        <div class="head-text">
+          <h1>B Download Manager</h1>
+          <p>Firefox integration</p>
+        </div>
+        <div class="status" id="status" data-state="checking" role="status" aria-live="polite">
+          <span class="dot" aria-hidden="true"></span>
+          <span id="status-text">Connecting</span>
+          <button class="text-button" id="retry" type="button" hidden>Retry</button>
+        </div>
+      </header>
+
+      <section class="group" aria-labelledby="downloads-heading">
+        <h2 id="downloads-heading">Downloads</h2>
+
+        <div class="row">
+          <div class="row-text">
+            <span id="intercept-label">Take over browser downloads</span>
+            <p>Supported links go to the app instead of Firefox.</p>
+          </div>
+          <button
+            class="switch"
+            id="intercept"
+            type="button"
+            role="switch"
+            aria-checked="true"
+            aria-labelledby="intercept-label"
+          >
+            <span aria-hidden="true"></span>
+          </button>
+        </div>
+
+        <div class="row">
+          <div class="row-text">
+            <span id="ask-label">Ask before saving</span>
+            <p>Open the app's save dialog instead of starting at once.</p>
+          </div>
+          <button
+            class="switch"
+            id="ask"
+            type="button"
+            role="switch"
+            aria-checked="false"
+            aria-labelledby="ask-label"
+          >
+            <span aria-hidden="true"></span>
+          </button>
+        </div>
+      </section>
+
+      <section class="group" aria-labelledby="overlay-heading">
+        <h2 id="overlay-heading">Video overlay</h2>
+        <div class="row">
+          <div class="row-text">
+            <span id="overlay-label">Show the download button on videos</span>
+            <p>A small button appears when you point at a video.</p>
+          </div>
+          <button
+            class="switch"
+            id="overlay"
+            type="button"
+            role="switch"
+            aria-checked="true"
+            aria-labelledby="overlay-label"
+          >
+            <span aria-hidden="true"></span>
+          </button>
+        </div>
+      </section>
+
+      <section class="group" aria-labelledby="types-heading">
+        <h2 id="types-heading">File types</h2>
+        <p class="hint" id="types-hint">
+          Only these types are taken over. Leave the list empty for all.
+        </p>
+        <div class="chips" id="types" aria-describedby="types-hint"></div>
+        <p class="empty" id="types-empty">All file types</p>
+        <div class="add-row">
+          <input
+            class="input"
+            id="type-input"
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="Add a type, e.g. mp4"
+            aria-label="Add a file type"
+          />
+          <button class="button" id="type-add" type="button">Add</button>
+        </div>
+        <p class="note" id="type-note" role="status" aria-live="polite"></p>
+      </section>
+
+      <section class="group" aria-labelledby="sites-heading">
+        <h2 id="sites-heading">Sites left alone</h2>
+        <p class="hint" id="sites-hint">
+          Downloads from these hosts stay in Firefox and their videos show no
+          button. A subdomain follows its domain.
+        </p>
+        <div class="chips" id="sites" aria-describedby="sites-hint"></div>
+        <p class="empty" id="sites-empty">No excluded sites</p>
+        <div class="add-row">
+          <input
+            class="input"
+            id="site-input"
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="Add a site, e.g. example.org"
+            aria-label="Add a site"
+          />
+          <button class="button" id="site-add" type="button">Add</button>
+        </div>
+        <p class="note" id="site-note" role="status" aria-live="polite"></p>
+      </section>
+
+      <section class="group" aria-labelledby="appearance-heading">
+        <h2 id="appearance-heading">Appearance</h2>
+        <div class="row">
+          <div class="row-text">
+            <span id="theme-label">Theme</span>
+            <p>Auto follows your system.</p>
+          </div>
+          <div class="segmented" role="radiogroup" aria-labelledby="theme-label">
+            <button type="button" role="radio" data-theme="auto" aria-checked="true">Auto</button>
+            <button type="button" role="radio" data-theme="light" aria-checked="false">Light</button>
+            <button type="button" role="radio" data-theme="dark" aria-checked="false">Dark</button>
+          </div>
+        </div>
+      </section>
+
+      <footer class="foot">
+        <span class="saved" id="saved" role="status" aria-live="polite"></span>
+        <span class="bridge">127.0.0.1:27500 · API 1</span>
+        <button class="text-button reset" id="reset" type="button">Reset to defaults</button>
+      </footer>
+    </main>
+
+    <script src="../lib/settings.js"></script>
+    <script src="../lib/icons.js"></script>
+    <script src="options.js"></script>
+  </body>
+</html>

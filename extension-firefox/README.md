@@ -1,124 +1,219 @@
 # Firefox extension
 
-The Firefox half of the browser bridge. It hands a link to the desktop
-application, which opens its add dialog the way it does for a link typed in by
-hand.
+The Firefox half of B Download Manager. It hands links and media to the
+desktop application and shows the application's live downloads in the toolbar
+popup.
 
-Kept apart from `browser-extension/`, which is the Chrome build: Firefox does
-not load a Manifest V3 service worker, so the background here is an event page
-(`background.scripts`) with its own `browser_specific_settings`.
+This build is Manifest V3 with an **event page** (`background.scripts`), which
+is what Firefox supports; it is not a Chrome service worker. The Chrome build
+lives in `browser-extension/` and speaks the same versioned loopback API.
 
 ## What it does
 
-- **Right click a link, video or audio element** → *Download with Internet
-  Download Manager*. A menu click always goes to the application; the skip
-  rules do not apply to it.
-- **Take over browser downloads**: a download the browser starts is handed to
-  the application and then cancelled here. The hand-over happens **before** the
-  cancel, so a download is never lost when the application is closed.
-- **Download button on pages**, the IDM-style panel: a small button in the
-  corner of a page that has media. It opens the same list the popup shows, one
-  Download per file, and can be hidden for that page view with its close button.
-  The toolbar button carries a badge with the number of media on the open page.
-  The panel is a content script and can be turned off in the popup or the
-  settings page; with it off the badge goes too.
-- **Media on this page**: the popup reads the open tab and lists the media
-  files it can see (video, audio, source, and links ending in a media
-  extension). One click sends the link over with the page as the referrer.
-  A blob: stream from MSE has no address outside the tab, so it is not listed.
-- **Settings** (the button in the popup footer):
-  - the takeover switch;
-  - the page download panel;
-  - file types to take over, empty for all;
-  - sites to leave alone, subdomains follow their domain;
-  - both lists take a pasted list, and a row moves by dragging it or by
-    focusing its handle and pressing Up or Down;
-  - **Save** writes, **Reset** restores the defaults (two clicks, Escape backs
-    out), and a page open in another tab reloads itself when the settings
-    change there.
+- **Right-click a link, video, audio element or image** →
+  *Download with B Download Manager*. A menu click always goes to the
+  application; the site exclusions do not apply to an explicit click.
+- **Takes over browser downloads** when the setting is on. A download the
+  browser starts is handed to the application **before** the browser copy is
+  cancelled, so a closed application never loses the file. File-type and site
+  rules are applied here.
+- **IDM-style video button** on supported HTML5 videos. A 30 px button appears
+  at the video's top-right corner on hover. Clicking it opens a compact panel
+  with the direct media files that video offers, a progress bar and an
+  *Open app* action. It is built in a closed shadow root with a constructed
+  stylesheet, so page CSS and CSP cannot change it.
+- **Toolbar badge** shows how many download-capable media elements are on the
+  tab. It is cleared when the tab navigates or the overlay is turned off.
+- **Compact popup**: connection state, active downloads (progress, size,
+  speed, pause/resume, two-click stop, open in app), media on the current
+  page, and one settings button.
+- **Settings**: interception, ask-before-saving, video overlay, file-type
+  filter, excluded sites, and Auto/Light/Dark theme. Every change is saved
+  immediately; *Reset to defaults* is the only destructive action and asks for
+  a second click.
 
-## The contract it talks to
+The panel deliberately offers only addresses the engine can fetch as a file.
+A `blob:` URL from Media Source Extensions, an HLS/DASH manifest, and a
+DRM-protected element are not offered, because they are not downloadable as a
+plain file by this application. The extension does not pretend otherwise.
 
-From `src-tauri/src/bridge.rs`:
+## How it talks to the application
+
+The desktop app runs a small HTTP API on `127.0.0.1:27500`. This is the local
+bridge: no native messaging host, no registry entry, no extra executable to
+install, and no port exposed beyond loopback. The app starts the server with
+itself.
+
+Every request carries `X-BDM-Client: browser-extension`. A web page cannot add
+that header without a preflight, and the server refuses a preflight whose
+`Origin` is not `moz-extension://` or `chrome-extension://`. A plain `<img>`,
+form or `<script>` request is therefore refused as well. Requests without an
+`Origin` (a local test, for example) are still required to carry the header.
 
 | Request | Answer |
 | --- | --- |
-| `GET http://127.0.0.1:27500/ping` | `200 ok` |
-| `GET /download?url=…&name=…&referer=…` | `200` once the add dialog is open |
+| `GET /v1/ping` | `{ app, api, version, port }` |
+| `GET /v1/downloads` | `{ downloads, active }` |
+| `POST /v1/downloads` | `{ mode: "direct", id, name, dest }` or `{ mode: "ask" }` |
+| `POST /v1/downloads/:id/pause` | the download's new state |
+| `POST /v1/downloads/:id/resume` | the download's new state |
+| `POST /v1/downloads/:id/cancel` | the download's new state |
+| `POST /v1/downloads/:id/show` | opens the progress window |
+| `POST /v1/focus` | brings the main window forward |
 
-`url` must be `http://`, `https://` or `ftp://`. Values are percent-encoded. The
-server refuses a request whose `Origin` is not `moz-extension://` or
-`chrome-extension://`, and the extension sends the `moz-extension://` origin by
-itself.
+`POST /v1/downloads` takes `{ url, name, referer, mode }`; `url` must be
+`http://`, `https://` or `ftp://`, and `mode` is `direct` or `ask`. The server
+sanitises the file name and makes it unique in the download folder, so a
+hand-over cannot escape the folder or overwrite an existing file.
 
-## Load it
+The extension pings first. If nothing answers, the app is reported as not
+running. If something answers but does not identify itself as
+`b-download-manager` with API version `1`, the popup says the versions or the
+program do not match instead of guessing.
 
-Temporary, for testing:
+### Why not native messaging
 
-1. Start the application.
-2. `about:debugging#/runtime/this-firefox` → *Load Temporary Add-on…*
-3. Pick `extension-firefox/manifest.json`.
+A native messaging host needs a JSON manifest in a fixed Firefox location, a
+registry key on Windows, and an executable whose lifetime and stdout framing
+are managed separately from the app. The loopback server is already inside the
+application, is reachable only from this machine, and fails in a way the popup
+can explain ("not running", "not responding", "version mismatch"). The
+extension therefore needs no `nativeMessaging` permission and nothing has to be
+registered per user or per Firefox profile.
 
-Temporary add-ons are dropped when Firefox closes.
+## Install on Windows
 
-Or with [web-ext](https://extensionworkshop.com/documentation/develop/getting-started-with-web-ext/):
+### 1. Start the application
 
-```bash
-npx web-ext run --source-dir extension-firefox
+```powershell
+cd D:\Dev\my-idm-clone
+npm install
+npm run tauri dev
 ```
 
-A permanent install needs the add-on signed, because Firefox only installs
-signed extensions. `npx web-ext sign --source-dir extension-firefox` with AMO
-credentials, or load it as a self-distributed build with
-`xpinstall.signatures.required` set to `false` in `about:config` on Developer
-Edition / Nightly.
+Or start the built `B Download Manager` executable. The application opens the
+bridge when it starts. Closing the window hides it in the tray; **Exit** in the
+tray menu stops it and the extension reports "Not running".
+
+To confirm the bridge is listening:
+
+```powershell
+Get-NetTCPConnection -LocalPort 27500 -State Listen
+```
+
+### 2. Load the extension in Firefox (development)
+
+1. Open `about:debugging#/runtime/this-firefox`.
+2. Choose **Load Temporary Add-on…**.
+3. Pick `extension-firefox/manifest.json`.
+
+Temporary add-ons are removed when Firefox closes, so repeat this after a
+restart. On a normal Firefox release, this is the only way to run an unsigned
+build.
+
+### 3. Install permanently (optional)
+
+Firefox only installs signed add-ons on release builds. There are two honest
+routes:
+
+- **Sign it yourself through AMO**:
+  ```powershell
+  npx web-ext sign --source-dir extension-firefox --channel unlisted
+  ```
+  This needs AMO API credentials. Install the resulting `.xpi` from
+  `about:addons` → gear → *Install Add-on From File*.
+- **Self-distributed build**: use Firefox Developer Edition or Nightly, set
+  `xpinstall.signatures.required` to `false` in `about:config`, then install
+  the `.xpi`. This is a developer setting, not a distribution path for normal
+  users.
+
+To produce the `.xpi` without signing:
+
+```powershell
+npx web-ext build --source-dir extension-firefox --overwrite-dest
+```
+
+### 4. Use it
+
+- Click a link's right-click menu → *Download with B Download Manager*, or
+  start a download normally and let the takeover send it to the app.
+- Hover a supported video and click the small download button.
+- Click the toolbar icon for connection state, active downloads and the media
+  on the current page.
+- Open the extension settings from the popup or the right-click menu.
+
+## Permissions and privacy
+
+| Permission | Why it is needed |
+| --- | --- |
+| `contextMenus` | the right-click entries |
+| `downloads` | see a browser download and cancel it after a successful hand-over |
+| `storage` | settings and the theme |
+| `http://127.0.0.1:27500/*` | the loopback bridge |
+
+The content script is declared for `http://*/*` and `https://*/*`, so Firefox
+shows **Access your data for all websites** at install. That broad grant is
+what lets the video button appear without a click. The script reads media
+addresses and the page URL as a referrer; it does not read page text, form
+values, cookies or storage, and it never sends anything to a remote server.
+Nothing leaves the machine: the only network destination is the loopback
+bridge, and the application downloads the file itself.
+
+The overlay is disabled on pages listed under **Sites left alone**, along with
+download interception. An explicit right-click or popup download still works
+there.
 
 ## Checks
 
-```bash
+```powershell
 npm run check:extension
+npx web-ext lint --source-dir extension-firefox --self-hosted
 ```
 
-Runs the extension's own `settings.js` in a Node sandbox: the manifest points at
-files that exist, every script and stylesheet a page loads exists, and the
-takeover rules and the host cleaning do what the settings page promises.
+`check:extension` parses every script, resolves every file a page loads,
+checks the shared colour tokens, runs the settings and media helpers in a
+sandbox, exercises the background against a mocked bridge, verifies that every
+icon name exists, and runs the Chrome build's hand-over contract too.
+`web-ext lint` is Mozilla's own manifest and API validation.
 
 ## Files
 
 ```
-manifest.json      MV3 event page, gecko id, options page
-bridge.js          the loopback contract: ping, hand-over, names
-settings.js        defaults, normalisation, the takeover rule
-list-editor.js     the add, remove and reorder list the settings page uses
-background.js      menu, traffic watching, the takeover, badge, panel messages
-panel.js           content script: the corner download button and its list
-popup.html/.css/.js    state, switches, media links on the open page
-options.html/.css/.js  the settings page
-theme.css          palette from src/index.css, dark base and light
-icons/icon-*.png   the app mark at 32, 48, 96 and 128
+manifest.json          MV3 event page, Gecko id, options page
+background.js          menus, takeover, badge, message routing
+lib/bridge.js          the versioned loopback contract
+lib/settings.js        defaults, normalisation, the takeover and overlay rules
+lib/media.js           what counts as a downloadable media address
+lib/icons.js           the SVG icons drawn by the popup and the overlay
+content/page-media.js  reads media addresses out of the page
+content/overlay.js     the floating button, panel and live progress
+content/overlay-style.js  the shadow-root stylesheet and its token copy
+popup/                 connection, downloads, page media, settings entry
+options/               the settings page
+theme.css              the app's palette, shared by both extension pages
+fonts/                 Inter, the app's interface face
+icons/                 the app mark at 32, 48, 96 and 128 px
 ```
 
-Permissions, and why each one is there: `downloads` to see and cancel a browser
-download, `contextMenus` for the right-click entry, `storage` for the settings,
-`scripting` + `activeTab` to read the media links when the popup opens, and the
-loopback host permission for the bridge. The page panel is a content script on
-every `http` and `https` page, which Firefox lists as "Access your data for all
-websites" at install; that broad grant is what lets the corner button appear
-without a click. It reads media addresses and nothing else.
+## Known limitations
 
-The panel is in a closed shadow root with a constructed stylesheet, so neither
-the page's CSS nor its CSP can change or block it.
+These are honest boundaries, not unfinished UI:
 
-## Not built, and why
-
-These two need the desktop application to change first; the extension cannot do
-them honestly on its own.
-
-- **Batch links** — the bridge takes one link and the add dialog holds one
-  request (`browserRequest` in `src/state/download-store.tsx`). Sending several
-  would overwrite the ones before it, silently. It needs a multi-link request in
-  `bridge.rs` and a list in the add dialog.
-- **HLS and DASH** — `Media splitting for MP4 DASH, HLS and MPEG-TS` is still
-  open in `PROGRESS.md`. Listing a `.m3u8` would hand the application a playlist
-  to download as a file, not a video, so the popup deliberately does not offer
-  one.
+- **HLS and DASH are not offered.** The engine has no muxer yet
+  (`PROGRESS.md`: *Media splitting for MP4 DASH, HLS and MPEG-TS*). A `.m3u8`
+  would be saved as a playlist, not a video.
+- **DRM/EME and `blob:` media are not offered.** There is no file address the
+  application may read. The overlay checks `mediaKeys` and never pretends a
+  protected stream is available.
+- **A type filter matches the URL path.** A URL with no extension but a
+  `Content-Disposition` file name is filtered out when the type list is
+  non-empty; leave the list empty to take every type.
+- **Batch hand-over is not implemented.** The app's bridge starts one
+  download per request and its add dialog holds one request.
+- **The overlay runs in the top frame only.** Media inside a cross-origin
+  iframe is not listed by the page panel; the browser's own download takeover
+  still sees files the browser downloads.
+- **The app must be running.** The extension cannot launch a desktop program
+  from a web extension sandbox; it reports the closed state instead.
+- **The app must be restarted after an update** that changes the bridge API.
+  The version check makes a mismatch visible rather than silently failing.

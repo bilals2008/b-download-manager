@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en" data-bdm-theme="auto">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="color-scheme" content="light dark" />
+    <title>B Download Manager</title>
+    <link rel="stylesheet" href="../theme.css" />
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div class="brand">
+        <img class="mark" src="../icons/icon-32.png" alt="" width="20" height="20" />
+        <span class="brand-name">B Download Manager</span>
+      </div>
+      <button
+        class="icon-button"
+        id="settings"
+        type="button"
+        title="Settings"
+        aria-label="Open extension settings"
+      >
+        <svg
+          class="icon"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.9"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M4 7h9M17 7h3M4 17h3M11 17h9" />
+          <circle cx="15" cy="7" r="2" />
+          <circle cx="9" cy="17" r="2" />
+        </svg>
+      </button>
+    </header>
+
+    <div class="status" id="status" data-state="checking" role="status" aria-live="polite">
+      <span class="dot" aria-hidden="true"></span>
+      <span class="status-text" id="status-text">Connecting</span>
+      <button class="text-button" id="retry" type="button" hidden>Retry</button>
+    </div>
+
+    <main>
+      <section class="section" aria-labelledby="downloads-title">
+        <div class="section-head">
+          <h2 id="downloads-title">Downloads</h2>
+          <span class="count" id="download-count"></span>
+          <button class="text-button end" id="open-app" type="button" hidden>Open app</button>
+        </div>
+        <ul class="downloads" id="downloads"></ul>
+        <p class="empty" id="downloads-empty">No active downloads.</p>
+      </section>
+
+      <section class="section" id="media-section" aria-labelledby="media-title" hidden>
+        <div class="section-head">
+          <h2 id="media-title">On this page</h2>
+          <span class="count" id="media-count"></span>
+        </div>
+        <ul class="media" id="media-list"></ul>
+      </section>
+    </main>
+
+    <script src="../lib/settings.js"></script>
+    <script src="../lib/media.js"></script>
+    <script src="../lib/icons.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>

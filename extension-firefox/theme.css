@@ -1,53 +1,129 @@
 /*
-  The palette of the application (src/index.css), shared by the popup and the
-  settings page so the extension and the window read as one product. Dark is
-  the base; light follows the operating system because an extension cannot
-  read the app's own theme setting.
+  The palette of the application (src/index.css), shared by the popup, the
+  settings page and the floating panel, so the extension and the window read
+  as one product.
+
+  Every colour here is a semantic token. The light block is selected by
+  `data-bdm-theme="light"` (the settings page writes it), and `auto` follows
+  the operating system. The two names the shadow-root panel uses are the same
+  values, in `content/overlay-style.js`; `scripts/check-extension.mjs` keeps
+  the two copies in step.
 */
 
-:root {
-  color-scheme: light dark;
+@font-face {
+  font-family: "Inter";
+  src: url("fonts/InterVariable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
 
-  --canvas: #03080a;
+:root {
+  color-scheme: dark;
+
+  --font-ui:
+    "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+  --canvas: #0b1416;
+  --surface: #0b1416;
+  --surface-raised: #0b1416;
   --text: #d7e3df;
   --text-muted: #869a93;
+
   --line: #13312a;
-  --hover: #081512;
+  --hover: #11201f;
+  --active: #16302b;
+
+  --primary: #022c1e;
+  --on-primary: #c8ff00;
+  --progress: #c8ff00;
   --accent: #c8ff00;
-  --focus: #b4e34f;
-  --ok: #2fd06b;
-  --warn: #e3b341;
-  --off: #ff9d90;
-  --danger: #ff9d90;
   --on-accent: #022c1e;
 
-  --radius: 6px;
+  --success: #2fd06b;
+  --warning: #e3b341;
+  --danger: #ff9d90;
+  --focus: #b4e34f;
+
+  --shadow:
+    0 18px 40px -18px rgb(0 0 0 / 0.75),
+    0 4px 12px -6px rgb(0 0 0 / 0.5);
+
+  --radius: 0.75rem;
+  --radius-control: 0.5rem;
+  --radius-chip: 0.375rem;
+
   --space-1: 0.25rem;
   --space-2: 0.5rem;
   --space-3: 0.75rem;
   --space-4: 1rem;
   --space-5: 1.5rem;
 
-  --font-ui: system-ui, -apple-system, "Segoe UI", sans-serif;
   --text-micro: 0.6875rem;
+  --text-small: 0.75rem;
   --text-body: 0.8125rem;
   --text-title: 1rem;
 }
 
+:root[data-bdm-theme="light"] {
+  color-scheme: light;
+
+  --canvas: #f3f4f6;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --text: #17181b;
+  --text-muted: #565b64;
+
+  --line: #d8dade;
+  --hover: #e9eaee;
+  --active: #dcdfe5;
+
+  --primary: #022c1e;
+  --on-primary: #c8ff00;
+  --progress: #022c1e;
+  --accent: #022c1e;
+  --on-accent: #c8ff00;
+
+  --success: #1a7f37;
+  --warning: #8a6100;
+  --danger: #b3261e;
+  --focus: #4d7a12;
+
+  --shadow:
+    0 18px 40px -18px rgb(15 23 42 / 0.3),
+    0 4px 12px -6px rgb(15 23 42 / 0.18);
+}
+
 @media (prefers-color-scheme: light) {
-  :root {
-    --canvas: #ffffff;
+  :root[data-bdm-theme="auto"] {
+    color-scheme: light;
+
+    --canvas: #f3f4f6;
+    --surface: #ffffff;
+    --surface-raised: #ffffff;
     --text: #17181b;
     --text-muted: #565b64;
+
     --line: #d8dade;
-    --hover: #f0f1f4;
+    --hover: #e9eaee;
+    --active: #dcdfe5;
+
+    --primary: #022c1e;
+    --on-primary: #c8ff00;
+    --progress: #022c1e;
     --accent: #022c1e;
-    --focus: #4d7a12;
-    --ok: #1a7f37;
-    --warn: #8a6100;
-    --off: #b3261e;
-    --danger: #b3261e;
     --on-accent: #c8ff00;
+
+    --success: #1a7f37;
+    --warning: #8a6100;
+    --danger: #b3261e;
+    --focus: #4d7a12;
+
+    --shadow:
+      0 18px 40px -18px rgb(15 23 42 / 0.3),
+      0 4px 12px -6px rgb(15 23 42 / 0.18);
   }
 }
 
@@ -55,7 +131,16 @@
   box-sizing: border-box;
 }
 
+html {
+  background: var(--canvas);
+}
+
 :focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
+}
+
+::selection {
+  color: var(--on-primary);
+  background: var(--primary);
 }

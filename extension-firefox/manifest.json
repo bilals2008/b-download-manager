@@ -1,36 +1,52 @@
 {
   "manifest_version": 3,
-  "name": "B Download Manager Bridge",
-  "version": "0.3.0",
-  "description": "Hands links and downloads to B Download Manager.",
+  "name": "B Download Manager",
+  "version": "1.0.0",
+  "description": "Send downloads and video from Firefox to B Download Manager.",
   "browser_specific_settings": {
     "gecko": {
       "id": "idm-bridge@my-idm-clone.local",
-      "strict_min_version": "128.0"
+      "strict_min_version": "142.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
     }
   },
-  "permissions": ["activeTab", "contextMenus", "downloads", "scripting", "storage"],
+  "permissions": ["contextMenus", "downloads", "storage"],
   "host_permissions": ["http://127.0.0.1:27500/*"],
   "background": {
-    "scripts": ["settings.js", "bridge.js", "background.js"]
+    "scripts": ["lib/media.js", "lib/settings.js", "lib/bridge.js", "background.js"]
   },
   "content_scripts": [
     {
       "matches": ["http://*/*", "https://*/*"],
-      "js": ["settings.js", "panel.js"],
+      "js": [
+        "lib/media.js",
+        "lib/settings.js",
+        "lib/icons.js",
+        "content/page-media.js",
+        "content/overlay-style.js",
+        "content/overlay.js"
+      ],
       "run_at": "document_idle"
     }
   ],
   "options_ui": {
-    "page": "options.html",
+    "page": "options/options.html",
     "open_in_tab": true
   },
   "action": {
     "default_title": "B Download Manager",
-    "default_popup": "popup.html",
-    "default_icon": "icons/icon-48.png"
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "96": "icons/icon-96.png",
+      "128": "icons/icon-128.png"
+    }
   },
   "icons": {
+    "32": "icons/icon-32.png",
     "48": "icons/icon-48.png",
     "96": "icons/icon-96.png",
     "128": "icons/icon-128.png"

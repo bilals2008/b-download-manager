@@ -1,0 +1,430 @@
+/* The popup: the state of the app and the downloads it holds, and nothing
+   that needs a paragraph to explain. */
+
+body {
+  width: 344px;
+  margin: 0;
+  color: var(--text);
+  background: var(--canvas);
+  font: var(--text-body) / 1.45 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+
+.icon {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ------------------------------------------------------------------ top */
+
+.top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 10px 10px 6px 12px;
+}
+
+.brand {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.mark {
+  flex: none;
+  border-radius: 5px;
+}
+
+.brand-name {
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.icon-button {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-control);
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.icon-button:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+
+.icon-button:active {
+  background: var(--active);
+}
+
+.icon-button.small {
+  width: 24px;
+  height: 24px;
+}
+
+.icon-button.small .icon {
+  width: 13px;
+  height: 13px;
+}
+
+.icon-button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+/* --------------------------------------------------------------- status */
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px 10px;
+  font-size: var(--text-micro);
+}
+
+.dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--text-muted) 14%, transparent);
+}
+
+.status[data-state="ok"] .dot {
+  background: var(--success);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 14%, transparent);
+}
+
+.status[data-state="checking"] .dot,
+.status[data-state="warn"] .dot {
+  background: var(--warning);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning) 14%, transparent);
+}
+
+.status[data-state="offline"] .dot {
+  background: var(--danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 14%, transparent);
+}
+
+.status[data-state="checking"] .dot {
+  animation: breathe 1.4s ease-in-out infinite;
+}
+
+.status-text {
+  overflow: hidden;
+  color: var(--text-muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.status[data-state="offline"] .status-text {
+  color: var(--danger);
+}
+
+.text-button {
+  margin: 0;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 5px;
+  color: var(--text-muted);
+  background: transparent;
+  font: inherit;
+  font-size: var(--text-micro);
+  cursor: pointer;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+
+.text-button:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+
+.text-button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.end {
+  margin-inline-start: auto;
+}
+
+#retry {
+  margin-inline-start: auto;
+  color: var(--text);
+}
+
+/* --------------------------------------------------------------- layout */
+
+main {
+  border-block-start: 1px solid var(--line);
+}
+
+.section {
+  padding: 9px 6px 10px;
+}
+
+.section + .section {
+  padding-block-start: 4px;
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 7px 5px;
+}
+
+h2 {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.count {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.empty {
+  margin: 0;
+  padding: 6px 7px 8px;
+  color: var(--text-muted);
+  font-size: var(--text-micro);
+}
+
+/* ------------------------------------------------------------ downloads */
+
+.downloads {
+  max-height: 286px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+.download {
+  padding: 7px;
+  border-radius: 8px;
+  animation: row-in 160ms ease;
+}
+
+.download + .download {
+  margin-block-start: 1px;
+}
+
+.download:hover {
+  background: var(--hover);
+}
+
+.download-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.file-button {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  color: var(--text);
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: start;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.file-button:hover {
+  color: var(--progress);
+}
+
+.file-button:focus-visible {
+  border-radius: 3px;
+  outline-offset: 3px;
+}
+
+.actions {
+  display: flex;
+  flex: none;
+  gap: 1px;
+}
+
+.download .icon-button:hover {
+  background: var(--active);
+}
+
+.download [data-op="cancel"]:hover,
+.download [data-op="cancel"][data-confirming="true"] {
+  color: var(--danger);
+}
+
+.track {
+  position: relative;
+  height: 4px;
+  margin-block: 7px 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--hover);
+}
+
+.track > span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--progress);
+  transition: width 260ms ease;
+}
+
+.track[data-indeterminate="true"] > span {
+  width: 34%;
+  animation: slide 1.3s ease-in-out infinite;
+}
+
+.meta {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.meta .pct {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.meta .speed {
+  margin-inline-start: auto;
+  white-space: nowrap;
+}
+
+.meta .detail {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.download[data-status="paused"] .track > span {
+  background: var(--text-muted);
+}
+
+/* ---------------------------------------------------------------- media */
+
+.media {
+  max-height: 132px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+.media-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 7px;
+  border-radius: 7px;
+}
+
+.media-row:hover {
+  background: var(--hover);
+}
+
+.tag {
+  flex: none;
+  padding: 1px 4px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.media-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--text-micro);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.media-row[data-sent="true"] .icon-button {
+  color: var(--success);
+}
+
+/* -------------------------------------------------------------- motion */
+
+@keyframes breathe {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@keyframes slide {
+  0% {
+    transform: translateX(-110%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icon-button,
+  .text-button,
+  .track > span,
+  .download {
+    transition: none;
+    animation: none;
+  }
+
+  .status[data-state="checking"] .dot,
+  .track[data-indeterminate="true"] > span {
+    animation: none;
+  }
+}
