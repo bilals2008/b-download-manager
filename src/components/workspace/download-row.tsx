@@ -23,6 +23,8 @@ interface DownloadRowProps {
   onSelect: (mode: SelectMode) => void;
   /** Open the menu of the row, the way a right click does. */
   onOpenMenu: (at: { x: number; y: number }, trigger: HTMLElement | null) => void;
+  /** Open the progress window of the row, the way a double click does. */
+  onOpen: () => void;
 }
 
 /**
@@ -38,6 +40,7 @@ export function DownloadRow({
   onToggle,
   onSelect,
   onOpenMenu,
+  onOpen,
 }: DownloadRowProps) {
   const nameRef = useRef<HTMLDivElement>(null);
   const status = STATUS_LABELS[item.status];
@@ -65,6 +68,13 @@ export function DownloadRow({
         } else {
           onSelect("replace");
         }
+      }}
+      onDoubleClick={(event) => {
+        // The checkbox already answered the double click with two toggles.
+        if ((event.target as HTMLElement).closest("input")) {
+          return;
+        }
+        onOpen();
       }}
       onContextMenu={(event) => {
         event.preventDefault();

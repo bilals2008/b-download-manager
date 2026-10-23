@@ -9,11 +9,12 @@ import {
   StopGlyph,
   TrashGlyph,
 } from "@/components/icons/action-icons";
+import { DownloadGlyph } from "@/components/icons/ui-icons";
 import { MenuPopup, type MenuRow } from "@/components/shell/menu-popup";
 import { copyText } from "@/lib/clipboard";
 import { splitPath, type Download } from "@/lib/downloads";
 import { describeError } from "@/lib/errors";
-import { openPath } from "@/lib/ipc";
+import { openPath, openProgressWindow } from "@/lib/ipc";
 import { useDownloads } from "@/state/download-store";
 
 /** What the menu of a download can do. */
@@ -25,6 +26,7 @@ type RowCommand =
   | "remove"
   | "open-file"
   | "open-folder"
+  | "open-window"
   | "copy-address"
   | "properties";
 
@@ -101,6 +103,11 @@ export function DownloadContextMenu({
         break;
       case "open-folder":
         open(splitPath(item.dest).dir);
+        break;
+      case "open-window":
+        openProgressWindow(item.id).catch((failure: unknown) => {
+          reportError(describeError(failure));
+        });
         break;
       case "copy-address":
         void copyAddress();
@@ -185,6 +192,12 @@ function rowsFor(items: Download[]): MenuRow<RowCommand>[] {
       command: "open-folder",
       label: "Open containing folder",
       icon: <FolderGlyph className="size-3.5" />,
+      disabled: single === null,
+    },
+    {
+      command: "open-window",
+      label: "Download progress window",
+      icon: <DownloadGlyph className="size-3.5" />,
       disabled: single === null,
     },
     {

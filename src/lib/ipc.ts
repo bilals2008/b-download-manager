@@ -67,6 +67,33 @@ export function removeDownload(id: number): Promise<void> {
   return invoke<void>("remove_download", { id });
 }
 
+/** Open the progress window of a download, or bring it back to the front. */
+export function openProgressWindow(id: number): Promise<void> {
+  return invoke<void>("open_progress_window", { id });
+}
+
+/**
+ * Fold the connection details of the progress window away, or open them.
+ *
+ * The window is not resizable, so the backend sizes it from this.
+ */
+export function setProgressDetails(open: boolean): Promise<void> {
+  return invoke<void>("set_progress_details", { open });
+}
+
+/**
+ * Cap the bandwidth of one download. Zero means no cap.
+ *
+ * Resolves with the rate the engine now holds, which is the value it clamped
+ * the request to.
+ */
+export function setDownloadSpeedLimit(
+  id: number,
+  bytesPerSecond: number,
+): Promise<number> {
+  return invoke<number>("set_download_speed_limit", { id, bytesPerSecond });
+}
+
 export function defaultDestination(): Promise<string> {
   return invoke<string>("default_destination");
 }
@@ -128,6 +155,17 @@ export function setMinimizeToTray(on: boolean): Promise<boolean> {
 /** Whether a finished download gets its own window. */
 export function setShowCompleteDialog(on: boolean): Promise<boolean> {
   return invoke<boolean>("set_show_complete_dialog", { on });
+}
+
+/**
+ * The folder a download handed over by the browser is saved to.
+ *
+ * The extension starts its hand-over in the backend, which cannot read the
+ * window's saved preferences, so the window pushes the folder here. An empty
+ * folder means the system Downloads folder.
+ */
+export function setBrowserFolder(folder: string): Promise<string> {
+  return invoke<string>("set_browser_folder", { folder });
 }
 
 /** Leave the application for good. */

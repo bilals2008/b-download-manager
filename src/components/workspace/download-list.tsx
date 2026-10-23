@@ -22,6 +22,8 @@ import { FindBar } from "@/components/workspace/find-bar";
 import { SelectionCheckbox } from "@/components/workspace/selection-checkbox";
 import { useColumnWidths } from "@/components/workspace/use-column-widths";
 import type { Download, SortKey } from "@/lib/downloads";
+import { describeError } from "@/lib/errors";
+import { openProgressWindow } from "@/lib/ipc";
 import { cn } from "@/lib/utils";
 import { useDownloads } from "@/state/download-store";
 
@@ -50,6 +52,7 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
     loading,
     error,
     dismissError,
+    reportError,
     reload,
     findOpen,
     closeFind,
@@ -94,6 +97,13 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
     if (reason !== "pointer") {
       menuTrigger.current?.focus();
     }
+  }
+
+  /** Open the window that shows this download in flight, the way IDM does. */
+  function openProgress(item: Download) {
+    openProgressWindow(item.id).catch((failure: unknown) => {
+      reportError(describeError(failure));
+    });
   }
 
   // The row the keyboard is on: bring it into view when a key, Find Next or a
@@ -408,6 +418,7 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
                     viewportRef.current?.focus({ preventScroll: true });
                   }}
                   onOpenMenu={(at, trigger) => openMenu(item, at, trigger)}
+                  onOpen={() => openProgress(item)}
                 />
               ))
             )}

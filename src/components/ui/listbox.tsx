@@ -13,6 +13,8 @@ interface ListBoxProps {
   options: ListBoxOption[];
   value: string;
   onChange: (value: string) => void;
+  /** A field the page is waiting for does not open; it stays readable. */
+  disabled?: boolean;
 }
 
 /** Where the popup hangs, in viewport coordinates. */
@@ -40,7 +42,13 @@ function samePlace(a: Placement | null, b: Placement): boolean {
  * draw their own chevron and cannot follow the theme, so the trigger, the
  * popup and the keyboard behaviour are built here instead.
  */
-export function ListBox({ label, options, value, onChange }: ListBoxProps) {
+export function ListBox({
+  label,
+  options,
+  value,
+  onChange,
+  disabled = false,
+}: ListBoxProps) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(() =>
     Math.max(
@@ -107,6 +115,14 @@ export function ListBox({ label, options, value, onChange }: ListBoxProps) {
       optionRefs.current[active]?.focus();
     }
   }, [open, active, placement]);
+
+  // A list that becomes unavailable while it is open folds itself away,
+  // instead of leaving a popup that cannot be used over the page.
+  useEffect(() => {
+    if (disabled) {
+      setOpen(false);
+    }
+  }, [disabled]);
 
   function close(returnFocus = true) {
     setOpen(false);
@@ -217,9 +233,10 @@ export function ListBox({ label, options, value, onChange }: ListBoxProps) {
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={`${baseId}-list`}
+        disabled={disabled}
         onClick={() => setOpen((current) => !current)}
         onKeyDown={handleKeyDown}
-        className="flex w-full items-center justify-between gap-2 rounded-chrome border border-chrome-line bg-chrome-canvas px-2.5 py-1.5 text-left text-xs text-chrome-menu-text transition-colors hover:border-chrome-muted focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
+        className="flex w-full items-center justify-between gap-2 rounded-chrome border border-chrome-line bg-chrome-canvas px-2.5 py-1.5 text-left text-xs text-chrome-menu-text transition-colors hover:border-chrome-muted focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none disabled:cursor-default disabled:opacity-45 disabled:hover:border-chrome-line"
       >
         <span className="truncate">{selected?.label ?? label}</span>
         <ChevronDown className="size-3.5 shrink-0 text-chrome-muted" />

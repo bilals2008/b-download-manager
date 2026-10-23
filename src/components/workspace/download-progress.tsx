@@ -2,14 +2,12 @@ import { cn } from "@/lib/utils";
 import type { Download } from "@/lib/downloads";
 
 interface DownloadProgressProps {
-  /** From 0 to 100. */
   value: number;
   status: Download["status"];
   label: string;
   className?: string;
 }
 
-/** The meter changes colour with the state, so a paused row never looks alive. */
 const FILL: Record<Download["status"], string> = {
   downloading: "bg-progress",
   completed: "bg-success",
@@ -19,11 +17,6 @@ const FILL: Record<Download["status"], string> = {
   error: "bg-destructive",
 };
 
-/**
- * The progress of one row on a single line: a slim meter, then its percentage.
- * The bar carries the state in its colour, so a download that is paused or
- * failed reads as one without looking at the status column.
- */
 export function DownloadProgress({
   value,
   status,

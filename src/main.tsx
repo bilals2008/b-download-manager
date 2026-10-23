@@ -3,29 +3,33 @@ import { createRoot } from "react-dom/client";
 
 import App from "./App";
 import { DownloadCompleteWindow } from "./components/windows/download-complete-window";
-import { applyFont, applyWeight } from "./lib/fonts";
-import { loadSettings } from "./lib/settings";
-import { applyTheme } from "./lib/theme";
+import { DownloadProgressWindow } from "./components/windows/progress/download-progress-window";
+import { startAppearanceSync } from "./lib/appearance";
 import { DownloadProvider } from "./state/download-store";
 import type { DownloadInfo } from "./types";
 import "./index.css";
 
 // The appearance is settled before the first paint, so the window opens in the
-// theme, face, weight and size the user chose instead of flashing defaults.
-const saved = loadSettings();
-applyTheme(saved.theme);
-applyFont(saved.uiFont);
-applyWeight(saved.uiWeight);
+// theme, face and weight the user chose instead of flashing defaults. The same
+// call makes this window follow changes made in the settings window, which is
+// what keeps a progress window in the theme it was opened beside.
+startAppearanceSync();
 
-// The backend opens the completion window with this script, so the page knows
-// the finished download before it renders. Every other window is the app.
+// The backend opens the two small windows with an initialization script, so
+// the page knows the download before it renders: the completion window gets a
+// finished one, the progress window a live one. Every other window is the app.
+const progress = (
+  window as Window & { __IDM_PROGRESS__?: DownloadInfo }
+).__IDM_PROGRESS__;
 const completed = (
   window as Window & { __IDM_COMPLETE__?: DownloadInfo }
 ).__IDM_COMPLETE__;
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    {completed ? (
+    {progress ? (
+      <DownloadProgressWindow initial={progress} />
+    ) : completed ? (
       <DownloadCompleteWindow info={completed} />
     ) : (
       <DownloadProvider>

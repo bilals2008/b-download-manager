@@ -120,6 +120,24 @@ export function DownloadGlyph({ className }: GlyphProps) {
   );
 }
 
+/**
+ * A window dropping into the tray.
+ *
+ * The window outline is what tells this apart from a download button: the
+ * arrow leaves a window, it does not fetch a file. The line at the foot is the
+ * tray the window goes into.
+ */
+export function MinimizeToTrayGlyph({ className }: GlyphProps) {
+  return (
+    <Glyph className={className}>
+      <rect x="3.2" y="2.4" width="9.6" height="5.8" rx="1.3" />
+      <path d="M8 9v3.2" />
+      <path d="m6.3 10.6 1.7 1.7 1.7-1.7" />
+      <path d="M3 14.8h10" />
+    </Glyph>
+  );
+}
+
 export function PanelGlyph({
   collapsed,
   className,

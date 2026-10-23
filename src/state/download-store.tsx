@@ -39,6 +39,7 @@ import {
 import { describeError, isDesktop } from "@/lib/errors";
 import { nextMatch } from "@/lib/find";
 import { rangeIds } from "@/lib/selection";
+import { etaSeconds, nextSpeedSample, type SpeedSample } from "@/lib/speed";
 import type { DownloadInfo, DownloadStatus as EngineStatus } from "@/types";
 
 /** What a bulk action does to the selected rows. */
@@ -74,12 +75,6 @@ export interface CategoryFolder {
   path: string;
   label: string;
   count: number;
-}
-
-interface SpeedSample {
-  downloaded: number;
-  at: number;
-  speed: number;
 }
 
 /** A link the browser extension handed over, waiting in the add dialog. */
@@ -218,23 +213,18 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
 
   const sampleFor = useCallback((info: DownloadInfo) => {
     const now = Date.now();
-    const previous = samples.current.get(info.id);
-    let speed = 0;
-
-    if (info.status === "running") {
-      if (previous && now > previous.at && info.downloaded >= previous.downloaded) {
-        const instant =
-          ((info.downloaded - previous.downloaded) * 1000) / (now - previous.at);
-        speed =
-          previous.speed > 0 ? previous.speed * 0.65 + instant * 0.35 : instant;
-      } else if (previous) {
-        speed = previous.speed;
-      }
-    }
-
-    samples.current.set(info.id, { downloaded: info.downloaded, at: now, speed });
-    const remaining = Math.max(0, info.total - info.downloaded);
-    return { speed, eta: speed > 0 ? remaining / speed : 0, at: now };
+    const sample = nextSpeedSample(
+      samples.current.get(info.id),
+      info.downloaded,
+      info.status === "running",
+      now,
+    );
+    samples.current.set(info.id, sample);
+    return {
+      speed: sample.speed,
+      eta: etaSeconds(info.total, info.downloaded, sample.speed),
+      at: now,
+    };
   }, []);
 
   const toDownload = useCallback(

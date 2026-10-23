@@ -10,9 +10,10 @@ import {
   type SettingsPageId,
 } from "@/components/settings/settings-nav";
 import { Dialog } from "@/components/ui/dialog";
+import { broadcastSettings } from "@/lib/app-events";
 import { describeError } from "@/lib/errors";
 import { applyFont, applyWeight } from "@/lib/fonts";
-import { setMaxConnections, setMinimizeToTray, setProxy, setShowCompleteDialog, setSpeedLimit } from "@/lib/ipc";
+import { setBrowserFolder, setMaxConnections, setMinimizeToTray, setProxy, setShowCompleteDialog, setSpeedLimit } from "@/lib/ipc";
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type Settings } from "@/lib/settings";
 import { applyTheme } from "@/lib/theme";
 
@@ -32,6 +33,7 @@ const ENGINE_KEYS: readonly (keyof Settings)[] = [
   "maxConnections",
   "minimizeToTray",
   "showCompleteDialog",
+  "defaultFolder",
 ];
 
 /**
@@ -70,6 +72,12 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
     setSettings(next);
     saveSettings(next);
 
+    // Every window reads the saved preferences: the progress window follows
+    // the appearance and the application-wide speed limit, the completion
+    // window the appearance. The main window is the preview for its own copy,
+    // and applies the change below without waiting for the round trip.
+    broadcastSettings();
+
     // The appearance lands at once; the window is the preview.
     if (key === "theme") {
       applyTheme(next.theme);
@@ -95,6 +103,7 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
       await setMaxConnections(next.maxConnections);
       await setMinimizeToTray(next.minimizeToTray);
       await setShowCompleteDialog(next.showCompleteDialog);
+      await setBrowserFolder(next.defaultFolder);
       setError(null);
     } catch (failure) {
       setError(describeError(failure));

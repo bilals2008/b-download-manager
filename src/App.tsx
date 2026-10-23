@@ -12,6 +12,7 @@ import { applyFont } from "@/lib/fonts";
 import {
   onTrayCommand,
   quitApp,
+  setBrowserFolder,
   setMaxConnections,
   setMinimizeToTray,
   setProxy,
@@ -25,7 +26,6 @@ import {
   saveToolbarSize,
   type ToolbarSize,
 } from "@/lib/settings";
-import { watchTheme } from "@/lib/theme";
 import { useDownloads } from "@/state/download-store";
 
 export default function App() {
@@ -72,6 +72,9 @@ export default function App() {
     void setShowCompleteDialog(settings.showCompleteDialog).catch(() => {
       // As above.
     });
+    void setBrowserFolder(settings.defaultFolder).catch(() => {
+      // As above; the browser hand-over falls back to the Downloads folder.
+    });
   }, []);
 
   // A link that the browser extension handed over opens the add dialog with
@@ -81,9 +84,6 @@ export default function App() {
       setAddDownloadOpen(true);
     }
   }, [downloads.browserRequest]);
-
-  // Auto keeps up with the operating system while the window is open.
-  useEffect(() => watchTheme(), []);
 
   // The tray menu drives the same commands as the menu bar.
   useEffect(() => {
