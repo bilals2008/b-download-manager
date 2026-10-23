@@ -57,6 +57,8 @@ export interface Download {
   connections: number;
   /** Failure text from the engine, when the status is "error". */
   error: string | null;
+  /** The note the user typed in the add dialog, when they typed one. */
+  description: string | null;
 }
 
 /** The categories pane filter. A category name filters to that category. */
@@ -258,4 +260,72 @@ export function categoryOfFile(fileName: string): CategoryName {
 
 /** The engine's eight-connection default, matching `DEFAULT_CONNECTIONS` in Rust. */
 export const DEFAULT_CONNECTIONS = 8;
+
+/** A category the list knows, when a value from disk is one. */
+export function categoryName(value: string | null | undefined): CategoryName | null {
+  return CATEGORIES.includes(value as CategoryName)
+    ? (value as CategoryName)
+    : null;
+}
+
+/**
+ * The address the engine may fetch, or null when it may not.
+ *
+ * The browser's own parser decides, so the answer matches what the request
+ * will do: a scheme of http, https or ftp, a host, and no raw whitespace.
+ */
+export function downloadUrl(value: string): URL | null {
+  const trimmed = value.trim();
+  if (!trimmed || /\s/.test(trimmed)) {
+    return null;
+  }
+  try {
+    const url = new URL(trimmed);
+    if (!["http:", "https:", "ftp:"].includes(url.protocol)) {
+      return null;
+    }
+    return url.hostname ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * What is wrong with a file name, or null when the file system can hold it.
+ *
+ * The rules are the ones `dest.rs` enforces on the way into the engine, so
+ * the dialog explains a name before a download is created for it.
+ */
+export function fileNameProblem(name: string): string | null {
+  if (!name.trim()) {
+    return "Enter a file name.";
+  }
+  if (name.length > 200) {
+    return "The file name is longer than 200 characters.";
+  }
+  if (/[<>:"/\\|?*\u0000-\u001f]/.test(name)) {
+    return 'A file name cannot contain < > : " / \\ | ? *.';
+  }
+  if (name === "." || name === "..") {
+    return "That is not a file name.";
+  }
+  if (/[. ]$/.test(name)) {
+    return "A file name cannot end with a dot or a space.";
+  }
+  const stem = name.split(".")[0].toLowerCase();
+  if (RESERVED_NAMES.includes(stem)) {
+    return `${name} is a name Windows keeps for a device.`;
+  }
+  return null;
+}
+
+/** The device names Windows reserves, with or without an extension. */
+const RESERVED_NAMES = [
+  "con",
+  "prn",
+  "aux",
+  "nul",
+  ...Array.from({ length: 9 }, (_, index) => `com${index + 1}`),
+  ...Array.from({ length: 9 }, (_, index) => `lpt${index + 1}`),
+];
 

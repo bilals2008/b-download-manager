@@ -43,6 +43,10 @@ export interface DownloadInfo {
   resumable: boolean | null;
   /** The bandwidth cap of this download, in bytes per second. 0 is no cap. */
   speedLimit: number;
+  /** The category picked in the add dialog, when one was picked. */
+  category: string | null;
+  /** The note typed in the add dialog, when one was typed. */
+  description: string | null;
 }
 
 export const ACTIVE_STATUSES: DownloadStatus[] = ["queued", "running", "paused"];

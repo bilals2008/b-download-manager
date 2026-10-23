@@ -11,6 +11,7 @@ import {
 
 import {
   CATEGORIES,
+  categoryName,
   categoryOfFile,
   DEFAULT_CONNECTIONS,
   fileNameFromUrl,
@@ -154,6 +155,10 @@ export interface NewDownload {
   savePath: string;
   /** The page the link was on, when the browser knew it. */
   referer?: string;
+  /** Start the row in the queue instead of starting it now. */
+  queue?: boolean;
+  /** A note for the download properties. */
+  description?: string;
 }
 
 const DownloadContext = createContext<DownloadStore | null>(null);
@@ -236,9 +241,13 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
         id: info.id,
         fileName,
         url: info.url,
-        // shortcut: the engine has no category field, so a category picked in
-        // the dialog lives for the session only.
-        category: previous?.category ?? categoryOfFile(fileName),
+        // The engine keeps the category the dialog gave it, so a row looks
+        // the same after a restart. An older index has none, and the file
+        // name is the next best answer.
+        category:
+          previous?.category ??
+          categoryName(info.category) ??
+          categoryOfFile(fileName),
         size: info.total,
         downloaded: info.downloaded,
         status: ENGINE_STATUS[info.status],
@@ -252,6 +261,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
         referer: info.referer,
         connections: info.connections,
         error: info.error,
+        description: info.description,
       };
     },
     [sampleFor],
@@ -443,23 +453,28 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
       // It may already be gone from the engine.
     }
     forget(item.id);
-    await startDownload(
-      item.url,
-      item.dest,
-      item.connections || DEFAULT_CONNECTIONS,
-      item.referer ?? undefined,
-    );
+    await startDownload({
+      url: item.url,
+      dest: item.dest,
+      connections: item.connections || DEFAULT_CONNECTIONS,
+      referer: item.referer ?? undefined,
+      category: item.category,
+      description: item.description ?? undefined,
+    });
   }
 
   /** Start one download and put its row in the list. */
   async function beginDownload(input: NewDownload) {
     const dest = joinPath(input.savePath, input.fileName);
-    const id = await startDownload(
-      input.url,
+    const id = await startDownload({
+      url: input.url,
       dest,
-      DEFAULT_CONNECTIONS,
-      input.referer,
-    );
+      connections: DEFAULT_CONNECTIONS,
+      referer: input.referer,
+      queue: input.queue,
+      category: input.category,
+      description: input.description,
+    });
     const now = Date.now();
     const { dir, base } = splitPath(dest);
     const row: Download = {
@@ -479,6 +494,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
       referer: input.referer?.trim() || null,
       connections: DEFAULT_CONNECTIONS,
       error: null,
+      description: input.description?.trim() || null,
     };
     setState((current) => ({
       ...current,

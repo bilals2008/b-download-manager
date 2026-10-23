@@ -12,6 +12,7 @@
     "check:selection": "node scripts/check-selection.mjs",
     "check:find": "node scripts/check-find.mjs",
     "check:progress": "node scripts/check-progress.mjs",
+    "check:add-dialog": "node scripts/check-add-dialog.mjs",
     "check:extension": "node scripts/check-extension.mjs",
     "tauri": "tauri"
   },

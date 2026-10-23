@@ -83,6 +83,11 @@ export function DownloadPropertiesDialog({
           </Field>
           <Field label="Status">{STATUS_LABELS[item.status]}</Field>
           <Field label="Category">{item.category}</Field>
+          {item.description ? (
+            <Field label="Description">
+              <span className="break-words">{item.description}</span>
+            </Field>
+          ) : null}
           <Field label="Connections">{item.connections}</Field>
           <Field label="Added">{formatDate(item.addedAt)}</Field>
           <Field label="Last try">{formatDate(item.lastTryAt)}</Field>

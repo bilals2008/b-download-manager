@@ -33,17 +33,28 @@ export function onBridgeDownload(
   );
 }
 
-export function startDownload(
-  url: string,
-  dest: string,
-  connections: number,
-  referer?: string,
-): Promise<number> {
+export interface StartDownloadInput {
+  url: string;
+  dest: string;
+  connections?: number;
+  referer?: string;
+  /** Add the row to the queue instead of starting it now. */
+  queue?: boolean;
+  /** The category the dialog showed. */
+  category?: string;
+  /** The note the user typed, when they typed one. */
+  description?: string;
+}
+
+export function startDownload(input: StartDownloadInput): Promise<number> {
   return invoke<number>("start_download", {
-    url,
-    dest,
-    connections,
-    referer: referer?.trim() || null,
+    url: input.url,
+    dest: input.dest,
+    connections: input.connections ?? null,
+    referer: input.referer?.trim() || null,
+    queue: input.queue ?? false,
+    category: input.category?.trim() || null,
+    description: input.description?.trim() || null,
   });
 }
 
@@ -75,10 +86,14 @@ export function openProgressWindow(id: number): Promise<void> {
 /**
  * Fold the connection details of the progress window away, or open them.
  *
- * The window is not resizable, so the backend sizes it from this.
+ * The window is not resizable, so the backend sizes it from this; the height
+ * travels there for anyone who has not asked for less motion.
  */
 export function setProgressDetails(open: boolean): Promise<void> {
-  return invoke<void>("set_progress_details", { open });
+  return invoke<void>("set_progress_details", {
+    open,
+    animated: !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  });
 }
 
 /**
@@ -104,9 +119,13 @@ export interface LinkProbe {
   name: string | null;
   /** The size of the file. Null when the server did not tell it. */
   total: number | null;
+  /** Whether the server honours a range request. */
+  ranges: boolean;
+  /** Whether a stopped download could continue from where it stopped. */
+  resumable: boolean;
 }
 
-/** The name and the size the server gives the file at an address. */
+/** The name, the size and the resume support of the link at an address. */
 export function probeLink(
   url: string,
   referer?: string,
@@ -115,6 +134,26 @@ export function probeLink(
     url,
     referer: referer?.trim() || null,
   });
+}
+
+/** What the dialog needs to know about a destination before it starts. */
+export interface DestinationInfo {
+  /** The folder the file goes into. */
+  folder: string;
+  /** Whether the folder is there already. A missing one is created. */
+  folderExists: boolean;
+  /** Whether a file of that name is already there, and would be replaced. */
+  fileExists: boolean;
+}
+
+/**
+ * Check a destination before a download is created for it.
+ *
+ * Rejects with the reason the engine would refuse it, in words the dialog can
+ * show beside the field.
+ */
+export function inspectDestination(dest: string): Promise<DestinationInfo> {
+  return invoke<DestinationInfo>("inspect_destination", { dest });
 }
 
 /** The system folder picker. Null when the user cancels. */
