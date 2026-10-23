@@ -40,7 +40,7 @@ toolbar and menus the classic download managers use.
 - **HTTP, HTTPS and FTP** — including `REST` offsets over FTP, one data connection per range.
 - **Proxy aware** — HTTP and SOCKS proxies, applied to new downloads.
 - **Speed control** — a global cap, a per-download cap, and a connection budget for the whole application.
-- **Browser hand-off** — an extension for Chrome and one for Firefox; a right click on a link or a browser download taken over by the application.
+- **Browser hand-off** — a Firefox extension with an IDM-style video button, live download controls and settings, plus a small Chrome/Edge build; both use a versioned loopback bridge inside the application.
 - **A queue you can watch** — categories, folders, sortable columns, search, selection, pause/stop/resume, properties, and a drag-free table.
 - **Its own completion window** — the IDM dialog with the file badge, the saved path, *Open file* and *Open folder*.
 - **Lives in the tray** — closing the window hides it; the tray menu brings it back, starts and stops the queue, and exits.
@@ -55,6 +55,7 @@ toolbar and menus the classic download managers use.
 | **Main window** | Categories tree, views and per-folder drill-down; the live download table with size, progress, speed and time left; toolbar, menus and status bar |
 | **Add new download** | Address first; the name, category and size follow from it and from the server's answer, the folder is picked with the system dialog |
 | **Download complete** | The window IDM opens when a file finishes, with the file badge, the size, the saved path and the two open buttons |
+| **Download progress** | The live window of one download: status, sizes, rate, time left, resume capability, the connections with what each one has and is doing, the speed limiter, and a minimize-to-tray button with a tray icon of its own |
 | **Options** | General, Save to, Downloads, Connection and Proxy pages — theme, face, weight, folder, limits, tray, proxy |
 | **Properties** | Address, destination, connections, status and error of one download |
 
@@ -70,7 +71,7 @@ toolbar and menus the classic download managers use.
 | UI | [shadcn/ui](https://ui.shadcn.com/) patterns, [Radix UI](https://www.radix-ui.com/), hand-drawn SVG artwork |
 | Styling | [Tailwind CSS v4](https://tailwindcss.com/) with semantic tokens in `src/index.css` |
 | Persistence | Part files, a JSON manifest per download, and a session index for the list |
-| Tooling | `tsc`, `vite`, `cargo test`, and four project gates (`check:palette`, `check:fonts`, `check:selection`, `check:find`) |
+| Tooling | `tsc`, `vite`, `cargo test`, clippy, and six project gates (`check:palette`, `check:fonts`, `check:selection`, `check:find`, `check:progress`, `check:extension`) |
 
 ---
 
@@ -134,6 +135,7 @@ npm run tauri icon src/assets/brand/logo.png
 | `npm run check:fonts` | Every offered face has files, a stack and a settings value |
 | `npm run check:selection` | The selection model: click, Ctrl, Shift and ranges |
 | `npm run check:find` | The Find bar: the walk, the wrap and the first press |
+| `npm run check:progress` | The progress window: percentages, connection words, rate sampling and speed-limit conversions |
 | `npm run check:extension` | Both browser extensions: manifest, host permissions and hand-off |
 | `cargo test --manifest-path crates/idm-core/Cargo.toml` | The engine, against a local HTTP and FTP server |
 | `cargo test --manifest-path src-tauri/Cargo.toml` | The application and its commands |
@@ -185,17 +187,34 @@ a one-byte file. The probe now fails on any non-success answer, and
 
 ## Browser Integration
 
-The application listens on `127.0.0.1:27500`. Both extensions speak that loopback
-hand-off; neither needs a native messaging host.
+The application runs a versioned JSON API on `127.0.0.1:27500`; it starts with
+the application and is reachable only from this machine. A request must carry
+`X-BDM-Client: browser-extension`, and an `Origin`, when present, must be an
+extension origin. Neither build needs a native messaging host or a registry
+entry; the bridge is the application itself.
 
 | Browser | Folder | What it adds |
 | --- | --- | --- |
-| Chrome / Edge | [`browser-extension/`](./browser-extension/) | *Download with Internet Download Manager* on links, videos and audio; browser downloads taken over |
-| Firefox | [`extension-firefox/`](./extension-firefox/) | The same, plus the IDM-style download panel and a link editor; its background is an event page |
+| Firefox | [`extension-firefox/`](./extension-firefox/) | Right-click hand-off, browser download takeover, an IDM-style hover button on supported HTML5 video with live progress, a compact popup with pause/resume/stop, page media and settings; MV3 event page |
+| Chrome / Edge | [`browser-extension/`](./browser-extension/) | Right-click hand-off and browser download takeover with the same bridge contract |
 
-Load the folder with the developer mode on (`chrome://extensions` or
-`about:debugging`). A handed-over link opens the add dialog with the address, the
-file name the browser knew and the referer the page had.
+The bridge offers `ping`, `downloads` (list), `POST /v1/downloads`,
+`pause`, `resume`, `cancel`, `show` and `focus`. A hand-over opens the app's add
+dialog when *Ask before saving* is on, or starts the engine directly otherwise.
+The extension checks the app id and API version before trusting the port, so a
+closed app, a stale app and an unrelated program are reported differently.
+
+Install steps, permissions, the API table and the honest limitations are in
+[`extension-firefox/README.md`](./extension-firefox/README.md). For a quick
+development run:
+
+1. Start the app (`npm run tauri dev`).
+2. `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on…** →
+   `extension-firefox/manifest.json`.
+3. Right-click a link or hover a direct-file HTML5 video.
+
+A permanent Firefox install needs a signed `.xpi`; the README explains the AMO
+and Developer Edition routes.
 
 ---
 
@@ -205,9 +224,17 @@ The tray icon is the way the application stays alive: closing the window hides
 it, the tray menu brings it back, starts and stops the queue, and exits. The
 switch is on **Options → General**.
 
+A download progress window has its own **Minimize to tray** button beside the
+minimize button, and every open progress window owns a tray icon of its own,
+labelled with the file name: clicking it brings that window back, so a window
+hidden there comes back without a trip through the download list. Right-click
+its tray icon for **Show window** and **Close window**.
+
 Windows are drawn by the application, not by the platform: the title bar, the
 menus, the toolbar and the two small windows all use the same tokens, so a theme
-change or a different typeface updates every surface at once.
+change or a different typeface updates every surface at once. The small windows
+take their corners from the compositor rather than drawing a second radius
+inside it, so all four corners are the same shape on every Windows version.
 
 ---
 
@@ -229,8 +256,13 @@ crates/
   idm-cli/           a headless client for the engine
 src-tauri/src/
   lib.rs             the Tauri commands, the reporter and the tray
-  bridge.rs          the loopback server the browser extensions talk to
+  actions.rs         start, pause, resume and cancel, shared by window and bridge
+  bridge/
+    mod.rs           the loopback routes, the versioned contract and its tests
+    http.rs          the small HTTP/1.1 reader and writer
+    dest.rs          file naming, sanitising and collision-free destinations
   complete.rs        the completion window
+  progress.rs        the live download window and its tray icon
   state.rs           the known downloads, limits and saved preferences
   window_style.rs    the rounded frame
 src/
@@ -238,7 +270,8 @@ src/
   components/
     shell/           title bar, menu bar and popups, toolbar, commands
     workspace/       categories pane, download table, dialogs, context menus
-    windows/         the completion window of a finished file
+    windows/         the completion window of a finished file, and the progress
+                     window of a live one (status, connections, speed limiter)
     settings/        the Options pages
     ui/              the primitives (button, dialog, listbox, table, ...)
   lib/
@@ -264,7 +297,9 @@ planning/            scope, engine spec, UI direction, milestones, ADRs
 | `remove_download(id)` | Drop it from the list, after stopping it |
 | `probe_link(url, referer)` | The name and the size the server gives a link |
 | `set_speed_limit(bytes_per_second)` | Bandwidth cap of the whole application |
-| `set_download_speed_limit(id, bytes_per_second)` | Bandwidth cap of one download |
+| `set_download_speed_limit(id, bytes_per_second)` | Bandwidth cap of one download, returns the rate the engine holds |
+| `open_progress_window(id)` | Open the live progress window of a download, or bring it back |
+| `set_progress_details(open)` | Fold the connection details of that window, and size it to match |
 | `set_site_connections(host, connections)` / `site_connections(host)` | Connection cap of one site |
 | `set_max_connections(max)` | How many connections the application may hold open |
 | `set_proxy(url)` | The proxy new downloads go through, HTTP or SOCKS |
@@ -318,7 +353,7 @@ font.
 
 ```bash
 npm run build
-npm run check:palette && npm run check:fonts && npm run check:selection && npm run check:find
+npm run check:palette && npm run check:fonts && npm run check:selection && npm run check:find && npm run check:progress && npm run check:extension
 cargo test --manifest-path crates/idm-core/Cargo.toml
 cargo test --manifest-path src-tauri/Cargo.toml
 ```

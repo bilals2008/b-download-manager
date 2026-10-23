@@ -41,9 +41,14 @@ src-tauri/src/
   main.rs        process entry
   lib.rs         Tauri builder, commands, event wiring
   state.rs       the set of known downloads
-  bridge.rs      the server the browser extension talks to
+  bridge/        the loopback server the browser extensions talk to
+    mod.rs         routes, the versioned contract and its tests
+    http.rs        the HTTP/1.1 reader and writer
+    dest.rs        safe, unique file names for hand-overs
 browser-extension/
-  manifest.json  the extension that hands a link to the application
+  manifest.json  the Chrome/Edge build
+extension-firefox/
+  manifest.json  the Firefox build; MV3 event page, video overlay, popup and settings
 src/
   App.tsx        screen composition and command routing only
   main.tsx       React root
@@ -53,6 +58,8 @@ src/
   components/
     shell/       title bar, menu bar, toolbar, the popup menu they share
     workspace/   panes, tables, dialogs, the context menus (one file each)
+    windows/     the completion window, and progress/ for the live download
+                 window (status tab, speed limiter tab, connections, meter)
     ui/          shadcn/ui primitives
 ```
 
@@ -78,15 +85,23 @@ duplicate bar back. Title-bar buttons call `windowAction` in `src/lib/window.ts`
 
 `core:default` does **not** include window dragging or the control buttons. The
 capability in `src-tauri/capabilities/default.json` must keep
-`core:window:allow-start-dragging`, `allow-minimize`, `allow-toggle-maximize`
-and `allow-close`, or the title bar silently stops dragging and the buttons do
-nothing. Double-click maximize is handled by the drag region; do not add a
-second `onDoubleClick` toggler, it cancels itself out.
+`core:window:allow-start-dragging`, `allow-minimize`, `allow-toggle-maximize`,
+`allow-hide` and `allow-close`, or the title bar silently stops dragging and
+the buttons do nothing. Double-click maximize is handled by the drag region; do
+not add a second `onDoubleClick` toggler, it cancels itself out.
 
 With decorations off the window has square corners, so
 `src-tauri/src/window_style.rs::round_corners` asks the compositor for rounded
 ones (Windows 11 only, and a no-op elsewhere). It is called for the main window
-in `lib.rs` and for the download-complete window in `complete.rs`.
+in `lib.rs`, the download-complete window in `complete.rs` and each progress
+window in `progress.rs`.
+
+The frame owns the corners. Small windows must **not** put `rounded-lg` (or any
+other radius) on their root: a second, different radius inside the compositor's
+rounding shows a rounded inner border inside a square or differently curved
+outer frame, which is exactly the mismatch the progress and completion windows
+had. Keep their content square and let `round_corners` shape the window; on
+Windows 10, where the API is a no-op, all four corners are square together.
 
 ## Theme
 
@@ -103,6 +118,16 @@ checkboxes. Floating things only (menus, popups, dialogs) get `shadow-float`;
 panes are flat. The only visible borders left are on form fields and
 checkboxes, where they are the affordance.
 
+Every window of the application is a separate document: the main window, each
+progress window, and the completion window. `src/main.tsx` calls
+`startAppearanceSync()` in `src/lib/appearance.ts` before the React root, which
+applies the saved theme, face and weight and then follows two sources of change:
+the operating system when the theme is Auto, and the `settings://changed` event
+that the Options window broadcasts (`src/lib/app-events.ts`). Do not apply a
+theme, a face or a weight in one window on its own. `index.html` carries a small
+pre-paint copy of the theme decision so a light window does not open with a dark
+flash; keep it in step with `src/lib/theme.ts`.
+
 Theme references:
 
 - shadcn/ui themes: https://ui.shadcn.com/themes
@@ -111,6 +136,27 @@ Theme references:
 - Radix Colors scales: https://www.radix-ui.com/colors
 - Local design kit (tokens, taste, aesthetic systems):
   `D:/Dev/ux-ui-agent-skills/tokens/`, `D:/Dev/ux-ui-agent-skills/taste/`
+
+## Download progress window
+
+- `src-tauri/src/progress.rs` owns the window: its label, its fixed size and
+  the payload that hands it the download before the first render.
+- The page follows `download://update` and filters on its own id
+  (`src/state/use-live-download.ts`); the engine already throttles those events.
+- Which controls can act is decided by `progressControls()` in
+  `src/lib/progress.ts`, not by conditions scattered through the markup. Add a
+  state there and cover it in `scripts/check-progress.mjs`.
+- Hide/Show details asks the backend to resize the window; the page never
+  assumes a height it set itself.
+- The tray button hides the window (it does not close it): `hideWindow()` needs
+  `core:window:allow-hide`.
+- Every progress window owns a tray icon (`progress::add_tray`), created after
+  the window and removed from the `Destroyed` handler in `lib.rs`. Its ID is
+  `progress-tray-<id>`, its tooltip is the window title, and right-clicking it
+  offers **Show window** / **Close window**. Keep the icon while the window is
+  hidden — it is the way back — and remove it only when the window is really
+  destroyed. The application's own tray icon in `lib.rs` stays a separate
+  thing; do not rebuild it for progress windows.
 
 ## Skills
 
