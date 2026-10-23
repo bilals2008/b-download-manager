@@ -854,6 +854,32 @@ fn the_bandwidth_cap_of_one_download_is_reported() {
 }
 
 #[test]
+fn the_category_and_note_are_trimmed_and_kept_short() {
+    let dir = temp_dir("meta");
+    let download = Download::new(
+        24,
+        "https://example.com/a.bin".to_string(),
+        dir.join("out.bin"),
+        2,
+        None,
+        None,
+    )
+    .expect("download");
+
+    download.set_meta(Some("  Video  ".to_string()), Some("  a note  ".to_string()));
+    let info = download.info();
+    assert_eq!(info.category.as_deref(), Some("Video"));
+    assert_eq!(info.description.as_deref(), Some("a note"));
+
+    download.set_meta(Some("   ".to_string()), Some("x".repeat(600)));
+    let info = download.info();
+    assert_eq!(info.category, None, "an empty category is no category");
+    assert_eq!(info.description.expect("a note").chars().count(), 500);
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn a_download_read_back_from_the_index_has_no_connection_open() {
     let dir = temp_dir("restored-segments");
     let dest = dir.join("out.bin");
@@ -868,11 +894,15 @@ fn a_download_read_back_from_the_index_has_no_connection_open() {
         error: None,
         referer: None,
         speed_limit: 32 * 1024,
+        category: Some("Programs".to_string()),
+        description: Some("the installer".to_string()),
     };
 
     let download = Download::from_known(&known).expect("download");
     let info = download.info();
     assert_eq!(info.speed_limit, 32 * 1024, "the cap survives a restart");
+    assert_eq!(info.category.as_deref(), Some("Programs"));
+    assert_eq!(info.description.as_deref(), Some("the installer"));
     assert_eq!(info.status, Status::Paused);
     assert_eq!(
         info.segments.len(),

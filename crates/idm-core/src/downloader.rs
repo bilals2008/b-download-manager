@@ -127,6 +127,10 @@ pub struct DownloadInfo {
     /// The bandwidth cap of this download, in bytes per second. Zero means
     /// no cap.
     pub speed_limit: u64,
+    /// The category the user picked, when they picked one.
+    pub category: Option<String>,
+    /// The note the user typed for this download, when they typed one.
+    pub description: Option<String>,
 }
 
 /// Pause state shared by every task of one download.
@@ -264,6 +268,10 @@ pub struct Download {
     cancelled_request: AtomicU64,
     /// Whether a task is running this download right now.
     running: AtomicBool,
+    /// The category and the note the user gave the download. They are kept
+    /// with the index, so the list looks the same after a restart.
+    category: Mutex<Option<String>>,
+    description: Mutex<Option<String>>,
     last_emit: Mutex<Instant>,
 }
 
@@ -327,6 +335,8 @@ impl Download {
             run_requests: AtomicU64::new(0),
             cancelled_request: AtomicU64::new(0),
             running: AtomicBool::new(false),
+            category: Mutex::new(None),
+            description: Mutex::new(None),
             last_emit: Mutex::new(last_emit),
         }))
     }
@@ -375,7 +385,31 @@ impl Download {
             segments,
             resumable,
             speed_limit: self.limiter.rate(),
+            category: self.category.lock().expect("category lock poisoned").clone(),
+            description: self
+                .description
+                .lock()
+                .expect("description lock poisoned")
+                .clone(),
         }
+    }
+
+    /// Record the category and the note the user gave the download.
+    ///
+    /// Both come from a text field, so they are trimmed and cut to the length
+    /// the index will hold; an empty value is no value.
+    pub fn set_meta(&self, category: Option<String>, description: Option<String>) {
+        let clean = |value: Option<String>, limit: usize| {
+            value
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+                .map(|value| value.chars().take(limit).collect::<String>())
+        };
+        *self.category.lock().expect("category lock poisoned") = clean(category, 40);
+        *self
+            .description
+            .lock()
+            .expect("description lock poisoned") = clean(description, 500);
     }
 
     /// The bandwidth cap of this download, in bytes per second. Zero means no
@@ -516,6 +550,7 @@ impl Download {
             download.set_resumable(true);
         }
         download.set_speed_limit(known.speed_limit);
+        download.set_meta(known.category.clone(), known.description.clone());
         download.reset_segment_statuses();
 
         download.set_status(match known.status {
@@ -547,6 +582,8 @@ impl Download {
             error: info.error,
             referer: self.referer.clone(),
             speed_limit: self.speed_limit(),
+            category: info.category,
+            description: info.description,
         }
     }
 

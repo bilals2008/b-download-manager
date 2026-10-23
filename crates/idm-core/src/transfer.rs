@@ -75,6 +75,14 @@ impl Source {
             return Self::parse_ftp(rest);
         }
         if url.starts_with("http://") || url.starts_with("https://") {
+            // A URL without a host is not a file anywhere. The request would
+            // fail later with a message about the transport instead of the
+            // address the user can fix.
+            let parsed =
+                reqwest::Url::parse(url).map_err(|_| "the URL is not a valid address".to_string())?;
+            if parsed.host_str().is_none() {
+                return Err("the URL has no host".to_string());
+            }
             let mut builder = reqwest::Client::builder()
                 .user_agent(http::USER_AGENT)
                 .redirect(reqwest::redirect::Policy::limited(10));
@@ -278,6 +286,14 @@ mod tests {
             Source::parse("https://example.com/a.bin", None, None).expect("http url"),
             Source::Http { .. }
         ));
+    }
+
+    #[test]
+    fn an_http_url_without_a_host_is_refused() {
+        assert!(Source::parse("https:///", None, None).is_err());
+        assert!(Source::parse("https://", None, None).is_err());
+        // A URL with extra slashes still names a host, so it is a real address.
+        assert!(Source::parse("https:///a.bin", None, None).is_ok());
     }
 
     #[test]

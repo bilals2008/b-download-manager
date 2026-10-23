@@ -33,6 +33,13 @@ pub struct KnownDownload {
     /// files have no cap.
     #[serde(default)]
     pub speed_limit: u64,
+    /// The category the user picked in the add dialog. Older index files have
+    /// none, and the list falls back to the file name.
+    #[serde(default)]
+    pub category: Option<String>,
+    /// The note the user typed in the add dialog. Older index files have none.
+    #[serde(default)]
+    pub description: Option<String>,
 }
 
 /// What is left on disk for a remembered download.
@@ -134,6 +141,8 @@ mod tests {
             error: None,
             referer: None,
             speed_limit: 0,
+            category: None,
+            description: None,
         }
     }
 
