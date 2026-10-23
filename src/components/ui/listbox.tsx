@@ -219,7 +219,7 @@ export function ListBox({ label, options, value, onChange }: ListBoxProps) {
         aria-controls={`${baseId}-list`}
         onClick={() => setOpen((current) => !current)}
         onKeyDown={handleKeyDown}
-        className="flex w-full items-center justify-between gap-2 rounded-chrome bg-chrome-canvas px-2.5 py-1.5 text-left text-xs text-chrome-menu-text transition-colors hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
+        className="flex w-full items-center justify-between gap-2 rounded-chrome border border-chrome-line bg-chrome-canvas px-2.5 py-1.5 text-left text-xs text-chrome-menu-text transition-colors hover:border-chrome-muted focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
       >
         <span className="truncate">{selected?.label ?? label}</span>
         <ChevronDown className="size-3.5 shrink-0 text-chrome-muted" />

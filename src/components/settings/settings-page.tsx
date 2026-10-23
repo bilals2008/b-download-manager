@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
 
-import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 /**
- * The shell of a page in the options window: a heading, a line of
- * explanation, and the blocks the page is made of. Every page uses it, so
- * they all read the same way.
+ * The frame of one page of the settings window. Every page opens with the same
+ * heading block and then a run of sections, so a page reads as one document
+ * instead of a stack of cards.
  */
 export function SettingsPage({
   title,
@@ -17,41 +17,92 @@ export function SettingsPage({
   children: ReactNode;
 }) {
   return (
-    <div className="mx-auto flex max-w-[42rem] flex-col px-5 py-6 sm:px-6">
-      <header>
+    <div className="flex w-full max-w-[30rem] flex-col px-4 pt-5 pb-6">
+      <header className="pb-5">
         <h2 className="text-base font-medium text-chrome-title-text">{title}</h2>
-        <p className="mt-1 text-xs text-chrome-muted">{description}</p>
+        <p className="mt-0.5 text-xs text-chrome-muted">{description}</p>
       </header>
-      <div className="mt-5 flex flex-col gap-1">{children}</div>
+      <div className="flex flex-col gap-5">{children}</div>
     </div>
   );
 }
 
-/** One titled block of a page. */
+/**
+ * A titled group of settings. The caption and the space above it are the only
+ * things that separate one group from the next: no boxes, no rules.
+ */
 export function Section({
   title,
   planned,
   children,
 }: {
   title: string;
-  /** Marks a block the build does not have yet. */
+  /** Marks a group the build does not have yet. */
   planned?: boolean;
   children: ReactNode;
 }) {
   return (
-    <section aria-label={title} className="py-5 first:pt-0 last:pb-0">
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="text-xs font-medium text-chrome-title-text">{title}</h3>
+    <section aria-label={title} className="flex flex-col">
+      <div className="flex h-5 items-center justify-between gap-3">
+        <h3 className="text-chrome-micro font-medium text-chrome-muted">
+          {title}
+        </h3>
         {planned ? (
-          <Badge
-            variant="secondary"
-            className="px-1.5 py-0 text-chrome-micro font-normal text-chrome-muted"
-          >
+          <span className="rounded-full border border-chrome-line px-1.5 py-px text-chrome-micro text-chrome-muted">
             Planned
-          </Badge>
+          </span>
         ) : null}
       </div>
-      <div className="mt-3">{children}</div>
+      <div className="flex flex-col">{children}</div>
     </section>
+  );
+}
+
+/**
+ * One setting: what it is on the left, the control that changes it on the
+ * right, and the explanation under the name. This is the row every desktop
+ * preferences window is made of, and it keeps a page scannable down the left
+ * edge instead of making every control carry its own caption.
+ */
+export function SettingRow({
+  label,
+  hint,
+  htmlFor,
+  stacked,
+  children,
+}: {
+  label: string;
+  hint?: ReactNode;
+  /** Set when the control is a plain input, so the name becomes its label. */
+  htmlFor?: string;
+  /** The control sits under the name: for a path or an address, which is wide. */
+  stacked?: boolean;
+  children: ReactNode;
+}) {
+  const name = "block text-xs leading-5 text-chrome-title-text";
+
+  return (
+    <div
+      className={cn(
+        "gap-4 py-2.5",
+        stacked ? "flex flex-col" : "flex items-center justify-between",
+      )}
+    >
+      <div className="min-w-0">
+        {htmlFor ? (
+          <label htmlFor={htmlFor} className={name}>
+            {label}
+          </label>
+        ) : (
+          <span className={name}>{label}</span>
+        )}
+        {hint ? (
+          <p className="text-chrome-micro leading-4 text-chrome-muted">
+            {hint}
+          </p>
+        ) : null}
+      </div>
+      <div className={stacked ? "w-full" : "shrink-0"}>{children}</div>
+    </div>
   );
 }

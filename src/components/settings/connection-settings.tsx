@@ -1,5 +1,10 @@
-import { NumberInput, Field } from "@/components/settings/fields";
-import { Section, SettingsPage } from "@/components/settings/settings-page";
+import { NumberInput } from "@/components/settings/fields";
+import {
+  Section,
+  SettingRow,
+  SettingsPage,
+} from "@/components/settings/settings-page";
+import { Switch } from "@/components/ui/switch";
 import { MAX_CONNECTIONS, type Settings } from "@/lib/settings";
 
 interface ConnectionSettingsProps {
@@ -23,7 +28,7 @@ export function ConnectionSettings({
       description="How much of the network the app may use."
     >
       <Section title="Connections">
-        <Field
+        <SettingRow
           label="Maximum number of connections"
           htmlFor="connection-max"
           hint="Open at once, over all downloads."
@@ -36,35 +41,35 @@ export function ConnectionSettings({
             suffix="connections"
             onChange={(value) => onChange("maxConnections", value)}
           />
-        </Field>
+        </SettingRow>
       </Section>
 
       <Section title="Speed limit">
-        <div className="flex flex-col gap-3">
-          <label className="flex items-center gap-2 text-xs text-chrome-title-text">
-            <input
-              type="checkbox"
-              className="size-3.5 accent-chrome-focus"
-              checked={settings.speedLimitEnabled}
-              onChange={(event) => onChange("speedLimitEnabled", event.target.checked)}
-            />
-            Limit the speed of all downloads
-          </label>
-          <Field
-            label="Speed limit"
-            htmlFor="connection-speed"
-            hint="Total bytes per second, all downloads together."
-          >
-            <NumberInput
-              id="connection-speed"
-              value={limitInKb}
-              min={1}
-              max={1024 * 1024}
-              suffix="KB/s"
-              onChange={(value) => onChange("speedLimitBytes", value * 1024)}
-            />
-          </Field>
-        </div>
+        <SettingRow
+          label="Limit the speed of all downloads"
+          hint="The cap is shared by every download in the list."
+        >
+          <Switch
+            label="Limit the speed of all downloads"
+            checked={settings.speedLimitEnabled}
+            onChange={(checked) => onChange("speedLimitEnabled", checked)}
+          />
+        </SettingRow>
+        <SettingRow
+          label="Speed limit"
+          htmlFor="connection-speed"
+          hint="Total bytes per second, all downloads together."
+        >
+          <NumberInput
+            id="connection-speed"
+            value={limitInKb}
+            min={1}
+            max={1024 * 1024}
+            suffix="KB/s"
+            disabled={!settings.speedLimitEnabled}
+            onChange={(value) => onChange("speedLimitBytes", value * 1024)}
+          />
+        </SettingRow>
       </Section>
     </SettingsPage>
   );

@@ -107,23 +107,25 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
       title="Settings"
       onClose={onClose}
       // The options window is the main window's sibling, not a popup: the same
-      // canvas, the same two panes, so the two windows read as one product.
-      className="h-[min(36rem,calc(100dvh-2rem))] w-[min(52rem,calc(100vw-2rem))] max-w-none bg-chrome-canvas"
-      bodyClassName="flex gap-1.5 p-1.5"
+      // canvas, the same hairline, so the two windows read as one product.
+      className="h-[min(40rem,calc(100dvh-2rem))] w-[min(48rem,calc(100vw-2rem))] max-w-none bg-chrome-panel"
+      headerClassName="border-b border-chrome-line pr-1.5"
+      bodyClassName="flex min-h-0 gap-0 p-0"
+      footerClassName="items-center border-t border-chrome-line px-4 py-2.5"
       footer={
         <>
-          <span className="mr-auto hidden self-center text-chrome-micro text-chrome-muted sm:inline">
+          <span className="mr-auto text-chrome-micro text-chrome-muted">
             Changes apply as you make them.
           </span>
           {error ? (
-            <span role="alert" className="mr-auto text-xs text-chrome-error">
+            <span role="alert" className="mr-2 text-xs text-chrome-error">
               {error}
             </span>
           ) : null}
           <button
             type="button"
             onClick={onClose}
-            className="rounded-chrome bg-chrome-panel px-3 py-1.5 text-xs text-chrome-menu-text transition-colors hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
+            className="rounded-chrome border border-chrome-line bg-chrome-canvas px-3 py-1.5 text-xs text-chrome-menu-text transition-colors hover:border-chrome-muted focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
           >
             Close
           </button>
@@ -131,7 +133,7 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
       }
     >
       <SettingsNav page={page} onSelect={setPage} />
-      <div className="scrollbar-none min-h-0 flex-1 overflow-y-auto rounded-lg bg-chrome-panel">
+      <div className="scrollbar-none min-h-0 flex-1 overflow-y-auto">
         {page === "general" ? (
           <GeneralSettings settings={settings} onChange={update} />
         ) : null}

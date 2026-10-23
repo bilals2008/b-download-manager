@@ -31,55 +31,80 @@ export const BUILT_PAGES: SettingsPageId[] = [
   "proxy",
 ];
 
+const OPEN_PAGES = SETTINGS_PAGES.filter(({ id }) => BUILT_PAGES.includes(id));
+const PLANNED_PAGES = SETTINGS_PAGES.filter(
+  ({ id }) => !BUILT_PAGES.includes(id),
+);
+
+const ITEM =
+  "flex h-8 w-full items-center gap-2.5 rounded-chrome px-2 text-left text-xs transition-colors focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none";
+
 interface SettingsNavProps {
   page: SettingsPageId;
   onSelect: (page: SettingsPageId) => void;
 }
 
 /**
- * The pages IDM puts in its configuration window. The pages this build has
- * open; the rest are shown disabled so the shell is honest about what it
- * can reach.
+ * The list of pages, as a column of the window rather than a card inside it.
+ * The pages this build has are at the top; the ones it does not open yet are
+ * kept together at the foot under their own caption, so the column is honest
+ * without making the working pages look unfinished.
  */
 export function SettingsNav({ page, onSelect }: SettingsNavProps) {
   return (
     <nav
       aria-label="Settings pages"
-      className="hidden w-44 shrink-0 flex-col gap-0.5 rounded-lg bg-chrome-panel p-2 sm:flex"
+      className="scrollbar-none flex w-44 shrink-0 flex-col overflow-y-auto border-r border-chrome-line bg-chrome-canvas p-2"
     >
-      <p className="px-2 pt-1 pb-2 text-chrome-micro font-medium tracking-wider text-chrome-muted uppercase">
-        Configuration
+      <div className="flex flex-col gap-0.5">
+        {OPEN_PAGES.map(({ id, label, glyph }) => {
+          const active = id === page;
+          return (
+            <button
+              key={id}
+              type="button"
+              aria-current={active ? "page" : undefined}
+              onClick={() => onSelect(id)}
+              className={
+                ITEM +
+                (active
+                  ? " bg-chrome-menu-active text-chrome-title-text"
+                  : " text-chrome-menu-text hover:bg-chrome-menu-hover")
+              }
+            >
+              <SettingsGlyph
+                kind={glyph}
+                className={
+                  "size-4 shrink-0 " +
+                  (active ? "text-chrome-focus" : "text-chrome-muted")
+                }
+              />
+              <span className="truncate">{label}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <p className="mt-auto px-2 pt-6 pb-1.5 text-chrome-micro text-chrome-muted">
+        Not in this build yet
       </p>
-      {SETTINGS_PAGES.map(({ id, label, glyph }) => {
-        const built = BUILT_PAGES.includes(id);
-        const active = id === page;
-        return (
+      <div className="flex flex-col gap-0.5">
+        {PLANNED_PAGES.map(({ id, label, glyph }) => (
           <button
             key={id}
             type="button"
-            disabled={!built}
-            aria-current={active ? "page" : undefined}
-            title={built ? undefined : "Not part of this build yet"}
-            onClick={() => onSelect(id)}
-            className={
-              "flex h-8 items-center gap-2 rounded-chrome px-2 text-left text-xs transition-colors focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none " +
-              (active
-                ? "bg-chrome-menu-active text-chrome-title-text"
-                : built
-                  ? "text-chrome-menu-text hover:bg-chrome-menu-hover"
-                  : "cursor-default text-chrome-muted/60")
-            }
+            disabled
+            title="Not part of this build yet"
+            className={ITEM + " cursor-default text-chrome-muted/50"}
           >
             <SettingsGlyph
               kind={glyph}
-              className={
-                "size-4 shrink-0 " + (active ? "text-chrome-focus" : "")
-              }
+              className="size-4 shrink-0 text-chrome-muted/50"
             />
             <span className="truncate">{label}</span>
           </button>
-        );
-      })}
+        ))}
+      </div>
     </nav>
   );
 }

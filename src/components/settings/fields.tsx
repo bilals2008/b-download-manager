@@ -1,37 +1,6 @@
-import type { ReactNode } from "react";
-
-/** The box every field in the options window uses. */
+/** The box every text field in the settings window uses. */
 export const FIELD =
-  "w-full rounded-chrome border border-transparent bg-chrome-canvas px-2 py-1.5 text-xs text-chrome-menu-text transition-colors placeholder:text-chrome-muted/70 hover:bg-chrome-menu-hover focus-visible:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none";
-
-/** The label above a field. */
-export const LABEL = "mb-1 block text-xs text-chrome-muted";
-
-/** The line of help under a field. */
-export const HINT = "mt-1 text-chrome-micro text-chrome-muted";
-
-/** A label, a control and the help under it. */
-export function Field({
-  label,
-  htmlFor,
-  hint,
-  children,
-}: {
-  label: string;
-  htmlFor?: string;
-  hint?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <div>
-      <label htmlFor={htmlFor} className={LABEL}>
-        {label}
-      </label>
-      {children}
-      {hint ? <p className={HINT}>{hint}</p> : null}
-    </div>
-  );
-}
+  "w-full rounded-chrome border border-chrome-line bg-chrome-canvas px-2.5 py-1.5 text-xs text-chrome-menu-text transition-colors placeholder:text-chrome-muted/70 hover:border-chrome-muted focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none disabled:cursor-default disabled:border-chrome-line disabled:text-chrome-muted disabled:hover:border-chrome-line";
 
 /** A one line text field. */
 export function TextInput({
@@ -39,18 +8,25 @@ export function TextInput({
   value,
   onChange,
   placeholder,
+  mono,
+  disabled,
 }: {
   id: string;
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
+  /** Addresses and paths are read one character at a time. */
+  mono?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <input
       id={id}
-      className={FIELD}
+      className={mono ? `${FIELD} font-mono` : FIELD}
       value={value}
       placeholder={placeholder}
+      disabled={disabled}
+      spellCheck={false}
       onChange={(event) => onChange(event.target.value)}
     />
   );
@@ -64,6 +40,7 @@ export function NumberInput({
   min = 1,
   max = 999,
   suffix,
+  disabled,
 }: {
   id: string;
   value: number;
@@ -71,6 +48,7 @@ export function NumberInput({
   min?: number;
   max?: number;
   suffix?: string;
+  disabled?: boolean;
 }) {
   return (
     <div className="flex items-center gap-2">
@@ -80,7 +58,8 @@ export function NumberInput({
         inputMode="numeric"
         min={min}
         max={max}
-        className={`${FIELD} w-28 tabular-nums`}
+        disabled={disabled}
+        className={`${FIELD} w-24 text-right tabular-nums`}
         value={value}
         onChange={(event) => {
           const next = Number.parseInt(event.target.value, 10);
@@ -89,7 +68,17 @@ export function NumberInput({
           }
         }}
       />
-      {suffix ? <span className="text-xs text-chrome-muted">{suffix}</span> : null}
+      {suffix ? (
+        <span
+          className={
+            disabled
+              ? "text-xs text-chrome-muted/60"
+              : "text-xs text-chrome-muted"
+          }
+        >
+          {suffix}
+        </span>
+      ) : null}
     </div>
   );
 }

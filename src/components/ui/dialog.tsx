@@ -13,6 +13,10 @@ interface DialogProps {
   className?: string;
   /** Padding and layout overrides for the body. */
   bodyClassName?: string;
+  /** Overrides for the title row, for a dialog that is a window with a bar. */
+  headerClassName?: string;
+  /** Overrides for the button row. */
+  footerClassName?: string;
 }
 
 /**
@@ -27,6 +31,8 @@ export function Dialog({
   footer,
   className,
   bodyClassName,
+  headerClassName,
+  footerClassName,
 }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
 
@@ -57,7 +63,12 @@ export function Dialog({
         className,
       )}
     >
-      <div className="flex shrink-0 items-center justify-between gap-4 py-3 pr-2 pl-4">
+      <div
+        className={cn(
+          "flex shrink-0 items-center justify-between gap-4 py-3 pr-2 pl-4",
+          headerClassName,
+        )}
+      >
         <span className="truncate text-sm text-chrome-title-text">{title}</span>
         <button
           type="button"
@@ -72,7 +83,12 @@ export function Dialog({
         {children}
       </div>
       {footer ? (
-        <div className="flex shrink-0 justify-end gap-2 px-4 pb-4">
+        <div
+          className={cn(
+            "flex shrink-0 justify-end gap-2 px-4 pb-4",
+            footerClassName,
+          )}
+        >
           {footer}
         </div>
       ) : null}

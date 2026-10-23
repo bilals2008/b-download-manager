@@ -1,5 +1,9 @@
-import { Field, TextInput } from "@/components/settings/fields";
-import { Section, SettingsPage } from "@/components/settings/settings-page";
+import { TextInput } from "@/components/settings/fields";
+import {
+  Section,
+  SettingRow,
+  SettingsPage,
+} from "@/components/settings/settings-page";
 import type { Settings } from "@/lib/settings";
 
 interface ProxySettingsProps {
@@ -18,22 +22,24 @@ export function ProxySettings({ settings, onChange }: ProxySettingsProps) {
       description="The proxy the downloads go through."
     >
       <Section title="Proxy">
-        <Field
+        <SettingRow
+          stacked
           label="Proxy address"
           htmlFor="proxy-address"
           hint="For example socks5://127.0.0.1:1080. Empty connects directly."
         >
           <TextInput
             id="proxy-address"
+            mono
             value={settings.proxyUrl}
             placeholder="socks5://127.0.0.1:1080"
             onChange={(value) => onChange("proxyUrl", value)}
           />
-        </Field>
+        </SettingRow>
       </Section>
 
       <Section title="What is not proxied">
-        <p className="text-xs text-chrome-muted">
+        <p className="py-2.5 text-xs leading-5 text-chrome-muted">
           Every download goes through the proxy above. IDM keeps a list of
           addresses that skip it; that list is not part of this build yet.
         </p>
