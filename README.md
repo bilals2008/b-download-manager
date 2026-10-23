@@ -71,7 +71,7 @@ toolbar and menus the classic download managers use.
 | UI | [shadcn/ui](https://ui.shadcn.com/) patterns, [Radix UI](https://www.radix-ui.com/), hand-drawn SVG artwork |
 | Styling | [Tailwind CSS v4](https://tailwindcss.com/) with semantic tokens in `src/index.css` |
 | Persistence | Part files, a JSON manifest per download, and a session index for the list |
-| Tooling | `tsc`, `vite`, `cargo test`, clippy, and six project gates (`check:palette`, `check:fonts`, `check:selection`, `check:find`, `check:progress`, `check:extension`) |
+| Tooling | `tsc`, `vite`, `cargo test`, clippy, and seven project gates (`check:palette`, `check:fonts`, `check:selection`, `check:find`, `check:progress`, `check:add-dialog`, `check:extension`) |
 
 ---
 
@@ -136,6 +136,7 @@ npm run tauri icon src/assets/brand/logo.png
 | `npm run check:selection` | The selection model: click, Ctrl, Shift and ranges |
 | `npm run check:find` | The Find bar: the walk, the wrap and the first press |
 | `npm run check:progress` | The progress window: percentages, connection words, rate sampling and speed-limit conversions |
+| `npm run check:add-dialog` | The add dialog: address, file-name and destination rules, plus the category |
 | `npm run check:extension` | Both browser extensions: manifest, host permissions and hand-off |
 | `cargo test --manifest-path crates/idm-core/Cargo.toml` | The engine, against a local HTTP and FTP server |
 | `cargo test --manifest-path src-tauri/Cargo.toml` | The application and its commands |
@@ -291,15 +292,18 @@ planning/            scope, engine spec, UI direction, milestones, ADRs
 
 | Command | Purpose |
 | --- | --- |
-| `start_download(url, dest, connections, referer)` | Begin a download, returns its id |
+| `start_download(url, dest, connections, referer, queue, category, description)` | Begin a download, or add it to the queue without starting it, and return its id |
 | `list_downloads()` | Current state of every download |
 | `pause_download(id)` / `resume_download(id)` / `cancel_download(id)` | Suspend, continue, stop and keep the parts |
 | `remove_download(id)` | Drop it from the list, after stopping it |
-| `probe_link(url, referer)` | The name and the size the server gives a link |
+| `probe_link(url, referer)` | The name, the size and the server's range support, as the add dialog shows them |
+| `inspect_destination(dest)` | Check a destination, and say whether a file would be replaced |
 | `set_speed_limit(bytes_per_second)` | Bandwidth cap of the whole application |
 | `set_download_speed_limit(id, bytes_per_second)` | Bandwidth cap of one download, returns the rate the engine holds |
 | `open_progress_window(id)` | Open the live progress window of a download, or bring it back |
 | `set_progress_details(open)` | Fold the connection details of that window, and size it to match |
+| `show_ready()` | Show the current window once its page has painted, instead of on a white frame |
+| `set_window_background(color)` | Give the native window the theme's background, so a repaint never shows white |
 | `set_site_connections(host, connections)` / `site_connections(host)` | Connection cap of one site |
 | `set_max_connections(max)` | How many connections the application may hold open |
 | `set_proxy(url)` | The proxy new downloads go through, HTTP or SOCKS |
