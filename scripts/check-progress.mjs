@@ -18,6 +18,7 @@ import {
   parseLimitAmount,
   percentOf,
   percentText,
+  progressChunks,
   progressControls,
   progressPercentText,
   receivingCount,
@@ -166,6 +167,36 @@ assert.equal(
   "2 waiting",
 );
 
+// The meter draws one block per connection, laid out along the file. A plan it
+// cannot place (no ranges, an unknown file size, a range without a length) is
+// a null, and the meter keeps its single bar.
+const plan = [
+  { id: 7, start: 0, size: 512, downloaded: 512, status: "done" },
+  { id: 8, start: 512, size: 1024, downloaded: 256, status: "receiving" },
+];
+assert.deepEqual(progressChunks(plan, 4096), [
+  { id: 7, left: 0, width: 12.5, fill: 100, status: "done" },
+  { id: 8, left: 12.5, width: 25, fill: 25, status: "receiving" },
+]);
+assert.equal(progressChunks([], 4096), null, "no plan, no blocks");
+assert.equal(progressChunks(plan, 0), null, "an unknown file size has no layout");
+assert.equal(
+  progressChunks(
+    [{ id: 1, start: 0, size: null, downloaded: 10, status: "receiving" }],
+    4096,
+  ),
+  null,
+  "a range without a length cannot be placed",
+);
+assert.equal(
+  progressChunks(
+    [{ id: 1, start: 0, size: 100, downloaded: 0, status: "done" }],
+    4096,
+  )[0].fill,
+  100,
+  "a finished connection is full even before its bytes are counted",
+);
+
 // The rate: the first report has no delta, the second splits 65/35 between the
 // old rate and the new one, and a paused download has no rate at all.
 assert.equal(nextSpeedSample(undefined, 0, true, 1000).speed, 0);
@@ -219,4 +250,4 @@ assert.equal(parseLimitAmount("abc", "KB/s"), null);
 assert.equal(limitLabel(0), "No limit");
 assert.equal(limitLabel(512 * KB), "512 KB/s");
 
-console.log("progress window: 74 checks pass");
+console.log("progress window: 79 checks pass");

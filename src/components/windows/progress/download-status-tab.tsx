@@ -128,6 +128,8 @@ export function DownloadStatusTab({
         // size: the meter fills with the success colour instead of running.
         unknown={!knownSize && info.status !== "completed"}
         status={info.status}
+        segments={info.segments}
+        total={info.total}
       />
 
       <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-6 gap-y-1.5 text-xs">
@@ -242,7 +244,11 @@ export function DownloadStatusTab({
       </div>
 
       {detailsOpen ? (
-        <ConnectionDetails segments={info.segments} status={info.status} />
+        // The panel unfolds as the window grows into it: the height travels on
+        // the shell side, so the content only has to step out of its own way.
+        <div className="flex min-h-0 flex-1 flex-col motion-safe:animate-details-in motion-reduce:animate-none">
+          <ConnectionDetails segments={info.segments} status={info.status} />
+        </div>
       ) : null}
     </section>
   );

@@ -20,7 +20,7 @@ import {
   setProgressDetails,
 } from "@/lib/ipc";
 import { progressPercentText } from "@/lib/progress";
-import { closeWindow } from "@/lib/window";
+import { closeWindow, showWindowWhenPainted } from "@/lib/window";
 import { useAppSpeedLimit } from "@/state/use-app-speed-limit";
 import { useLiveDownload } from "@/state/use-live-download";
 import type { DownloadInfo, DownloadStatus } from "@/types";
@@ -59,6 +59,10 @@ export function DownloadProgressWindow({ initial }: { initial: DownloadInfo }) {
 
   const { base } = splitPath(info.dest);
   const name = base || fileNameFromUrl(info.url);
+
+  useEffect(() => {
+    void showWindowWhenPainted();
+  }, []);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -119,11 +123,10 @@ export function DownloadProgressWindow({ initial }: { initial: DownloadInfo }) {
   }
 
   return (
-    // The corners belong to the window, not to this box: `window_style.rs`
-    // asks the compositor to round the whole frame. A radius here as well cut
-    // the border into a rounded inner corner inside a square window on older
-    // Windows, and into a different curve inside the rounded one on Windows 11.
-    <div className="flex h-dvh flex-col overflow-hidden border border-chrome-line bg-chrome-popup text-chrome-menu-text">
+    // The rounded edge is the frame: no border, and the radius is the one the
+    // compositor draws, so the window never shows a second, tighter curve
+    // inside the first.
+    <div className="flex h-dvh flex-col overflow-hidden rounded-lg bg-chrome-popup text-chrome-menu-text">
       <ProgressWindowTitle
         name={name}
         path={info.dest}

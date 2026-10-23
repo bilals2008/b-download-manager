@@ -143,6 +143,53 @@ export function progressControls(
   };
 }
 
+/** One connection's share of the file, as the meter draws it. */
+export interface ProgressChunk {
+  id: number;
+  /** Where the range starts, as a percentage of the whole file. */
+  left: number;
+  /** How much of the file the range covers, in percent. */
+  width: number;
+  /** How much of the range is on disk, as a percentage of the range. */
+  fill: number;
+  status: SegmentStatus;
+}
+
+/**
+ * The ranges of a download laid out along the file, one block per connection,
+ * the way IDM draws them.
+ *
+ * Null when the ranges cannot be placed: no plan yet, a file whose size the
+ * server did not tell, or a range without a length. The meter then keeps the
+ * single bar, because a block of unknown width would be a guess.
+ */
+export function progressChunks(
+  segments: DownloadSegment[],
+  total: number,
+): ProgressChunk[] | null {
+  if (total <= 0 || segments.length === 0) {
+    return null;
+  }
+
+  const chunks: ProgressChunk[] = [];
+  for (const segment of segments) {
+    if (segment.size === null || segment.size <= 0) {
+      return null;
+    }
+    chunks.push({
+      id: segment.id,
+      left: Math.min(100, Math.max(0, (segment.start / total) * 100)),
+      width: Math.min(100, (segment.size / total) * 100),
+      fill:
+        segment.status === "done"
+          ? 100
+          : Math.min(100, Math.max(0, (segment.downloaded / segment.size) * 100)),
+      status: segment.status,
+    });
+  }
+  return chunks;
+}
+
 /** The status as a sentence: the engine's names, in the window's words. */
 export function statusLabel(status: DownloadStatus): string {
   switch (status) {

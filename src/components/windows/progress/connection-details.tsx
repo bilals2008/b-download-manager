@@ -68,29 +68,31 @@ export function ConnectionDetails({
         </span>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="scrollbar-none min-h-0 flex-1 overflow-y-auto">
         <table className="w-full table-fixed border-separate border-spacing-0 text-chrome-micro">
           <caption className="sr-only">
             Connections of this download, with the bytes each one has received
             and what it is doing
           </caption>
           <thead>
+            {/* The header stays put while the connections scroll under it, so
+                it carries the surface itself and closes on a hairline. */}
             <tr className="text-chrome-muted">
               <th
                 scope="col"
-                className="sticky top-0 w-9 bg-chrome-popup py-1.5 pr-2 text-left font-medium"
+                className="sticky top-0 w-10 border-b border-chrome-line bg-chrome-popup px-2 py-1.5 text-left font-semibold tracking-wider uppercase"
               >
                 #
               </th>
               <th
                 scope="col"
-                className="sticky top-0 w-28 bg-chrome-popup py-1.5 pr-3 text-right font-medium"
+                className="sticky top-0 w-28 border-b border-chrome-line bg-chrome-popup px-2 py-1.5 text-right font-semibold tracking-wider uppercase"
               >
                 Downloaded
               </th>
               <th
                 scope="col"
-                className="sticky top-0 bg-chrome-popup py-1.5 text-left font-medium"
+                className="sticky top-0 border-b border-chrome-line bg-chrome-popup px-2 py-1.5 text-left font-semibold tracking-wider uppercase"
               >
                 Status
               </th>
@@ -101,7 +103,7 @@ export function ConnectionDetails({
               <tr>
                 <td
                   colSpan={3}
-                  className="px-1 py-4 text-center text-chrome-muted"
+                  className="px-2 py-4 text-center text-chrome-muted"
                 >
                   {joined
                     ? "The file is complete; its parts were joined and cleaned up."
@@ -110,8 +112,8 @@ export function ConnectionDetails({
               </tr>
             ) : (
               segments.map((segment, index) => (
-                <tr key={segment.id}>
-                  <td className="border-t border-chrome-line py-1.5 pr-2 tabular-nums text-chrome-muted">
+                <tr key={segment.id} className="even:bg-chrome-row-alt">
+                  <td className="px-2 py-1.5 tabular-nums text-chrome-muted">
                     {index + 1}
                   </td>
                   <td
@@ -120,11 +122,11 @@ export function ConnectionDetails({
                         ? `Connection ${index + 1}: ${formatSize(segment.downloaded)} received; the server did not tell the file size`
                         : `Connection ${index + 1}: ${formatSize(segment.downloaded)} of ${segmentSize(segment)}`
                     }
-                    className="border-t border-chrome-line py-1.5 pr-3 text-right tabular-nums text-chrome-menu-text"
+                    className="px-2 py-1.5 text-right tabular-nums text-chrome-menu-text"
                   >
                     {formatSize(segment.downloaded)}
                   </td>
-                  <td className="border-t border-chrome-line py-1.5">
+                  <td className="px-2 py-1.5">
                     <span
                       className={cn(
                         "inline-flex items-center gap-1.5",

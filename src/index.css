@@ -306,6 +306,9 @@
   --chrome-toolbar-active: #16302b;
   --chrome-popup: #0b1416;
   --chrome-popup-hover: #142824;
+  /* The stripe on every second table row: one step above the popup, enough to
+     follow a line across without competing with the text. */
+  --chrome-row-alt: #0f1c19;
   --chrome-muted: #869a93;
   --chrome-canvas: #0b1416;
   --chrome-panel: #0b1416;
@@ -473,6 +476,7 @@
     --chrome-toolbar-active: #dcdfe5;
     --chrome-popup: #ffffff;
     --chrome-popup-hover: #f0f1f4;
+    --chrome-row-alt: #eef0f3;
     --chrome-muted: #565b64;
     --chrome-canvas: #f3f4f6;
     --chrome-panel: #ffffff;
@@ -538,6 +542,9 @@
   */
   --animate-indeterminate: indeterminate 1.4s ease-in-out infinite;
 
+  /* The connection details step into the room the window grows for them. */
+  --animate-details-in: details-in 180ms ease-out;
+
   /* Secondary metadata, one step below the body size. */
   --text-chrome-micro: 0.6875rem;
   --text-chrome-micro--line-height: 1rem;
@@ -586,6 +593,7 @@
   --color-chrome-toolbar-active: var(--chrome-toolbar-active);
   --color-chrome-popup: var(--chrome-popup);
   --color-chrome-popup-hover: var(--chrome-popup-hover);
+  --color-chrome-row-alt: var(--chrome-row-alt);
   --color-chrome-muted: var(--chrome-muted);
   --color-chrome-canvas: var(--chrome-canvas);
   --color-chrome-panel: var(--chrome-panel);
@@ -613,6 +621,18 @@
   }
   100% {
     transform: translateX(410%);
+  }
+}
+
+/* The details unfold from under the controls, in step with the window. */
+@keyframes details-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.25rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
   }
 }
 

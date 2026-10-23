@@ -77,6 +77,8 @@ const REQUIRED = [
   ["chrome-menu-text", "chrome-popup-hover", 4.5, "menu item text, hovered"],
   ["chrome-muted", "chrome-popup", 4.5, "menu shortcut text"],
   ["chrome-muted", "chrome-popup-hover", 4.5, "menu shortcut text, hovered"],
+  ["chrome-menu-text", "chrome-row-alt", 4.5, "table row text, zebra stripe"],
+  ["chrome-muted", "chrome-row-alt", 4.5, "table row secondary text, zebra stripe"],
   ["chrome-focus", "chrome-toolbar", 3, "focus ring on the toolbar"],
   ["chrome-focus", "chrome-menu", 3, "focus ring on the menu bar"],
   ["chrome-focus", "chrome-popup", 3, "focus ring in a menu"],
