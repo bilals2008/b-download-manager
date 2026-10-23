@@ -1,35 +1,38 @@
-# The browser extension
+# Chrome / Edge extension
 
-This is the piece that makes a click in the browser start a download in
-`B Download Manager`, the way the IDM extension does.
+The small Chromium build of the browser integration. It speaks the same
+loopback API as the Firefox extension in `extension-firefox/`; that one has
+the IDM-style video button and the full popup.
 
-IDM hands a link to the application the other way round: the browser asks
-the application to take a download over. The clone does the same thing with
-a small server on the loopback interface, which is what a browser extension
-can reach without anything being installed on the system. The application
-listens on `127.0.0.1:27500`.
+The application listens on `127.0.0.1:27500` and starts the server with
+itself, so there is no native messaging host to register.
 
-## Installing it in Chrome or Edge
+## Install
 
-1. Open `chrome://extensions` (or `edge://extensions`).
-2. Turn on **Developer mode**.
-3. Press **Load unpacked** and pick this folder.
-4. Press the icon of the extension once. The popup says whether the
-   application is running.
+1. Start `B Download Manager`.
+2. Open `chrome://extensions` (or `edge://extensions`).
+3. Turn on **Developer mode**.
+4. Press **Load unpacked** and pick this folder.
+5. Click the extension icon. The popup says whether the app answered.
 
 ## What it does
 
-- The right click menu on a link has **Download with Internet Download
-  Manager**.
-- A download the browser starts is taken over by the application, which
-  opens its add dialog with the address and the name of the file already
-  filled in. The switch in the popup turns that off.
+- **Right click a link, video, audio element or image** →
+  *Download with B Download Manager*.
+- **Take over browser downloads** when the popup switch is on. The file is
+  handed to the application **before** the browser copy is cancelled; if the
+  app is closed, the browser download continues untouched.
+- The popup checks `/v1/ping` with the client header, so a different program
+  on the port is reported as a mismatch instead of a connection.
 
-## What it does not do yet
+## Permissions
 
-- The address of the page the link was on is sent along, but the
-  application does not use it yet. A server that only serves a link to the
-  page it was on will refuse the download until the referer is used.
-- There is no native messaging host. IDM registers one (`com.tonec.idm`,
-  the name is in the string table of `IDMan.exe`); the loopback server is
-  the simpler way to reach the same result.
+`contextMenus`, `downloads` and `storage`, plus the loopback host permission.
+The background worker sends `X-BDM-Client: browser-extension`; the bridge
+accepts only extension origins and refuses a page's preflight.
+
+## Limitations
+
+- No video overlay and no live download list; use the Firefox build for those.
+- No options page. The takeover switch lives in the popup.
+- The app must be running; a web extension cannot start a desktop program.
