@@ -1,49 +1,25 @@
+mod actions;
 mod bridge;
 mod complete;
+mod progress;
 mod state;
 mod window_style;
 
 use std::path::PathBuf;
-use std::sync::Arc;
 
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
 
-use idm_core::downloader::{Download, DownloadInfo, Reporter, Status, DEFAULT_CONNECTIONS};
-use idm_core::limits::Limits;
+use idm_core::downloader::{DownloadInfo, Status};
 use idm_core::session::Index;
 use idm_core::transfer::Source;
 use state::AppState;
 
-/// Event carrying the state of one download to the UI.
-const UPDATE_EVENT: &str = "download://update";
+use actions::UPDATE_EVENT;
 
 /// Event carrying a command from the tray to the UI.
 const TRAY_EVENT: &str = "tray://command";
-
-/// The reporter the desktop app hands to the engine: it pushes the state of
-/// a download into the user interface.
-struct AppReporter(AppHandle);
-
-impl Reporter for AppReporter {
-    fn report(&self, info: &DownloadInfo) {
-        let _ = self.0.emit(UPDATE_EVENT, info.clone());
-
-        // A finished file gets the window IDM opens for it, unless the user
-        // turned that window off in Options. The window is built on the main
-        // thread, the one the window toolkit runs on.
-        if info.status == Status::Completed
-            && self.0.state::<AppState>().show_complete_dialog()
-        {
-            let app = self.0.clone();
-            let info = info.clone();
-            let _ = self
-                .0
-                .run_on_main_thread(move || complete::show(&app, &info));
-        }
-    }
-}
 
 #[tauri::command]
 fn start_download(
@@ -54,38 +30,14 @@ fn start_download(
     connections: Option<u32>,
     referer: Option<String>,
 ) -> Result<u64, String> {
-    let url = url.trim().to_string();
-    if url.is_empty() {
-        return Err("a URL is required".to_string());
-    }
-    if !(url.starts_with("http://") || url.starts_with("https://") || url.starts_with("ftp://")) {
-        return Err("the URL must start with http://, https:// or ftp://.".to_string());
-    }
-
-    let dest = PathBuf::from(dest.trim());
-    if dest.as_os_str().is_empty() {
-        return Err("a destination file is required".to_string());
-    }
-
-    let download = Download::new(
-        state.next_id(),
+    actions::start(
+        &app,
+        &state,
         url,
-        dest,
-        connections.unwrap_or(DEFAULT_CONNECTIONS).clamp(1, 32),
-        state.limits().proxy().as_deref(),
-        referer.as_deref(),
-    )?;
-
-    let id = download.id;
-    state.insert(download.clone());
-    state.save_index();
-
-    let limits: Limits = state.limits().clone();
-    tauri::async_runtime::spawn(async move {
-        idm_core::downloader::run(Arc::new(AppReporter(app)), limits, download).await;
-    });
-
-    Ok(id)
+        PathBuf::from(dest.trim()),
+        connections,
+        referer,
+    )
 }
 
 #[tauri::command]
@@ -95,49 +47,47 @@ fn list_downloads(state: State<'_, AppState>) -> Vec<DownloadInfo> {
 
 #[tauri::command]
 fn pause_download(app: AppHandle, state: State<'_, AppState>, id: u64) -> Result<(), String> {
-    let download = state.get(id).ok_or("unknown download")?;
-    download.control.pause();
-    download.set_status(Status::Paused);
-    let _ = app.emit(UPDATE_EVENT, download.info());
-    state.save_index();
-    Ok(())
+    actions::pause(&app, &state, id)
 }
 
 #[tauri::command]
 fn resume_download(app: AppHandle, state: State<'_, AppState>, id: u64) -> Result<(), String> {
-    let download = state.get(id).ok_or("unknown download")?;
-    download.control.resume();
-
-    // A download whose task is gone — it was cancelled, or it failed — is
-    // started again, from the parts that are on disk.
-    if !download.is_running() && download.info().status != Status::Completed {
-        let limits = state.limits().clone();
-        let reporter = Arc::new(AppReporter(app));
-        let running = download.clone();
-        tauri::async_runtime::spawn(async move {
-            idm_core::downloader::run(reporter, limits, running).await;
-        });
-    } else {
-        download.set_status(Status::Running);
-        let _ = app.emit(UPDATE_EVENT, download.info());
-    }
-
-    state.save_index();
-    Ok(())
+    actions::resume(&app, &state, id)
 }
 
 #[tauri::command]
 fn cancel_download(app: AppHandle, state: State<'_, AppState>, id: u64) -> Result<(), String> {
+    actions::cancel(&app, &state, id)
+}
+
+/// Open the progress window of one download, or bring it back to the front.
+///
+/// The window is built on the main thread, the one the window toolkit runs
+/// on, and the download is handed to it before its first render.
+#[tauri::command]
+async fn open_progress_window(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: u64,
+) -> Result<(), String> {
     let download = state.get(id).ok_or("unknown download")?;
-    download.cancel();
-    download.set_status(Status::Cancelled);
-    let _ = app.emit(UPDATE_EVENT, download.info());
-    state.save_index();
-    Ok(())
+    let info = download.info();
+    let handle = app.clone();
+    app.run_on_main_thread(move || progress::show(&handle, &info))
+        .map_err(|error| error.to_string())
+}
+
+/// Fold the connection details of the progress window away, or open them.
+///
+/// The window sizes itself from this, so the page does not have to know the
+/// height of its own chrome.
+#[tauri::command]
+fn set_progress_details(window: tauri::WebviewWindow, open: bool) {
+    progress::set_details(&window, open);
 }
 
 #[tauri::command]
-fn remove_download(state: State<'_, AppState>, id: u64) -> Result<(), String> {
+fn remove_download(app: AppHandle, state: State<'_, AppState>, id: u64) -> Result<(), String> {
     // The download must stop before it leaves the list, or it would keep
     // writing to the disk with nothing to show for it.
     if let Some(download) = state.get(id) {
@@ -145,6 +95,8 @@ fn remove_download(state: State<'_, AppState>, id: u64) -> Result<(), String> {
     }
     state.remove(id);
     state.save_index();
+    // The progress window of a row that is gone has nothing to show.
+    progress::close(&app, id);
     Ok(())
 }
 
@@ -156,11 +108,30 @@ fn set_speed_limit(state: State<'_, AppState>, bytes_per_second: u64) -> u64 {
 }
 
 /// Cap the bandwidth of one download. Zero means no cap.
+///
+/// The limiter reads its rate on every wait, so a new cap reaches the
+/// connections of the download as they stream, including one that is already
+/// waiting for its next bytes.
 #[tauri::command]
-fn set_download_speed_limit(state: State<'_, AppState>, id: u64, bytes_per_second: u64) -> Result<(), String> {
+fn set_download_speed_limit(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: u64,
+    bytes_per_second: u64,
+) -> Result<u64, String> {
     let download = state.get(id).ok_or("unknown download")?;
-    download.set_speed_limit(bytes_per_second);
-    Ok(())
+    // A finished file has no connection left to pace, and the update that
+    // follows would open its completion window again.
+    if download.status() == Status::Completed {
+        return Err("this download has already finished".to_string());
+    }
+    // One gigabyte a second is far above any link this app will see, and the
+    // cap keeps a bad value from being stored as a meaningless one.
+    download.set_speed_limit(bytes_per_second.min(1024 * 1024 * 1024));
+    let rate = download.speed_limit();
+    let _ = app.emit(UPDATE_EVENT, download.info());
+    state.save_index();
+    Ok(rate)
 }
 
 /// The proxy that new downloads go through. `None` means no proxy.
@@ -209,6 +180,23 @@ fn set_minimize_to_tray(state: State<'_, AppState>, on: bool) -> bool {
 fn set_show_complete_dialog(state: State<'_, AppState>, on: bool) -> bool {
     state.set_show_complete_dialog(on);
     on
+}
+
+/// The folder a download handed over by the browser is saved to.
+///
+/// The options window owns this preference and pushes it here, so a link
+/// caught by the extension lands where the user expects. An empty folder
+/// means the system Downloads folder.
+#[tauri::command]
+fn set_browser_folder(state: State<'_, AppState>, folder: String) -> String {
+    let trimmed = folder.trim();
+    let folder = if trimmed.is_empty() {
+        None
+    } else {
+        Some(PathBuf::from(trimmed))
+    };
+    state.set_browser_folder(folder);
+    trimmed.to_string()
 }
 
 /// A sensible starting point for the destination path.
@@ -314,14 +302,11 @@ fn open_in_os(target: &std::path::Path) -> Result<(), String> {
 
 /// The tray icon: the window comes back from it, the queue is started and
 /// stopped from it, and it is the way out of the application.
+///
+/// Each progress window owns a tray icon of its own (`progress.rs`); this one
+/// is the application itself.
 fn build_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    let show = MenuItem::with_id(
-        app,
-        "show",
-        "Show B Download Manager",
-        true,
-        None::<&str>,
-    )?;
+    let show = MenuItem::with_id(app, "show", "Show B Download Manager", true, None::<&str>)?;
     let start = MenuItem::with_id(app, "start-queue", "Start queue", true, None::<&str>)?;
     let stop = MenuItem::with_id(app, "stop-queue", "Stop queue", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Exit", true, None::<&str>)?;
@@ -351,7 +336,10 @@ fn build_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
                 state.save_index();
                 app.exit(0);
             }
-            _ => {}
+            // The menu of a progress window's own tray icon. Tauri's menu
+            // listener is global, so this is the one place those items are
+            // routed from; `handle_menu` ignores an id it does not own.
+            id => progress::handle_menu(app, id),
         })
         .on_tray_icon_event(|tray, event| {
             if let TrayIconEvent::Click {
@@ -401,11 +389,11 @@ pub fn run() {
             bridge::start(app.handle().clone());
             Ok(())
         })
-        .on_window_event(|window, event| {
+        .on_window_event(|window, event| match event {
             // Closing the window hides it into the tray, the way IDM does.
             // The tray menu is the way out. Only the main window is kept;
             // the smaller windows of the application really close.
-            if let WindowEvent::CloseRequested { api, .. } = event {
+            WindowEvent::CloseRequested { api, .. } => {
                 if window.label() != "main" {
                     return;
                 }
@@ -415,6 +403,14 @@ pub fn run() {
                     let _ = window.hide();
                 }
             }
+            // A progress window that really closed takes its own tray icon
+            // with it; one left behind would open nothing.
+            WindowEvent::Destroyed => {
+                if let Some(id) = progress::id_of_label(window.label()) {
+                    progress::remove_tray(window.app_handle(), id);
+                }
+            }
+            _ => {}
         })
         .invoke_handler(tauri::generate_handler![
             start_download,
@@ -426,11 +422,14 @@ pub fn run() {
             set_speed_limit,
             set_proxy,
             set_download_speed_limit,
+            open_progress_window,
+            set_progress_details,
             set_site_connections,
             site_connections,
             set_max_connections,
             set_minimize_to_tray,
             set_show_complete_dialog,
+            set_browser_folder,
             quit_app,
             default_destination,
             probe_link,

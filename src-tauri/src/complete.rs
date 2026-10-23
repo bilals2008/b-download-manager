@@ -40,20 +40,16 @@ pub fn show(app: &AppHandle, info: &DownloadInfo) {
         return;
     }
 
-    let _ = WebviewWindowBuilder::new(
-        app,
-        label,
-        WebviewUrl::App("index.html".into()),
-    )
-    .title("Download complete")
-    .inner_size(500.0, 284.0)
-    .resizable(false)
-    .maximizable(false)
-    .decorations(false)
-    .center()
-    .initialization_script(payload(info))
-    .build()
-    .map(|window| crate::window_style::round_corners(&window));
+    let _ = WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
+        .title("Download complete")
+        .inner_size(500.0, 284.0)
+        .resizable(false)
+        .maximizable(false)
+        .decorations(false)
+        .center()
+        .initialization_script(payload(info))
+        .build()
+        .map(|window| crate::window_style::round_corners(&window));
 }
 
 #[cfg(test)]
@@ -77,6 +73,9 @@ mod tests {
             status: idm_core::downloader::Status::Completed,
             error: None,
             referer: None,
+            segments: vec![],
+            resumable: Some(true),
+            speed_limit: 0,
         };
         let script = payload(&info);
         assert!(script.starts_with("window.__IDM_COMPLETE__ = {"));

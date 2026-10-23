@@ -1,0 +1,360 @@
+//! The "Download progress" window.
+//!
+//! IDM opens a window of its own for a download in flight: the status, the
+//! sizes, the transfer rate, the time left, the resume capability, the
+//! connections, and the pause, cancel and details controls. The clone gives
+//! every download that window, built from the same state the list reads.
+//!
+//! Like the completion window it is a webview with its own title bar, so the
+//! main window stays usable. The download rides in as an initialization
+//! script; every later state arrives on `download://update`, which the app
+//! broadcasts to every window. Closing it hides nothing but the window: the
+//! download goes on.
+
+use idm_core::downloader::DownloadInfo;
+use idm_core::log;
+use tauri::menu::{Menu, MenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::{AppHandle, LogicalSize, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+
+/// The label prefix of the progress windows.
+const LABEL_PREFIX: &str = "progress";
+
+/// The prefix of the tray icon each progress window owns.
+const TRAY_PREFIX: &str = "progress-tray";
+
+/// What the system title adds after the file name.
+const TITLE_SUFFIX: &str = " — Download progress";
+
+/// The width of the window. Wide enough for two columns of connection rows
+/// and a percentage, narrow enough to sit beside a browser.
+const WIDTH: f64 = 560.0;
+
+/// The height with the connection details open.
+const DETAILS_HEIGHT: f64 = 552.0;
+
+/// The height with the connection details folded away. Only the details
+/// section differs, so the window does not jump when it is folded. The height
+/// still leaves room for the two lines an error may take.
+const COMPACT_HEIGHT: f64 = 380.0;
+
+// A folded window is shorter than an open one; the geometry is settled when
+// the crate is compiled, so a later change to either height cannot invert them.
+const _: () = assert!(COMPACT_HEIGHT < DETAILS_HEIGHT);
+
+/// The window label of one download.
+pub fn label(id: u64) -> String {
+    format!("{LABEL_PREFIX}-{id}")
+}
+
+/// The download id a window label names, when it names one.
+pub fn id_of_label(label: &str) -> Option<u64> {
+    label
+        .strip_prefix(LABEL_PREFIX)?
+        .strip_prefix('-')?
+        .parse()
+        .ok()
+}
+
+/// The tray icon of one download.
+fn tray_id(id: u64) -> String {
+    format!("{TRAY_PREFIX}-{id}")
+}
+
+/// What the menu of a progress window's tray icon can do.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TrayMenuAction {
+    Show,
+    Close,
+}
+
+/// The menu id of one action of one progress window's tray icon.
+pub fn menu_id(id: u64, action: TrayMenuAction) -> String {
+    match action {
+        TrayMenuAction::Show => format!("progress-show:{id}"),
+        TrayMenuAction::Close => format!("progress-close:{id}"),
+    }
+}
+
+/// Read a menu id back into the download and the action it names.
+pub fn parse_menu_id(id: &str) -> Option<(u64, TrayMenuAction)> {
+    let (action, target) = id.split_once(':')?;
+    let download = target.parse().ok()?;
+    match action {
+        "progress-show" => Some((download, TrayMenuAction::Show)),
+        "progress-close" => Some((download, TrayMenuAction::Close)),
+        _ => None,
+    }
+}
+
+/// Run a menu item of a progress window's tray icon.
+///
+/// Rust registers one global menu listener for the whole application, so the
+/// listener of the main tray is the one that receives these events. It hands
+/// the id here; an id that is not ours is ignored.
+pub fn handle_menu(app: &AppHandle, id: &str) {
+    let Some((download, action)) = parse_menu_id(id) else {
+        return;
+    };
+    match action {
+        TrayMenuAction::Show => reveal(app, download),
+        TrayMenuAction::Close => close(app, download),
+    }
+}
+
+/// The title the operating system shows for the window.
+///
+/// The custom bar draws the file name itself, but the task switcher only knows
+/// this title. Naming the file there keeps two progress windows apart, and the
+/// tray icon of the window is named after the same file.
+fn window_title(info: &DownloadInfo) -> String {
+    let name = std::path::Path::new(&info.dest)
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_default();
+    if name.is_empty() {
+        "Download progress".to_string()
+    } else {
+        format!("{name}{TITLE_SUFFIX}")
+    }
+}
+
+/// Bring an existing progress window back from the tray or the taskbar.
+pub fn reveal(app: &AppHandle, id: u64) {
+    if let Some(window) = app.get_webview_window(&label(id)) {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+/// Close the progress window, leaving the download running.
+fn close_window(app: &AppHandle, id: u64) {
+    if let Some(window) = app.get_webview_window(&label(id)) {
+        let _ = window.close();
+    }
+}
+
+/// What the tray icon says when the pointer rests on it.
+fn tray_tip(info: &DownloadInfo) -> String {
+    // Windows keeps about 120 characters of a tray tooltip.
+    window_title(info).chars().take(120).collect()
+}
+
+/// Give a progress window its own tray icon.
+///
+/// The icon is the application's, labelled with the file. Clicking it brings
+/// the window back from the tray; its menu closes the window without touching
+/// the download. One icon per window is what keeps a hidden progress window
+/// findable without a trip through the download list.
+fn add_tray(app: &AppHandle, info: &DownloadInfo) -> tauri::Result<()> {
+    let id = tray_id(info.id);
+    if app.tray_by_id(&id).is_some() {
+        return Ok(());
+    }
+
+    let download = info.id;
+    let show = MenuItem::with_id(
+        app,
+        menu_id(info.id, TrayMenuAction::Show),
+        "Show window",
+        true,
+        None::<&str>,
+    )?;
+    let close = MenuItem::with_id(
+        app,
+        menu_id(info.id, TrayMenuAction::Close),
+        "Close window",
+        true,
+        None::<&str>,
+    )?;
+    let menu = Menu::with_items(app, &[&show, &close])?;
+
+    let mut builder = TrayIconBuilder::with_id(id)
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .tooltip(tray_tip(info))
+        // The menu is handled by the application's one global menu listener:
+        // `on_menu_event` is global in Tauri, so one listener per window would
+        // make every window react to every other window's menu item.
+        .on_tray_icon_event(move |tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            }
+            | TrayIconEvent::DoubleClick {
+                button: MouseButton::Left,
+                ..
+            } = event
+            {
+                reveal(tray.app_handle(), download);
+            }
+        });
+
+    if let Some(icon) = app.default_window_icon() {
+        builder = builder.icon(icon.clone());
+    }
+
+    builder.build(app)?;
+    Ok(())
+}
+
+/// Remove the tray icon of a progress window that really closed.
+pub fn remove_tray(app: &AppHandle, id: u64) {
+    // Dropping the icon that comes back removes it from the notification area.
+    let _ = app.remove_tray_by_id(&tray_id(id));
+}
+
+/// The script that hands the download to the page before it renders.
+fn payload(info: &DownloadInfo) -> String {
+    let json = serde_json::to_string(info).unwrap_or_else(|_| "null".to_string());
+    format!("window.__IDM_PROGRESS__ = {json};")
+}
+
+/// Show the progress window of a download, or bring it to the front when it
+/// is already open.
+///
+/// Called on the main thread, where the window toolkit lives.
+pub fn show(app: &AppHandle, info: &DownloadInfo) {
+    let label = label(info.id);
+    if app.get_webview_window(&label).is_some() {
+        reveal(app, info.id);
+        // A window that was opened before its tray icon could be built gets
+        // one now rather than staying without a way back from the tray.
+        if let Err(error) = add_tray(app, info) {
+            log::write("warn", &format!("the tray icon did not open: {error}"));
+        }
+        return;
+    }
+
+    let built = WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
+        .title(window_title(info))
+        .inner_size(WIDTH, DETAILS_HEIGHT)
+        .resizable(false)
+        .maximizable(false)
+        .decorations(false)
+        .center()
+        .initialization_script(payload(info))
+        .build();
+    match built {
+        Ok(window) => {
+            crate::window_style::round_corners(&window);
+            if let Err(error) = add_tray(app, info) {
+                log::write("warn", &format!("the tray icon did not open: {error}"));
+            }
+        }
+        Err(error) => log::write(
+            "warn",
+            &format!("the progress window did not open: {error}"),
+        ),
+    }
+}
+
+/// Close the progress window of a download that is leaving the list.
+///
+/// A window of a download the engine no longer knows would only be able to
+/// report refusals, so it goes with the row.
+pub fn close(app: &AppHandle, id: u64) {
+    close_window(app, id);
+}
+
+/// Fold the connection details away, or open them again.
+///
+/// The window is not resizable, so the height is chosen here rather than by
+/// the user. The page asks for this when its details control is used.
+pub fn set_details(window: &WebviewWindow, open: bool) {
+    let height = if open { DETAILS_HEIGHT } else { COMPACT_HEIGHT };
+    if let Err(error) = window.set_size(LogicalSize::new(WIDTH, height)) {
+        log::write(
+            "warn",
+            &format!("the progress window did not resize: {error}"),
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_info() -> DownloadInfo {
+        DownloadInfo {
+            id: 9,
+            url: "https://example.org/a.bin".to_string(),
+            dest: "C:\\Downloads\\a.bin".to_string(),
+            total: 4096,
+            downloaded: 1024,
+            connections: 2,
+            status: idm_core::downloader::Status::Running,
+            error: None,
+            referer: None,
+            segments: vec![],
+            resumable: Some(true),
+            speed_limit: 0,
+        }
+    }
+
+    #[test]
+    fn a_window_is_named_after_its_download() {
+        assert_eq!(label(42), "progress-42");
+    }
+
+    #[test]
+    fn a_label_names_its_download_or_nothing() {
+        assert_eq!(id_of_label("progress-42"), Some(42));
+        assert_eq!(id_of_label("complete-42"), None);
+        assert_eq!(id_of_label("progress-"), None);
+        assert_eq!(id_of_label("main"), None);
+    }
+
+    #[test]
+    fn every_progress_window_owns_a_tray_icon() {
+        assert_eq!(tray_id(7), "progress-tray-7");
+        assert_ne!(
+            tray_id(7),
+            tray_id(8),
+            "two windows must not share one tray icon"
+        );
+    }
+
+    #[test]
+    fn a_tray_menu_id_names_its_download_and_action() {
+        assert_eq!(menu_id(7, TrayMenuAction::Show), "progress-show:7");
+        assert_eq!(menu_id(7, TrayMenuAction::Close), "progress-close:7");
+        assert_eq!(
+            parse_menu_id("progress-show:7"),
+            Some((7, TrayMenuAction::Show))
+        );
+        assert_eq!(
+            parse_menu_id(&menu_id(8, TrayMenuAction::Close)),
+            Some((8, TrayMenuAction::Close))
+        );
+        assert_eq!(parse_menu_id("show"), None);
+        assert_eq!(parse_menu_id("progress-show:"), None);
+        assert_eq!(parse_menu_id("progress-unknown:7"), None);
+    }
+
+    #[test]
+    fn the_payload_is_the_state_of_the_download() {
+        let script = payload(&sample_info());
+        assert!(script.starts_with("window.__IDM_PROGRESS__ = {"));
+        assert!(script.contains("\"dest\":\"C:\\\\Downloads\\\\a.bin\""));
+        assert!(script.contains("\"resumable\":true"));
+    }
+
+    #[test]
+    fn the_taskbar_title_names_the_file() {
+        assert_eq!(
+            window_title(&sample_info()),
+            "a.bin — Download progress",
+            "two progress windows must be told apart in the task switcher"
+        );
+    }
+
+    #[test]
+    fn a_download_without_a_name_still_gets_a_title() {
+        let mut info = sample_info();
+        info.dest = String::new();
+        assert_eq!(window_title(&info), "Download progress");
+    }
+}

@@ -1,6 +1,7 @@
 //! Shared application state: the set of downloads known to the app.
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -13,6 +14,9 @@ pub struct AppState {
     downloads: Mutex<HashMap<u64, Arc<Download>>>,
     limits: Limits,
     index: Mutex<Option<Index>>,
+    /// Where a download handed over by the browser is saved. `None` means the
+    /// system Downloads folder.
+    browser_folder: Mutex<Option<PathBuf>>,
     /// Whether closing the window hides it into the tray.
     minimize_to_tray: AtomicBool,
     /// Whether the window of a finished download is shown.
@@ -26,6 +30,7 @@ impl Default for AppState {
             downloads: Mutex::new(HashMap::new()),
             limits: Limits::default(),
             index: Mutex::new(None),
+            browser_folder: Mutex::new(None),
             minimize_to_tray: AtomicBool::new(true),
             show_complete_dialog: AtomicBool::new(true),
         }
@@ -78,6 +83,23 @@ impl AppState {
     /// The limits that apply to every download.
     pub fn limits(&self) -> &Limits {
         &self.limits
+    }
+
+    /// The folder a browser hand-over is saved to, when the window has told
+    /// the backend which one it uses.
+    pub fn browser_folder(&self) -> Option<PathBuf> {
+        self.browser_folder
+            .lock()
+            .expect("browser folder lock poisoned")
+            .clone()
+    }
+
+    /// Point the browser hand-over at the folder the options window uses.
+    pub fn set_browser_folder(&self, folder: Option<PathBuf>) {
+        *self
+            .browser_folder
+            .lock()
+            .expect("browser folder lock poisoned") = folder;
     }
 
     /// Whether closing the window hides it into the tray.
