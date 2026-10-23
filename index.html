@@ -4,6 +4,29 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>B Download Manager</title>
+    <script>
+      // The appearance has to be on the root before the first paint, or a
+      // light window opens with a dark flash. The same three attributes and
+      // the same storage key as `src/lib/appearance.ts`, which owns every
+      // change after the first paint. Keep the two in step.
+      try {
+        var saved = JSON.parse(
+          localStorage.getItem("idm-clone.settings.v1") || "{}",
+        );
+        var root = document.documentElement;
+        root.dataset.theme =
+          saved.theme === "light" || saved.theme === "dark"
+            ? saved.theme
+            : matchMedia("(prefers-color-scheme: light)").matches
+              ? "light"
+              : "dark";
+        if (typeof saved.uiFont === "string") root.dataset.font = saved.uiFont;
+        if (typeof saved.uiWeight === "string")
+          root.dataset.weight = saved.uiWeight;
+      } catch {
+        // Storage can be blocked; the defaults are the dark appearance.
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

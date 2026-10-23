@@ -138,6 +138,7 @@ const UI_FONTS: readonly string[] = [
   "dmsans",
   "jakarta",
   "instrument",
+  "bricolage",
   "plex",
   "jetbrains",
   "system",

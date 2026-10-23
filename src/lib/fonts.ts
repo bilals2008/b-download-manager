@@ -43,6 +43,11 @@ export const FONT_OPTIONS: FontOption[] = [
     note: "Humanist, a little warm.",
   },
   {
+    value: "bricolage",
+    label: "Bricolage Grotesque",
+    note: "Expressive, with a little character in the letterforms.",
+  },
+  {
     value: "plex",
     label: "IBM Plex Sans",
     note: "Humanist, clearest figures.",
