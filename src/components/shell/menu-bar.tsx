@@ -1,7 +1,10 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+
+import { FONT_OPTIONS } from "@/lib/fonts";
+import { loadSettings } from "@/lib/settings";
 
 import type { ShellCommand } from "./commands";
-import { MENUS } from "./menus";
+import { buildMenus } from "./menus";
 import { MenuPopup, type FocusTarget, type MenuItem } from "./menu-popup";
 
 interface MenuBarProps {
@@ -23,6 +26,21 @@ export function MenuBar({ onCommand, menuLabels, menuChecks }: MenuBarProps) {
   const triggerRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const focusTargetRef = useRef<FocusTarget>(null);
   const baseId = useId();
+
+  // The menus are rebuilt whenever one opens, so the Font group ticks the face
+  // in use.
+  const { menus, checks } = useMemo(() => {
+    const fonts = FONT_OPTIONS;
+    const current = loadSettings().uiFont;
+    const fontChecks: Partial<Record<ShellCommand, boolean>> = {};
+    for (const font of fonts) {
+      fontChecks[`font:${font.value}`] = font.value === current;
+    }
+    return {
+      menus: buildMenus(fonts),
+      checks: { ...menuChecks, ...fontChecks },
+    };
+  }, [menuChecks, openIndex]);
 
   useEffect(() => {
     if (openIndex === null) {
@@ -59,7 +77,7 @@ export function MenuBar({ onCommand, menuLabels, menuChecks }: MenuBarProps) {
       if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
         return;
       }
-      const index = MENUS.findIndex(
+      const index = menus.findIndex(
         (menu) => menu.accessKey === event.key.toLowerCase(),
       );
       if (index === -1) {
@@ -74,10 +92,10 @@ export function MenuBar({ onCommand, menuLabels, menuChecks }: MenuBarProps) {
 
     window.addEventListener("keydown", openFromAccessKey);
     return () => window.removeEventListener("keydown", openFromAccessKey);
-  }, []);
+  }, [menus]);
 
   function focusTrigger(index: number) {
-    const next = (index + MENUS.length) % MENUS.length;
+    const next = (index + menus.length) % menus.length;
     setActiveIndex(next);
     triggerRefs.current[next]?.focus();
   }
@@ -126,7 +144,7 @@ export function MenuBar({ onCommand, menuLabels, menuChecks }: MenuBarProps) {
         break;
       case "End":
         event.preventDefault();
-        focusTrigger(MENUS.length - 1);
+        focusTrigger(menus.length - 1);
         break;
       case "Escape":
         if (openIndex !== null) {
@@ -145,7 +163,7 @@ export function MenuBar({ onCommand, menuLabels, menuChecks }: MenuBarProps) {
       className="relative z-40 h-6 bg-chrome-menu"
     >
       <ul role="menubar" className="flex h-full items-stretch px-1">
-        {MENUS.map((menu, index) => {
+        {menus.map((menu, index) => {
           const isOpen = openIndex === index;
           return (
             <li key={menu.id} role="none" className="relative flex items-center">
@@ -189,7 +207,7 @@ export function MenuBar({ onCommand, menuLabels, menuChecks }: MenuBarProps) {
                   level={0}
                   focus={focusTarget}
                   menuLabels={menuLabels}
-                  checked={menuChecks}
+                  checked={checks}
                   onChoose={choose}
                   onClose={() => {
                     setOpenIndex(null);

@@ -224,9 +224,8 @@ function Segmented<T extends string>({
 }
 
 /**
- * The face the window is drawn in, picked from the faces the app ships. The
- * note under the name says what the face is like, since the list only shows
- * the names.
+ * The face the window is drawn in: the faces the application ships, and the
+ * note under the picker says what the chosen one is like.
  */
 function FontChoice({
   value,
@@ -240,11 +239,11 @@ function FontChoice({
 
   return (
     <SettingRow label="Font" hint={current.note}>
-      <div className="w-44">
+      <div className="w-40">
         <ListBox
           label="Font"
-          value={value}
-          onChange={(next) => onChange(next as UiFont)}
+          value={current.value}
+          onChange={(next) => onChange(next)}
           options={FONT_OPTIONS.map((option) => ({
             value: option.value,
             label: option.label,

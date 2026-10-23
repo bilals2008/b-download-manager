@@ -1,3 +1,5 @@
+import type { FontOption } from "@/lib/fonts";
+
 import type { MenuRow } from "./menu-popup";
 import type { ShellCommand } from "./commands";
 
@@ -14,8 +16,12 @@ export interface MenuDefinition {
  * them ("Export", "Arrange files", "Toolbar", "Speed Limiter") are nested
  * menus in the original as well. Registration is left out: this application
  * is not licensed or ordered from anywhere.
+ *
+ * Built rather than written down, because the Font group lists the faces the
+ * user can actually pick, imported ones included.
  */
-export const MENUS: MenuDefinition[] = [
+export function buildMenus(fonts: FontOption[]): MenuDefinition[] {
+  return [
   {
     id: "tasks",
     label: "Tasks",
@@ -143,17 +149,17 @@ export const MENUS: MenuDefinition[] = [
         ],
       },
       {
-        command: "font-choose",
+        command: "font-reset",
         label: "Font",
         submenu: [
-          { command: "font-choose", label: "Choose Font...", disabled: true },
-          { command: "font-reset", label: "Reset to default Font", disabled: true },
+          ...fonts.map((font) => ({
+            command: `font:${font.value}` as ShellCommand,
+            label: font.label,
+            radio: true,
+          })),
+          "separator",
+          { command: "font-reset", label: "Reset to default Font" },
         ],
-      },
-      {
-        command: "language-english",
-        label: "Language",
-        submenu: [{ command: "language-english", label: "English", disabled: true }],
       },
     ],
   },
@@ -176,4 +182,5 @@ export const MENUS: MenuDefinition[] = [
       { command: "tell-friend", label: "Tell a friend", disabled: true },
     ],
   },
-];
+  ];
+}

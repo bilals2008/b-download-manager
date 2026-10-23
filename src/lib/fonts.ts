@@ -73,7 +73,11 @@ export const WEIGHT_OPTIONS: { value: UiWeight; label: string }[] = [
  * starts in the wrong face.
  */
 export function applyFont(font: UiFont): void {
-  document.documentElement.dataset.font = font;
+  const root = document.documentElement;
+
+  root.dataset.font = FONT_OPTIONS.some((option) => option.value === font)
+    ? font
+    : "inter";
 }
 
 export function applyWeight(weight: UiWeight): void {

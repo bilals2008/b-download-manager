@@ -8,6 +8,7 @@ import { useShellShortcuts } from "@/components/shell/use-shell-shortcuts";
 import { AboutDialog } from "@/components/workspace/about-dialog";
 import { AddDownloadDialog } from "@/components/workspace/add-download-dialog";
 import { Workspace } from "@/components/workspace/workspace";
+import { applyFont } from "@/lib/fonts";
 import {
   onTrayCommand,
   quitApp,
@@ -20,6 +21,7 @@ import {
 import {
   loadSettings,
   loadToolbarSize,
+  saveSettings,
   saveToolbarSize,
   type ToolbarSize,
 } from "@/lib/settings";
@@ -111,7 +113,18 @@ export default function App() {
     saveToolbarSize(size);
   }
 
+  // The face lands at once; the root variable is what every component reads.
+  function chooseFont(font: string) {
+    saveSettings({ ...loadSettings(), uiFont: font });
+    applyFont(font);
+  }
+
   function handleCommand(command: ShellCommand) {
+    if (command.startsWith("font:")) {
+      chooseFont(command.slice("font:".length));
+      return;
+    }
+
     switch (command) {
       case "exit":
         void quitApp();
@@ -190,6 +203,9 @@ export default function App() {
         break;
       case "toolbar-small":
         setToolbar("small");
+        break;
+      case "font-reset":
+        chooseFont("inter");
         break;
     }
   }

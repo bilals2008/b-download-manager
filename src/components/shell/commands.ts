@@ -54,9 +54,9 @@ export type ShellCommand =
   | "tray-hidden"
   | "tray-customize-list"
   | "tray-dark-mode"
-  | "font-choose"
   | "font-reset"
-  | "language-english"
+  /** `font:<value>` picks a face from the list in the View menu. */
+  | `font:${string}`
   // Help
   | "help-contents"
   | "tutorials"

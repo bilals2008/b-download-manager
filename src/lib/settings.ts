@@ -19,7 +19,7 @@ export interface Settings {
   showCompleteDialog: boolean;
   /** Auto follows the system; the other two override it. */
   theme: ThemePreference;
-  /** The face the whole window is drawn in. */
+  /** The face the whole window is drawn in, built in or imported. */
   uiFont: UiFont;
   /** How heavy the text is drawn. */
   uiWeight: UiWeight;
@@ -129,18 +129,9 @@ export type ThemePreference = "auto" | "light" | "dark";
  * The faces the appearance page offers. System is the Windows face, so it
  * costs no download; the rest ship with the application.
  */
-export type UiFont =
-  | "inter"
-  | "geist"
-  | "googlesans"
-  | "dmsans"
-  | "jakarta"
-  | "instrument"
-  | "plex"
-  | "jetbrains"
-  | "system";
+export type UiFont = string;
 
-const UI_FONTS: readonly UiFont[] = [
+const UI_FONTS: readonly string[] = [
   "inter",
   "geist",
   "googlesans",
@@ -196,7 +187,10 @@ function theme(value: unknown, fallback: ThemePreference): ThemePreference {
 }
 
 function font(value: unknown, fallback: UiFont): UiFont {
-  return UI_FONTS.includes(value as UiFont) ? (value as UiFont) : fallback;
+  if (typeof value !== "string") {
+    return fallback;
+  }
+  return UI_FONTS.includes(value) ? value : fallback;
 }
 
 function weight(value: unknown, fallback: UiWeight): UiWeight {
