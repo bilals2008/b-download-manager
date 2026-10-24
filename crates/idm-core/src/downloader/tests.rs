@@ -896,9 +896,14 @@ fn a_download_read_back_from_the_index_has_no_connection_open() {
         speed_limit: 32 * 1024,
         category: Some("Programs".to_string()),
         description: Some("the installer".to_string()),
+        replace: true,
     };
 
     let download = Download::from_known(&known).expect("download");
+    assert!(
+        download.known().replace,
+        "the Replace answer outlives the process"
+    );
     let info = download.info();
     assert_eq!(info.speed_limit, 32 * 1024, "the cap survives a restart");
     assert_eq!(info.category.as_deref(), Some("Programs"));
@@ -936,6 +941,85 @@ async fn a_download_runs_to_the_end_and_leaves_the_file_behind() {
         .filter(|name| name.contains(".part"))
         .collect();
     assert!(parts.is_empty(), "the part files must be gone: {parts:?}");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn a_file_that_was_not_allowed_to_be_replaced_is_left_alone() {
+    let data = sample_data();
+    let (url, _requests) = spawn_range_server(data);
+    let dir = temp_dir("existing-destination");
+    let dest = dir.join("out.bin");
+    std::fs::write(&dest, b"old bytes").expect("the file that was already there");
+
+    let download = Download::new(70, url, dest.clone(), 4, None, None).expect("download");
+    run(silent(), Limits::default(), download.clone()).await;
+
+    let info = download.info();
+    assert_eq!(info.status, Status::Failed);
+    assert!(
+        info.error.expect("a reason").contains("appeared while the download was running"),
+        "the failure names the file that appeared"
+    );
+    assert_eq!(
+        std::fs::read(&dest).expect("the old file"),
+        b"old bytes",
+        "a file the user did not agree to replace is never overwritten"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn a_confirmed_replace_puts_the_download_over_the_old_file() {
+    let data = sample_data();
+    let (url, _requests) = spawn_range_server(data.clone());
+    let dir = temp_dir("confirmed-replace");
+    let dest = dir.join("out.bin");
+    std::fs::write(&dest, b"old bytes").expect("the file that was already there");
+
+    let download = Download::new(71, url, dest.clone(), 4, None, None).expect("download");
+    download.set_allow_replace(true);
+    run(silent(), Limits::default(), download.clone()).await;
+
+    assert_eq!(download.info().status, Status::Completed);
+    assert_eq!(std::fs::read(&dest).expect("destination"), data);
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn discarding_progress_removes_the_parts_and_the_manifest() {
+    let dir = temp_dir("discard-progress");
+    let dest = dir.join("out.bin");
+    let download = Download::new(72, "https://example.com/a.bin".to_string(), dest, 4, None, None)
+        .expect("download");
+
+    let mut segments = segmenter::plan(1024, 2, &dir, &download.stem);
+    for segment in &mut segments {
+        std::fs::write(&segment.part, vec![0u8; segment.len() as usize]).expect("part");
+    }
+    *download.segments.lock().expect("segments lock") = segments;
+    download.total.store(1024, Ordering::SeqCst);
+    download.save_manifest();
+    assert!(download.manifest.exists(), "the download can resume");
+
+    download.discard_progress().expect("discard");
+
+    assert!(!download.manifest.exists(), "the resume state is gone");
+    assert!(
+        download.segments.lock().expect("segments lock").is_empty(),
+        "the old ranges are forgotten"
+    );
+    assert_eq!(download.total.load(Ordering::SeqCst), 0);
+    let leftovers: Vec<_> = std::fs::read_dir(&dir)
+        .expect("read dir")
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.file_name().to_string_lossy().to_string())
+        .filter(|name| name.contains(".part"))
+        .collect();
+    assert!(leftovers.is_empty(), "the parts are gone: {leftovers:?}");
 
     let _ = std::fs::remove_dir_all(&dir);
 }

@@ -268,6 +268,10 @@ pub struct Download {
     cancelled_request: AtomicU64,
     /// Whether a task is running this download right now.
     running: AtomicBool,
+    /// Whether the destination may be replaced at the end of the transfer.
+    /// Only an explicit Replace in the File Exists dialog sets this, so a
+    /// file that appears while a download runs is never overwritten.
+    allow_replace: AtomicBool,
     /// The category and the note the user gave the download. They are kept
     /// with the index, so the list looks the same after a restart.
     category: Mutex<Option<String>>,
@@ -335,6 +339,7 @@ impl Download {
             run_requests: AtomicU64::new(0),
             cancelled_request: AtomicU64::new(0),
             running: AtomicBool::new(false),
+            allow_replace: AtomicBool::new(false),
             category: Mutex::new(None),
             description: Mutex::new(None),
             last_emit: Mutex::new(last_emit),
@@ -421,6 +426,46 @@ impl Download {
     /// Record whether the file can be resumed, once the probe has answered.
     pub fn set_resumable(&self, resumable: bool) {
         *self.resumable.lock().expect("resumable lock poisoned") = Some(resumable);
+    }
+
+    /// Allow the destination file to be replaced when the transfer finishes.
+    ///
+    /// This is set only from an explicit Replace; every other start leaves it
+    /// off, and `assemble` refuses to overwrite a file that appeared while the
+    /// download was running.
+    pub fn set_allow_replace(&self, allow: bool) {
+        self.allow_replace.store(allow, Ordering::SeqCst);
+    }
+
+    /// Forget every byte received so far and remove the resume state.
+    ///
+    /// Used by Retry when the server cannot resume: the next run plans fresh
+    /// ranges instead of continuing from parts that cannot be continued.
+    pub fn discard_progress(&self) -> Result<(), String> {
+        if self.is_running() {
+            return Err("the download is still running".to_string());
+        }
+        let parts: Vec<PathBuf> = self
+            .segments
+            .lock()
+            .expect("segments lock poisoned")
+            .iter()
+            .map(|segment| segment.part.clone())
+            .collect();
+        for part in parts {
+            let _ = std::fs::remove_file(part);
+        }
+        let _ = std::fs::remove_file(&self.manifest);
+        self.segments
+            .lock()
+            .expect("segments lock poisoned")
+            .clear();
+        self.total.store(0, Ordering::SeqCst);
+        self.next_segment_id.store(0, Ordering::SeqCst);
+        self.head.lock().expect("head lock poisoned").clear();
+        self.degraded.store(false, Ordering::SeqCst);
+        *self.resumable.lock().expect("resumable lock poisoned") = None;
+        Ok(())
     }
 
     /// The epoch of the newest task of this download.
@@ -551,6 +596,10 @@ impl Download {
         }
         download.set_speed_limit(known.speed_limit);
         download.set_meta(known.category.clone(), known.description.clone());
+        // The Replace answer outlives the process: the file it replaces is
+        // still there, and the finished download has to be allowed to put
+        // itself over it.
+        download.set_allow_replace(known.replace);
         download.reset_segment_statuses();
 
         download.set_status(match known.status {
@@ -584,6 +633,7 @@ impl Download {
             speed_limit: self.speed_limit(),
             category: info.category,
             description: info.description,
+            replace: self.allow_replace.load(Ordering::SeqCst),
         }
     }
 
@@ -1245,6 +1295,7 @@ async fn assemble(download: &Arc<Download>) -> Result<(), String> {
         let Some(segment) = segments.first() else {
             return Err("the download has no parts".to_string());
         };
+        guard_replace(download)?;
         disk::replace_file(&segment.part, &dest).map_err(|e| e.to_string())?;
         cleanup(download, &segments);
         return Ok(());
@@ -1301,12 +1352,29 @@ async fn assemble(download: &Arc<Download>) -> Result<(), String> {
         return Err(error);
     }
 
+    guard_replace(download)?;
     if let Err(error) = disk::replace_file(&tmp, &dest) {
         let _ = std::fs::remove_file(&tmp);
         return Err(error.to_string());
     }
 
     cleanup(download, &segments);
+    Ok(())
+}
+
+/// Refuse to put the finished file over one that was not there when the
+/// download started.
+///
+/// A Replace was confirmed before the transfer began, so it is the one case
+/// where the destination may already hold a file. Everything else leaves a
+/// file that appeared meanwhile alone, and reports why.
+fn guard_replace(download: &Arc<Download>) -> Result<(), String> {
+    if download.dest.exists() && !download.allow_replace.load(Ordering::SeqCst) {
+        return Err(format!(
+            "{} appeared while the download was running; it was not replaced",
+            download.dest.display()
+        ));
+    }
     Ok(())
 }
 

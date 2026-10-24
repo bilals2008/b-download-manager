@@ -40,6 +40,11 @@ pub struct KnownDownload {
     /// The note the user typed in the add dialog. Older index files have none.
     #[serde(default)]
     pub description: Option<String>,
+    /// Whether the user confirmed replacing the file at the destination. A
+    /// resumed download has to remember that answer, or it would refuse to
+    /// put its own finished file where the one it replaced still is.
+    #[serde(default)]
+    pub replace: bool,
 }
 
 /// What is left on disk for a remembered download.
@@ -143,6 +148,7 @@ mod tests {
             speed_limit: 0,
             category: None,
             description: None,
+            replace: false,
         }
     }
 
