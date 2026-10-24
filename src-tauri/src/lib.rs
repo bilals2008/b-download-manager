@@ -156,6 +156,7 @@ fn remove_download(app: AppHandle, state: State<'_, AppState>, id: u64) -> Resul
     state.save_index();
     // The progress window of a row that is gone has nothing to show.
     progress::close(&app, id);
+    complete::close(&app, id);
     Ok(())
 }
 
@@ -535,6 +536,7 @@ pub fn run() {
             WindowEvent::Destroyed => {
                 if let Some(id) = progress::id_of_label(window.label()) {
                     progress::remove_tray(window.app_handle(), id);
+                    progress::forget(window.label());
                 }
             }
             _ => {}

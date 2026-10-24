@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 type DialogActionTone = "primary" | "secondary" | "danger" | "quiet";
 
 const TONES: Record<DialogActionTone, string> = {
-  primary: "bg-primary text-primary-foreground hover:opacity-90",
+  primary: "bg-primary font-medium text-primary-foreground hover:opacity-90",
   secondary: "bg-chrome-panel text-chrome-menu-text hover:bg-chrome-menu-hover",
   // A destructive answer is named by its word, in the error tone, instead of
   // being painted as a red slab next to the safe one.

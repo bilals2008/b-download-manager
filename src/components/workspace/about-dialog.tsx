@@ -1,5 +1,6 @@
 import { AppMark } from "@/components/shell/app-mark";
 import { Dialog } from "@/components/ui/dialog";
+import { DialogAction } from "@/components/ui/dialog-action";
 
 interface AboutDialogProps {
   open: boolean;
@@ -14,13 +15,9 @@ export function AboutDialog({ open, onClose }: AboutDialogProps) {
       title="About B Download Manager"
       onClose={onClose}
       footer={
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-chrome bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
-        >
+        <DialogAction tone="primary" data-autofocus onClick={onClose}>
           OK
-        </button>
+        </DialogAction>
       }
     >
       <div className="flex flex-col gap-2 text-xs text-chrome-menu-text">

@@ -1,5 +1,6 @@
 import { CopyGlyph } from "@/components/icons/action-icons";
 import { Dialog } from "@/components/ui/dialog";
+import { DialogAction } from "@/components/ui/dialog-action";
 import { copyText } from "@/lib/clipboard";
 import {
   formatDate,
@@ -44,21 +45,16 @@ export function DownloadPropertiesDialog({
       className="w-[min(34rem,calc(100vw-2rem))]"
       footer={
         <>
-          <button
-            type="button"
+          <DialogAction
+            className="mr-auto"
+            icon={<CopyGlyph className="size-3.5" />}
             onClick={copyAddress}
-            className="mr-auto inline-flex items-center gap-1.5 rounded-chrome bg-chrome-panel px-3 py-1.5 text-xs text-chrome-menu-text transition-colors hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
           >
-            <CopyGlyph className="size-3.5" />
             Copy address
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-chrome bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
-          >
+          </DialogAction>
+          <DialogAction tone="primary" data-autofocus onClick={onClose}>
             Close
-          </button>
+          </DialogAction>
         </>
       }
     >

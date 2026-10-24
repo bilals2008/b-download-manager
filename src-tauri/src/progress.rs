@@ -13,7 +13,8 @@
 
 use idm_core::downloader::DownloadInfo;
 use idm_core::log;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -50,8 +51,41 @@ const FOLD_MS: u64 = 180;
 /// The steps that travel is spread over, one per frame at rest.
 const FOLD_STEPS: u64 = 12;
 
-/// Bumped by every fold, so the newest toggle owns the window.
-static FOLD: AtomicU64 = AtomicU64::new(0);
+/// The newest fold of each progress window, keyed by window label.
+///
+/// One token for the whole application would make a fold in one window stop
+/// the travel of every other window, leaving it at a half-open height. Each
+/// window cancels only its own earlier travel.
+static FOLDS: OnceLock<Mutex<HashMap<String, u64>>> = OnceLock::new();
+
+fn folds() -> &'static Mutex<HashMap<String, u64>> {
+    FOLDS.get_or_init(Default::default)
+}
+
+/// Claim the next fold token of one window.
+fn claim_fold(label: &str) -> u64 {
+    let mut folds = folds().lock().unwrap_or_else(|error| error.into_inner());
+    let token = folds.entry(label.to_string()).or_insert(0);
+    *token += 1;
+    *token
+}
+
+/// Whether a fold that claimed `token` is still the newest one of its window.
+fn fold_is_current(label: &str, token: u64) -> bool {
+    folds()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .get(label)
+        .is_some_and(|current| *current == token)
+}
+
+/// Drop the fold state of a window that closed.
+pub fn forget(label: &str) {
+    folds()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .remove(label);
+}
 
 /// The window label of one download.
 pub fn label(id: u64) -> String {
@@ -288,13 +322,14 @@ pub fn set_details(window: &WebviewWindow, open: bool, animated: bool) {
         return;
     }
 
-    // The last toggle owns the window: an earlier loop that is still in flight
-    // sees the newer token and stops instead of fighting it for the height.
-    let token = FOLD.fetch_add(1, Ordering::Relaxed) + 1;
+    // The last toggle of this window owns it: an earlier loop that is still in
+    // flight sees the newer token and stops instead of fighting it.
+    let label = window.label().to_string();
+    let token = claim_fold(&label);
     let window = window.clone();
     std::thread::spawn(move || {
         for step in 1..=FOLD_STEPS {
-            if FOLD.load(Ordering::Relaxed) != token {
+            if !fold_is_current(&label, token) {
                 return;
             }
             let progress = step as f64 / FOLD_STEPS as f64;
@@ -393,6 +428,24 @@ mod tests {
         assert_eq!(parse_menu_id("show"), None);
         assert_eq!(parse_menu_id("progress-show:"), None);
         assert_eq!(parse_menu_id("progress-unknown:7"), None);
+    }
+
+    #[test]
+    fn a_fold_cancels_only_the_folds_of_its_own_window() {
+        forget("progress-1");
+        forget("progress-2");
+        let one = claim_fold("progress-1");
+        let two = claim_fold("progress-2");
+
+        // A toggle in another window does not stop this one's travel.
+        assert!(fold_is_current("progress-1", one));
+        assert!(fold_is_current("progress-2", two));
+
+        // A newer toggle of the same window does.
+        let newer = claim_fold("progress-1");
+        assert!(!fold_is_current("progress-1", one));
+        assert!(fold_is_current("progress-1", newer));
+        assert!(fold_is_current("progress-2", two));
     }
 
     #[test]

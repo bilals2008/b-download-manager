@@ -1,9 +1,9 @@
 import { useState } from "react";
 
+import { DialogAction } from "@/components/ui/dialog-action";
 import { FIELD } from "@/components/ui/field";
 import { ListBox } from "@/components/ui/listbox";
 import { Switch } from "@/components/ui/switch";
-import { ActionButton } from "@/components/windows/progress/action-button";
 import { describeError } from "@/lib/errors";
 import { setDownloadSpeedLimit } from "@/lib/ipc";
 import {
@@ -166,13 +166,13 @@ export function SpeedLimitTab({ info, appLimit }: SpeedLimitTabProps) {
           />
         </div>
 
-        <ActionButton
+        <DialogAction
           tone="primary"
           onClick={() => void apply()}
           disabled={!dirty || nextBytes === null || busy}
         >
           {busy ? "Applying…" : "Apply"}
-        </ActionButton>
+        </DialogAction>
       </div>
 
       <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-6 gap-y-1.5 text-xs">

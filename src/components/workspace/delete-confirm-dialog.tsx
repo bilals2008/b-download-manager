@@ -1,4 +1,5 @@
 import { Dialog } from "@/components/ui/dialog";
+import { DialogAction } from "@/components/ui/dialog-action";
 import { useDownloads } from "@/state/download-store";
 
 /**
@@ -6,6 +7,9 @@ import { useDownloads } from "@/state/download-store";
  * picked it themselves; a batch gets a question because it is one keystroke
  * away from losing a lot, and "Delete Completed" always asks because its scope
  * is not the row under the pointer.
+ *
+ * The keyboard starts on Cancel: Enter on a question about removing downloads
+ * should not remove anything.
  */
 export function DeleteConfirmDialog() {
   const { pendingDelete, confirmDelete, cancelDelete } = useDownloads();
@@ -19,20 +23,12 @@ export function DeleteConfirmDialog() {
       onClose={cancelDelete}
       footer={
         <>
-          <button
-            type="button"
-            onClick={cancelDelete}
-            className="rounded-chrome bg-chrome-panel px-3 py-1.5 text-xs text-chrome-menu-text transition-colors hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
-          >
+          <DialogAction data-autofocus onClick={cancelDelete}>
             Cancel
-          </button>
-          <button
-            type="button"
-            onClick={confirmDelete}
-            className="rounded-chrome bg-chrome-danger px-3 py-1.5 text-xs font-medium text-chrome-danger-text transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
-          >
+          </DialogAction>
+          <DialogAction tone="danger" onClick={confirmDelete}>
             {one ? "Remove" : `Remove ${count}`}
-          </button>
+          </DialogAction>
         </>
       }
     >

@@ -249,6 +249,7 @@ pub fn redownload(
     state.save_index();
     // The progress window of the row that was replaced has nothing to show.
     crate::progress::close(app, id);
+    crate::complete::close(app, id);
     // The new row takes the place of the old one at once, instead of waiting
     // for the first bytes of the transfer.
     let _ = app.emit(UPDATE_EVENT, fresh.info());

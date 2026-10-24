@@ -2,15 +2,13 @@ import { useEffect, useState } from "react";
 
 import { FileTypeIcon } from "@/components/icons/desktop-icons";
 import { CheckGlyph, CloseGlyph } from "@/components/icons/ui-icons";
+import { DialogAction } from "@/components/ui/dialog-action";
 import { Tooltip } from "@/components/ui/tooltip";
 import { categoryOfFile, formatSize, splitPath } from "@/lib/downloads";
 import { describeError } from "@/lib/errors";
 import { openPath } from "@/lib/ipc";
 import { closeWindow, showWindowWhenPainted } from "@/lib/window";
 import type { DownloadInfo } from "@/types";
-
-const BUTTON =
-  "rounded-chrome px-3 py-1.5 text-xs transition-colors focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none";
 
 /**
  * The window IDM opens when a file finishes.
@@ -112,28 +110,15 @@ export function DownloadCompleteWindow({ info }: { info: DownloadInfo }) {
       </div>
 
       <div className="flex shrink-0 justify-end gap-2 px-4 py-3">
-        <button
-          type="button"
-          onClick={() => void reveal(folder)}
-          className={`${BUTTON} bg-chrome-panel text-chrome-menu-text hover:bg-chrome-menu-hover`}
-        >
+        <DialogAction onClick={() => void reveal(folder)}>
           Open folder
-        </button>
-        <button
-          type="button"
-          onClick={() => void reveal(info.dest)}
-          className={`${BUTTON} bg-chrome-panel text-chrome-menu-text hover:bg-chrome-menu-hover`}
-        >
+        </DialogAction>
+        <DialogAction onClick={() => void reveal(info.dest)}>
           Open file
-        </button>
-        <button
-          type="button"
-          autoFocus
-          onClick={() => void closeWindow()}
-          className={`${BUTTON} bg-primary font-medium text-primary-foreground hover:opacity-90`}
-        >
+        </DialogAction>
+        <DialogAction tone="primary" autoFocus onClick={() => void closeWindow()}>
           Close
-        </button>
+        </DialogAction>
       </div>
     </div>
   );

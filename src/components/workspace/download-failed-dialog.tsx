@@ -92,6 +92,7 @@ export function DownloadFailedDialog({
           {canRetry ? (
             <DialogAction
               tone="primary"
+              data-autofocus
               icon={<RefreshGlyph className="size-3.5" />}
               onClick={() => onRetry(restartFirst)}
               disabled={busy}
@@ -101,6 +102,7 @@ export function DownloadFailedDialog({
           ) : (
             <DialogAction
               tone="primary"
+              data-autofocus
               icon={<FolderGlyph className="size-3.5" />}
               onClick={onChooseFolder}
               disabled={busy}

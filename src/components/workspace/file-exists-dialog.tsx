@@ -64,7 +64,7 @@ export function FileExistsDialog({
           >
             Replace
           </DialogAction>
-          <DialogAction tone="primary" autoFocus onClick={() => answer("rename")}>
+          <DialogAction tone="primary" data-autofocus onClick={() => answer("rename")}>
             Save as new name
           </DialogAction>
         </>

@@ -8,8 +8,8 @@ import {
 } from "@/components/icons/action-icons";
 import { WarningMark } from "@/components/icons/desktop-icons";
 import { CloseGlyph, ChevronDown, ChevronUp } from "@/components/icons/ui-icons";
+import { DialogAction } from "@/components/ui/dialog-action";
 import { Tooltip } from "@/components/ui/tooltip";
-import { ActionButton } from "@/components/windows/progress/action-button";
 import { ConnectionDetails } from "@/components/windows/progress/connection-details";
 import { ProgressMeter } from "@/components/windows/progress/progress-meter";
 import {
@@ -167,7 +167,7 @@ export function DownloadStatusTab({
       ) : null}
 
       <div className="mt-auto flex items-center justify-between gap-2 pt-0.5">
-        <ActionButton
+        <DialogAction
           tone="quiet"
           onClick={onToggleDetails}
           aria-expanded={detailsOpen}
@@ -181,62 +181,62 @@ export function DownloadStatusTab({
           }
         >
           {detailsOpen ? "Hide details" : "Show details"}
-        </ActionButton>
+        </DialogAction>
 
         {controls.primary === "open" ? (
           <div className="flex items-center gap-2">
-            <ActionButton
+            <DialogAction
               tone="secondary"
               icon={<CloseGlyph className="size-3.5" />}
               onClick={onClose}
             >
               Close
-            </ActionButton>
+            </DialogAction>
             <Tooltip content={controls.primaryHint} side="top">
-              <ActionButton
+              <DialogAction
                 tone="primary"
                 icon={<OpenFileGlyph className="size-3.5" />}
                 onClick={onOpen}
                 disabled={working}
               >
                 {controls.primaryLabel}
-              </ActionButton>
+              </DialogAction>
             </Tooltip>
           </div>
         ) : (
           <div className="flex items-center gap-2">
             <Tooltip content={controls.cancelHint} side="top">
-              <ActionButton
+              <DialogAction
                 tone="danger"
                 icon={<StopGlyph className="size-3.5" />}
                 onClick={onCancel}
                 disabled={working || !controls.canCancel}
               >
                 Cancel
-              </ActionButton>
+              </DialogAction>
             </Tooltip>
 
             {controls.canPause ? (
               <Tooltip content={controls.primaryHint} side="top">
-                <ActionButton
+                <DialogAction
                   tone="secondary"
                   icon={<PauseGlyph className="size-3.5" />}
                   onClick={onPause}
                   disabled={working}
                 >
                   {controls.primaryLabel}
-                </ActionButton>
+                </DialogAction>
               </Tooltip>
             ) : (
               <Tooltip content={controls.primaryHint} side="top">
-                <ActionButton
+                <DialogAction
                   tone="primary"
                   icon={<PlayGlyph className="size-3.5" />}
                   onClick={onResume}
                   disabled={working || !controls.canResume}
                 >
                   {controls.primaryLabel}
-                </ActionButton>
+                </DialogAction>
               </Tooltip>
             )}
           </div>

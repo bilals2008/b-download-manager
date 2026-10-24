@@ -4,6 +4,7 @@ import { FolderGlyph } from "@/components/icons/action-icons";
 import { FileTypeIcon, WarningMark } from "@/components/icons/desktop-icons";
 import { DownloadGlyph, SpinnerGlyph } from "@/components/icons/ui-icons";
 import { Dialog } from "@/components/ui/dialog";
+import { DialogAction } from "@/components/ui/dialog-action";
 import { FIELD } from "@/components/ui/field";
 import { Tooltip } from "@/components/ui/tooltip";
 import {
@@ -53,12 +54,6 @@ const LABEL = "mb-1.5 block text-xs text-chrome-muted";
 const FOLDER_ROW =
   "group flex h-9 w-full min-w-0 items-center gap-2 rounded-chrome border border-chrome-line bg-chrome-canvas px-2.5 text-left transition-colors hover:border-chrome-muted focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none disabled:cursor-default disabled:opacity-60 disabled:hover:border-chrome-line";
 
-const SECONDARY =
-  "rounded-chrome bg-chrome-panel px-3 py-1.5 text-xs text-chrome-menu-text transition-colors hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none disabled:opacity-45";
-
-const PRIMARY =
-  "inline-flex items-center gap-1.5 rounded-chrome bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none disabled:opacity-50";
-
 /**
  * "Add URL" - the compact way to take a link without a browser.
  *
@@ -93,6 +88,9 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
   // A second click in the same tick reaches the command before React has
   // re-rendered the disabled button; this is the guard that holds.
   const running = useRef(false);
+  // The address is the one thing the user came for, so it has the caret
+  // whenever the dialog opens, including after a browser hand-off. The
+  // attribute carries that to `Dialog`, which focuses it after `showModal`.
   const urlField = useRef<HTMLInputElement>(null);
   const folderButton = useRef<HTMLButtonElement>(null);
 
@@ -109,14 +107,6 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
     setError(null);
     setTouched(false);
     setBusy(false);
-  }, [open]);
-
-  // The address is the one thing the user came for, so it has the caret
-  // whenever the dialog opens, including after a browser hand-off.
-  useEffect(() => {
-    if (open) {
-      urlField.current?.focus();
-    }
   }, [open]);
 
   // Start from the folder of the last download, then from the folder of the
@@ -408,27 +398,24 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
       className="w-[min(30rem,calc(100vw-2rem))]"
       footer={
         <>
-          <button
-            type="button"
-            onClick={close}
-            disabled={busy}
-            className={SECONDARY}
-          >
+          <DialogAction onClick={close} disabled={busy}>
             Cancel
-          </button>
-          <button
+          </DialogAction>
+          <DialogAction
             type="submit"
             form="add-url-form"
+            tone="primary"
             disabled={busy}
-            className={PRIMARY}
+            icon={
+              busy ? (
+                <SpinnerGlyph className="size-3.5 motion-safe:animate-spin" />
+              ) : (
+                <DownloadGlyph className="size-3.5" />
+              )
+            }
           >
-            {busy ? (
-              <SpinnerGlyph className="size-3.5 motion-safe:animate-spin" />
-            ) : (
-              <DownloadGlyph className="size-3.5" />
-            )}
             {busy ? "Starting…" : "Download"}
-          </button>
+          </DialogAction>
         </>
       }
     >
@@ -449,6 +436,7 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
           <input
             id="add-url"
             ref={urlField}
+            data-autofocus
             className={`${FIELD} h-9 font-mono`}
             value={url}
             disabled={busy}

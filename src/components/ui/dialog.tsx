@@ -57,6 +57,9 @@ export function Dialog({
     }
     if (open && !element.open) {
       element.showModal();
+      // `showModal` focuses the first focusable child, which is the close
+      // button. A dialog that knows where the keyboard should start says so.
+      element.querySelector<HTMLElement>("[data-autofocus]")?.focus();
     }
     if (!open && element.open) {
       element.close();

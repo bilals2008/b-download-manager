@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { SettingsDialog } from "@/components/settings/settings-dialog";
 import type { ShellCommand } from "@/components/shell/commands";
@@ -85,15 +85,19 @@ export default function App() {
     }
   }, [downloads.browserRequest]);
 
-  // The tray menu drives the same commands as the menu bar.
+  // The tray menu drives the same commands as the menu bar. The listener is
+  // subscribed once; the ref carries the current store, so a state update does
+  // not tear it down and subscribe again.
+  const latest = useRef(downloads);
+  latest.current = downloads;
   useEffect(() => {
     let dispose: (() => void) | undefined;
     let closed = false;
     void onTrayCommand((command) => {
       if (command === "start-queue") {
-        downloads.startQueue();
+        latest.current.startQueue();
       } else if (command === "stop-queue") {
-        downloads.stopQueue();
+        latest.current.stopQueue();
       }
     }).then((unlisten) => {
       if (closed) {
@@ -106,7 +110,7 @@ export default function App() {
       closed = true;
       dispose?.();
     };
-  }, [downloads]);
+  }, []);
 
   function setToolbar(size: ToolbarSize) {
     setToolbarSize(size);

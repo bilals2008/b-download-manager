@@ -55,6 +55,15 @@ pub fn show(app: &AppHandle, info: &DownloadInfo) {
         .map(|window| crate::window_style::round_corners(&window));
 }
 
+/// Close the completion window of a download that is leaving the list.
+///
+/// The window would otherwise keep announcing a file the list no longer has.
+pub fn close(app: &AppHandle, id: u64) {
+    if let Some(window) = app.get_webview_window(&label(id)) {
+        let _ = window.close();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
