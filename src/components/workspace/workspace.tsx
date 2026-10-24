@@ -1,7 +1,9 @@
 import { CategoriesPane } from "@/components/workspace/categories-pane";
 import { DeleteConfirmDialog } from "@/components/workspace/delete-confirm-dialog";
 import { DownloadList } from "@/components/workspace/download-list";
+import { FileExistsDialog } from "@/components/workspace/file-exists-dialog";
 import { StatusBar } from "@/components/workspace/status-bar";
+import { useDownloads } from "@/state/download-store";
 
 interface WorkspaceProps {
   /** The View menu hides the categories pane in IDM, so it is app state. */
@@ -15,6 +17,8 @@ interface WorkspaceProps {
  * status bar.
  */
 export function Workspace({ categoriesVisible, onAddDownload }: WorkspaceProps) {
+  const { conflict, answerConflict, cancelConflict } = useDownloads();
+
   return (
     <main
       aria-label="Download workspace"
@@ -26,6 +30,16 @@ export function Workspace({ categoriesVisible, onAddDownload }: WorkspaceProps) 
       </div>
       <StatusBar />
       <DeleteConfirmDialog />
+      {/* Keyed by the file it asks about, so a second question never inherits
+          the checkbox of the first. */}
+      {conflict ? (
+        <FileExistsDialog
+          key={`${conflict.path}:${conflict.remaining}`}
+          conflict={conflict}
+          onAnswer={answerConflict}
+          onCancel={cancelConflict}
+        />
+      ) : null}
     </main>
   );
 }

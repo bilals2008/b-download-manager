@@ -33,6 +33,9 @@ export function onBridgeDownload(
   );
 }
 
+/** What the File Exists dialog answered. */
+export type ConflictChoice = "ask" | "rename" | "replace" | "skip";
+
 export interface StartDownloadInput {
   url: string;
   dest: string;
@@ -44,17 +47,37 @@ export interface StartDownloadInput {
   category?: string;
   /** A note to keep with the download. */
   description?: string;
+  /** The answer to a destination conflict. The default asks the window. */
+  conflict?: ConflictChoice;
 }
 
-export function startDownload(input: StartDownloadInput): Promise<number> {
-  return invoke<number>("start_download", {
-    url: input.url,
-    dest: input.dest,
-    connections: input.connections ?? null,
-    referer: input.referer?.trim() || null,
-    queue: input.queue ?? false,
-    category: input.category?.trim() || null,
-    description: input.description?.trim() || null,
+/** What the engine did with a start. A rename changes the destination. */
+export interface StartOutcome {
+  id: number | null;
+  dest: string;
+  skipped: boolean;
+}
+
+/** A start the File Exists dialog has to settle, or cannot perform. */
+export interface StartRefusal {
+  kind: "exists" | "active" | "busy" | "invalid" | "unsafe";
+  message: string;
+  path: string;
+  suggested: string;
+}
+
+export function startDownload(input: StartDownloadInput): Promise<StartOutcome> {
+  return invoke<StartOutcome>("start_download", {
+    request: {
+      url: input.url,
+      dest: input.dest,
+      connections: input.connections ?? null,
+      referer: input.referer?.trim() || null,
+      queue: input.queue ?? false,
+      category: input.category?.trim() || null,
+      description: input.description?.trim() || null,
+      conflict: input.conflict ?? null,
+    },
   });
 }
 
@@ -68,6 +91,32 @@ export function pauseDownload(id: number): Promise<void> {
 
 export function resumeDownload(id: number): Promise<void> {
   return invoke<void>("resume_download", { id });
+}
+
+/**
+ * Start a failed download again. `restart` forgets bytes the server cannot
+ * continue; otherwise the engine resumes from the parts it still has.
+ */
+export function retryDownload(id: number, restart: boolean): Promise<void> {
+  return invoke<void>("retry_download", { id, restart });
+}
+
+/**
+ * Start a finished or failed download over from its first byte.
+ *
+ * The row is only replaced once `conflict` settles a taken destination, so a
+ * cancelled File Exists dialog leaves the download as it was.
+ */
+export function redownloadDownload(
+  id: number,
+  conflict: ConflictChoice,
+): Promise<StartOutcome> {
+  return invoke<StartOutcome>("redownload_download", { id, conflict });
+}
+
+/** Move an idle download and its partial files to another folder. */
+export function relocateDownload(id: number, folder: string): Promise<void> {
+  return invoke<void>("relocate_download", { id, folder });
 }
 
 export function cancelDownload(id: number): Promise<void> {
@@ -142,8 +191,13 @@ export interface DestinationInfo {
   folder: string;
   /** Whether the folder is there already. A missing one is created. */
   folderExists: boolean;
-  /** Whether a file of that name is already there, and would be replaced. */
+  /** Whether a file of that name is already there. */
   fileExists: boolean;
+  /** Another download in the list writes to this exact file. */
+  active: boolean;
+  /** A free name beside it, for the Rename action. */
+  suggestedName: string;
+  suggestedPath: string;
 }
 
 /**

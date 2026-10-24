@@ -17,14 +17,20 @@ import { Tooltip } from "@/components/ui/tooltip";
 
 import { DOWNLOAD_COLUMNS } from "@/components/workspace/download-columns";
 import { DownloadContextMenu } from "@/components/workspace/download-context-menu";
+import { DownloadFailedDialog } from "@/components/workspace/download-failed-dialog";
 import { DownloadPropertiesDialog } from "@/components/workspace/download-properties-dialog";
 import { DownloadRow } from "@/components/workspace/download-row";
 import { FindBar } from "@/components/workspace/find-bar";
 import { SelectionCheckbox } from "@/components/workspace/selection-checkbox";
 import { useColumnWidths } from "@/components/workspace/use-column-widths";
-import type { Download, SortKey } from "@/lib/downloads";
+import { splitPath, type Download, type SortKey } from "@/lib/downloads";
 import { describeError } from "@/lib/errors";
-import { openProgressWindow } from "@/lib/ipc";
+import {
+  chooseFolder,
+  openProgressWindow,
+  relocateDownload,
+  retryDownload,
+} from "@/lib/ipc";
 import { cn } from "@/lib/utils";
 import { useDownloads } from "@/state/download-store";
 
@@ -76,6 +82,12 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
   const [propertiesId, setPropertiesId] = useState<number | null>(null);
   const properties =
     downloads.find((download) => download.id === propertiesId) ?? null;
+  // The row whose failure window is open, and the state of the last recovery
+  // command it sent.
+  const [failureId, setFailureId] = useState<number | null>(null);
+  const [recoveryBusy, setRecoveryBusy] = useState(false);
+  const [recoveryError, setRecoveryError] = useState<string | null>(null);
+  const failure = downloads.find((download) => download.id === failureId) ?? null;
 
   function openMenu(
     item: Download,
@@ -105,6 +117,61 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
     openProgressWindow(item.id).catch((failure: unknown) => {
       reportError(describeError(failure));
     });
+  }
+
+  function openFailure(item: Download) {
+    setRecoveryError(null);
+    setFailureId(item.id);
+  }
+
+  function closeFailure() {
+    setFailureId(null);
+    setRecoveryError(null);
+    setRecoveryBusy(false);
+  }
+
+  /** Retry from the bytes on disk, or start the transfer over. */
+  async function retryFailure(restart: boolean) {
+    if (!failure) {
+      return;
+    }
+    setRecoveryBusy(true);
+    setRecoveryError(null);
+    try {
+      await retryDownload(failure.id, restart);
+      closeFailure();
+    } catch (problem) {
+      setRecoveryError(describeError(problem));
+    } finally {
+      setRecoveryBusy(false);
+    }
+  }
+
+  /** Move the parts and the manifest, then continue from them. */
+  async function moveFailure() {
+    if (!failure) {
+      return;
+    }
+    let folder: string | null;
+    try {
+      folder = await chooseFolder(splitPath(failure.dest).dir);
+    } catch (problem) {
+      setRecoveryError(describeError(problem));
+      return;
+    }
+    if (!folder) {
+      return;
+    }
+    setRecoveryBusy(true);
+    setRecoveryError(null);
+    try {
+      await relocateDownload(failure.id, folder);
+      closeFailure();
+    } catch (problem) {
+      setRecoveryError(describeError(problem));
+    } finally {
+      setRecoveryBusy(false);
+    }
   }
 
   // The row the keyboard is on: bring it into view when a key, Find Next or a
@@ -423,6 +490,7 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
                   }}
                   onOpenMenu={(at, trigger) => openMenu(item, at, trigger)}
                   onOpen={() => openProgress(item)}
+                  onOpenFailure={() => openFailure(item)}
                 />
               ))
             )}
@@ -435,7 +503,22 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
           item={menu.item}
           at={menu.at}
           onShowProperties={(item) => setPropertiesId(item.id)}
+          onShowFailure={openFailure}
           onClose={closeMenu}
+        />
+      ) : null}
+
+      {/* A retry from anywhere closes the window by itself: it is only about
+          the failure, and the failure is over. */}
+      {failure && failure.status === "error" ? (
+        <DownloadFailedDialog
+          key={failure.id}
+          item={failure}
+          busy={recoveryBusy}
+          actionError={recoveryError}
+          onClose={closeFailure}
+          onRetry={(restart) => void retryFailure(restart)}
+          onChooseFolder={() => void moveFailure()}
         />
       ) : null}
 

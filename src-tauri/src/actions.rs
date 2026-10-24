@@ -12,7 +12,9 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use idm_core::downloader::{Download, DownloadInfo, Reporter, Status, DEFAULT_CONNECTIONS};
 use idm_core::limits::Limits;
+use idm_core::segmenter::part_path;
 
+use crate::conflict::{self, Choice, Refusal, Started};
 use crate::state::AppState;
 
 /// Event carrying the state of one download to the UI.
@@ -31,6 +33,8 @@ pub struct StartOptions {
     pub category: Option<String>,
     /// The note the user typed in the add dialog.
     pub description: Option<String>,
+    /// What the File Exists dialog answered.
+    pub conflict: Choice,
 }
 
 /// The reporter the desktop app hands to the engine: it pushes the state of
@@ -58,34 +62,80 @@ impl Reporter for AppReporter {
 ///
 /// The run is claimed before its task is spawned, so a stop that arrives while
 /// the task still waits to be polled covers it too.
+fn refused(kind: &str, message: String, dest: &std::path::Path) -> Refusal {
+    Refusal {
+        kind: kind.to_string(),
+        message,
+        path: dest.to_string_lossy().to_string(),
+        suggested: dest.to_string_lossy().to_string(),
+    }
+}
+
+/// Hand a download to a task of its own.
+///
+/// The task claims the run itself, so a stop that lands right after the spawn
+/// still covers it.
+fn spawn_run(app: &AppHandle, state: &AppState, download: Arc<Download>) {
+    let limits: Limits = state.limits().clone();
+    let request = download.request_run();
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        idm_core::downloader::run_claimed(Arc::new(AppReporter(app)), limits, download, request)
+            .await;
+    });
+}
+
 pub fn start(
     app: &AppHandle,
     state: &AppState,
     url: String,
     dest: PathBuf,
     options: StartOptions,
-) -> Result<u64, String> {
+) -> Result<Started, Refusal> {
     let url = url.trim().to_string();
     if url.is_empty() {
-        return Err("a URL is required".to_string());
+        return Err(refused("invalid", "a URL is required".to_string(), &dest));
     }
     if !(url.starts_with("http://") || url.starts_with("https://") || url.starts_with("ftp://")) {
-        return Err("the URL must start with http://, https:// or ftp://.".to_string());
+        return Err(refused(
+            "invalid",
+            "the URL must start with http://, https:// or ftp://.".to_string(),
+            &dest,
+        ));
     }
     if dest.as_os_str().is_empty() {
-        return Err("a destination file is required".to_string());
+        return Err(refused(
+            "invalid",
+            "a destination file is required".to_string(),
+            &dest,
+        ));
     }
-    crate::dest::validate(&dest)?;
+
+    // The check and the insert are one step: two starts that both found the
+    // name free would otherwise write over each other's part files.
+    let _gate = state.start_gate();
+    let (dest, replace) = match conflict::resolve(state, &dest, options.conflict, None)? {
+        conflict::Resolved::Skip => {
+            return Ok(Started {
+                id: None,
+                dest: dest.to_string_lossy().to_string(),
+                skipped: true,
+            })
+        }
+        conflict::Resolved::Start { dest, replace } => (dest, replace),
+    };
 
     let download = Download::new(
         state.next_id(),
         url,
-        dest,
+        dest.clone(),
         options.connections.unwrap_or(DEFAULT_CONNECTIONS).clamp(1, 32),
         state.limits().proxy().as_deref(),
         options.referer.as_deref(),
-    )?;
+    )
+    .map_err(|message| refused("invalid", message, &dest))?;
     download.set_meta(options.category, options.description);
+    download.set_allow_replace(replace);
 
     let id = download.id;
     state.insert(download.clone());
@@ -96,18 +146,232 @@ pub fn start(
     // spawned: the queue starts it the same way a paused one is started.
     if options.queue {
         let _ = app.emit(UPDATE_EVENT, download.info());
-        return Ok(id);
+        return Ok(Started {
+            id: Some(id),
+            dest: dest.to_string_lossy().to_string(),
+            skipped: false,
+        });
     }
 
-    let limits: Limits = state.limits().clone();
-    let request = download.request_run();
-    let app = app.clone();
-    tauri::async_runtime::spawn(async move {
-        idm_core::downloader::run_claimed(Arc::new(AppReporter(app)), limits, download, request)
-            .await;
-    });
+    spawn_run(app, state, download);
 
-    Ok(id)
+    Ok(Started {
+        id: Some(id),
+        dest: dest.to_string_lossy().to_string(),
+        skipped: false,
+    })
+}
+
+/// Start a failed download again.
+///
+/// `restart` forgets the bytes of the attempt that could not continue, which
+/// is the safe answer when the server does not support ranges. Without it the
+/// engine picks up from the parts and the manifest it still has.
+pub fn retry(
+    app: &AppHandle,
+    state: &AppState,
+    id: u64,
+    restart: bool,
+) -> Result<(), String> {
+    let download = state.get(id).ok_or("unknown download")?;
+    match download.status() {
+        Status::Failed | Status::Cancelled | Status::Paused => {}
+        Status::Running | Status::Queued => {
+            return Err("the download is still running".to_string())
+        }
+        Status::Completed => return Err("this download has already finished".to_string()),
+    }
+    if restart {
+        download.discard_progress()?;
+        download.set_status(Status::Queued);
+    }
+    resume(app, state, id)
+}
+
+/// Start a download over, from its first byte.
+///
+/// The address, the category and the note stay; the bytes of the old attempt
+/// do not. The row is replaced only once the File Exists question is settled,
+/// so a cancelled question leaves it exactly as it was, and its own file is
+/// not a conflict with the download that replaces it.
+pub fn redownload(
+    app: &AppHandle,
+    state: &AppState,
+    id: u64,
+    choice: Choice,
+) -> Result<Started, Refusal> {
+    let old = state
+        .get(id)
+        .ok_or_else(|| refused("invalid", "unknown download".to_string(), std::path::Path::new("")))?;
+    if old.is_running() || matches!(old.status(), Status::Running | Status::Queued) {
+        // Not a destination question: the row itself is busy, which no answer
+        // in the File Exists window can settle.
+        return Err(refused(
+            "busy",
+            "stop the download before starting it again".to_string(),
+            &old.dest,
+        ));
+    }
+
+    let _gate = state.start_gate();
+    let (dest, replace) = match conflict::resolve(state, &old.dest, choice, Some(id))? {
+        conflict::Resolved::Skip => {
+            return Ok(Started {
+                id: None,
+                dest: old.dest.to_string_lossy().to_string(),
+                skipped: true,
+            })
+        }
+        conflict::Resolved::Start { dest, replace } => (dest, replace),
+    };
+
+    let previous = old.info();
+    let fresh = Download::new(
+        state.next_id(),
+        previous.url.clone(),
+        dest.clone(),
+        old.max_connections,
+        state.limits().proxy().as_deref(),
+        old.referer.as_deref(),
+    )
+    .map_err(|message| refused("invalid", message, &dest))?;
+    fresh.set_meta(previous.category, previous.description);
+    fresh.set_speed_limit(previous.speed_limit);
+    fresh.set_allow_replace(replace);
+
+    // Part files carry the name of the file, not the id of the row, so the
+    // old bytes would look like the start of this transfer. They go first.
+    let _ = old.discard_progress();
+
+    let new_id = fresh.id;
+    state.remove(id);
+    state.insert(fresh.clone());
+    state.save_index();
+    // The progress window of the row that was replaced has nothing to show.
+    crate::progress::close(app, id);
+    // The new row takes the place of the old one at once, instead of waiting
+    // for the first bytes of the transfer.
+    let _ = app.emit(UPDATE_EVENT, fresh.info());
+    spawn_run(app, state, fresh);
+
+    Ok(Started {
+        id: Some(new_id),
+        dest: dest.to_string_lossy().to_string(),
+        skipped: false,
+    })
+}
+
+/// Move a download that has no task to another folder.
+///
+/// The part files and the manifest travel with it, so a server that supports
+/// ranges continues from the bytes already received. The new name is chosen
+/// to be free: a move never replaces a file in the target folder.
+pub fn relocate(
+    app: &AppHandle,
+    state: &AppState,
+    id: u64,
+    folder: PathBuf,
+) -> Result<(), String> {
+    let old = state.get(id).ok_or("unknown download")?;
+    if old.is_running() || matches!(old.status(), Status::Running | Status::Queued) {
+        return Err("stop the download before moving it".to_string());
+    }
+    if old.status() == Status::Completed {
+        return Err("a finished download cannot be moved".to_string());
+    }
+    if !folder.is_dir() {
+        return Err(format!("{} is not a folder", folder.display()));
+    }
+    let name = old
+        .dest
+        .file_name()
+        .ok_or("the download has no file name")?;
+    // The same folder is not a move: the question was about the bytes, so
+    // continue where the download stopped instead of renaming the file.
+    if old
+        .dest
+        .parent()
+        .is_some_and(|parent| conflict::same_path(parent, &folder))
+    {
+        return resume(app, state, id);
+    }
+    let wanted = folder.join(name);
+
+    let _gate = state.start_gate();
+    let new_dest = match conflict::resolve(state, &wanted, Choice::Rename, Some(id))
+        .map_err(|refusal| refusal.message)?
+    {
+        conflict::Resolved::Start { dest, .. } => dest,
+        conflict::Resolved::Skip => return Err("the download was not moved".to_string()),
+    };
+
+    let moved = Download::new(
+        old.id,
+        old.url.clone(),
+        new_dest.clone(),
+        old.max_connections,
+        state.limits().proxy().as_deref(),
+        old.referer.as_deref(),
+    )?;
+    moved.set_speed_limit(old.speed_limit());
+
+    let old_segments = old
+        .segments
+        .lock()
+        .expect("segments lock poisoned")
+        .clone();
+    let mut new_segments = Vec::with_capacity(old_segments.len());
+    let mut moved_files: Vec<(PathBuf, PathBuf)> = Vec::new();
+    for mut segment in old_segments {
+        let target = part_path(&moved.dir, &moved.stem, segment.id);
+        if segment.part.exists() {
+            if let Err(error) = move_file(&segment.part, &target) {
+                for (from, to) in moved_files.iter().rev() {
+                    let _ = move_file(to, from);
+                }
+                return Err(format!("cannot move the partial file: {error}"));
+            }
+            moved_files.push((segment.part.clone(), target.clone()));
+        }
+        segment.part = target;
+        new_segments.push(segment);
+    }
+
+    moved.total.store(old.total.load(std::sync::atomic::Ordering::SeqCst), std::sync::atomic::Ordering::SeqCst);
+    moved
+        .next_segment_id
+        .store(old.next_segment_id.load(std::sync::atomic::Ordering::SeqCst), std::sync::atomic::Ordering::SeqCst);
+    *moved.segments.lock().expect("segments lock poisoned") = new_segments;
+    // A download that failed before it planned its ranges has nothing to
+    // resume, and an empty manifest would only sit beside the file.
+    if !moved
+        .segments
+        .lock()
+        .expect("segments lock poisoned")
+        .is_empty()
+    {
+        moved.save_manifest();
+    }
+    let _ = std::fs::remove_file(&old.manifest);
+
+    state.replace(moved);
+    state.save_index();
+    let _ = app.emit(
+        UPDATE_EVENT,
+        state.get(id).expect("the moved download").info(),
+    );
+    resume(app, state, id)
+}
+
+/// Put `from` at `to`, across volumes as well.
+fn move_file(from: &std::path::Path, to: &std::path::Path) -> std::io::Result<()> {
+    match std::fs::rename(from, to) {
+        Ok(()) => Ok(()),
+        Err(_) => {
+            std::fs::copy(from, to)?;
+            std::fs::remove_file(from)
+        }
+    }
 }
 
 /// Hold a running download back. The bytes stay where they are.

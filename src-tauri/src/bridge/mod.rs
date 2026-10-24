@@ -15,7 +15,7 @@
 mod dest;
 mod http;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -283,22 +283,26 @@ async fn add_download(app: &AppHandle, body: &[u8]) -> (u16, Value) {
                 target.clone(),
                 crate::actions::StartOptions {
                     referer,
+                    // A hand-over has no dialog to ask, so it never replaces
+                    // a file: it takes the next free name beside it.
+                    conflict: crate::conflict::Choice::Rename,
                     ..crate::actions::StartOptions::default()
                 },
             ) {
-                Ok(id) => {
-                    log::write("info", &format!("the browser started {url} as {id}"));
+                Ok(started) => {
+                    let id = started.id;
+                    log::write("info", &format!("the browser started {url} as {id:?}"));
                     (
                         200,
                         ok(json!({
                             "mode": "direct",
                             "id": id,
-                            "name": target.file_name().map(|name| name.to_string_lossy().to_string()).unwrap_or(name),
-                            "dest": target.to_string_lossy(),
+                            "name": Path::new(&started.dest).file_name().map(|name| name.to_string_lossy().to_string()).unwrap_or(name),
+                            "dest": started.dest,
                         })),
                     )
                 }
-                Err(message) => (400, error_body("bad_request", message)),
+                Err(refusal) => (400, error_body("bad_request", refusal.message)),
             }
         }
     }

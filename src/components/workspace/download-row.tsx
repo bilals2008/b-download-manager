@@ -26,6 +26,8 @@ interface DownloadRowProps {
   onOpenMenu: (at: { x: number; y: number }, trigger: HTMLElement | null) => void;
   /** Open the progress window of the row, the way a double click does. */
   onOpen: () => void;
+  /** Open the window that explains a failed row and offers to recover it. */
+  onOpenFailure: () => void;
 }
 
 /**
@@ -42,6 +44,7 @@ export function DownloadRow({
   onSelect,
   onOpenMenu,
   onOpen,
+  onOpenFailure,
 }: DownloadRowProps) {
   const nameRef = useRef<HTMLDivElement>(null);
   const status = STATUS_LABELS[item.status];
@@ -124,13 +127,23 @@ export function DownloadRow({
             </Tooltip>
             {item.error ? (
               <Tooltip
-                content={item.error}
+                content={`${item.error} — open the failure details`}
                 side="bottom"
                 className="block min-w-0"
               >
-                <span className="mt-0.5 block truncate text-chrome-micro text-icon-red-bright">
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    // The row's own click would only move the selection; this
+                    // opens the window that offers the recovery actions.
+                    event.stopPropagation();
+                    onOpenFailure();
+                  }}
+                  onDoubleClick={(event) => event.stopPropagation()}
+                  className="mt-0.5 block w-full truncate rounded-chrome text-left text-chrome-micro text-icon-red-bright transition-colors hover:underline focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
+                >
                   {item.error}
-                </span>
+                </button>
               </Tooltip>
             ) : null}
           </div>

@@ -9,6 +9,7 @@ import {
   StopGlyph,
   TrashGlyph,
 } from "@/components/icons/action-icons";
+import { WarningMark } from "@/components/icons/desktop-icons";
 import { DownloadGlyph } from "@/components/icons/ui-icons";
 import { MenuPopup, type MenuRow } from "@/components/shell/menu-popup";
 import { copyText } from "@/lib/clipboard";
@@ -22,6 +23,7 @@ type RowCommand =
   | "resume"
   | "pause"
   | "stop"
+  | "recover"
   | "redownload"
   | "remove"
   | "open-file"
@@ -36,6 +38,8 @@ interface DownloadContextMenuProps {
   at: { x: number; y: number };
   /** Open the properties window of the row the menu was opened on. */
   onShowProperties: (item: Download) => void;
+  /** Open the failure window of a row that could not finish. */
+  onShowFailure: (item: Download) => void;
   onClose: () => void;
 }
 
@@ -51,6 +55,7 @@ export function DownloadContextMenu({
   item,
   at,
   onShowProperties,
+  onShowFailure,
   onClose,
 }: DownloadContextMenuProps) {
   const {
@@ -91,6 +96,9 @@ export function DownloadContextMenu({
         break;
       case "stop":
         applyToSelection("stop");
+        break;
+      case "recover":
+        onShowFailure(item);
         break;
       case "redownload":
         redownloadSelected();
@@ -171,9 +179,20 @@ function rowsFor(items: Download[]): MenuRow<RowCommand>[] {
       disabled: !anyStoppable,
     },
     {
+      command: "recover",
+      label: "Show error and retry...",
+      icon: <WarningMark tone="red" className="size-3.5" />,
+      disabled: single?.status !== "error",
+    },
+    {
       command: "redownload",
       label: "Redownload",
       icon: <RefreshGlyph className="size-3.5" />,
+      // A running row has to be stopped first; the engine refuses to replace
+      // a row it is still writing.
+      disabled: items.some(
+        (item) => item.status === "downloading" || item.status === "queued",
+      ),
     },
     {
       command: "remove",

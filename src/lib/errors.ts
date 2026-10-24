@@ -13,5 +13,13 @@ export function describeError(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
   }
+  // A command that refuses a start answers with an object, so the window can
+  // show the path and the name it suggests instead of a flattened sentence.
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const message = (error as { message: unknown }).message;
+    if (typeof message === "string") {
+      return message;
+    }
+  }
   return "The download engine did not answer.";
 }

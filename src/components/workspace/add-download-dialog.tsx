@@ -26,7 +26,7 @@ import {
   probeLink,
   type DestinationInfo,
 } from "@/lib/ipc";
-import { loadSettings } from "@/lib/settings";
+import { preferredFolder, saveLastFolder } from "@/lib/settings";
 import { useDownloads } from "@/state/download-store";
 
 interface AddDownloadDialogProps {
@@ -71,8 +71,9 @@ const PRIMARY =
  *
  * The dialog creates nothing until Download succeeds: Cancel, Escape and the
  * close button only close it, and a start in flight cannot be dismissed into a
- * download that appears from nowhere. A file that is already there is
- * announced once, and the same button is pressed again to replace it.
+ * download that appears from nowhere. A file that is already there is the
+ * engine's question to ask, so the File Exists window answers it after the
+ * start, not a second press of the same button.
  */
 export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
   const {
@@ -86,7 +87,6 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
   const [folder, setFolder] = useState("");
   const [probe, setProbe] = useState<Probe>({ kind: "idle" });
   const [destination, setDestination] = useState<DestinationInfo | null>(null);
-  const [overwrite, setOverwrite] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -106,7 +106,6 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
     setFolder("");
     setProbe({ kind: "idle" });
     setDestination(null);
-    setOverwrite(false);
     setError(null);
     setTouched(false);
     setBusy(false);
@@ -120,16 +119,17 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
     }
   }, [open]);
 
-  // Start from the folder of the options window, and from the Downloads
-  // folder of the system when nothing was chosen there.
+  // Start from the folder of the last download, then from the folder of the
+  // options window, and from the Downloads folder of the system when neither
+  // has one.
   useEffect(() => {
     if (!open) {
       return;
     }
     let active = true;
-    const chosen = loadSettings().defaultFolder.trim();
-    if (chosen) {
-      setFolder(chosen);
+    const remembered = preferredFolder();
+    if (remembered) {
+      setFolder(remembered);
       return () => {
         active = false;
       };
@@ -261,7 +261,6 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
   // is a debounce, so the engine is not asked for every letter of the address.
   useEffect(() => {
     setDestination(null);
-    setOverwrite(false);
     if (!open || !isDesktop() || !target) {
       return;
     }
@@ -284,20 +283,12 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
     };
   }, [open, target]);
 
-  // A change to the address or the folder is a new destination, so a question
-  // about replacing a file no longer applies to what is on screen.
-  function forgetOverwrite() {
-    setOverwrite(false);
-    setError(null);
-  }
-
   function reset() {
     setUrl("");
     setHandedOver(null);
     setFolder("");
     setProbe({ kind: "idle" });
     setDestination(null);
-    setOverwrite(false);
     setTouched(false);
     setError(null);
   }
@@ -319,7 +310,7 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
       const picked = await chooseFolder(folder.trim());
       if (picked) {
         setFolder(picked);
-        forgetOverwrite();
+        setError(null);
       }
     } catch (failure) {
       setError(describeError(failure));
@@ -354,27 +345,32 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
       return;
     }
 
-    const dest = joinPath(chosenFolder, chosenName);
     running.current = true;
     setBusy(true);
     try {
-      const check = await inspectDestination(dest);
-      setDestination(check);
-      if (check.fileExists && !overwrite) {
-        // The same button starts it the second time. Nothing is created yet.
-        setOverwrite(true);
-        return;
-      }
-      await addDownload({
+      const outcome = await addDownload({
         url: address,
         fileName: chosenName,
         category,
         savePath: chosenFolder,
         referer: referer || undefined,
       });
+      // A dismissed destination question leaves the dialog as it was, with
+      // the address and the folder still in it.
+      if (outcome === "cancelled") {
+        return;
+      }
+      if (outcome === "started") {
+        saveLastFolder(chosenFolder);
+      }
       onClose();
     } catch (failure) {
       setError(describeError(failure));
+      // The engine is the authority on the destination, so it is asked again
+      // after a refusal; the hint under the folder follows its answer.
+      void inspectDestination(joinPath(chosenFolder, chosenName))
+        .then(setDestination)
+        .catch(() => undefined);
     } finally {
       running.current = false;
       setBusy(false);
@@ -402,7 +398,6 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
   ]
     .filter(Boolean)
     .join(" · ");
-  const willReplace = overwrite && destination?.fileExists === true;
 
   return (
     <Dialog
@@ -432,7 +427,7 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
             ) : (
               <DownloadGlyph className="size-3.5" />
             )}
-            {busy ? "Starting…" : willReplace ? "Replace file" : "Download"}
+            {busy ? "Starting…" : "Download"}
           </button>
         </>
       }
@@ -464,7 +459,7 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
             aria-describedby={showProblem ? "add-url-problem" : undefined}
             onChange={(event) => {
               setUrl(event.target.value);
-              forgetOverwrite();
+              setError(null);
             }}
             onBlur={() => {
               if (address) {
@@ -547,19 +542,19 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
               This folder does not exist yet. It will be created.
             </p>
           ) : null}
-          {destination?.fileExists ? (
+          {destination?.fileExists || destination?.active ? (
             <p className="mt-1.5 flex items-start gap-1.5 text-chrome-micro text-chrome-menu-text">
               <WarningMark tone="amber" className="mt-px size-3.5 shrink-0" />
               <span className="min-w-0 break-words">
-                {willReplace ? (
+                {destination.active ? (
                   <>
-                    Press Download again to replace{" "}
+                    Another download is already using{` `}
                     <span className="font-mono">{name}</span>.
                   </>
                 ) : (
                   <>
                     A file named <span className="font-mono">{name}</span> is
-                    already there.
+                    already there. You will be asked what to do.
                   </>
                 )}
               </span>

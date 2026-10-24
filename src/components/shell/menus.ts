@@ -79,7 +79,7 @@ export function buildMenus(fonts: FontOption[]): MenuDefinition[] {
       "separator",
       { command: "find", label: "Find", shortcut: "Ctrl-F" },
       { command: "find-next", label: "Find Next", shortcut: "F3" },
-      { command: "scheduler", label: "Scheduler", disabled: true },
+      { command: "scheduler", label: "Scheduler and queues (coming soon)", disabled: true },
       "separator",
       { command: "options", label: "Options..." },
       "separator",
@@ -170,7 +170,11 @@ export function buildMenus(fonts: FontOption[]): MenuDefinition[] {
     rows: [
       { command: "help-contents", label: "Help contents", shortcut: "F1", disabled: true },
       { command: "tutorials", label: "Tutorials", disabled: true },
-      { command: "help-scheduler-queues", label: "Scheduler and queues", disabled: true },
+      {
+        command: "help-scheduler-queues",
+        label: "Scheduler and queues (coming soon)",
+        disabled: true,
+      },
       { command: "grabber-help", label: "Grabber Help", disabled: true },
       { command: "tip-of-the-day", label: "Tip of the Day...", disabled: true },
       "separator",

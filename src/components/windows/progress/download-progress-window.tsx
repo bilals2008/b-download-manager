@@ -19,7 +19,6 @@ import {
   resumeDownload,
   setProgressDetails,
 } from "@/lib/ipc";
-import { progressPercentText } from "@/lib/progress";
 import { closeWindow, showWindowWhenPainted } from "@/lib/window";
 import { useAppSpeedLimit } from "@/state/use-app-speed-limit";
 import { useLiveDownload } from "@/state/use-live-download";
@@ -130,7 +129,6 @@ export function DownloadProgressWindow({ initial }: { initial: DownloadInfo }) {
       <ProgressWindowTitle
         name={name}
         path={info.dest}
-        percent={progressPercentText(info)}
       />
 
       <div className="flex min-h-0 flex-1 flex-col px-4 pt-1 pb-3">

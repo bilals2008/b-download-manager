@@ -13,8 +13,6 @@ interface ProgressWindowTitleProps {
   name: string;
   /** The destination it is being written to, shown on hover. */
   path: string;
-  /** The percentage, already written the way the window prints it. */
-  percent: string;
 }
 
 /**
@@ -29,7 +27,6 @@ interface ProgressWindowTitleProps {
 export function ProgressWindowTitle({
   name,
   path,
-  percent,
 }: ProgressWindowTitleProps) {
   return (
     <header
@@ -44,39 +41,11 @@ export function ProgressWindowTitle({
           {name}
         </span>
       </Tooltip>
-      <span
-        data-tauri-drag-region
-        className="shrink-0 text-chrome-micro tabular-nums text-chrome-muted"
-      >
-        {percent}
-      </span>
 
       <div
         className="flex items-center gap-0.5"
         onDoubleClick={(event) => event.stopPropagation()}
       >
-        <Tooltip content="Minimize" side="bottom">
-          <button
-            type="button"
-            aria-label="Minimize window"
-            className={WINDOW_BUTTON}
-            onClick={() => void windowAction("minimize")}
-          >
-            <svg
-              className="size-3"
-              viewBox="0 0 12 12"
-              aria-hidden="true"
-              focusable="false"
-            >
-              <path
-                d="M2 6h8"
-                stroke="currentColor"
-                strokeWidth="1"
-                strokeLinecap="round"
-              />
-            </svg>
-          </button>
-        </Tooltip>
         <Tooltip content="Minimize to tray" side="bottom">
           <button
             type="button"

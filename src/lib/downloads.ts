@@ -57,6 +57,8 @@ export interface Download {
   connections: number;
   /** Failure text from the engine, when the status is "error". */
   error: string | null;
+  /** Whether the engine can continue from what is on disk. Null until known. */
+  resumable: boolean | null;
   /** A note kept with the download. */
   description: string | null;
 }

@@ -27,15 +27,26 @@ import {
   type SortState,
 } from "@/lib/downloads";
 import {
+  StartCancelled,
+  startResolving,
+  type BatchAsking,
+  type ConflictAnswer,
+  type ConflictReply,
+  type FileConflict,
+} from "@/lib/conflict";
+import {
   cancelDownload,
   listDownloads,
   onBridgeDownload,
   onDownloadUpdate,
   pauseDownload,
+  redownloadDownload,
   removeDownload,
   resumeDownload,
   startDownload,
   type BridgeDownload,
+  type StartDownloadInput,
+  type StartOutcome,
 } from "@/lib/ipc";
 import { describeError, isDesktop } from "@/lib/errors";
 import { nextMatch } from "@/lib/find";
@@ -139,7 +150,13 @@ export interface DownloadStore {
   pendingDelete: number[] | null;
   confirmDelete: () => void;
   cancelDelete: () => void;
-  addDownload: (input: NewDownload) => Promise<void>;
+  addDownload: (input: NewDownload) => Promise<AddOutcome>;
+  /** A destination the list has to ask about, or null. */
+  conflict: FileConflict | null;
+  /** Settle the question the File Exists dialog is showing. */
+  answerConflict: (answer: ConflictAnswer, applyToRemaining: boolean) => void;
+  /** Dismiss the question; the start is abandoned. */
+  cancelConflict: () => void;
   pauseAll: () => void;
   stopAll: () => void;
   redownloadSelected: () => void;
@@ -147,6 +164,9 @@ export interface DownloadStore {
   startQueue: () => void;
   stopQueue: () => void;
 }
+
+/** What became of a start the window asked to begin. */
+export type AddOutcome = "started" | "skipped" | "cancelled";
 
 export interface NewDownload {
   url: string;
@@ -197,6 +217,11 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [browserRequest, setBrowserRequest] = useState<BrowserRequest | null>(
+    null,
+  );
+  // A destination that is taken, while the File Exists dialog asks about it.
+  const [conflict, setConflict] = useState<FileConflict | null>(null);
+  const conflictReply = useRef<((reply: ConflictReply | null) => void) | null>(
     null,
   );
 
@@ -261,6 +286,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
         referer: info.referer,
         connections: info.connections,
         error: info.error,
+        resumable: info.resumable,
         description: info.description,
       };
     },
@@ -440,33 +466,59 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
     return result;
   }, [state.downloads]);
 
-  /** Replace a finished or failed download with a fresh engine job. */
-  async function restart(item: Download) {
-    try {
-      await cancelDownload(item.id);
-    } catch {
-      // A finished download has no task left to cancel.
-    }
-    try {
-      await removeDownload(item.id);
-    } catch {
-      // It may already be gone from the engine.
-    }
-    forget(item.id);
-    await startDownload({
-      url: item.url,
-      dest: item.dest,
-      connections: item.connections || DEFAULT_CONNECTIONS,
-      referer: item.referer ?? undefined,
-      category: item.category,
-      description: item.description ?? undefined,
+  /** Put the File Exists question on screen and wait for the answer. */
+  function askConflict(question: FileConflict): Promise<ConflictReply | null> {
+    return new Promise((resolve) => {
+      // A question that is still waiting can only be replaced by the next one;
+      // settle it as dismissed so its start does not hang on a promise nobody
+      // will ever answer.
+      conflictReply.current?.(null);
+      conflictReply.current = resolve;
+      setConflict(question);
     });
   }
 
+  /** Take the answer out of the ref first, so a late click cannot land twice. */
+  function settleConflict(reply: ConflictReply | null) {
+    const settle = conflictReply.current;
+    conflictReply.current = null;
+    setConflict(null);
+    settle?.(reply);
+  }
+
+  /** Start a finished or failed download over with a fresh engine job. */
+  async function restart(
+    item: Download,
+    batch?: BatchAsking,
+  ): Promise<AddOutcome> {
+    let outcome: StartOutcome;
+    try {
+      // The engine replaces the row itself once the destination question is
+      // settled, so a cancelled question leaves the row untouched.
+      outcome = await startResolving(
+        (choice) => redownloadDownload(item.id, choice),
+        askConflict,
+        batch,
+      );
+    } catch (failure) {
+      if (failure instanceof StartCancelled) {
+        return "cancelled";
+      }
+      throw failure;
+    }
+    if (outcome.id === null || outcome.skipped) {
+      return "skipped";
+    }
+    // The row was replaced in the engine: the old id is gone, and the update
+    // of the new one fills the list.
+    forget(item.id);
+    return "started";
+  }
+
   /** Start one download and put its row in the list. */
-  async function beginDownload(input: NewDownload) {
+  async function beginDownload(input: NewDownload): Promise<AddOutcome> {
     const dest = joinPath(input.savePath, input.fileName);
-    const id = await startDownload({
+    const request: StartDownloadInput = {
       url: input.url,
       dest,
       connections: DEFAULT_CONNECTIONS,
@@ -474,9 +526,27 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
       queue: input.queue,
       category: input.category,
       description: input.description,
-    });
+    };
+    let outcome: StartOutcome;
+    try {
+      outcome = await startResolving(
+        (choice) => startDownload({ ...request, conflict: choice }),
+        askConflict,
+      );
+    } catch (failure) {
+      if (failure instanceof StartCancelled) {
+        return "cancelled";
+      }
+      throw failure;
+    }
+    if (outcome.id === null || outcome.skipped) {
+      return "skipped";
+    }
+    const id = outcome.id;
+    // A rename changes where the file goes, so the row follows the engine.
+    const written = outcome.dest || dest;
     const now = Date.now();
-    const { dir, base } = splitPath(dest);
+    const { dir, base } = splitPath(written);
     const row: Download = {
       id,
       fileName: base || input.fileName,
@@ -490,10 +560,11 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
       addedAt: now,
       lastTryAt: now,
       savePath: dir,
-      dest,
+      dest: written,
       referer: input.referer?.trim() || null,
       connections: DEFAULT_CONNECTIONS,
       error: null,
+      resumable: null,
       description: input.description?.trim() || null,
     };
     setState((current) => ({
@@ -502,6 +573,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
         ? current.downloads
         : [...current.downloads, row],
     }));
+    return "started";
   }
 
   /**
@@ -719,6 +791,10 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
     cancelDelete: () =>
       setState((current) => ({ ...current, pendingDelete: null })),
     addDownload: (input) => beginDownload(input),
+    conflict,
+    answerConflict: (answer, applyToRemaining) =>
+      settleConflict({ choice: answer, applyToRemaining }),
+    cancelConflict: () => settleConflict(null),
     pauseAll: () => {
       const items = latest.current.downloads.filter(
         (item) => item.status === "downloading",
@@ -754,14 +830,37 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
       run(Promise.all(items.map((item) => cancelDownload(item.id))));
     },
     redownloadSelected: () => {
-      const items = latest.current.downloads.filter((item) =>
-        latest.current.selected.includes(item.id),
+      // A live row has to be stopped before it can start over, so it is left
+      // out instead of answering with an error nobody asked for.
+      const items = latest.current.downloads.filter(
+        (item) =>
+          latest.current.selected.includes(item.id) &&
+          item.status !== "downloading" &&
+          item.status !== "queued",
       );
       if (items.length === 0) {
         return;
       }
       setState((current) => ({ ...current, selected: [] }));
-      run(Promise.all(items.map((item) => restart(item))));
+      // One at a time, so the File Exists question of a batch is asked about
+      // one file and answered for all of them, instead of several questions
+      // racing for the same dialog.
+      const batch: BatchAsking = { remaining: 0, choice: null };
+      void (async () => {
+        for (let index = 0; index < items.length; index += 1) {
+          batch.remaining = items.length - index - 1;
+          let outcome: AddOutcome;
+          try {
+            outcome = await restart(items[index], batch);
+          } catch (failure) {
+            setError(describeError(failure));
+            continue;
+          }
+          if (outcome === "cancelled") {
+            return;
+          }
+        }
+      })();
     },
     deleteCompleted: () => {
       const ids = latest.current.downloads

@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use idm_core::downloader::{Download, DownloadInfo};
+use idm_core::downloader::{Download, DownloadInfo, Status};
 use idm_core::limits::Limits;
 use idm_core::session::{Index, KnownDownload};
 
@@ -21,6 +21,9 @@ pub struct AppState {
     minimize_to_tray: AtomicBool,
     /// Whether the window of a finished download is shown.
     show_complete_dialog: AtomicBool,
+    /// Held while a start checks its destination and inserts the download, so
+    /// two starts cannot both find the same name free.
+    start_gate: Mutex<()>,
 }
 
 impl Default for AppState {
@@ -33,6 +36,7 @@ impl Default for AppState {
             browser_folder: Mutex::new(None),
             minimize_to_tray: AtomicBool::new(true),
             show_complete_dialog: AtomicBool::new(true),
+            start_gate: Mutex::new(()),
         }
     }
 }
@@ -74,6 +78,41 @@ impl AppState {
             .lock()
             .expect("downloads lock poisoned")
             .remove(&id);
+    }
+
+    /// Put a download in place of the row with the same id, after a move.
+    pub fn replace(&self, download: Arc<Download>) {
+        self.downloads
+            .lock()
+            .expect("downloads lock poisoned")
+            .insert(download.id, download);
+    }
+
+    /// Hold the destination check and the insert of a new download together.
+    pub fn start_gate(&self) -> std::sync::MutexGuard<'_, ()> {
+        self.start_gate.lock().expect("start gate lock poisoned")
+    }
+
+    /// The files the downloads in the list write to.
+    pub fn destinations(&self) -> Vec<PathBuf> {
+        self.destinations_except(None)
+    }
+
+    /// The files the downloads in the list write to, minus one row.
+    ///
+    /// A download that is started again is not a conflict with the row it
+    /// replaces, so that row's file is left out of the answer. A finished
+    /// download is left out too: it has no task and no parts, and its file may
+    /// have been deleted, so a new download of the same name is not a second
+    /// writer.
+    pub fn destinations_except(&self, except: Option<u64>) -> Vec<PathBuf> {
+        self.list()
+            .iter()
+            .filter(|download| {
+                Some(download.id) != except && download.status() != Status::Completed
+            })
+            .map(|download| download.dest.clone())
+            .collect()
     }
 
     pub fn infos(&self) -> Vec<DownloadInfo> {

@@ -55,6 +55,12 @@ export const DEFAULT_SETTINGS: Settings = {
 
 const STORAGE_KEY = "idm-clone.settings.v1";
 
+/**
+ * The folder the add dialog used last. It is not part of `Settings`: the
+ * options window does not own it, and the next successful add replaces it.
+ */
+const LAST_FOLDER_KEY = "idm-clone.last-folder.v1";
+
 /** The range the engine accepts for a connection count. */
 export const MAX_CONNECTIONS = 32;
 
@@ -117,6 +123,37 @@ export function saveSettings(settings: Settings): void {
   } catch {
     // Storage can be blocked; the dialog still closes with the chosen values.
   }
+}
+
+/** The folder of the last download started from the add dialog. */
+export function loadLastFolder(): string {
+  try {
+    return window.localStorage.getItem(LAST_FOLDER_KEY)?.trim() ?? "";
+  } catch {
+    return "";
+  }
+}
+
+/** Remember the folder of a download, once it has really started. */
+export function saveLastFolder(folder: string): void {
+  const value = folder.trim();
+  if (!value) {
+    return;
+  }
+  try {
+    window.localStorage.setItem(LAST_FOLDER_KEY, value);
+  } catch {
+    // Storage can be blocked; the next open falls back to the default.
+  }
+}
+
+/**
+ * The folder the add dialog opens on: the one the last download used, and the
+ * configured default until there is one. Empty means the system Downloads
+ * folder, which the dialog asks the engine for.
+ */
+export function preferredFolder(): string {
+  return loadLastFolder() || loadSettings().defaultFolder.trim();
 }
 
 /** The size of the toolbar buttons, the way IDM keeps it in the View menu. */

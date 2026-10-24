@@ -13,6 +13,7 @@
     "check:find": "node scripts/check-find.mjs",
     "check:progress": "node scripts/check-progress.mjs",
     "check:add-dialog": "node scripts/check-add-dialog.mjs",
+    "check:recovery": "node scripts/check-recovery.mjs",
     "check:tooltip": "node scripts/check-tooltip.mjs",
     "check:extension": "node scripts/check-extension.mjs",
     "tauri": "tauri"

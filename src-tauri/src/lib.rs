@@ -1,6 +1,7 @@
 mod actions;
 mod bridge;
 mod complete;
+mod conflict;
 mod dest;
 mod progress;
 mod state;
@@ -22,10 +23,13 @@ use actions::UPDATE_EVENT;
 /// Event carrying a command from the tray to the UI.
 const TRAY_EVENT: &str = "tray://command";
 
-#[tauri::command]
-fn start_download(
-    app: AppHandle,
-    state: State<'_, AppState>,
+/// Everything the add dialog sends to start a download.
+///
+/// One object rather than a dozen positional arguments: the destination
+/// question is the newest field, and the call keeps a name for each.
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StartRequest {
     url: String,
     dest: String,
     connections: Option<u32>,
@@ -33,18 +37,28 @@ fn start_download(
     queue: Option<bool>,
     category: Option<String>,
     description: Option<String>,
-) -> Result<u64, String> {
+    /// What the File Exists dialog answered, when it was asked.
+    conflict: Option<conflict::Choice>,
+}
+
+#[tauri::command]
+fn start_download(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    request: StartRequest,
+) -> Result<conflict::Started, conflict::Refusal> {
     actions::start(
         &app,
         &state,
-        url,
-        PathBuf::from(dest.trim()),
+        request.url,
+        PathBuf::from(request.dest.trim()),
         actions::StartOptions {
-            connections,
-            referer,
-            queue: queue.unwrap_or(false),
-            category,
-            description,
+            connections: request.connections,
+            referer: request.referer,
+            queue: request.queue.unwrap_or(false),
+            category: request.category,
+            description: request.description,
+            conflict: request.conflict.unwrap_or_default(),
         },
     )
 }
@@ -67,6 +81,42 @@ fn resume_download(app: AppHandle, state: State<'_, AppState>, id: u64) -> Resul
 #[tauri::command]
 fn cancel_download(app: AppHandle, state: State<'_, AppState>, id: u64) -> Result<(), String> {
     actions::cancel(&app, &state, id)
+}
+
+/// Start a failed download again. `restart` forgets the bytes of an attempt
+/// the server cannot continue; otherwise the engine resumes from its parts.
+#[tauri::command]
+fn retry_download(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: u64,
+    restart: Option<bool>,
+) -> Result<(), String> {
+    actions::retry(&app, &state, id, restart.unwrap_or(false))
+}
+
+/// Start a finished or failed download again from the first byte. `conflict`
+/// is the answer to the File Exists question; the row stays as it is until
+/// that question is settled.
+#[tauri::command]
+fn redownload_download(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: u64,
+    conflict: Option<conflict::Choice>,
+) -> Result<conflict::Started, conflict::Refusal> {
+    actions::redownload(&app, &state, id, conflict.unwrap_or_default())
+}
+
+/// Move a download that is not running to another folder, parts included.
+#[tauri::command]
+fn relocate_download(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: u64,
+    folder: String,
+) -> Result<(), String> {
+    actions::relocate(&app, &state, id, PathBuf::from(folder.trim()))
 }
 
 /// Open the progress window of one download, or bring it back to the front.
@@ -314,8 +364,11 @@ fn parse_hex_color(value: &str) -> Option<(u8, u8, u8)> {
 /// there. The add dialog asks before it starts, so a bad name is a line in
 /// the dialog instead of a failed download.
 #[tauri::command]
-fn inspect_destination(dest: String) -> Result<dest::Destination, String> {
-    dest::inspect(&PathBuf::from(dest.trim()))
+fn inspect_destination(
+    state: State<'_, AppState>,
+    dest: String,
+) -> Result<conflict::DestinationStatus, String> {
+    conflict::inspect(&state, &PathBuf::from(dest.trim()))
 }
 
 /// Open a file or a folder with the program the system uses for it.
@@ -489,6 +542,9 @@ pub fn run() {
             pause_download,
             resume_download,
             cancel_download,
+            retry_download,
+            redownload_download,
+            relocate_download,
             remove_download,
             set_speed_limit,
             set_proxy,
@@ -533,6 +589,39 @@ mod tests {
     #[test]
     fn an_empty_path_is_refused() {
         assert!(open_path("   ".to_string()).is_err());
+    }
+
+    #[test]
+    fn a_start_request_reads_the_names_the_window_sends() {
+        let request: StartRequest = serde_json::from_value(serde_json::json!({
+            "url": "https://example.org/film.mp4",
+            "dest": "D:\\Downloads\\film.mp4",
+            "connections": 8,
+            "referer": null,
+            "queue": false,
+            "category": "Video",
+            "description": null,
+            "conflict": "rename",
+        }))
+        .expect("a start request");
+
+        assert_eq!(request.url, "https://example.org/film.mp4");
+        assert_eq!(request.connections, Some(8));
+        assert_eq!(request.queue, Some(false));
+        assert_eq!(request.category.as_deref(), Some("Video"));
+        assert_eq!(request.conflict, Some(conflict::Choice::Rename));
+    }
+
+    #[test]
+    fn a_start_request_from_an_older_window_asks_the_destination_question() {
+        let request: StartRequest = serde_json::from_value(serde_json::json!({
+            "url": "https://example.org/film.mp4",
+            "dest": "D:\\Downloads\\film.mp4",
+        }))
+        .expect("a start request");
+
+        assert_eq!(request.conflict, None, "an older window has no answer yet");
+        assert_eq!(request.conflict.unwrap_or_default(), conflict::Choice::Ask);
     }
 
     #[test]

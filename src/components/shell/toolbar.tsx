@@ -61,7 +61,7 @@ export function Toolbar({ onCommand, size, disabled }: ToolbarProps) {
       }
     >
       {TOOLBAR_ITEMS.map(
-        ({ command, label, icon: Icon, disabled: off, shortcut }, index) => {
+        ({ command, label, icon: Icon, disabled: off, shortcut, note }, index) => {
           // The item itself knows whether its screen exists; the state knows
           // whether it has anything to act on. Either one can dim it.
           const inert = off || disabled?.[command] === true;
@@ -69,7 +69,7 @@ export function Toolbar({ onCommand, size, disabled }: ToolbarProps) {
           return (
             <Tooltip
               key={command}
-              content={label}
+              content={note ? `${label} — ${note}` : label}
               shortcut={shortcut}
               side="bottom"
               className="shrink-0"

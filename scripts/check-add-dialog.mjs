@@ -21,6 +21,13 @@ import {
   splitPath,
   urlProblem,
 } from "../src/lib/downloads.ts";
+import {
+  DEFAULT_SETTINGS,
+  loadLastFolder,
+  preferredFolder,
+  saveLastFolder,
+  saveSettings,
+} from "../src/lib/settings.ts";
 
 let checks = 0;
 
@@ -202,5 +209,28 @@ is(splitPath("C:\\Downloads\\a.zip"), {
   base: "a.zip",
 });
 is(formatSize(1536), "1.50 KB");
+
+// The dialog reopens on the folder of the last download. Only a download
+// that started replaces it; picking a folder and cancelling does not.
+const storage = new Map();
+globalThis.window = {
+  localStorage: {
+    getItem: (key) => storage.get(key) ?? null,
+    setItem: (key, value) => storage.set(key, String(value)),
+  },
+};
+is(loadLastFolder(), "", "no folder remembered yet");
+is(preferredFolder(), "", "nothing to start from yet");
+saveSettings({ ...DEFAULT_SETTINGS, defaultFolder: "C:\\Default" });
+is(preferredFolder(), "C:\\Default", "the configured default is the fallback");
+saveLastFolder("  C:\\Downloads\\Video  ");
+is(loadLastFolder(), "C:\\Downloads\\Video", "the last folder comes back trimmed");
+is(
+  preferredFolder(),
+  "C:\\Downloads\\Video",
+  "the last used folder wins over the default",
+);
+saveLastFolder("   ");
+is(loadLastFolder(), "C:\\Downloads\\Video", "an empty folder does not erase it");
 
 console.log(`Add URL dialog: ${checks} checks pass`);
