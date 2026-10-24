@@ -257,12 +257,27 @@
   --popover: #0b1416;
   --popover-foreground: #d7e3df;
 
-  /* Lime on deep green: the accent, kept to one main action at a time. The
-     meter is the one place the lime fills an area, so a download in flight
-     reads at a glance. */
+  /* Lime on deep green: the accent, kept to one main action at a time. */
   --primary: #022c1e;
   --primary-foreground: #c8ff00;
   --progress: #c8ff00;
+
+  /*
+    The download meter. Its track is a translucent wash, so it reads on every
+    row shade, and its fill is a gradient: emerald through cyan to blue while
+    the transfer runs, green when it is done, a held blue when it is paused and
+    red when it failed. The palette gate checks every stop in both appearances.
+  */
+  --progress-track: rgb(255 255 255 / 0.08);
+  --progress-active-from: #34d399;
+  --progress-active-via: #22d3ee;
+  --progress-active-to: #60a5fa;
+  --progress-complete-from: #34d399;
+  --progress-complete-to: #22c55e;
+  --progress-paused-from: #7f9fe0;
+  --progress-paused-to: #6a86c4;
+  --progress-failed-from: #f87171;
+  --progress-failed-to: #ef4444;
 
   --secondary: #0b1416;
   --secondary-foreground: #c3d6d1;
@@ -445,6 +460,20 @@
     --primary-foreground: #c8ff00;
     --progress: #022c1e;
 
+    /* Same meter, carried onto the pale surfaces: the stops darken so the bar
+       still reads as a graphical object, and the track becomes a soft ink wash
+       rather than a light one. */
+    --progress-track: rgb(23 24 27 / 0.1);
+    --progress-active-from: #047857;
+    --progress-active-via: #0e7490;
+    --progress-active-to: #2563eb;
+    --progress-complete-from: #047857;
+    --progress-complete-to: #15803d;
+    --progress-paused-from: #5872a8;
+    --progress-paused-to: #445c88;
+    --progress-failed-from: #dc2626;
+    --progress-failed-to: #b91c1c;
+
     --secondary: #e9eaee;
     --secondary-foreground: #1d1f23;
 
@@ -581,6 +610,16 @@
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
   --color-progress: var(--progress);
+  --color-progress-track: var(--progress-track);
+  --color-progress-active-from: var(--progress-active-from);
+  --color-progress-active-via: var(--progress-active-via);
+  --color-progress-active-to: var(--progress-active-to);
+  --color-progress-complete-from: var(--progress-complete-from);
+  --color-progress-complete-to: var(--progress-complete-to);
+  --color-progress-paused-from: var(--progress-paused-from);
+  --color-progress-paused-to: var(--progress-paused-to);
+  --color-progress-failed-from: var(--progress-failed-from);
+  --color-progress-failed-to: var(--progress-failed-to);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);

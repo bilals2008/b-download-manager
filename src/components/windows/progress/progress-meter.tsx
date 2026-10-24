@@ -1,3 +1,8 @@
+import {
+  gradientSpan,
+  PROGRESS_FILL,
+  type ProgressFillState,
+} from "@/components/ui/progress-fill";
 import { progressChunks } from "@/lib/progress";
 import { cn } from "@/lib/utils";
 import type { DownloadSegment, DownloadStatus, SegmentStatus } from "@/types";
@@ -15,25 +20,25 @@ interface ProgressMeterProps {
 }
 
 /** The fill carries the state, so a paused window never looks alive. */
-const FILL: Record<DownloadStatus, string> = {
-  queued: "bg-chrome-muted",
-  running: "bg-progress",
-  paused: "bg-chrome-muted",
-  completed: "bg-success",
-  failed: "bg-destructive",
-  cancelled: "bg-chrome-muted",
+const FILL: Record<DownloadStatus, ProgressFillState> = {
+  queued: "queued",
+  running: "active",
+  paused: "paused",
+  completed: "complete",
+  failed: "failed",
+  cancelled: "stopped",
 };
 
 /** A block carries the state of its own connection: done, live, or stopped. */
-const CHUNK_FILL: Record<SegmentStatus, string> = {
-  pending: "bg-chrome-muted",
-  connecting: "bg-progress",
-  receiving: "bg-progress",
-  retrying: "bg-progress",
-  paused: "bg-chrome-muted",
-  stopped: "bg-chrome-muted",
-  done: "bg-success",
-  failed: "bg-destructive",
+const CHUNK_FILL: Record<SegmentStatus, ProgressFillState> = {
+  pending: "queued",
+  connecting: "active",
+  receiving: "active",
+  retrying: "active",
+  paused: "paused",
+  stopped: "stopped",
+  done: "complete",
+  failed: "failed",
 };
 
 /**
@@ -71,7 +76,7 @@ export function ProgressMeter({
             : "Size unknown"
           : `${percent.toFixed(2)}%`
       }
-      className="relative h-2 w-full overflow-hidden rounded-full bg-chrome-line"
+      className="relative h-2 w-full overflow-hidden rounded-full bg-progress-track"
     >
       {chunks ? (
         <div aria-hidden="true" className="absolute inset-0">
@@ -83,10 +88,13 @@ export function ProgressMeter({
             >
               <div
                 className={cn(
-                  "h-full transition-[width] duration-300 ease-out motion-reduce:transition-none",
-                  CHUNK_FILL[chunk.status],
+                  "h-full bg-no-repeat transition-[width] duration-300 ease-out motion-reduce:transition-none",
+                  PROGRESS_FILL[CHUNK_FILL[chunk.status]],
                 )}
-                style={{ width: `${chunk.fill}%` }}
+                style={{
+                  width: `${chunk.fill}%`,
+                  backgroundSize: `${gradientSpan(chunk.fill)}% 100%`,
+                }}
               />
             </div>
           ))}
@@ -97,7 +105,7 @@ export function ProgressMeter({
             aria-hidden="true"
             className={cn(
               "absolute inset-y-0 left-0 w-1/3 rounded-full motion-safe:animate-indeterminate motion-reduce:left-0 motion-reduce:w-1/2",
-              FILL[status],
+              PROGRESS_FILL[FILL[status]],
             )}
           />
         ) : null
@@ -105,10 +113,13 @@ export function ProgressMeter({
         <div
           aria-hidden="true"
           className={cn(
-            "h-full rounded-full transition-[width] duration-300 ease-out motion-reduce:transition-none",
-            FILL[status],
+            "h-full rounded-full bg-no-repeat transition-[width] duration-300 ease-out motion-reduce:transition-none",
+            PROGRESS_FILL[FILL[status]],
           )}
-          style={{ width: `${percent}%` }}
+          style={{
+            width: `${percent}%`,
+            backgroundSize: `${gradientSpan(percent)}% 100%`,
+          }}
         />
       )}
     </div>

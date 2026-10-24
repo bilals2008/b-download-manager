@@ -109,6 +109,24 @@ const REQUIRED = [
   ["icon-silver", "chrome-canvas", 3, "archive and other icons"],
 ];
 
+// Every stop of the download meter's gradient must read as a graphical object
+// on the list surface, in the plain row and in the selected row.
+const METER_STOPS = [
+  ["progress-active-from", "progress bar, emerald"],
+  ["progress-active-via", "progress bar, cyan"],
+  ["progress-active-to", "progress bar, blue"],
+  ["progress-complete-from", "finished bar, start"],
+  ["progress-complete-to", "finished bar, end"],
+  ["progress-paused-from", "paused bar, start"],
+  ["progress-paused-to", "paused bar, end"],
+  ["progress-failed-from", "failed bar, start"],
+  ["progress-failed-to", "failed bar, end"],
+];
+for (const [token, label] of METER_STOPS) {
+  REQUIRED.push([token, "chrome-canvas", 3, label]);
+  REQUIRED.push([token, "chrome-menu-active", 3, `${label}, selected row`]);
+}
+
 let failed = 0;
 for (const [theme, tokens] of THEMES) {
   console.log(`\n${theme} appearance`);
