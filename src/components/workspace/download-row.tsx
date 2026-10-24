@@ -175,12 +175,10 @@ export function DownloadRow({
       </td>
 
       <td className="px-3 py-2">
-        <Tooltip content={item.error ?? status} side="bottom">
-          <span className="inline-flex items-center gap-1.5 text-chrome-menu-text">
-            <StatusMark status={item.status} className="size-4 shrink-0" />
-            {status}
-          </span>
-        </Tooltip>
+        <span className="inline-flex items-center gap-1.5 text-chrome-menu-text">
+          <StatusMark status={item.status} className="size-4 shrink-0" />
+          {status}
+        </span>
       </td>
     </tr>
   );

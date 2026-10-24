@@ -167,45 +167,31 @@ export function DownloadStatusTab({
       ) : null}
 
       <div className="mt-auto flex items-center justify-between gap-2 pt-0.5">
-        <Tooltip
-          content={
-            detailsOpen
-              ? "Fold the connection details away"
-              : "Show every connection of this download"
+        <ActionButton
+          tone="quiet"
+          onClick={onToggleDetails}
+          aria-expanded={detailsOpen}
+          aria-controls={detailsOpen ? "progress-connections" : undefined}
+          icon={
+            detailsOpen ? (
+              <ChevronUp className="size-3.5" />
+            ) : (
+              <ChevronDown className="size-3.5" />
+            )
           }
-          side="top"
         >
-          <ActionButton
-            tone="quiet"
-            onClick={onToggleDetails}
-            aria-expanded={detailsOpen}
-            aria-controls={detailsOpen ? "progress-connections" : undefined}
-            icon={
-              detailsOpen ? (
-                <ChevronUp className="size-3.5" />
-              ) : (
-                <ChevronDown className="size-3.5" />
-              )
-            }
-          >
-            {detailsOpen ? "Hide details" : "Show details"}
-          </ActionButton>
-        </Tooltip>
+          {detailsOpen ? "Hide details" : "Show details"}
+        </ActionButton>
 
         {controls.primary === "open" ? (
           <div className="flex items-center gap-2">
-            <Tooltip
-              content="Close this window. The file stays where it was saved."
-              side="top"
+            <ActionButton
+              tone="secondary"
+              icon={<CloseGlyph className="size-3.5" />}
+              onClick={onClose}
             >
-              <ActionButton
-                tone="secondary"
-                icon={<CloseGlyph className="size-3.5" />}
-                onClick={onClose}
-              >
-                Close
-              </ActionButton>
-            </Tooltip>
+              Close
+            </ActionButton>
             <Tooltip content={controls.primaryHint} side="top">
               <ActionButton
                 tone="primary"

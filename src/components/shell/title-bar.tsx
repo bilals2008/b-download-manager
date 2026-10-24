@@ -69,31 +69,29 @@ export function TitleBar() {
             </svg>
           </button>
         </Tooltip>
-        <Tooltip content="Close" side="bottom">
-          <button
-            type="button"
-            aria-label="Close window"
-            className={cn(
-              WINDOW_BUTTON,
-              "hover:bg-chrome-danger hover:text-chrome-danger-text",
-            )}
-            onClick={() => void windowAction("close")}
+        <button
+          type="button"
+          aria-label="Close window"
+          className={cn(
+            WINDOW_BUTTON,
+            "hover:bg-chrome-danger hover:text-chrome-danger-text",
+          )}
+          onClick={() => void windowAction("close")}
+        >
+          <svg
+            className="size-3"
+            viewBox="0 0 12 12"
+            aria-hidden="true"
+            focusable="false"
           >
-            <svg
-              className="size-3"
-              viewBox="0 0 12 12"
-              aria-hidden="true"
-              focusable="false"
-            >
-              <path
-                d="m2.5 2.5 7 7m0-7-7 7"
-                stroke="currentColor"
-                strokeWidth="1"
-                strokeLinecap="round"
-              />
-            </svg>
-          </button>
-        </Tooltip>
+            <path
+              d="m2.5 2.5 7 7m0-7-7 7"
+              stroke="currentColor"
+              strokeWidth="1"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
       </div>
     </div>
   );

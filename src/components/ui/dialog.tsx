@@ -114,13 +114,7 @@ export function Dialog({
             </span>
           </div>
         )}
-        {tooltips ? (
-          <Tooltip content="Close" side="bottom">
-            {closeButton}
-          </Tooltip>
-        ) : (
-          closeButton
-        )}
+        {closeButton}
       </div>
       <div className={cn("min-h-0 flex-1 px-4 pb-3", bodyClassName)}>
         {children}

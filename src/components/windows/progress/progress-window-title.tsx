@@ -56,16 +56,14 @@ export function ProgressWindowTitle({
             <MinimizeToTrayGlyph className="size-3.5" />
           </button>
         </Tooltip>
-        <Tooltip content="Close" side="bottom">
-          <button
-            type="button"
-            aria-label="Close window"
-            className={`${WINDOW_BUTTON} hover:bg-chrome-danger hover:text-chrome-danger-text`}
-            onClick={() => void windowAction("close")}
-          >
-            <CloseGlyph className="size-3" />
-          </button>
-        </Tooltip>
+        <button
+          type="button"
+          aria-label="Close window"
+          className={`${WINDOW_BUTTON} hover:bg-chrome-danger hover:text-chrome-danger-text`}
+          onClick={() => void windowAction("close")}
+        >
+          <CloseGlyph className="size-3" />
+        </button>
       </div>
     </header>
   );

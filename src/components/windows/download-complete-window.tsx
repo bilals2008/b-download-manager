@@ -63,16 +63,14 @@ export function DownloadCompleteWindow({ info }: { info: DownloadInfo }) {
         >
           Download complete
         </span>
-        <Tooltip content="Close" side="bottom">
-          <button
-            type="button"
-            onClick={() => void closeWindow()}
-            aria-label="Close"
-            className="flex size-7 shrink-0 items-center justify-center rounded-chrome text-chrome-muted transition-colors hover:bg-chrome-menu-hover hover:text-chrome-menu-text focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
-          >
-            <CloseGlyph className="size-3.5" />
-          </button>
-        </Tooltip>
+        <button
+          type="button"
+          onClick={() => void closeWindow()}
+          aria-label="Close"
+          className="flex size-7 shrink-0 items-center justify-center rounded-chrome text-chrome-muted transition-colors hover:bg-chrome-menu-hover hover:text-chrome-menu-text focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
+        >
+          <CloseGlyph className="size-3.5" />
+        </button>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 px-4 pb-1 text-xs">
