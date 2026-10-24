@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">Application screenshot coming soon</title>
+  <desc id="desc">Placeholder for a screenshot of the B Download Manager desktop application.</desc>
+  <rect width="1600" height="900" fill="#f6f7f9"/>
+  <rect x="40" y="40" width="1520" height="820" rx="6" fill="#fbfbfc" stroke="#e3e5e9" stroke-width="2"/>
+  <text x="800" y="438" text-anchor="middle" font-family="Inter, 'Segoe UI', system-ui, sans-serif" font-size="36" font-weight="500" fill="#4d525a">Application Screenshot Coming Soon</text>
+  <text x="800" y="486" text-anchor="middle" font-family="Inter, 'Segoe UI', system-ui, sans-serif" font-size="20" fill="#8b9099">B Download Manager</text>
+</svg>

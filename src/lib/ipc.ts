@@ -40,9 +40,9 @@ export interface StartDownloadInput {
   referer?: string;
   /** Add the row to the queue instead of starting it now. */
   queue?: boolean;
-  /** The category the dialog showed. */
+  /** The category the download belongs to. */
   category?: string;
-  /** The note the user typed, when they typed one. */
+  /** A note to keep with the download. */
   description?: string;
 }
 

@@ -57,7 +57,7 @@ export interface Download {
   connections: number;
   /** Failure text from the engine, when the status is "error". */
   error: string | null;
-  /** The note the user typed in the add dialog, when they typed one. */
+  /** A note kept with the download. */
   description: string | null;
 }
 
@@ -268,6 +268,9 @@ export function categoryName(value: string | null | undefined): CategoryName | n
     : null;
 }
 
+/** The schemes the engine can fetch. */
+const DOWNLOAD_PROTOCOLS = ["http:", "https:", "ftp:"];
+
 /**
  * The address the engine may fetch, or null when it may not.
  *
@@ -281,7 +284,7 @@ export function downloadUrl(value: string): URL | null {
   }
   try {
     const url = new URL(trimmed);
-    if (!["http:", "https:", "ftp:"].includes(url.protocol)) {
+    if (!DOWNLOAD_PROTOCOLS.includes(url.protocol)) {
       return null;
     }
     return url.hostname ? url : null;
@@ -289,6 +292,98 @@ export function downloadUrl(value: string): URL | null {
     return null;
   }
 }
+
+/**
+ * What is wrong with the address in the add dialog, or null when it can go to
+ * the engine.
+ *
+ * The answer names the fix rather than the fault: a missing scheme, a space
+ * the browser would send as it stands, or a link that is not a download at
+ * all. The dialog shows it beside the field, so the user does not have to
+ * guess what the engine would refuse.
+ */
+export function urlProblem(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "Paste the address of the file to download.";
+  }
+  if (/\s/.test(trimmed)) {
+    return "The address cannot contain spaces.";
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return "Enter a full address, starting with http://, https:// or ftp://.";
+  }
+  if (!DOWNLOAD_PROTOCOLS.includes(parsed.protocol)) {
+    return "Only http, https and ftp addresses can be downloaded.";
+  }
+  if (!parsed.hostname) {
+    return "The address has no site name.";
+  }
+  return null;
+}
+
+/**
+ * Whether two addresses name the same link. The browser's parser folds the
+ * parts that do not matter (a host's case, a default port), so the duplicate
+ * note in the dialog does not depend on how the address was typed.
+ */
+export function sameAddress(left: string, right: string): boolean {
+  const canonical = (value: string) => {
+    const trimmed = value.trim();
+    try {
+      return new URL(trimmed).href;
+    } catch {
+      return trimmed;
+    }
+  };
+  return canonical(left) === canonical(right);
+}
+
+/**
+ * A failed link check, in words the add dialog can show.
+ *
+ * The engine already explains why a server said no; this maps the common
+ * refusals to the one line that helps: a sign-in, an expired link, a file
+ * that is gone, a busy server. A check is advice, not a gate, so the download
+ * can still be started after any of these.
+ */
+export function probeWarning(message: string): string {
+  const text = message.trim();
+  if (!text) {
+    return "The link could not be checked. The download may still work.";
+  }
+  if (/cannot reach the server/i.test(text)) {
+    return "The server could not be reached. Check the address and your connection.";
+  }
+  if (/\b407\b/.test(text)) {
+    return "The proxy asks for a sign-in, so it refused the check.";
+  }
+  if (/sign in|\(401\)/i.test(text)) {
+    return "The server asks for a sign-in. The download may fail without one.";
+  }
+  if (/\(403\)|refused the request/i.test(text)) {
+    return "The server refused the check. The link may have expired, or the site may only answer a browser.";
+  }
+  if (/not on the server|gone for good|\(404\)|\(410\)/i.test(text)) {
+    return "The file is not on the server any more.";
+  }
+  if (/\(429\)|server is busy/i.test(text)) {
+    return "The server is busy. Try again in a moment.";
+  }
+  if (/redirect/i.test(text)) {
+    return "The address redirected too many times.";
+  }
+  if (/server had a problem/i.test(text)) {
+    return "The server had a problem. Try again later.";
+  }
+  return `The link could not be checked: ${text}`;
+}
+
+/** The longest name one component of a path may have, as `dest.rs` enforces. */
+export const MAX_FILE_NAME = 200;
 
 /**
  * What is wrong with a file name, or null when the file system can hold it.
@@ -300,8 +395,8 @@ export function fileNameProblem(name: string): string | null {
   if (!name.trim()) {
     return "Enter a file name.";
   }
-  if (name.length > 200) {
-    return "The file name is longer than 200 characters.";
+  if (name.length > MAX_FILE_NAME) {
+    return `The file name is longer than ${MAX_FILE_NAME} characters.`;
   }
   if (/[<>:"/\\|?*\u0000-\u001f]/.test(name)) {
     return 'A file name cannot contain < > : " / \\ | ? *.';
@@ -328,4 +423,30 @@ const RESERVED_NAMES = [
   ...Array.from({ length: 9 }, (_, index) => `com${index + 1}`),
   ...Array.from({ length: 9 }, (_, index) => `lpt${index + 1}`),
 ];
+
+/**
+ * A file name the engine will accept, made from whatever the server, the
+ * browser or the address offered.
+ *
+ * The dialog has no name field, so the name it starts with has to be one the
+ * file system can hold: characters a path cannot carry are replaced, a name
+ * Windows keeps for a device gets a leading underscore, and a name longer
+ * than the engine allows is cut back with its extension kept.
+ */
+export function safeFileName(raw: string): string {
+  let name = sanitizeFileName(raw);
+  const stem = name.split(".")[0].toLowerCase();
+  if (RESERVED_NAMES.includes(stem)) {
+    name = `_${name}`;
+  }
+  if (name.length > MAX_FILE_NAME) {
+    const dot = name.lastIndexOf(".");
+    const extension =
+      dot > 0 && name.length - dot <= 20 ? name.slice(dot) : "";
+    const stem = extension ? name.slice(0, dot) : name;
+    const room = Math.max(1, MAX_FILE_NAME - extension.length);
+    name = sanitizeFileName(`${stem.slice(0, room)}${extension}`);
+  }
+  return name;
+}
 

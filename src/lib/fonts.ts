@@ -15,12 +15,12 @@ export const FONT_OPTIONS: FontOption[] = [
   {
     value: "inter",
     label: "Inter",
-    note: "Neutral screen face. The default.",
+    note: "Neutral screen face.",
   },
   {
     value: "googlesans",
     label: "Google Sans",
-    note: "Google's own face: geometric and even.",
+    note: "Google's own face: geometric and even. The default.",
   },
   {
     value: "geist",
@@ -82,7 +82,7 @@ export function applyFont(font: UiFont): void {
 
   root.dataset.font = FONT_OPTIONS.some((option) => option.value === font)
     ? font
-    : "inter";
+    : "googlesans";
 }
 
 export function applyWeight(weight: UiWeight): void {

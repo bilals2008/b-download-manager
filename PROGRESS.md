@@ -73,12 +73,19 @@ Done items stay in the list as a record of what is already standing.
 
 ## Adding downloads
 
-- [x] Add new download dialog with URL, file name, category listbox and save path
+- [x] Compact Add URL dialog: the address, the file it becomes and the save folder
 - [x] The dialog starts a real engine download and reports a failed start inline
-- [x] The category picker is an ARIA listbox, not a native select
-- [x] Validation on the URL, inline error message
-- [x] Read the real file name and size from the server headers; the category
-      follows the name the server gives
+- [x] URL validation beside the field: a missing scheme, a space and an
+      unsupported scheme each say what to change
+- [x] Read the real file name, size and resume support from the server
+      headers; the name and category follow the server's answer
+- [x] A refused check (sign-in, expired link, unreachable server, redirect
+      loop) is a line of advice rather than a block
+- [x] Double submits are ignored while a start is in flight, and a link that
+      is already in the list is noted without being refused
+- [x] An existing file is announced once and replaced on the second press
+- [x] Enter starts, Escape cancels and Ctrl+N opens the dialog from anywhere
+      in the shell
 - [ ] Batch download, many URLs in one dialog
 - [ ] Add from clipboard, drop target, site grabber
 

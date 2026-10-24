@@ -205,7 +205,7 @@ export default function App() {
         setToolbar("small");
         break;
       case "font-reset":
-        chooseFont("inter");
+        chooseFont("googlesans");
         break;
     }
   }

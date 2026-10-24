@@ -43,7 +43,7 @@ export const DEFAULT_SETTINGS: Settings = {
   minimizeToTray: true,
   showCompleteDialog: true,
   theme: "auto",
-  uiFont: "inter",
+  uiFont: "googlesans",
   uiWeight: "medium",
   defaultFolder: "",
   defaultConnections: 8,

@@ -4,18 +4,19 @@ import { FolderGlyph } from "@/components/icons/action-icons";
 import { FileTypeIcon, WarningMark } from "@/components/icons/desktop-icons";
 import { DownloadGlyph, SpinnerGlyph } from "@/components/icons/ui-icons";
 import { Dialog } from "@/components/ui/dialog";
-import { ListBox } from "@/components/ui/listbox";
+import { FIELD } from "@/components/ui/field";
+import { Tooltip } from "@/components/ui/tooltip";
 import {
-  CATEGORIES,
   categoryOfFile,
   downloadUrl,
   fileNameFromUrl,
-  fileNameProblem,
   formatSize,
   joinPath,
-  sanitizeFileName,
+  probeWarning,
+  safeFileName,
+  sameAddress,
   splitPath,
-  type CategoryName,
+  urlProblem,
 } from "@/lib/downloads";
 import { describeError, isDesktop } from "@/lib/errors";
 import {
@@ -38,15 +39,19 @@ type Probe =
   | { kind: "idle" }
   | { kind: "checking" }
   | { kind: "ready"; name: string | null; total: number | null; resumable: boolean }
-  | { kind: "unavailable" };
+  | { kind: "failed"; reason: string };
 
-/** The action a click follows: start now, or wait in the queue. */
-type Mode = "start" | "later";
+/** A link the browser extension handed over, while it is still this address. */
+interface HandedOver {
+  url: string;
+  name: string;
+  referer: string;
+}
 
-const FIELD =
-  "w-full rounded-chrome border border-transparent bg-chrome-canvas px-2.5 py-1.5 text-xs text-chrome-menu-text transition-colors placeholder:text-chrome-muted/70 hover:bg-chrome-menu-hover focus-visible:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none disabled:opacity-60";
+const LABEL = "mb-1.5 block text-xs text-chrome-muted";
 
-const LABEL = "mb-1 block text-xs text-chrome-muted";
+const FOLDER_ROW =
+  "group flex h-9 w-full min-w-0 items-center gap-2 rounded-chrome border border-chrome-line bg-chrome-canvas px-2.5 text-left transition-colors hover:border-chrome-muted focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none disabled:cursor-default disabled:opacity-60 disabled:hover:border-chrome-line";
 
 const SECONDARY =
   "rounded-chrome bg-chrome-panel px-3 py-1.5 text-xs text-chrome-menu-text transition-colors hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none disabled:opacity-45";
@@ -55,38 +60,41 @@ const PRIMARY =
   "inline-flex items-center gap-1.5 rounded-chrome bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none disabled:opacity-50";
 
 /**
- * "Start download" - the dialog IDM opens before it takes a link.
+ * "Add URL" - the compact way to take a link without a browser.
  *
- * The address is the one field that matters, so it sits alone at the top and
+ * The address is the only field that matters, so it sits alone at the top and
  * everything else follows from it: the name the server gives the file, its
- * size and whether the server can resume it arrive from a probe, and the name
- * and category follow the address until the user changes them. The folder is
- * picked with the folder dialog of the system rather than typed.
+ * size, whether it can be resumed and the category it lands in all arrive from
+ * a probe, and the folder below is the one the file goes into. The link is
+ * checked as it settles, but the check is advice rather than a gate: a server
+ * that will not answer the probe can still be downloaded from.
  *
- * The dialog creates nothing until one of its two start actions succeeds:
- * Cancel, Escape and the close button only close it. A file that is already
- * there is announced once, and the same button is pressed again to replace it.
+ * The dialog creates nothing until Download succeeds: Cancel, Escape and the
+ * close button only close it, and a start in flight cannot be dismissed into a
+ * download that appears from nowhere. A file that is already there is
+ * announced once, and the same button is pressed again to replace it.
  */
 export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
-  const { addDownload, browserRequest, clearBrowserRequest } = useDownloads();
+  const {
+    addDownload,
+    browserRequest,
+    clearBrowserRequest,
+    downloads: allDownloads,
+  } = useDownloads();
   const [url, setUrl] = useState("");
-  // Null means "follow the address"; a string is the value the user typed.
-  const [nameOverride, setNameOverride] = useState<string | null>(null);
-  const [categoryOverride, setCategoryOverride] = useState<CategoryName | null>(
-    null,
-  );
+  const [handedOver, setHandedOver] = useState<HandedOver | null>(null);
   const [folder, setFolder] = useState("");
-  const [description, setDescription] = useState("");
-  // The page the browser handed over with the link, if any.
-  const [referer, setReferer] = useState("");
   const [probe, setProbe] = useState<Probe>({ kind: "idle" });
   const [destination, setDestination] = useState<DestinationInfo | null>(null);
   const [overwrite, setOverwrite] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<Mode | null>(null);
+  const [touched, setTouched] = useState(false);
+  const [busy, setBusy] = useState(false);
   // A second click in the same tick reaches the command before React has
   // re-rendered the disabled button; this is the guard that holds.
   const running = useRef(false);
+  const urlField = useRef<HTMLInputElement>(null);
+  const folderButton = useRef<HTMLButtonElement>(null);
 
   // Open on a fresh form, whatever the last one left behind.
   useEffect(() => {
@@ -94,14 +102,22 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
       return;
     }
     setUrl("");
-    setNameOverride(null);
-    setCategoryOverride(null);
-    setDescription("");
-    setReferer("");
+    setHandedOver(null);
+    setFolder("");
     setProbe({ kind: "idle" });
     setDestination(null);
     setOverwrite(false);
     setError(null);
+    setTouched(false);
+    setBusy(false);
+  }, [open]);
+
+  // The address is the one thing the user came for, so it has the caret
+  // whenever the dialog opens, including after a browser hand-off.
+  useEffect(() => {
+    if (open) {
+      urlField.current?.focus();
+    }
   }, [open]);
 
   // Start from the folder of the options window, and from the Downloads
@@ -125,29 +141,38 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
         }
       })
       .catch(() => {
-        // The dialog still works with a typed folder when the engine cannot
-        // answer, which is also what happens in a plain browser window.
+        // The dialog still works after the folder is picked when the engine
+        // cannot answer, which is also what happens in a plain browser window.
       });
     return () => {
       active = false;
     };
   }, [open]);
 
-  // A link the browser handed over opens this dialog with the address and the
-  // name already in it, and the request is done once they are.
+  // A link the browser handed over opens this dialog with its address, its
+  // name and the page it came from already in it.
   useEffect(() => {
     if (!open || !browserRequest) {
       return;
     }
     setUrl(browserRequest.url);
-    setNameOverride(
-      browserRequest.name ? sanitizeFileName(browserRequest.name) : null,
-    );
-    setCategoryOverride(null);
-    setReferer(browserRequest.referer);
+    setHandedOver({
+      url: browserRequest.url,
+      name: browserRequest.name,
+      referer: browserRequest.referer,
+    });
     setError(null);
+    setTouched(false);
     clearBrowserRequest();
   }, [open, browserRequest, clearBrowserRequest]);
+
+  const address = url.trim();
+  const problem = urlProblem(address);
+  const valid = problem === null;
+  // A hand-over only describes the link it carried, not whatever was pasted
+  // over it.
+  const handed = handedOver && sameAddress(handedOver.url, address) ? handedOver : null;
+  const referer = handed?.referer ?? "";
 
   // Ask the server what the address holds once it has settled: the name it
   // gives the file, the size, and whether a stop could resume. The probe is
@@ -157,61 +182,83 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
       return;
     }
     setProbe({ kind: "idle" });
-    if (!isDesktop()) {
-      return;
-    }
-    const address = url.trim();
-    if (!downloadUrl(address)) {
+    if (!isDesktop() || !downloadUrl(url.trim())) {
       return;
     }
     let active = true;
+    let deadline: ReturnType<typeof setTimeout> | undefined;
     setProbe({ kind: "checking" });
     const timer = setTimeout(() => {
-      probeLink(address, referer)
+      // A server that accepts the connection and then says nothing would keep
+      // the check spinning forever. The download can still start, so the
+      // dialog says so and stops waiting.
+      const tooLong = new Promise<"too long">((resolve) => {
+        deadline = setTimeout(() => resolve("too long"), 8_000);
+      });
+      Promise.race([probeLink(url.trim(), referer), tooLong])
         .then((answer) => {
+          if (!active) {
+            return;
+          }
+          if (answer === "too long") {
+            setProbe({
+              kind: "failed",
+              reason:
+                "The server did not answer in time. You can still start the download.",
+            });
+            return;
+          }
+          setProbe({
+            kind: "ready",
+            name: answer.name,
+            total: answer.total,
+            resumable: answer.resumable,
+          });
+        })
+        .catch((failure: unknown) => {
           if (active) {
             setProbe({
-              kind: "ready",
-              name: answer.name,
-              total: answer.total,
-              resumable: answer.resumable,
+              kind: "failed",
+              reason: probeWarning(describeError(failure)),
             });
           }
         })
-        .catch(() => {
-          if (active) {
-            setProbe({ kind: "unavailable" });
+        .finally(() => {
+          if (deadline) {
+            clearTimeout(deadline);
           }
         });
-    }, 500);
+    }, 450);
     return () => {
       active = false;
       clearTimeout(timer);
+      if (deadline) {
+        clearTimeout(deadline);
+      }
     };
   }, [open, url, referer]);
 
-  // The name and the category are derived, never copied into state, so
-  // editing the address keeps them in step until the user overrides one.
-  const detectedName = useMemo(
-    () => (url.trim() ? sanitizeFileName(fileNameFromUrl(url.trim())) : ""),
-    [url],
+  // The name and the category follow what was detected until the user changes
+  // the address or picks a new folder. Nothing here is typed.
+  const suggestedName = valid ? safeFileName(fileNameFromUrl(address)) : "";
+  const servedName =
+    probe.kind === "ready" && probe.name ? safeFileName(probe.name) : null;
+  const browserName = handed?.name ? safeFileName(handed.name) : null;
+  const name = servedName ?? browserName ?? suggestedName;
+  const category = name ? categoryOfFile(name) : "General";
+  const target =
+    folder.trim() && name.trim() ? joinPath(folder.trim(), name.trim()) : "";
+
+  // Say so when the exact link is already in the list, without refusing it:
+  // a second copy is a legitimate choice.
+  const duplicate = useMemo(
+    () =>
+      valid && allDownloads.some((item) => sameAddress(item.url, address)),
+    [valid, allDownloads, address],
   );
-  // The server's name wins: a link like `/get?id=12` carries no useful name,
-  // and one like `/download.php` carries a name the server overrides.
-  const serverName =
-    probe.kind === "ready" && probe.name
-      ? sanitizeFileName(probe.name)
-      : null;
-  const name = nameOverride ?? serverName ?? detectedName;
-  const category =
-    categoryOverride ??
-    (name ? categoryOfFile(name) : "General");
-  const target = folder.trim() && name.trim()
-    ? joinPath(folder.trim(), name.trim())
-    : "";
 
   // Announce an existing file before the second click replaces it. The check
-  // is a debounce, so typing a name does not ask the engine for every letter.
+  // is a debounce, so the engine is not asked for every letter of the address.
   useEffect(() => {
     setDestination(null);
     setOverwrite(false);
@@ -227,8 +274,8 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
           }
         })
         .catch(() => {
-          // A half-typed folder is not an error yet; Start checks again and
-          // shows what the engine says.
+          // A half-typed folder is not an error yet; Download checks again
+          // and shows what the engine says.
         });
     }, 400);
     return () => {
@@ -237,44 +284,21 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
     };
   }, [open, target]);
 
-  // A change to the name or the folder is a new destination, so a question
+  // A change to the address or the folder is a new destination, so a question
   // about replacing a file no longer applies to what is on screen.
   function forgetOverwrite() {
     setOverwrite(false);
     setError(null);
   }
 
-  const sizeLabel =
-    probe.kind === "ready"
-      ? probe.total === null
-        ? "Unknown size"
-        : formatSize(probe.total)
-      : null;
-  const resumeLabel =
-    probe.kind === "ready"
-      ? probe.resumable
-        ? "Resumable"
-        : "Not resumable"
-      : null;
-  const probeLabel =
-    probe.kind === "checking"
-      ? "Checking size and resume support…"
-      : probe.kind === "unavailable"
-        ? "Size and resume support not available"
-        : sizeLabel && resumeLabel
-          ? `${sizeLabel} · ${resumeLabel}`
-          : null;
-  const willReplace = overwrite && destination?.fileExists === true;
-
   function reset() {
     setUrl("");
-    setNameOverride(null);
-    setCategoryOverride(null);
-    setDescription("");
-    setReferer("");
+    setHandedOver(null);
+    setFolder("");
     setProbe({ kind: "idle" });
     setDestination(null);
     setOverwrite(false);
+    setTouched(false);
     setError(null);
   }
 
@@ -302,28 +326,27 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
     }
   }
 
-  async function submit(mode: Mode) {
+  async function submit() {
     if (running.current) {
       return;
     }
+    setTouched(true);
     setError(null);
 
-    const address = url.trim();
-    if (!downloadUrl(address)) {
-      setError(
-        "Enter the full address of the file, starting with http://, https:// or ftp://.",
-      );
+    if (!valid) {
+      // The field explains itself; do not say it twice.
+      urlField.current?.focus();
       return;
     }
     const chosenName = name.trim();
-    const nameIssue = fileNameProblem(chosenName);
-    if (nameIssue) {
-      setError(nameIssue);
+    if (!chosenName) {
+      setError("The file needs a name; the address did not give one.");
       return;
     }
     const chosenFolder = folder.trim();
     if (!chosenFolder) {
-      setError("Choose the folder the file should be saved to.");
+      setError("Choose a folder to save the file in.");
+      folderButton.current?.focus();
       return;
     }
     if (!isDesktop()) {
@@ -333,7 +356,7 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
 
     const dest = joinPath(chosenFolder, chosenName);
     running.current = true;
-    setBusy(mode);
+    setBusy(true);
     try {
       const check = await inspectDestination(dest);
       setDestination(check);
@@ -347,211 +370,209 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
         fileName: chosenName,
         category,
         savePath: chosenFolder,
-        referer,
-        queue: mode === "later",
-        description,
+        referer: referer || undefined,
       });
-      reset();
       onClose();
     } catch (failure) {
       setError(describeError(failure));
     } finally {
       running.current = false;
-      setBusy(null);
+      setBusy(false);
     }
   }
+
+  const showProblem = touched && problem !== null;
+  const sizeLabel =
+    probe.kind === "ready"
+      ? probe.total === null
+        ? "Unknown size"
+        : formatSize(probe.total)
+      : null;
+  const resumeLabel =
+    probe.kind === "ready"
+      ? probe.resumable
+        ? "Resumable"
+        : "Not resumable"
+      : null;
+  const details = [
+    category,
+    probe.kind === "checking" ? "Checking link…" : sizeLabel,
+    resumeLabel,
+    duplicate ? "Already in your list" : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const willReplace = overwrite && destination?.fileExists === true;
 
   return (
     <Dialog
       open={open}
-      title="Start download"
+      title="Add URL"
       onClose={close}
-      className="w-[min(34rem,calc(100vw-2rem))]"
-      footerClassName="items-center gap-2"
+      dismissible={!busy}
+      className="w-[min(30rem,calc(100vw-2rem))]"
       footer={
         <>
           <button
             type="button"
             onClick={close}
-            disabled={busy !== null}
-            className={`mr-auto ${SECONDARY}`}
+            disabled={busy}
+            className={SECONDARY}
           >
             Cancel
           </button>
           <button
-            type="button"
-            onClick={() => void submit("later")}
-            disabled={busy !== null}
-            className={`inline-flex items-center gap-1.5 ${SECONDARY}`}
-          >
-            {busy === "later" ? (
-              <SpinnerGlyph className="size-3.5 motion-safe:animate-spin" />
-            ) : null}
-            {busy === "later" ? "Adding…" : "Download later"}
-          </button>
-          <button
             type="submit"
-            form="add-download-form"
-            disabled={busy !== null}
+            form="add-url-form"
+            disabled={busy}
             className={PRIMARY}
           >
-            {busy === "start" ? (
+            {busy ? (
               <SpinnerGlyph className="size-3.5 motion-safe:animate-spin" />
             ) : (
               <DownloadGlyph className="size-3.5" />
             )}
-            {busy === "start"
-              ? "Starting…"
-              : willReplace
-                ? "Replace file"
-                : "Start download"}
+            {busy ? "Starting…" : willReplace ? "Replace file" : "Download"}
           </button>
         </>
       }
     >
       <form
-        id="add-download-form"
+        id="add-url-form"
         onSubmit={(event) => {
           event.preventDefault();
-          void submit("start");
+          void submit();
         }}
-        aria-busy={busy !== null}
+        aria-busy={busy}
         className="flex flex-col gap-3.5"
+        noValidate
       >
         <div>
           <label htmlFor="add-url" className={LABEL}>
-            Address of the file
+            URL
           </label>
           <input
             id="add-url"
-            className={`${FIELD} font-mono`}
+            ref={urlField}
+            className={`${FIELD} h-9 font-mono`}
             value={url}
-            autoFocus
+            disabled={busy}
             spellCheck={false}
+            autoComplete="off"
+            inputMode="url"
+            aria-invalid={showProblem || undefined}
+            aria-describedby={showProblem ? "add-url-problem" : undefined}
             onChange={(event) => {
               setUrl(event.target.value);
-              setError(null);
-              setOverwrite(false);
+              forgetOverwrite();
+            }}
+            onBlur={() => {
+              if (address) {
+                setTouched(true);
+              }
             }}
             placeholder="https://example.org/file.zip"
           />
+          {showProblem ? (
+            <p
+              id="add-url-problem"
+              role="alert"
+              className="mt-1.5 flex items-start gap-1.5 text-chrome-micro text-chrome-error"
+            >
+              <WarningMark tone="red" className="mt-px size-3.5 shrink-0" />
+              <span className="min-w-0 break-words">{problem}</span>
+            </p>
+          ) : null}
         </div>
 
-        {/* What the address adds up to, before the user changes any of it:
-            the file it becomes, its size and whether it can be resumed. It is
-            the answer to "did I paste the right link". */}
-        {url.trim() ? (
-          <div className="flex items-center gap-3" aria-live="polite">
+        {/* What the address adds up to, before anything starts: the file it
+            becomes, the category it lands in, its size and whether it can be
+            resumed. It is the answer to "did I paste the right link". */}
+        {valid ? (
+          <div className="flex min-w-0 items-center gap-2.5">
             <FileTypeIcon category={category} className="size-7 shrink-0" />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-xs text-chrome-title-text">
-                {name || "Taking the name from the address…"}
-              </p>
+            <div className="min-w-0 flex-1" aria-live="polite">
+              <Tooltip content={name} side="top" className="block w-full min-w-0">
+                <p className="truncate text-xs text-chrome-title-text">
+                  {name}
+                </p>
+              </Tooltip>
               <p className="truncate text-chrome-micro text-chrome-muted">
-                {[category, probeLabel].filter(Boolean).join(" · ")}
+                {details}
               </p>
             </div>
           </div>
         ) : null}
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_9rem]">
-          <div>
-            <label htmlFor="add-name" className={LABEL}>
-              File name
-            </label>
-            <input
-              id="add-name"
-              className={FIELD}
-              value={name}
-              spellCheck={false}
-              onChange={(event) => {
-                setNameOverride(event.target.value);
-                forgetOverwrite();
-              }}
-              placeholder="Taken from the address"
-            />
-          </div>
-          <div>
-            <span className={LABEL}>Category</span>
-            <ListBox
-              label="Category"
-              value={category}
-              onChange={(value) => {
-                setCategoryOverride(value as CategoryName);
-                setError(null);
-              }}
-              disabled={busy !== null}
-              options={CATEGORIES.map((value) => ({ value, label: value }))}
-            />
-          </div>
-        </div>
+        {valid && probe.kind === "failed" ? (
+          <p
+            role="status"
+            className="flex items-start gap-1.5 text-chrome-micro text-chrome-menu-text"
+          >
+            <WarningMark tone="amber" className="mt-px size-3.5 shrink-0" />
+            <span className="min-w-0 break-words">{probe.reason}</span>
+          </p>
+        ) : null}
 
         <div>
-          <label htmlFor="add-folder" className={LABEL}>
-            Save to folder
-          </label>
-          <div className="flex gap-2">
-            <input
-              id="add-folder"
-              className={FIELD}
-              value={folder}
-              spellCheck={false}
-              onChange={(event) => {
-                setFolder(event.target.value);
-                forgetOverwrite();
-              }}
-            />
+          <span className={LABEL}>Save to</span>
+          <Tooltip
+            content={folder || "Choose a folder"}
+            side="top"
+            className="block w-full min-w-0"
+          >
             <button
+              ref={folderButton}
               type="button"
               onClick={() => void pickFolder()}
-              disabled={busy !== null}
-              className={`inline-flex shrink-0 items-center gap-1.5 ${SECONDARY}`}
+              disabled={busy}
+              aria-label={
+                folder
+                  ? `Change the save folder, currently ${folder}`
+                  : "Choose a save folder"
+              }
+              className={FOLDER_ROW}
             >
-              <FolderGlyph className="size-3.5" />
-              Browse…
+              <FolderGlyph className="size-3.5 shrink-0 text-chrome-muted" />
+              <span className="min-w-0 flex-1 truncate font-mono text-chrome-micro text-chrome-menu-text">
+                {folder || "Choose a folder"}
+              </span>
+              <span className="shrink-0 text-chrome-micro text-chrome-muted transition-colors group-hover:text-chrome-menu-text">
+                Change
+              </span>
             </button>
-          </div>
-          <p
-            title={target || undefined}
-            className="mt-1.5 truncate font-mono text-chrome-micro text-chrome-muted"
-          >
-            {target ? `Saves as ${target}` : "The file name is taken from the address when the box is left empty."}
-          </p>
+          </Tooltip>
           {destination && !destination.folderExists ? (
-            <p className="mt-1 text-chrome-micro text-chrome-muted">
-              This folder does not exist yet; it will be created.
+            <p className="mt-1.5 text-chrome-micro text-chrome-muted">
+              This folder does not exist yet. It will be created.
+            </p>
+          ) : null}
+          {destination?.fileExists ? (
+            <p className="mt-1.5 flex items-start gap-1.5 text-chrome-micro text-chrome-menu-text">
+              <WarningMark tone="amber" className="mt-px size-3.5 shrink-0" />
+              <span className="min-w-0 break-words">
+                {willReplace ? (
+                  <>
+                    Press Download again to replace{" "}
+                    <span className="font-mono">{name}</span>.
+                  </>
+                ) : (
+                  <>
+                    A file named <span className="font-mono">{name}</span> is
+                    already there.
+                  </>
+                )}
+              </span>
             </p>
           ) : null}
         </div>
 
-        <div>
-          <label htmlFor="add-description" className={LABEL}>
-            Description <span className="text-chrome-muted">(optional)</span>
-          </label>
-          <input
-            id="add-description"
-            className={FIELD}
-            value={description}
-            maxLength={500}
-            spellCheck={false}
-            onChange={(event) => setDescription(event.target.value)}
-            placeholder="A note for this download"
-          />
-        </div>
-
-        {willReplace ? (
-          <p className="flex items-start gap-2 text-xs text-chrome-menu-text">
-            <WarningMark tone="amber" className="mt-0.5 size-3.5 shrink-0" />
-            <span className="min-w-0 break-words">
-              A file named <span className="font-mono">{name.trim()}</span> is
-              already in that folder. Press the button again to replace it.
-            </span>
-          </p>
-        ) : null}
-
         {error ? (
-          <p role="alert" className="flex items-start gap-2 text-xs text-chrome-error">
-            <WarningMark tone="red" className="mt-0.5 size-3.5 shrink-0" />
+          <p
+            role="alert"
+            className="flex items-start gap-1.5 text-xs text-chrome-error"
+          >
+            <WarningMark tone="red" className="mt-px size-3.5 shrink-0" />
             <span className="min-w-0 break-words">{error}</span>
           </p>
         ) : null}

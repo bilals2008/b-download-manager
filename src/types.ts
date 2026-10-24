@@ -43,9 +43,9 @@ export interface DownloadInfo {
   resumable: boolean | null;
   /** The bandwidth cap of this download, in bytes per second. 0 is no cap. */
   speedLimit: number;
-  /** The category picked in the add dialog, when one was picked. */
+  /** The category the download was given when it was added. */
   category: string | null;
-  /** The note typed in the add dialog, when one was typed. */
+  /** A note kept with the download. */
   description: string | null;
 }
 
