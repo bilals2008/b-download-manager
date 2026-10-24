@@ -2,6 +2,7 @@ import {
   CloseGlyph,
   MinimizeToTrayGlyph,
 } from "@/components/icons/ui-icons";
+import { Tooltip } from "@/components/ui/tooltip";
 import { hideWindow, windowAction } from "@/lib/window";
 
 const WINDOW_BUTTON =
@@ -35,13 +36,14 @@ export function ProgressWindowTitle({
       data-tauri-drag-region
       className="flex h-9 shrink-0 items-center gap-3 border-b border-chrome-line pr-1 pl-3.5"
     >
-      <span
-        data-tauri-drag-region
-        title={path}
-        className="min-w-0 flex-1 truncate text-xs font-medium text-chrome-title-text"
-      >
-        {name}
-      </span>
+      <Tooltip content={path} side="bottom" className="min-w-0 flex-1">
+        <span
+          data-tauri-drag-region
+          className="block truncate text-xs font-medium text-chrome-title-text"
+        >
+          {name}
+        </span>
+      </Tooltip>
       <span
         data-tauri-drag-region
         className="shrink-0 text-chrome-micro tabular-nums text-chrome-muted"
@@ -53,45 +55,48 @@ export function ProgressWindowTitle({
         className="flex items-center gap-0.5"
         onDoubleClick={(event) => event.stopPropagation()}
       >
-        <button
-          type="button"
-          aria-label="Minimize window"
-          title="Minimize"
-          className={WINDOW_BUTTON}
-          onClick={() => void windowAction("minimize")}
-        >
-          <svg
-            className="size-3"
-            viewBox="0 0 12 12"
-            aria-hidden="true"
-            focusable="false"
+        <Tooltip content="Minimize" side="bottom">
+          <button
+            type="button"
+            aria-label="Minimize window"
+            className={WINDOW_BUTTON}
+            onClick={() => void windowAction("minimize")}
           >
-            <path
-              d="M2 6h8"
-              stroke="currentColor"
-              strokeWidth="1"
-              strokeLinecap="round"
-            />
-          </svg>
-        </button>
-        <button
-          type="button"
-          aria-label="Minimize to tray"
-          title="Minimize to tray"
-          className={WINDOW_BUTTON}
-          onClick={() => void hideWindow()}
-        >
-          <MinimizeToTrayGlyph className="size-3.5" />
-        </button>
-        <button
-          type="button"
-          aria-label="Close window"
-          title="Close"
-          className={`${WINDOW_BUTTON} hover:bg-chrome-danger hover:text-chrome-danger-text`}
-          onClick={() => void windowAction("close")}
-        >
-          <CloseGlyph className="size-3" />
-        </button>
+            <svg
+              className="size-3"
+              viewBox="0 0 12 12"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path
+                d="M2 6h8"
+                stroke="currentColor"
+                strokeWidth="1"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
+        </Tooltip>
+        <Tooltip content="Minimize to tray" side="bottom">
+          <button
+            type="button"
+            aria-label="Minimize to tray"
+            className={WINDOW_BUTTON}
+            onClick={() => void hideWindow()}
+          >
+            <MinimizeToTrayGlyph className="size-3.5" />
+          </button>
+        </Tooltip>
+        <Tooltip content="Close" side="bottom">
+          <button
+            type="button"
+            aria-label="Close window"
+            className={`${WINDOW_BUTTON} hover:bg-chrome-danger hover:text-chrome-danger-text`}
+            onClick={() => void windowAction("close")}
+          >
+            <CloseGlyph className="size-3" />
+          </button>
+        </Tooltip>
       </div>
     </header>
   );

@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 
+import { Tooltip } from "@/components/ui/tooltip";
 import type { ToolbarSize } from "@/lib/settings";
 
 import type { ShellCommand } from "./commands";
@@ -59,49 +60,57 @@ export function Toolbar({ onCommand, size, disabled }: ToolbarProps) {
         (large ? "h-16" : "h-12")
       }
     >
-      {TOOLBAR_ITEMS.map(({ command, label, icon: Icon, disabled: off }, index) => {
-        // The item itself knows whether its screen exists; the state knows
-        // whether it has anything to act on. Either one can dim it.
-        const inert = off || disabled?.[command] === true;
+      {TOOLBAR_ITEMS.map(
+        ({ command, label, icon: Icon, disabled: off, shortcut }, index) => {
+          // The item itself knows whether its screen exists; the state knows
+          // whether it has anything to act on. Either one can dim it.
+          const inert = off || disabled?.[command] === true;
 
-        return (
-          <button
-            key={command}
-            ref={(node) => {
-              buttonRefs.current[index] = node;
-            }}
-            type="button"
-            title={label}
-            aria-disabled={inert || undefined}
-            tabIndex={activeIndex === index ? 0 : -1}
-            onClick={() => {
-              if (!inert) {
-                onCommand(command);
-              }
-            }}
-            onFocus={() => setActiveIndex(index)}
-            onKeyDown={(event) => handleKeyDown(event, index)}
-            className={
-              "flex shrink-0 flex-col items-center justify-center rounded-chrome text-chrome-toolbar-text transition-colors focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none " +
-              (large ? "h-15 min-w-18 gap-1 px-2" : "h-11 min-w-14 gap-0.5 px-1.5") +
-              (inert
-                ? " cursor-default opacity-45"
-                : " hover:bg-chrome-toolbar-hover active:bg-chrome-toolbar-active")
-            }
-          >
-            <Icon className={large ? "size-8" : "size-5"} />
-            <span
-              className={
-                large
-                  ? "text-xs leading-none whitespace-nowrap"
-                  : "text-chrome-micro leading-none whitespace-nowrap"
-              }
+          return (
+            <Tooltip
+              key={command}
+              content={label}
+              shortcut={shortcut}
+              side="bottom"
+              className="shrink-0"
             >
-              {label}
-            </span>
-          </button>
-        );
-      })}
+              <button
+                ref={(node) => {
+                  buttonRefs.current[index] = node;
+                }}
+                type="button"
+                aria-disabled={inert || undefined}
+                tabIndex={activeIndex === index ? 0 : -1}
+                onClick={() => {
+                  if (!inert) {
+                    onCommand(command);
+                  }
+                }}
+                onFocus={() => setActiveIndex(index)}
+                onKeyDown={(event) => handleKeyDown(event, index)}
+                className={
+                  "flex shrink-0 flex-col items-center justify-center rounded-chrome text-chrome-toolbar-text transition-colors focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none " +
+                  (large ? "h-15 min-w-18 gap-1 px-2" : "h-11 min-w-14 gap-0.5 px-1.5") +
+                  (inert
+                    ? " cursor-default opacity-45"
+                    : " hover:bg-chrome-toolbar-hover active:bg-chrome-toolbar-active")
+                }
+              >
+                <Icon className={large ? "size-8" : "size-5"} />
+                <span
+                  className={
+                    large
+                      ? "text-xs leading-none whitespace-nowrap"
+                      : "text-chrome-micro leading-none whitespace-nowrap"
+                  }
+                >
+                  {label}
+                </span>
+              </button>
+            </Tooltip>
+          );
+        },
+      )}
     </div>
   );
 }

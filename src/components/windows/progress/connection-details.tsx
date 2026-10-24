@@ -1,3 +1,4 @@
+import { Tooltip } from "@/components/ui/tooltip";
 import { formatSize } from "@/lib/downloads";
 import {
   connectionLabel,
@@ -116,15 +117,17 @@ export function ConnectionDetails({
                   <td className="px-2 py-1.5 tabular-nums text-chrome-muted">
                     {index + 1}
                   </td>
-                  <td
-                    title={
-                      segment.size === null
-                        ? `Connection ${index + 1}: ${formatSize(segment.downloaded)} received; the server did not tell the file size`
-                        : `Connection ${index + 1}: ${formatSize(segment.downloaded)} of ${segmentSize(segment)}`
-                    }
-                    className="px-2 py-1.5 text-right tabular-nums text-chrome-menu-text"
-                  >
-                    {formatSize(segment.downloaded)}
+                  <td className="px-2 py-1.5 text-right tabular-nums text-chrome-menu-text">
+                    <Tooltip
+                      content={
+                        segment.size === null
+                          ? `Connection ${index + 1}: ${formatSize(segment.downloaded)} received; the server did not tell the file size`
+                          : `Connection ${index + 1}: ${formatSize(segment.downloaded)} of ${segmentSize(segment)}`
+                      }
+                      side="top"
+                    >
+                      <span>{formatSize(segment.downloaded)}</span>
+                    </Tooltip>
                   </td>
                   <td className="px-2 py-1.5">
                     <span

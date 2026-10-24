@@ -8,6 +8,7 @@ import {
 } from "@/components/icons/action-icons";
 import { WarningMark } from "@/components/icons/desktop-icons";
 import { CloseGlyph, ChevronDown, ChevronUp } from "@/components/icons/ui-icons";
+import { Tooltip } from "@/components/ui/tooltip";
 import { ActionButton } from "@/components/windows/progress/action-button";
 import { ConnectionDetails } from "@/components/windows/progress/connection-details";
 import { ProgressMeter } from "@/components/windows/progress/progress-meter";
@@ -154,90 +155,103 @@ export function DownloadStatusTab({
       </dl>
 
       {problem ? (
-        <p
-          role="alert"
-          title={problem}
-          className="flex items-start gap-1.5 text-chrome-micro text-chrome-error"
-        >
-          <WarningMark tone="red" className="mt-px size-3.5 shrink-0" />
-          <span className="line-clamp-2 min-w-0 break-words">{problem}</span>
-        </p>
+        <Tooltip content={problem} side="top" className="block">
+          <p
+            role="alert"
+            className="flex items-start gap-1.5 text-chrome-micro text-chrome-error"
+          >
+            <WarningMark tone="red" className="mt-px size-3.5 shrink-0" />
+            <span className="line-clamp-2 min-w-0 break-words">{problem}</span>
+          </p>
+        </Tooltip>
       ) : null}
 
       <div className="mt-auto flex items-center justify-between gap-2 pt-0.5">
-        <ActionButton
-          tone="quiet"
-          onClick={onToggleDetails}
-          aria-expanded={detailsOpen}
-          aria-controls={detailsOpen ? "progress-connections" : undefined}
-          title={
+        <Tooltip
+          content={
             detailsOpen
               ? "Fold the connection details away"
               : "Show every connection of this download"
           }
-          icon={
-            detailsOpen ? (
-              <ChevronUp className="size-3.5" />
-            ) : (
-              <ChevronDown className="size-3.5" />
-            )
-          }
+          side="top"
         >
-          {detailsOpen ? "Hide details" : "Show details"}
-        </ActionButton>
+          <ActionButton
+            tone="quiet"
+            onClick={onToggleDetails}
+            aria-expanded={detailsOpen}
+            aria-controls={detailsOpen ? "progress-connections" : undefined}
+            icon={
+              detailsOpen ? (
+                <ChevronUp className="size-3.5" />
+              ) : (
+                <ChevronDown className="size-3.5" />
+              )
+            }
+          >
+            {detailsOpen ? "Hide details" : "Show details"}
+          </ActionButton>
+        </Tooltip>
 
         {controls.primary === "open" ? (
           <div className="flex items-center gap-2">
-            <ActionButton
-              tone="secondary"
-              icon={<CloseGlyph className="size-3.5" />}
-              onClick={onClose}
-              title="Close this window. The file stays where it was saved."
+            <Tooltip
+              content="Close this window. The file stays where it was saved."
+              side="top"
             >
-              Close
-            </ActionButton>
-            <ActionButton
-              tone="primary"
-              icon={<OpenFileGlyph className="size-3.5" />}
-              onClick={onOpen}
-              disabled={working}
-              title={controls.primaryHint}
-            >
-              {controls.primaryLabel}
-            </ActionButton>
+              <ActionButton
+                tone="secondary"
+                icon={<CloseGlyph className="size-3.5" />}
+                onClick={onClose}
+              >
+                Close
+              </ActionButton>
+            </Tooltip>
+            <Tooltip content={controls.primaryHint} side="top">
+              <ActionButton
+                tone="primary"
+                icon={<OpenFileGlyph className="size-3.5" />}
+                onClick={onOpen}
+                disabled={working}
+              >
+                {controls.primaryLabel}
+              </ActionButton>
+            </Tooltip>
           </div>
         ) : (
           <div className="flex items-center gap-2">
-            <ActionButton
-              tone="danger"
-              icon={<StopGlyph className="size-3.5" />}
-              onClick={onCancel}
-              disabled={working || !controls.canCancel}
-              title={controls.cancelHint}
-            >
-              Cancel
-            </ActionButton>
+            <Tooltip content={controls.cancelHint} side="top">
+              <ActionButton
+                tone="danger"
+                icon={<StopGlyph className="size-3.5" />}
+                onClick={onCancel}
+                disabled={working || !controls.canCancel}
+              >
+                Cancel
+              </ActionButton>
+            </Tooltip>
 
             {controls.canPause ? (
-              <ActionButton
-                tone="secondary"
-                icon={<PauseGlyph className="size-3.5" />}
-                onClick={onPause}
-                disabled={working}
-                title={controls.primaryHint}
-              >
-                {controls.primaryLabel}
-              </ActionButton>
+              <Tooltip content={controls.primaryHint} side="top">
+                <ActionButton
+                  tone="secondary"
+                  icon={<PauseGlyph className="size-3.5" />}
+                  onClick={onPause}
+                  disabled={working}
+                >
+                  {controls.primaryLabel}
+                </ActionButton>
+              </Tooltip>
             ) : (
-              <ActionButton
-                tone="primary"
-                icon={<PlayGlyph className="size-3.5" />}
-                onClick={onResume}
-                disabled={working || !controls.canResume}
-                title={controls.primaryHint}
-              >
-                {controls.primaryLabel}
-              </ActionButton>
+              <Tooltip content={controls.primaryHint} side="top">
+                <ActionButton
+                  tone="primary"
+                  icon={<PlayGlyph className="size-3.5" />}
+                  onClick={onResume}
+                  disabled={working || !controls.canResume}
+                >
+                  {controls.primaryLabel}
+                </ActionButton>
+              </Tooltip>
             )}
           </div>
         )}

@@ -6,6 +6,7 @@ Organize files properly: Keep folders and files logically structured by feature 
 - Use skills for UI/UX and for the desktop-app feel.
 - Never put the entire application logic in one file. Separate concerns into appropriate modules and reusable components.
 - Build reusable components, hooks, utilities, and shared logic wherever appropriate. Avoid code duplication and follow consistent naming conventions.
+- Use the shared `Tooltip` (`src/components/ui/tooltip.tsx`) instead of native `title` for icon-only controls and truncated text.
 - Use the `find-skills` skill to discover and apply relevant skills for this project. Check already-installed skills and never install or add duplicates.
 - Use semantic design tokens for colors, typography, spacing, borders, and other design properties. Never hardcode design values in components; define and reuse centralized tokens.
 - Add relevant theme reference URLs and useful resource links to `AGENTS.md`.

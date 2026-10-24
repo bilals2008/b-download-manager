@@ -13,6 +13,7 @@ import {
   PlusGlyph,
   SpinnerGlyph,
 } from "@/components/icons/ui-icons";
+import { Tooltip } from "@/components/ui/tooltip";
 
 import { DOWNLOAD_COLUMNS } from "@/components/workspace/download-columns";
 import { DownloadContextMenu } from "@/components/workspace/download-context-menu";
@@ -169,14 +170,16 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
           >
             Retry
           </button>
-          <button
-            type="button"
-            aria-label="Dismiss error"
-            onClick={dismissError}
-            className="grid size-5 shrink-0 place-items-center rounded-chrome text-chrome-muted hover:bg-chrome-menu-hover hover:text-chrome-menu-text focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
-          >
-            <CloseGlyph className="size-3.5" />
-          </button>
+          <Tooltip content="Dismiss error" side="bottom">
+            <button
+              type="button"
+              aria-label="Dismiss error"
+              onClick={dismissError}
+              className="grid size-5 shrink-0 place-items-center rounded-chrome text-chrome-muted hover:bg-chrome-menu-hover hover:text-chrome-menu-text focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
+            >
+              <CloseGlyph className="size-3.5" />
+            </button>
+          </Tooltip>
         </div>
       ) : null}
 
@@ -285,23 +288,24 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
                     ) : null}
 
                     {column.sortKey ? (
-                      <button
-                        type="button"
-                        title={`Sort by ${column.label}`}
-                        onClick={() => sortBy(column.sortKey as SortKey)}
-                        className={cn(
-                          "inline-flex items-center gap-1 rounded-chrome hover:text-chrome-menu-text focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none",
-                          column.align === "right" && "flex-row-reverse",
-                        )}
-                      >
-                        <span>{column.label}</span>
-                        <SortIcon
+                      <Tooltip content={`Sort by ${column.label}`} side="bottom">
+                        <button
+                          type="button"
+                          onClick={() => sortBy(column.sortKey as SortKey)}
                           className={cn(
-                            "size-3.5",
-                            !isSorted && "opacity-40",
+                            "inline-flex items-center gap-1 rounded-chrome hover:text-chrome-menu-text focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none",
+                            column.align === "right" && "flex-row-reverse",
                           )}
-                        />
-                      </button>
+                        >
+                          <span>{column.label}</span>
+                          <SortIcon
+                            className={cn(
+                              "size-3.5",
+                              !isSorted && "opacity-40",
+                            )}
+                          />
+                        </button>
+                      </Tooltip>
                     ) : (
                       column.label
                     )}

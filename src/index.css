@@ -637,6 +637,67 @@
 }
 
 /*
+  The tooltip rises out of its trigger, softens into focus, and leaves on the
+  same curve in reverse. The node is dropped when the leave transition ends;
+  `visibility` is what keeps the text out of the accessibility tree and the
+  layout until it opens.
+*/
+[data-slot="tooltip"] {
+  --tooltip-shift-x: 0rem;
+  --tooltip-shift-y: 0.35rem;
+  opacity: 0;
+  visibility: hidden;
+  filter: blur(5px);
+  transform: translate(var(--tooltip-shift-x), var(--tooltip-shift-y)) scale(0.94);
+  transform-origin: center bottom;
+}
+
+[data-slot="tooltip"][data-side="bottom"] {
+  --tooltip-shift-y: -0.35rem;
+  transform-origin: center top;
+}
+
+[data-slot="tooltip"][data-side="left"] {
+  --tooltip-shift-x: 0.35rem;
+  --tooltip-shift-y: 0rem;
+  transform-origin: right center;
+}
+
+[data-slot="tooltip"][data-side="right"] {
+  --tooltip-shift-x: -0.35rem;
+  --tooltip-shift-y: 0rem;
+  transform-origin: left center;
+}
+
+[data-slot="tooltip"][data-open="true"] {
+  opacity: 1;
+  visibility: visible;
+  filter: blur(0);
+  transform: translate(0, 0) scale(1);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-slot="tooltip"] {
+    transition:
+      opacity 140ms ease-out,
+      transform 240ms cubic-bezier(0.16, 1, 0.3, 1),
+      filter 160ms ease-out,
+      visibility 0s linear 240ms;
+  }
+
+  [data-slot="tooltip"][data-open="true"] {
+    transition-delay: 0s;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="tooltip"] {
+    filter: none;
+    transform: none;
+  }
+}
+
+/*
   A scroll area that still scrolls but draws no bar, for a pane whose content
   fills the frame it sits in.
 */

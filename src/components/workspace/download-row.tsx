@@ -1,6 +1,7 @@
 import { useRef } from "react";
 
 import { FileTypeIcon, StatusMark } from "@/components/icons/desktop-icons";
+import { Tooltip } from "@/components/ui/tooltip";
 import { SelectionCheckbox } from "@/components/workspace/selection-checkbox";
 import { DownloadProgress } from "@/components/workspace/download-progress";
 import {
@@ -111,18 +112,26 @@ export function DownloadRow({
             className="size-5 shrink-0"
           />
 
-          <div
-            ref={nameRef}
-            title={item.url}
-            className="min-w-0 flex-1"
-          >
-            <span className="block truncate text-chrome-menu-text">
-              {item.fileName}
-            </span>
-            {item.error ? (
-              <span className="mt-0.5 block truncate text-chrome-micro text-icon-red-bright">
-                {item.error}
+          <div ref={nameRef} className="min-w-0 flex-1">
+            <Tooltip
+              content={item.url}
+              side="bottom"
+              className="block min-w-0"
+            >
+              <span className="block truncate text-chrome-menu-text">
+                {item.fileName}
               </span>
+            </Tooltip>
+            {item.error ? (
+              <Tooltip
+                content={item.error}
+                side="bottom"
+                className="block min-w-0"
+              >
+                <span className="mt-0.5 block truncate text-chrome-micro text-icon-red-bright">
+                  {item.error}
+                </span>
+              </Tooltip>
             ) : null}
           </div>
         </div>
@@ -153,13 +162,12 @@ export function DownloadRow({
       </td>
 
       <td className="px-3 py-2">
-        <span
-          className="inline-flex items-center gap-1.5 text-chrome-menu-text"
-          title={item.error ?? status}
-        >
-          <StatusMark status={item.status} className="size-4 shrink-0" />
-          {status}
-        </span>
+        <Tooltip content={item.error ?? status} side="bottom">
+          <span className="inline-flex items-center gap-1.5 text-chrome-menu-text">
+            <StatusMark status={item.status} className="size-4 shrink-0" />
+            {status}
+          </span>
+        </Tooltip>
       </td>
     </tr>
   );

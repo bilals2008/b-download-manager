@@ -4,6 +4,7 @@ import {
   CloseGlyph,
   SearchGlyph,
 } from "@/components/icons/ui-icons";
+import { Tooltip } from "@/components/ui/tooltip";
 import { useDownloads } from "@/state/download-store";
 
 const ICON_BUTTON =
@@ -68,35 +69,38 @@ export function FindBar({ onClose }: { onClose: () => void }) {
         {count}
       </span>
 
-      <button
-        type="button"
-        aria-label="Previous match"
-        title="Previous match (Shift+Enter)"
-        disabled={findMatches.length === 0}
-        onClick={() => findNext(-1)}
-        className={ICON_BUTTON}
-      >
-        <ChevronUp className="size-3.5" />
-      </button>
-      <button
-        type="button"
-        aria-label="Next match"
-        title="Next match (Enter)"
-        disabled={findMatches.length === 0}
-        onClick={() => findNext(1)}
-        className={ICON_BUTTON}
-      >
-        <ChevronDown className="size-3.5" />
-      </button>
-      <button
-        type="button"
-        aria-label="Close find bar"
-        title="Close (Escape)"
-        onClick={onClose}
-        className={ICON_BUTTON}
-      >
-        <CloseGlyph className="size-3.5" />
-      </button>
+      <Tooltip content="Previous match" shortcut="Shift+Enter" side="bottom">
+        <button
+          type="button"
+          aria-label="Previous match"
+          disabled={findMatches.length === 0}
+          onClick={() => findNext(-1)}
+          className={ICON_BUTTON}
+        >
+          <ChevronUp className="size-3.5" />
+        </button>
+      </Tooltip>
+      <Tooltip content="Next match" shortcut="Enter" side="bottom">
+        <button
+          type="button"
+          aria-label="Next match"
+          disabled={findMatches.length === 0}
+          onClick={() => findNext(1)}
+          className={ICON_BUTTON}
+        >
+          <ChevronDown className="size-3.5" />
+        </button>
+      </Tooltip>
+      <Tooltip content="Close find bar" shortcut="Esc" side="bottom">
+        <button
+          type="button"
+          aria-label="Close find bar"
+          onClick={onClose}
+          className={ICON_BUTTON}
+        >
+          <CloseGlyph className="size-3.5" />
+        </button>
+      </Tooltip>
     </div>
   );
 }

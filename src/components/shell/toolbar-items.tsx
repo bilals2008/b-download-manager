@@ -20,12 +20,14 @@ export interface ToolbarItem {
   command: ShellCommand;
   label: string;
   icon: ComponentType<ToolbarIconProps>;
+  /** An accelerator the tooltip can print on a key cap. */
+  shortcut?: string;
   /** Toolbar buttons whose screen is not built yet stay visible but inert. */
   disabled?: boolean;
 }
 
 export const TOOLBAR_ITEMS: ToolbarItem[] = [
-  { command: "add-download", label: "Add URL", icon: AddIcon },
+  { command: "add-download", label: "Add URL", icon: AddIcon, shortcut: "Ctrl+N" },
   { command: "resume", label: "Resume", icon: ResumeIcon },
   { command: "stop", label: "Stop", icon: StopIcon },
   { command: "stop-all", label: "Stop All", icon: StopAllIcon },

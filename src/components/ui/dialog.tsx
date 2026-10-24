@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 
 import { CloseGlyph } from "@/components/icons/ui-icons";
+import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 interface DialogProps {
@@ -17,6 +18,12 @@ interface DialogProps {
   headerClassName?: string;
   /** Overrides for the button row. */
   footerClassName?: string;
+  /**
+   * Whether Escape and the close button may close it. A dialog that is
+   * finishing a command turns this off, so the command cannot be left in
+   * flight with nothing to explain it.
+   */
+  dismissible?: boolean;
 }
 
 /**
@@ -33,6 +40,7 @@ export function Dialog({
   bodyClassName,
   headerClassName,
   footerClassName,
+  dismissible = true,
 }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
 
@@ -53,7 +61,13 @@ export function Dialog({
     <dialog
       ref={ref}
       onClose={onClose}
-      onCancel={onClose}
+      onCancel={(event) => {
+        if (!dismissible) {
+          event.preventDefault();
+          return;
+        }
+        onClose();
+      }}
       aria-label={title}
       className={cn(
         // `open:flex` matters: a plain `flex` would override the native
@@ -69,15 +83,22 @@ export function Dialog({
           headerClassName,
         )}
       >
-        <span className="truncate text-sm text-chrome-title-text">{title}</span>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close"
-          className="flex size-7 shrink-0 items-center justify-center rounded-chrome text-chrome-muted transition-colors hover:bg-chrome-menu-hover hover:text-chrome-menu-text focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
-        >
-          <CloseGlyph className="size-3.5" />
-        </button>
+        <Tooltip content={title} side="bottom" className="min-w-0 flex-1">
+          <span className="block truncate text-sm text-chrome-title-text">
+            {title}
+          </span>
+        </Tooltip>
+        <Tooltip content="Close" side="bottom">
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            disabled={!dismissible}
+            className="flex size-7 shrink-0 items-center justify-center rounded-chrome text-chrome-muted transition-colors hover:bg-chrome-menu-hover hover:text-chrome-menu-text focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-chrome-muted"
+          >
+            <CloseGlyph className="size-3.5" />
+          </button>
+        </Tooltip>
       </div>
       <div className={cn("min-h-0 flex-1 px-4 pb-3", bodyClassName)}>
         {children}

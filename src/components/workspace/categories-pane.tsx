@@ -2,6 +2,7 @@ import { useRef, useState, type KeyboardEvent } from "react";
 
 import { CategoryFolderIcon, ViewIcon } from "@/components/icons/desktop-icons";
 import { DisclosureGlyph, PanelGlyph } from "@/components/icons/ui-icons";
+import { Tooltip } from "@/components/ui/tooltip";
 import { CategoryContextMenu } from "@/components/workspace/category-context-menu";
 import {
   CATEGORIES,
@@ -196,95 +197,102 @@ export function CategoriesPane() {
   function renderRow(row: Row) {
     const selected = isSelected(row);
     const depth = row.kind === "folder" ? 1 : 0;
+    // Collapsed rows are icons alone; a folder's path is longer than its row.
+    const hint = collapsed
+      ? `${row.label} (${row.count})`
+      : row.kind === "folder"
+        ? row.path
+        : null;
 
     return (
       <li key={row.key}>
-        <button
-          ref={(node) => {
-            if (node) {
-              itemRefs.current.set(row.key, node);
-            } else {
-              itemRefs.current.delete(row.key);
-            }
-          }}
-          type="button"
-          aria-current={selected ? "true" : undefined}
-          aria-expanded={
-            row.kind === "category" && row.hasFolders ? row.expanded : undefined
-          }
-          title={
-            collapsed
-              ? `${row.label} (${row.count})`
-              : row.kind === "folder"
-                ? row.path
-                : undefined
-          }
-          tabIndex={row.key === rovingKey ? 0 : -1}
-          onClick={() => {
-            setFocusKey(row.key);
-            if (row.kind === "folder") {
-              setFolder(row.id, row.path);
-            } else {
-              setFilter(row.id);
-              if (row.kind === "category") {
-                toggleCategory(row.id);
-              }
-            }
-          }}
-          onContextMenu={(event) => {
-            event.preventDefault();
-            openMenu(row, { x: event.clientX, y: event.clientY });
-          }}
-          onFocus={() => setFocusKey(row.key)}
-          onKeyDown={(event) => handleKeyDown(event, row)}
-          className={cn(
-            "group relative flex h-8 w-full items-center gap-1.5 rounded-chrome pr-2 text-left text-xs transition-colors focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none",
-            depth === 0 ? "pl-2" : "pl-9",
-            selected
-              ? "bg-chrome-menu-active text-chrome-title-text"
-              : "text-chrome-menu-text hover:bg-chrome-menu-hover active:bg-chrome-toolbar-active",
-            collapsed && "justify-center px-0",
-          )}
+        <Tooltip
+          content={hint}
+          side={collapsed ? "right" : "bottom"}
+          className="flex w-full"
         >
-          {collapsed ? null : (
-            <span className="grid size-4 shrink-0 place-items-center text-chrome-muted">
-              {row.kind === "category" && row.hasFolders ? (
-                <DisclosureGlyph
-                  className={cn(
-                    "size-3.5 transition-transform duration-150 ease-out motion-reduce:transition-none",
-                    row.expanded && "rotate-90",
-                  )}
-                />
-              ) : null}
-            </span>
-          )}
-
-          {row.kind === "view" ? (
-            <ViewIcon view={row.id} className="size-5 shrink-0" />
-          ) : (
-            <CategoryFolderIcon
-              category={row.id}
-              open={row.kind === "category" && row.expanded}
-              className="size-5 shrink-0"
-            />
-          )}
-
-          {collapsed ? null : (
-            <>
-              <span className="min-w-0 flex-1 truncate">{row.label}</span>
-              <span
-                className={cn(
-                  "shrink-0 text-chrome-micro tabular-nums",
-                  selected
-                    ? "text-chrome-title-text"
-                    : "text-chrome-muted group-hover:text-chrome-menu-text",
-                )}
-              >
-                {row.count}
+          <button
+            ref={(node) => {
+              if (node) {
+                itemRefs.current.set(row.key, node);
+              } else {
+                itemRefs.current.delete(row.key);
+              }
+            }}
+            type="button"
+            aria-current={selected ? "true" : undefined}
+            aria-expanded={
+              row.kind === "category" && row.hasFolders
+                ? row.expanded
+                : undefined
+            }
+            tabIndex={row.key === rovingKey ? 0 : -1}
+            onClick={() => {
+              setFocusKey(row.key);
+              if (row.kind === "folder") {
+                setFolder(row.id, row.path);
+              } else {
+                setFilter(row.id);
+                if (row.kind === "category") {
+                  toggleCategory(row.id);
+                }
+              }
+            }}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              openMenu(row, { x: event.clientX, y: event.clientY });
+            }}
+            onFocus={() => setFocusKey(row.key)}
+            onKeyDown={(event) => handleKeyDown(event, row)}
+            className={cn(
+              "group relative flex h-8 w-full items-center gap-1.5 rounded-chrome pr-2 text-left text-xs transition-colors focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none",
+              depth === 0 ? "pl-2" : "pl-9",
+              selected
+                ? "bg-chrome-menu-active text-chrome-title-text"
+                : "text-chrome-menu-text hover:bg-chrome-menu-hover active:bg-chrome-toolbar-active",
+              collapsed && "justify-center px-0",
+            )}
+          >
+            {collapsed ? null : (
+              <span className="grid size-4 shrink-0 place-items-center text-chrome-muted">
+                {row.kind === "category" && row.hasFolders ? (
+                  <DisclosureGlyph
+                    className={cn(
+                      "size-3.5 transition-transform duration-150 ease-out motion-reduce:transition-none",
+                      row.expanded && "rotate-90",
+                    )}
+                  />
+                ) : null}
               </span>
-            </>
-          )}
-        </button>
+            )}
+
+            {row.kind === "view" ? (
+              <ViewIcon view={row.id} className="size-5 shrink-0" />
+            ) : (
+              <CategoryFolderIcon
+                category={row.id}
+                open={row.kind === "category" && row.expanded}
+                className="size-5 shrink-0"
+              />
+            )}
+
+            {collapsed ? null : (
+              <>
+                <span className="min-w-0 flex-1 truncate">{row.label}</span>
+                <span
+                  className={cn(
+                    "shrink-0 text-chrome-micro tabular-nums",
+                    selected
+                      ? "text-chrome-title-text"
+                      : "text-chrome-muted group-hover:text-chrome-menu-text",
+                  )}
+                >
+                  {row.count}
+                </span>
+              </>
+            )}
+          </button>
+        </Tooltip>
       </li>
     );
   }
@@ -313,16 +321,20 @@ export function CategoriesPane() {
             <span className="truncate">Categories</span>
           </span>
         )}
-        <button
-          type="button"
-          aria-label={collapsed ? "Expand categories" : "Collapse categories"}
-          aria-expanded={!collapsed}
-          title={collapsed ? "Expand categories" : "Collapse categories"}
-          onClick={() => setCollapsed((value) => !value)}
-          className="grid size-6 shrink-0 place-items-center rounded-chrome text-chrome-muted hover:bg-chrome-menu-hover hover:text-chrome-menu-text focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
+        <Tooltip
+          content={collapsed ? "Expand categories" : "Collapse categories"}
+          side="bottom"
         >
-          <PanelGlyph collapsed={collapsed} className="size-3.5" />
-        </button>
+          <button
+            type="button"
+            aria-label={collapsed ? "Expand categories" : "Collapse categories"}
+            aria-expanded={!collapsed}
+            onClick={() => setCollapsed((value) => !value)}
+            className="grid size-6 shrink-0 place-items-center rounded-chrome text-chrome-muted hover:bg-chrome-menu-hover hover:text-chrome-menu-text focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
+          >
+            <PanelGlyph collapsed={collapsed} className="size-3.5" />
+          </button>
+        </Tooltip>
       </div>
 
       <div className="scrollbar-none min-h-0 flex-1 overflow-y-auto px-1.5 py-2">

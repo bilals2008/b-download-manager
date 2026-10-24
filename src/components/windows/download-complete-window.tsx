@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { FileTypeIcon } from "@/components/icons/desktop-icons";
 import { CheckGlyph, CloseGlyph } from "@/components/icons/ui-icons";
+import { Tooltip } from "@/components/ui/tooltip";
 import { categoryOfFile, formatSize, splitPath } from "@/lib/downloads";
 import { describeError } from "@/lib/errors";
 import { openPath } from "@/lib/ipc";
@@ -62,14 +63,16 @@ export function DownloadCompleteWindow({ info }: { info: DownloadInfo }) {
         >
           Download complete
         </span>
-        <button
-          type="button"
-          onClick={() => void closeWindow()}
-          aria-label="Close"
-          className="flex size-7 shrink-0 items-center justify-center rounded-chrome text-chrome-muted transition-colors hover:bg-chrome-menu-hover hover:text-chrome-menu-text focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
-        >
-          <CloseGlyph className="size-3.5" />
-        </button>
+        <Tooltip content="Close" side="bottom">
+          <button
+            type="button"
+            onClick={() => void closeWindow()}
+            aria-label="Close"
+            className="flex size-7 shrink-0 items-center justify-center rounded-chrome text-chrome-muted transition-colors hover:bg-chrome-menu-hover hover:text-chrome-menu-text focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
+          >
+            <CloseGlyph className="size-3.5" />
+          </button>
+        </Tooltip>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 px-4 pb-1 text-xs">
@@ -92,12 +95,15 @@ export function DownloadCompleteWindow({ info }: { info: DownloadInfo }) {
 
         <div className="min-h-0 flex-1 rounded-chrome border border-chrome-line bg-chrome-canvas px-2.5 py-2">
           <p className="text-chrome-micro text-chrome-muted">File saved as</p>
-          <p
-            title={info.dest}
-            className="mt-0.5 line-clamp-2 font-mono text-chrome-micro break-all text-chrome-menu-text"
+          <Tooltip
+            content={info.dest}
+            side="top"
+            className="mt-0.5 block"
           >
-            {info.dest}
-          </p>
+            <p className="line-clamp-2 font-mono text-chrome-micro break-all text-chrome-menu-text">
+              {info.dest}
+            </p>
+          </Tooltip>
         </div>
 
         {error ? (
