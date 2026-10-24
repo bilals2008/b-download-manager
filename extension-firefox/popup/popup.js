@@ -27,7 +27,6 @@ const speedSamples = new Map();
 let closed = false;
 let pollTimer = 0;
 let inFlight = false;
-let online = false;
 
 /* ---------------------------------------------------------------- helpers */
 
@@ -429,21 +428,16 @@ async function refresh() {
   if (closed) return;
 
   if (!answer || !answer.ok) {
-    online = false;
     setConnection("offline", connectionText(answer?.error));
     renderDownloads([], { offline: true });
-    refs.mediaSection.hidden = true;
     schedule(OFFLINE_POLL_MS);
     return;
   }
 
-  const first = !online;
-  online = true;
   setConnection("ok", "Connected");
   renderDownloads(Array.isArray(answer.downloads) ? answer.downloads : [], {
     offline: false,
   });
-  if (first) void loadPageMedia();
   schedule(POLL_MS);
 }
 
@@ -493,3 +487,5 @@ browser.storage.onChanged.addListener((_changes, area) => {
 
 setConnection("checking", "Connecting");
 void refresh();
+/* The page list does not need the app, so it is read straight away. */
+void loadPageMedia();

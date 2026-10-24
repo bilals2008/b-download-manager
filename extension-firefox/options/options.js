@@ -28,6 +28,7 @@ const STATUS_POLL = 5000;
 
 let settings = bdmNormalizeSettings({});
 let saveTimer = 0;
+let saving = 0;
 let savedTimer = 0;
 let statusTimer = 0;
 let resetTimer = 0;
@@ -90,11 +91,15 @@ function renderList(container, empty, values, kind) {
 
 function scheduleSave() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => void save(), SAVE_DELAY);
+  saveTimer = setTimeout(() => {
+    saveTimer = 0;
+    void save();
+  }, SAVE_DELAY);
 }
 
 async function save() {
   const snapshot = settings;
+  saving += 1;
   try {
     const clean = await bdmSaveSettings(snapshot);
     // A change made while the write was in flight owns the newer state; its
@@ -107,6 +112,8 @@ async function save() {
     }, 1600);
   } catch {
     saved.textContent = "Not saved";
+  } finally {
+    saving -= 1;
   }
 }
 
@@ -220,6 +227,7 @@ resetButton.addEventListener("click", async () => {
 
   disarmReset();
   clearTimeout(saveTimer);
+  saveTimer = 0;
   settings = await bdmSaveSettings(BDM_DEFAULT_SETTINGS);
   bdmApplyPageTheme(settings.theme);
   apply();
@@ -300,6 +308,9 @@ document.getElementById("site-add").addEventListener("click", addSite);
 
 browser.storage.onChanged.addListener((_changes, area) => {
   if (area !== "local") return;
+  // An echo of this page's own write would undo a change made since; the
+  // pending save writes the newer state anyway.
+  if (saveTimer || saving) return;
   void bdmLoadSettings().then((next) => {
     if (JSON.stringify(next) === JSON.stringify(settings)) return;
     settings = next;
