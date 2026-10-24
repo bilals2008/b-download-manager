@@ -263,7 +263,7 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
         ref={viewportRef}
         tabIndex={0}
         aria-label="Download list"
-        className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
+        className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto scrollbar-thin focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
         onClick={(event) => {
           // A click on the empty space under the rows drops the selection.
           if (event.target === event.currentTarget) {
