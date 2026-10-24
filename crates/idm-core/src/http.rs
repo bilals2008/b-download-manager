@@ -9,9 +9,14 @@ use std::time::Duration;
 
 use futures_util::StreamExt;
 use reqwest::header::HeaderMap;
-use reqwest::header::{ACCEPT_ENCODING, CONTENT_DISPOSITION, CONTENT_RANGE, RANGE, RETRY_AFTER};
+use reqwest::header::{
+    ACCEPT_ENCODING, CONTENT_DISPOSITION, CONTENT_RANGE, ETAG, IF_RANGE, LAST_MODIFIED, RANGE,
+    RETRY_AFTER,
+};
 
-use crate::transfer::{ByteStream, Probe, TransferError};
+use crate::transfer::{
+    ByteStream, FailureKind, Probe, TransferError, CHANGED_MESSAGE, RANGE_IGNORED_MESSAGE,
+};
 
 /// IDM asks for an identity encoding so that the byte offsets on the wire
 /// stay equal to the byte offsets in the file.
@@ -47,11 +52,7 @@ pub async fn probe(client: &reqwest::Client, url: &str) -> Result<Probe, Transfe
     // answers `429` with a body of one byte, and that byte is not the size
     // of the file.
     if !status.is_success() {
-        return Err(TransferError {
-            message: status_message(status.as_u16()),
-            status: Some(status.as_u16()),
-            retry_after,
-        });
+        return Err(answer_error(status.as_u16(), retry_after));
     }
 
     let ranges = status == reqwest::StatusCode::PARTIAL_CONTENT;
@@ -69,6 +70,15 @@ pub async fn probe(client: &reqwest::Client, url: &str) -> Result<Probe, Transfe
         total = response.content_length();
     }
 
+    let header = |name| {
+        response
+            .headers()
+            .get(name)
+            .and_then(|value| value.to_str().ok())
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+    };
+
     Ok(Probe {
         total,
         ranges,
@@ -77,7 +87,41 @@ pub async fn probe(client: &reqwest::Client, url: &str) -> Result<Probe, Transfe
             .get(CONTENT_DISPOSITION)
             .and_then(|value| value.to_str().ok())
             .and_then(file_name_from_disposition),
+        etag: header(ETAG),
+        last_modified: header(LAST_MODIFIED),
     })
+}
+
+/// The header value that proves a later request gets the same bytes.
+///
+/// `If-Range` needs a strong validator. A weak entity tag (`W/"..."`) may
+/// name a semantically equal copy that differs byte for byte, so it is not
+/// used; the modification date is the fallback.
+pub fn validator(etag: Option<&str>, last_modified: Option<&str>) -> Option<String> {
+    let etag = etag.map(str::trim).filter(|etag| !etag.is_empty());
+    if let Some(etag) = etag {
+        if !etag.starts_with("W/") {
+            return Some(etag.to_string());
+        }
+    }
+    last_modified
+        .map(str::trim)
+        .filter(|date| !date.is_empty())
+        .map(str::to_string)
+}
+
+/// The error for a status the server refused the request with.
+fn answer_error(status: u16, retry_after: Option<Duration>) -> TransferError {
+    TransferError {
+        message: status_message(status),
+        status: Some(status),
+        retry_after,
+        kind: if is_retryable(status) {
+            FailureKind::Transient
+        } else {
+            FailureKind::Permanent
+        },
+    }
 }
 
 /// Open a transfer that yields the bytes of a range.
@@ -86,19 +130,31 @@ pub async fn probe(client: &reqwest::Client, url: &str) -> Result<Probe, Transfe
 /// this range is the whole file: a server that answers `200` instead of
 /// `206` sent the whole file, and that is only usable when the whole file is
 /// what this range holds.
+///
+/// `if_range` is the validator the probe was answered with. `expected_total`
+/// is the size the probe promised. Both are checked against the answer, so a
+/// file that changed between the probe and the request is refused instead of
+/// being mixed into the bytes already on disk.
 pub async fn open_range(
     client: &reqwest::Client,
     url: &str,
     from: u64,
     to: Option<u64>,
     covers_all: bool,
+    if_range: Option<&str>,
+    expected_total: Option<u64>,
 ) -> Result<ByteStream, TransferError> {
     // IDM always asks for an explicit range and always asks for an identity
     // encoding so the bytes on the wire line up with the file offsets.
-    let response = client
+    let mut request = client
         .get(url)
         .header(RANGE, range_header(from, to))
-        .header(ACCEPT_ENCODING, IDENTITY_ENCODING)
+        .header(ACCEPT_ENCODING, IDENTITY_ENCODING);
+    if let Some(validator) = if_range {
+        request = request.header(IF_RANGE, validator);
+    }
+
+    let response = request
         .send()
         .await
         .map_err(|e| TransferError::msg(e.to_string()))?;
@@ -106,34 +162,58 @@ pub async fn open_range(
     let status = response.status();
     let retry_after = parse_retry_after(response.headers());
 
-    if status == reqwest::StatusCode::RANGE_NOT_SATISFIABLE {
-        // The range is already complete.
-        return Ok(empty_stream());
-    }
     if !status.is_success() {
-        return Err(TransferError {
-            message: status_message(status.as_u16()),
-            status: Some(status.as_u16()),
-            retry_after,
-        });
+        // A `416` is not "the range is complete": the engine never asks for
+        // a range it already has. It means the resource no longer covers the
+        // range, which asking again will not change.
+        return Err(answer_error(status.as_u16(), retry_after));
     }
     if status == reqwest::StatusCode::OK && !covers_all {
-        // The server ignored the range and sent the whole file. The download
-        // would end up short.
-        return Err(TransferError::msg("the server ignored the Range request"));
+        // A whole-file answer for a range that is not the whole file would
+        // leave the download short. When `If-Range` was sent, the answer also
+        // proves the server's copy is not the copy the probe saw.
+        return Err(if if_range.is_some() {
+            TransferError::changed(CHANGED_MESSAGE)
+        } else {
+            TransferError::range_ignored(RANGE_IGNORED_MESSAGE)
+        });
     }
 
     // Verify the server really served the range we asked for. IDM checks the
     // `Content-Range` reply in `HTTPConnection::GetRetrRangeReply()`.
-    if let Some(value) = response
+    let content_range = response
         .headers()
         .get(CONTENT_RANGE)
-        .and_then(|v| v.to_str().ok())
-    {
-        if let Some(served_start) = parse_content_range_start(value) {
-            if served_start != from {
-                return Err(TransferError::msg(format!(
-                    "the server served bytes from {served_start} instead of {from}"
+        .and_then(|v| v.to_str().ok());
+    if status == reqwest::StatusCode::PARTIAL_CONTENT && content_range.is_none() {
+        // A `206` without `Content-Range` does not say which bytes it is
+        // sending, so they cannot be placed in the file.
+        return Err(TransferError::permanent(
+            "the server sent a partial answer without a Content-Range",
+        ));
+    }
+    if let Some(value) = content_range {
+        let Some((served_start, served_end, served_total)) = parse_content_range(value) else {
+            return Err(TransferError::permanent(format!(
+                "the server sent a Content-Range we cannot read: {value}"
+            )));
+        };
+        if served_start != from {
+            return Err(TransferError::msg(format!(
+                "the server served bytes from {served_start} instead of {from}"
+            )));
+        }
+        if served_end < served_start {
+            return Err(TransferError::permanent(format!(
+                "the server sent a Content-Range that ends before it starts: {value}"
+            )));
+        }
+        // The size in the header is the proof that both ends of the download
+        // are talking about the same file.
+        if let (Some(expected), Some(actual)) = (expected_total, served_total) {
+            if actual != expected {
+                return Err(TransferError::changed(format!(
+                    "the file changed on the server: it was {expected} bytes, it is {actual} now"
                 )));
             }
         }
@@ -147,11 +227,6 @@ pub async fn open_range(
     Ok(stream)
 }
 
-/// A transfer that is over before it began.
-fn empty_stream() -> ByteStream {
-    Box::pin(futures_util::stream::empty())
-}
-
 /// The `Range` header value for a byte range.
 ///
 /// `to` of `None` means "to the end of the file", which is what a server that
@@ -163,19 +238,33 @@ pub fn range_header(from: u64, to: Option<u64>) -> String {
     }
 }
 
+/// Read a `Content-Range` value: `bytes <start>-<end>/<total>`.
+///
+/// The total is `None` when the server wrote `*`: it does not know the size.
+pub fn parse_content_range(value: &str) -> Option<(u64, u64, Option<u64>)> {
+    let (unit, spec) = value.trim().split_once(' ')?;
+    if !unit.eq_ignore_ascii_case("bytes") {
+        return None;
+    }
+    let (range, total) = spec.trim().split_once('/')?;
+    let (start, end) = range.trim().split_once('-')?;
+    let start = start.trim().parse().ok()?;
+    let end = end.trim().parse().ok()?;
+    let total = total.trim();
+    let total = if total == "*" {
+        None
+    } else {
+        Some(total.parse().ok()?)
+    };
+    Some((start, end, total))
+}
+
 /// Read the total size out of a `Content-Range` value.
 ///
 /// `bytes 0-0/1234` gives `Some(1234)`. `bytes 0-0/*` gives `None`, which is
 /// how a server says it does not know the size.
 pub fn parse_content_range_total(value: &str) -> Option<u64> {
-    let (_, spec) = value.trim().split_once(' ')?;
-    let (_, total) = spec.trim().split_once('/')?;
-    let total = total.trim();
-    if total == "*" {
-        None
-    } else {
-        total.parse().ok()
-    }
+    parse_content_range(value).and_then(|(_, _, total)| total)
 }
 
 /// Read the first byte offset out of a `Content-Range` value.
@@ -184,10 +273,7 @@ pub fn parse_content_range_total(value: &str) -> Option<u64> {
 /// (`HTTPConnection::GetRetrRangeReply()`), so the engine has to be able to
 /// read back what the server actually served.
 pub fn parse_content_range_start(value: &str) -> Option<u64> {
-    let (_, spec) = value.trim().split_once(' ')?;
-    let (range, _) = spec.trim().split_once('/')?;
-    let (start, _) = range.trim().split_once('-')?;
-    start.trim().parse().ok()
+    parse_content_range(value).map(|(start, _, _)| start)
 }
 
 /// The file name a `Content-Disposition` header carries, if it carries one.
@@ -328,6 +414,44 @@ mod tests {
     fn a_range_to_the_end_has_no_end() {
         assert_eq!(range_header(10, Some(20)), "bytes=10-20");
         assert_eq!(range_header(10, None), "bytes=10-");
+    }
+
+    #[test]
+    fn a_content_range_is_read_whole() {
+        assert_eq!(
+            parse_content_range("bytes 4096-8191/9000"),
+            Some((4096, 8191, Some(9000)))
+        );
+        assert_eq!(parse_content_range("bytes 0-0/*"), Some((0, 0, None)));
+        assert_eq!(parse_content_range("bytes 0-0"), None);
+        assert_eq!(parse_content_range("items 0-0/10"), None);
+    }
+
+    #[test]
+    fn a_strong_entity_tag_is_the_validator() {
+        assert_eq!(
+            validator(Some("\"abc\""), Some("Wed, 21 Oct 2015 07:28:00 GMT")),
+            Some("\"abc\"".to_string())
+        );
+    }
+
+    #[test]
+    fn a_weak_entity_tag_is_not_used_for_a_range() {
+        assert_eq!(
+            validator(Some("W/\"abc\""), Some("Wed, 21 Oct 2015 07:28:00 GMT")),
+            Some("Wed, 21 Oct 2015 07:28:00 GMT".to_string())
+        );
+        assert_eq!(validator(Some("W/\"abc\""), None), None);
+    }
+
+    #[test]
+    fn a_modification_date_is_the_fallback() {
+        assert_eq!(
+            validator(None, Some(" Wed, 21 Oct 2015 07:28:00 GMT ")),
+            Some("Wed, 21 Oct 2015 07:28:00 GMT".to_string())
+        );
+        assert_eq!(validator(None, Some("   ")), None);
+        assert_eq!(validator(None, None), None);
     }
 
     #[test]

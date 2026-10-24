@@ -12,6 +12,29 @@ use futures_util::Stream;
 use crate::ftp;
 use crate::http;
 
+/// How a failed transfer should be treated by the retry loop.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FailureKind {
+    /// Asking again may work: a timeout, a reset, a busy server.
+    Transient,
+    /// Asking again changes nothing: a missing file, a bad disk write.
+    Permanent,
+    /// The server now serves a different file. The bytes on disk belong to
+    /// the old version and must not be joined into the new one.
+    Changed,
+    /// The server sent the whole file instead of the range. One connection
+    /// can still fetch it, so the caller falls back to a single stream.
+    RangeIgnored,
+}
+
+/// The message used when the copy on the server is not the copy on disk.
+pub const CHANGED_MESSAGE: &str =
+    "the file changed on the server since the download started; start it again";
+
+/// The message used when the server answered a range request with the whole
+/// file.
+pub const RANGE_IGNORED_MESSAGE: &str = "the server ignored the Range request";
+
 /// A transfer that failed. The extra fields drive the retry policy.
 #[derive(Debug, Clone)]
 pub struct TransferError {
@@ -20,15 +43,40 @@ pub struct TransferError {
     pub status: Option<u16>,
     /// How long the server asked us to wait, when it said so.
     pub retry_after: Option<Duration>,
+    pub kind: FailureKind,
 }
 
 impl TransferError {
     pub fn msg(message: impl Into<String>) -> Self {
+        Self::with_kind(message, FailureKind::Transient)
+    }
+
+    /// A failure that a retry cannot fix.
+    pub fn permanent(message: impl Into<String>) -> Self {
+        Self::with_kind(message, FailureKind::Permanent)
+    }
+
+    /// The file on the server is not the file on disk.
+    pub fn changed(message: impl Into<String>) -> Self {
+        Self::with_kind(message, FailureKind::Changed)
+    }
+
+    /// The server answered with the whole file instead of the range.
+    pub fn range_ignored(message: impl Into<String>) -> Self {
+        Self::with_kind(message, FailureKind::RangeIgnored)
+    }
+
+    pub fn with_kind(message: impl Into<String>, kind: FailureKind) -> Self {
         Self {
             message: message.into(),
             status: None,
             retry_after: None,
+            kind,
         }
+    }
+
+    pub fn is_transient(&self) -> bool {
+        self.kind == FailureKind::Transient
     }
 }
 
@@ -44,6 +92,21 @@ pub struct Probe {
     pub ranges: bool,
     /// The name the server gives the file, when it gives one.
     pub name: Option<String>,
+    /// The entity tag the server gave, when it gave one.
+    pub etag: Option<String>,
+    /// The last modification date the server gave, when it gave one.
+    pub last_modified: Option<String>,
+}
+
+impl Probe {
+    /// The value to send in `If-Range`, when the server gave a usable one.
+    ///
+    /// An entity tag is the stronger proof; a date is the fallback. A weak
+    /// tag (`W/"..."`) cannot be used for a range: it only promises semantic
+    /// equivalence, not byte equality.
+    pub fn validator(&self) -> Option<String> {
+        http::validator(self.etag.as_deref(), self.last_modified.as_deref())
+    }
 }
 
 /// A place to download from.
@@ -78,8 +141,8 @@ impl Source {
             // A URL without a host is not a file anywhere. The request would
             // fail later with a message about the transport instead of the
             // address the user can fix.
-            let parsed =
-                reqwest::Url::parse(url).map_err(|_| "the URL is not a valid address".to_string())?;
+            let parsed = reqwest::Url::parse(url)
+                .map_err(|_| "the URL is not a valid address".to_string())?;
             if parsed.host_str().is_none() {
                 return Err("the URL has no host".to_string());
             }
@@ -171,6 +234,8 @@ impl Source {
                     total: Some(total),
                     ranges: true,
                     name: None,
+                    etag: None,
+                    last_modified: None,
                 })
             }
         }
@@ -178,16 +243,22 @@ impl Source {
 
     /// Open a transfer that yields the bytes of a range.
     ///
-    /// `to` of `None` means "to the end of the file".
+    /// `to` of `None` means "to the end of the file". `if_range` is the
+    /// validator the probe was answered with: the server answers the whole
+    /// file instead of the range when its copy has changed since. `total` is
+    /// the size the probe promised, so a `Content-Range` that names another
+    /// size is caught before its bytes reach the disk.
     pub async fn open(
         &self,
         from: u64,
         to: Option<u64>,
         covers_all: bool,
+        if_range: Option<&str>,
+        total: Option<u64>,
     ) -> Result<ByteStream, TransferError> {
         match self {
             Source::Http { url, client } => {
-                http::open_range(client, url, from, to, covers_all).await
+                http::open_range(client, url, from, to, covers_all, if_range, total).await
             }
             Source::Ftp {
                 host,
