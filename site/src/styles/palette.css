@@ -1,0 +1,78 @@
+/*
+  One palette, two appearances. Components read semantic names only; the
+  application's deep-green canvas and lime action carry over from the desktop
+  UI so the site and the app read as one product.
+
+  Both surfaces import this file: the landing page through tokens.css, the
+  docs through starlight.css. A colour changes here once.
+*/
+
+:root {
+  color-scheme: light;
+
+  /* Surfaces */
+  --page: #f5f6f2;
+  --surface: #edf0e9;
+  --ink: #101713;
+  --ink-soft: #39443e;
+  --muted: #5d6962;
+  --line: #dce2d9;
+  --line-strong: #c7d0c5;
+  --accent: #256b46;
+  --accent-soft: #e4edda;
+  --action-bg: #0d3020;
+  --action-ink: #d9ff7a;
+  --action-hover: #144630;
+
+  /* Focus and artwork */
+  --focus: #1d6240;
+  --figure-bg: #0a1511;
+  --figure-border: #d5ddd2;
+
+  /* Closing band */
+  --footer-bg: #0a1d14;
+  --footer-ink: #edf4ec;
+  --footer-muted: #a8b8ab;
+  --footer-line: #1e3a2b;
+  --footer-accent: #cdf25a;
+  --footer-action: #cdf25a;
+  --footer-action-ink: #08130c;
+
+  /* Depth */
+  --shadow-figure:
+    0 40px 90px -52px rgb(10 30 20 / 0.42),
+    0 14px 30px -24px rgb(10 30 20 / 0.24);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --page: #08110e;
+  --surface: #0d1a15;
+  --ink: #e9efe9;
+  --ink-soft: #c3cdc6;
+  --muted: #95a39a;
+  --line: #1c2d24;
+  --line-strong: #2c4638;
+  --accent: #c3e96a;
+  --accent-soft: #12241a;
+  --action-bg: #cdf25a;
+  --action-ink: #08130c;
+  --action-hover: #ddff79;
+
+  --focus: #d3f77a;
+  --figure-bg: #0a1511;
+  --figure-border: #1f3529;
+
+  --footer-bg: #0b1712;
+  --footer-ink: #e9efe9;
+  --footer-muted: #95a39a;
+  --footer-line: #1c2d24;
+  --footer-accent: #cdf25a;
+  --footer-action: #cdf25a;
+  --footer-action-ink: #08130c;
+
+  --shadow-figure:
+    0 50px 120px -60px rgb(0 0 0 / 0.85),
+    0 18px 40px -30px rgb(0 0 0 / 0.6);
+}

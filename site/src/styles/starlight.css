@@ -1,0 +1,119 @@
+/*
+  Docs appearance. The landing page's palette and faces are the only source of
+  colour and type; this file maps them onto the variable names Starlight reads,
+  so the docs and the site cannot drift apart.
+*/
+@import "./fonts.css";
+@import "./palette.css";
+
+:root {
+  --sl-font: var(--face-sans);
+  --sl-font-mono: var(--face-mono);
+}
+
+/* Dark is Starlight's default appearance, so it sits on the root. */
+:root,
+::backdrop {
+  color-scheme: dark;
+
+  --sl-color-bg: var(--page);
+  --sl-color-bg-nav: var(--surface);
+  --sl-color-bg-sidebar: var(--page);
+  --sl-color-bg-inline-code: var(--accent-soft);
+
+  --sl-color-text: var(--ink-soft);
+  --sl-color-text-accent: var(--accent);
+  --sl-color-text-invert: var(--action-ink);
+
+  --sl-color-accent-low: var(--accent-soft);
+  --sl-color-accent: var(--accent);
+  --sl-color-accent-high: var(--action-hover);
+  --sl-color-bg-accent: var(--action-bg);
+
+  --sl-color-hairline: var(--line);
+  --sl-color-hairline-light: var(--line-strong);
+
+  /* Text steps and the code-block frame, which read the neutral ramp. */
+  --sl-color-gray-1: var(--ink);
+  --sl-color-gray-2: var(--ink-soft);
+  --sl-color-gray-3: var(--muted);
+  --sl-color-gray-4: var(--line);
+  --sl-color-gray-5: var(--line-strong);
+  --sl-color-gray-6: var(--surface);
+  --sl-color-gray-7: var(--surface);
+}
+
+:root[data-theme="light"],
+[data-theme="light"] ::backdrop {
+  color-scheme: light;
+
+  --sl-color-bg: var(--page);
+  --sl-color-bg-nav: var(--surface);
+  --sl-color-bg-sidebar: var(--page);
+  --sl-color-bg-inline-code: var(--surface);
+
+  --sl-color-text: var(--ink-soft);
+  --sl-color-text-accent: var(--accent);
+  --sl-color-text-invert: var(--page);
+
+  --sl-color-accent-low: var(--accent-soft);
+  --sl-color-accent: var(--accent);
+  --sl-color-accent-high: var(--action-bg);
+  --sl-color-bg-accent: var(--accent);
+
+  --sl-color-hairline: var(--line);
+  --sl-color-hairline-light: var(--line-strong);
+
+  --sl-color-gray-1: var(--ink);
+  --sl-color-gray-2: var(--ink-soft);
+  --sl-color-gray-3: var(--muted);
+  --sl-color-gray-4: var(--line);
+  --sl-color-gray-5: var(--line-strong);
+  --sl-color-gray-6: var(--surface);
+  --sl-color-gray-7: var(--surface);
+}
+
+/* The landing page's display face, so a heading reads the same on both sides. */
+.sl-markdown-content :is(h1, h2, h3, h4, h5, h6),
+.page-title,
+.site-title {
+  font-family: var(--face-display);
+  letter-spacing: -0.02em;
+}
+
+.site-title {
+  color: var(--sl-color-text);
+  font-weight: 600;
+}
+
+.site-title:hover {
+  color: var(--sl-color-text-accent);
+}
+
+/* Previous and Next as one-line rows; Starlight's cards are oversized. */
+.pagination-links a {
+  gap: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.375rem;
+  box-shadow: none;
+}
+
+.pagination-links .link-title {
+  font-size: var(--sl-text-base);
+  line-height: 1.3;
+}
+
+.pagination-links svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* Keys in the docs, matching the landing page's <kbd> treatment. */
+.sl-markdown-content kbd {
+  padding: 0.1em 0.35em;
+  border: 1px solid var(--sl-color-hairline-light);
+  border-radius: 0.3rem;
+  background-color: var(--sl-color-bg-inline-code);
+  font-family: var(--sl-font-mono);
+  font-size: 0.85em;
+}

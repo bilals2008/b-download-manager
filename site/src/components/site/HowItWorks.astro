@@ -1,0 +1,182 @@
+---
+import Icon from "./Icon.astro";
+
+const steps = [
+  {
+    number: "01",
+    title: "Probe",
+    body: "A one-byte range request reveals the size and proves the server honours ranges. A plain 200 answer means one connection.",
+  },
+  {
+    number: "02",
+    title: "Segment",
+    body: "The file is cut into contiguous ranges, targeting 16 MiB each, one per connection. Your connection limit decides how many run.",
+  },
+  {
+    number: "03",
+    title: "Verify",
+    body: "The head of each range is compared with the file head. A range that ignored the request is handed back and the file falls to one connection.",
+  },
+  {
+    number: "04",
+    title: "Reassemble",
+    body: "When the last range lands, the parts are joined in order and moved onto the destination.",
+  },
+];
+---
+
+<section id="how-it-works" class="section" aria-labelledby="how-title">
+  <div class="container-page">
+    <div class="steps-head reveal">
+      <p class="eyebrow">How it works</p>
+      <h2 id="how-title" class="section-title">Four moves, start to finish.</h2>
+      <p class="section-copy">
+        The engine works the same way over HTTP, HTTPS and FTP. The protocol
+        changes where the bytes come from, not how the file is put together.
+      </p>
+    </div>
+
+    <ol class="steps reveal">
+      {
+        steps.map((step) => (
+          <li class="step">
+            <span class="step-number" aria-hidden="true">{step.number}</span>
+            <h3 class="step-title">{step.title}</h3>
+            <p class="step-body">{step.body}</p>
+          </li>
+        ))
+      }
+    </ol>
+
+    <aside class="resume-note reveal" aria-label="Resume behaviour">
+      <p class="resume-label">
+        <Icon name="resume" size={16} />
+        Resume
+      </p>
+      <p class="resume-copy">
+        Every finished range is recorded in a manifest beside the parts. If the
+        app stops, the next run resumes from what is already on disk.
+      </p>
+    </aside>
+  </div>
+</section>
+
+<style>
+  .steps-head {
+    max-width: 46rem;
+    margin-inline: auto;
+    text-align: center;
+  }
+
+  .steps-head :global(.section-title) {
+    margin-inline: auto;
+  }
+
+  .steps-head :global(.section-copy) {
+    margin-inline: auto;
+  }
+
+  .steps {
+    display: grid;
+    margin-top: clamp(2.75rem, 5vw, 4rem);
+  }
+
+  .step {
+    position: relative;
+    padding-block: 1.5rem;
+    border-top: 1px solid var(--line);
+  }
+
+  .step:last-child {
+    border-bottom: 1px solid var(--line);
+  }
+
+  .step::before {
+    content: "";
+    position: absolute;
+    top: -3px;
+    left: 0;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background-color: var(--accent);
+  }
+
+  .step-number {
+    display: block;
+    color: var(--accent);
+    font-family: var(--face-mono);
+    font-size: var(--type-caption);
+    letter-spacing: 0.04em;
+    line-height: 1;
+  }
+
+  .step-title {
+    margin-top: 0.65rem;
+    color: var(--ink);
+    font-family: var(--face-display);
+    font-size: var(--type-step);
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+  }
+
+  .step-body {
+    margin-top: 0.6rem;
+    max-width: 34ch;
+    color: var(--muted);
+    font-size: var(--type-small);
+    line-height: 1.65;
+  }
+
+  .resume-note {
+    display: grid;
+    gap: 0.65rem;
+    margin-top: clamp(2.5rem, 4vw, 3.5rem);
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--line);
+  }
+
+  .resume-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--accent);
+    font-size: var(--type-caption);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    line-height: 1.4;
+    text-transform: uppercase;
+  }
+
+  .resume-copy {
+    max-width: 62ch;
+    color: var(--muted);
+    font-size: var(--type-small);
+    line-height: 1.65;
+  }
+
+  @media (min-width: 48rem) {
+    .resume-note {
+      grid-template-columns: 8rem minmax(0, 1fr);
+      gap: 1.5rem;
+    }
+  }
+
+  @media (min-width: 64rem) {
+    .steps {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      column-gap: 2.5rem;
+      border-top: 1px solid var(--line);
+    }
+
+    .step {
+      padding: 1.6rem 0 0;
+      border-top: 0;
+    }
+
+    .step:last-child {
+      border-bottom: 0;
+    }
+  }
+</style>

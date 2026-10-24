@@ -1,0 +1,94 @@
+---
+import Icon from "./Icon.astro";
+---
+
+<button
+  type="button"
+  class="theme-toggle"
+  data-theme-toggle
+  aria-label="Switch to light theme"
+>
+  <Icon name="sun" size={17} strokeWidth={1.4} class="theme-icon theme-icon--sun" />
+  <Icon name="moon" size={17} strokeWidth={1.4} class="theme-icon theme-icon--moon" />
+</button>
+
+<style>
+  .theme-toggle {
+    display: grid;
+    place-items: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    flex: none;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition:
+      color var(--duration-fast) var(--ease-out),
+      background-color var(--duration-fast) var(--ease-out),
+      border-color var(--duration-fast) var(--ease-out);
+  }
+
+  .theme-toggle:hover {
+    border-color: var(--line);
+    background-color: var(--surface);
+    color: var(--ink);
+  }
+
+  .theme-toggle:active {
+    transform: scale(0.96);
+  }
+
+  .theme-icon--sun {
+    display: none;
+  }
+
+  :global(html[data-theme="dark"]) .theme-icon--sun {
+    display: block;
+  }
+
+  :global(html[data-theme="dark"]) .theme-icon--moon {
+    display: none;
+  }
+</style>
+
+<script>
+  const toggle = document.querySelector<HTMLButtonElement>("[data-theme-toggle]");
+
+  if (toggle) {
+    const syncLabel = () => {
+      const dark = document.documentElement.dataset.theme === "dark";
+      toggle.setAttribute(
+        "aria-label",
+        dark ? "Switch to light theme" : "Switch to dark theme",
+      );
+    };
+
+    syncLabel();
+
+    toggle.addEventListener("click", () => {
+      const next =
+        document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+
+      document.documentElement.dataset.theme = next;
+
+      try {
+        localStorage.setItem("bdm-theme", next);
+        localStorage.setItem("starlight-theme", next);
+      } catch {
+        // A blocked storage API should not stop the theme from switching.
+      }
+
+      const themeColor = document.querySelector('meta[name="theme-color"]');
+      if (themeColor) {
+        themeColor.setAttribute(
+          "content",
+          next === "dark" ? "#08110e" : "#f5f6f2",
+        );
+      }
+
+      syncLabel();
+    });
+  }
+</script>

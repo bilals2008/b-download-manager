@@ -1,0 +1,152 @@
+---
+import Icon from "./Icon.astro";
+import TextLink from "./TextLink.astro";
+
+type Feature = {
+  icon: "network" | "resume" | "globe" | "gauge" | "browser" | "tray";
+  title: string;
+  body: string;
+};
+
+const features: Feature[] = [
+  {
+    icon: "network",
+    title: "Parallel by default",
+    body: "Each file is split into byte ranges with one connection each, up to 32, with a per-site cap and an application-wide connection budget.",
+  },
+  {
+    icon: "resume",
+    title: "Resume, not restart",
+    body: "A crash-safe manifest records every finished range. Pause, close the app, or lose power; the next run continues from the bytes on disk.",
+  },
+  {
+    icon: "globe",
+    title: "HTTP, HTTPS and FTP",
+    body: "Range requests over HTTP and HTTPS, and REST offsets over FTP. If a server ignores ranges, the file is fetched on one connection.",
+  },
+  {
+    icon: "gauge",
+    title: "Speed you set",
+    body: "A global ceiling and a per-download cap, applied across every connection, in KB/s or MB/s.",
+  },
+  {
+    icon: "browser",
+    title: "Browser hand-off",
+    body: "Firefox, Chrome and Edge extensions send links to the app over a local bridge. No native messaging host, no registry entry.",
+  },
+  {
+    icon: "tray",
+    title: "Out of the way",
+    body: "Close the window and the queue keeps going. The tray restores it, starts or stops the queue, and is the way out.",
+  },
+];
+---
+
+<section id="features" class="section" aria-labelledby="features-title">
+  <div class="container-page">
+    <div class="feature-grid">
+      <div class="feature-intro reveal">
+        <p class="eyebrow">What it does</p>
+        <h2 id="features-title" class="section-title">
+          The hard part is finishing.
+        </h2>
+        <p class="section-copy">
+          A dropped connection, a closed lid, a server that ignores ranges. The
+          engine handles the edges so the file still lands.
+        </p>
+        <TextLink href="/getting-started/" class="feature-link">
+          Read the documentation
+        </TextLink>
+      </div>
+
+      <ul class="feature-list reveal">
+        {
+          features.map((feature) => (
+            <li class="feature">
+              <span class="feature-icon">
+                <Icon name={feature.icon} size={18} />
+              </span>
+              <div>
+                <h3 class="feature-title">{feature.title}</h3>
+                <p class="feature-body">{feature.body}</p>
+              </div>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+  </div>
+</section>
+
+<style>
+  .feature-grid {
+    display: grid;
+    gap: 2.75rem;
+  }
+
+  .feature-intro {
+    align-self: start;
+  }
+
+  .feature-link {
+    margin-top: 2rem;
+  }
+
+  .feature-list {
+    display: grid;
+  }
+
+  .feature {
+    display: grid;
+    grid-template-columns: 1.5rem minmax(0, 1fr);
+    gap: 1rem;
+    padding-block: 1.4rem;
+  }
+
+  .feature:first-child {
+    padding-top: 0;
+  }
+
+  .feature:last-child {
+    padding-bottom: 0;
+  }
+
+  .feature + .feature {
+    border-top: 1px solid var(--line);
+  }
+
+  .feature-icon {
+    display: flex;
+    justify-content: flex-start;
+    padding-top: 0.15rem;
+    color: var(--accent);
+  }
+
+  .feature-title {
+    color: var(--ink);
+    font-size: var(--type-feature);
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    line-height: 1.35;
+  }
+
+  .feature-body {
+    margin-top: 0.4rem;
+    max-width: 56ch;
+    color: var(--muted);
+    font-size: var(--type-small);
+    line-height: 1.65;
+  }
+
+  @media (min-width: 56rem) {
+    .feature-grid {
+      grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
+      gap: clamp(3.5rem, 7vw, 6rem);
+    }
+
+    .feature-intro {
+      position: sticky;
+      top: var(--nav-offset);
+    }
+  }
+</style>

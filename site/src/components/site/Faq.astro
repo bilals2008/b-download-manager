@@ -1,0 +1,189 @@
+---
+import TextLink from "./TextLink.astro";
+
+type FaqItem = {
+  question: string;
+  answer: string;
+  link?: { href: string; label: string };
+};
+
+const faqs: FaqItem[] = [
+  {
+    question: "Is there an installer?",
+    answer:
+      "Not yet. The app is at 0.1.0 and builds from source with Node.js, Rust and pnpm. The installation guide covers Windows, macOS and Linux.",
+    link: { href: "/installation/", label: "Installation requirements" },
+  },
+  {
+    question: "What happens if a download is interrupted?",
+    answer:
+      "The part files and a JSON manifest stay on disk. On the next run the engine resumes from the recorded ranges, as long as the server still honours range requests.",
+  },
+  {
+    question: "Which browsers can send links to the app?",
+    answer:
+      "Firefox has a full extension with an IDM-style video button and live progress. Chrome and Edge have a hand-off build. Both use the same local bridge inside the application.",
+  },
+  {
+    question: "Can I limit the download speed?",
+    answer:
+      "Yes. Set one cap for the whole application and one for each download, in KB/s or MB/s. The engine applies the cap across every connection.",
+  },
+  {
+    question: "Is scheduling available?",
+    answer:
+      "Not yet. Scheduling, media splitting and a few other IDM features are still planned. The queue, pause and resume, the tray and both browser extensions work today.",
+    link: { href: "/troubleshooting/", label: "Troubleshooting and known limits" },
+  },
+];
+---
+
+<section id="faq" class="section" aria-labelledby="faq-title">
+  <div class="container-page">
+    <div class="faq-grid">
+      <div class="faq-intro reveal">
+        <p class="eyebrow">FAQ</p>
+        <h2 id="faq-title" class="section-title">Straight answers.</h2>
+        <p class="section-copy">
+          These are the answers the current build can support. If you hit
+          something else, the troubleshooting page is the next stop.
+        </p>
+        <TextLink href="/troubleshooting/" class="faq-link">
+          Go to troubleshooting
+        </TextLink>
+      </div>
+
+      <div class="faq-list reveal">
+        {
+          faqs.map((faq) => (
+            <details class="faq-item">
+              <summary class="faq-question">
+                <span>{faq.question}</span>
+                <span class="faq-icon" aria-hidden="true"></span>
+              </summary>
+              <div class="faq-answer">
+                <p>{faq.answer}</p>
+                {faq.link && (
+                  <a class="faq-answer-link" href={faq.link.href}>
+                    {faq.link.label}
+                  </a>
+                )}
+              </div>
+            </details>
+          ))
+        }
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .faq-grid {
+    display: grid;
+    gap: 2.75rem;
+  }
+
+  .faq-intro {
+    align-self: start;
+  }
+
+  .faq-link {
+    margin-top: 2rem;
+  }
+
+  .faq-list {
+    border-top: 1px solid var(--line);
+  }
+
+  .faq-item {
+    border-bottom: 1px solid var(--line);
+  }
+
+  .faq-question {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    min-height: 3.75rem;
+    padding-block: 1.25rem;
+    color: var(--ink);
+    font-size: var(--type-body);
+    font-weight: 500;
+    line-height: 1.45;
+    transition: color var(--duration-fast) var(--ease-out);
+  }
+
+  .faq-question:hover {
+    color: var(--accent);
+  }
+
+  .faq-icon {
+    position: relative;
+    width: 0.875rem;
+    height: 0.875rem;
+    flex: none;
+    color: var(--muted);
+  }
+
+  .faq-icon::before,
+  .faq-icon::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 100%;
+    height: 1px;
+    background-color: currentColor;
+    transform: translate(-50%, -50%);
+  }
+
+  .faq-icon::after {
+    width: 1px;
+    height: 100%;
+    transition: transform var(--duration-base) var(--ease-out);
+  }
+
+  .faq-item[open] .faq-icon::after {
+    transform: translate(-50%, -50%) rotate(90deg);
+  }
+
+  .faq-answer {
+    max-width: 58ch;
+    padding-bottom: 1.4rem;
+    color: var(--muted);
+    font-size: var(--type-small);
+    line-height: 1.7;
+    animation: faq-open 240ms var(--ease-out) both;
+  }
+
+  .faq-answer-link {
+    display: inline-block;
+    margin-top: 0.7rem;
+    color: var(--accent);
+    font-weight: 500;
+    text-underline-offset: 0.22em;
+    text-decoration-thickness: 1px;
+  }
+
+  .faq-answer-link:hover {
+    color: var(--ink);
+  }
+
+  @media (min-width: 56rem) {
+    .faq-grid {
+      grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
+      gap: clamp(3.5rem, 7vw, 6rem);
+    }
+  }
+
+  @keyframes faq-open {
+    from {
+      opacity: 0;
+      transform: translate3d(0, -4px, 0);
+    }
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0);
+    }
+  }
+</style>

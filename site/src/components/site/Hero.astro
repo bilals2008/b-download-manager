@@ -1,0 +1,226 @@
+---
+import Button from "./Button.astro";
+import Icon from "./Icon.astro";
+---
+
+<section class="hero" aria-labelledby="hero-title">
+  <div class="container-page">
+    <div class="hero-copy">
+      <p class="hero-eyebrow">
+        <span class="hero-eyebrow-mark" aria-hidden="true"></span>
+        Desktop download manager · 0.1.0 preview
+      </p>
+
+      <h1 id="hero-title" class="hero-title">
+        Pick up where it stopped<span class="hero-title-dot">.</span>
+      </h1>
+
+      <p class="hero-lede">
+        B Download Manager splits large files across parallel connections and
+        keeps every byte on disk. Pause, crash, or restart: it continues from
+        where it stopped.
+      </p>
+
+      <div class="hero-actions">
+        <Button href="/installation/" variant="primary" icon="arrow-right">
+          Install from source
+        </Button>
+        <a class="hero-secondary" href="#how-it-works">
+          <span>See how it works</span>
+          <Icon name="arrow-down" size={15} />
+        </a>
+      </div>
+
+      <ul class="hero-specs" aria-label="Product facts">
+        <li>Up to 32 connections</li>
+        <li>HTTP, HTTPS, FTP</li>
+        <li>Windows, macOS, Linux</li>
+      </ul>
+    </div>
+
+    <figure class="hero-figure reveal">
+      <div class="hero-figure-frame">
+        <img
+          src="https://placehold.co/1200x640/0a1511/e9efe9?text=Main+window+preview&font=montserrat"
+          width="1200"
+          height="640"
+          alt="Placeholder for the B Download Manager main window with the download list"
+          loading="eager"
+          fetchpriority="high"
+          decoding="async"
+        />
+      </div>
+    </figure>
+  </div>
+</section>
+
+<style>
+  .hero {
+    padding-block: clamp(3.5rem, 7vw, 6.5rem) clamp(4.5rem, 9vw, 8rem);
+  }
+
+  .hero-copy {
+    max-width: 64rem;
+    margin-inline: auto;
+    text-align: center;
+  }
+
+  .hero-copy > * {
+    animation: hero-rise 820ms var(--ease-spring) both;
+  }
+
+  .hero-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    color: var(--muted);
+    font-size: var(--type-caption);
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    line-height: 1.3;
+    animation-delay: 40ms;
+  }
+
+  .hero-eyebrow-mark {
+    width: 0.4rem;
+    height: 0.4rem;
+    flex: none;
+    border-radius: 1px;
+    background-color: var(--accent);
+  }
+
+  .hero-title {
+    max-width: 18ch;
+    margin: 1.35rem auto 0;
+    color: var(--ink);
+    font-family: var(--face-display);
+    font-size: var(--type-hero);
+    font-optical-sizing: auto;
+    font-weight: 500;
+    letter-spacing: -0.045em;
+    line-height: 0.94;
+    text-wrap: balance;
+    animation-delay: 120ms;
+  }
+
+  .hero-title-dot {
+    color: var(--accent);
+  }
+
+  .hero-lede {
+    max-width: 56ch;
+    margin: 1.75rem auto 0;
+    color: var(--muted);
+    font-size: var(--type-lede);
+    line-height: 1.55;
+    animation-delay: 220ms;
+  }
+
+  .hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem 1.5rem;
+    margin-top: 2.25rem;
+    animation-delay: 320ms;
+  }
+
+  .hero-secondary {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-height: 2.75rem;
+    padding: 0.25rem 0;
+    border-bottom: 1px solid transparent;
+    color: var(--ink-soft);
+    font-size: var(--type-small);
+    font-weight: 500;
+    text-decoration: none;
+    transition:
+      color var(--duration-fast) var(--ease-out),
+      border-color var(--duration-fast) var(--ease-out);
+  }
+
+  .hero-secondary:hover {
+    color: var(--ink);
+    border-color: var(--muted);
+  }
+
+  .hero-secondary :global(svg) {
+    transition: transform var(--duration-fast) var(--ease-out);
+  }
+
+  .hero-secondary:hover :global(svg) {
+    transform: translateY(2px);
+  }
+
+  .hero-specs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem 1.25rem;
+    margin-top: 2.5rem;
+    color: var(--muted);
+    font-size: var(--type-caption);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.5;
+    animation-delay: 400ms;
+  }
+
+  .hero-specs li {
+    display: inline-flex;
+    align-items: center;
+    gap: 1.25rem;
+  }
+
+  .hero-specs li + li::before {
+    content: "/";
+    color: var(--line-strong);
+    font-family: var(--face-mono);
+  }
+
+  .hero-figure {
+    margin-top: clamp(3rem, 6vw, 5rem);
+  }
+
+  .hero-figure-frame {
+    overflow: hidden;
+    border: 1px solid var(--figure-border);
+    border-radius: var(--radius-md);
+    background-color: var(--figure-bg);
+    box-shadow: var(--shadow-figure);
+  }
+
+  .hero-figure img {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1200 / 640;
+    object-fit: cover;
+  }
+
+  @media (min-width: 48rem) {
+    .hero-figure-frame {
+      border-radius: var(--radius-lg);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hero-copy > * {
+      animation: none;
+    }
+  }
+
+  @keyframes hero-rise {
+    from {
+      opacity: 0;
+      transform: translate3d(0, 16px, 0);
+    }
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0);
+    }
+  }
+</style>
