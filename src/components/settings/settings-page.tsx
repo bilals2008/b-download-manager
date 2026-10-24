@@ -17,12 +17,12 @@ export function SettingsPage({
   children: ReactNode;
 }) {
   return (
-    <div className="flex w-full max-w-[30rem] flex-col px-4 pt-5 pb-6">
+    <div className="flex w-full flex-col px-5 py-5">
       <header className="pb-5">
-        <h2 className="text-base font-medium text-chrome-title-text">{title}</h2>
+        <h2 className="text-sm font-medium text-chrome-title-text">{title}</h2>
         <p className="mt-0.5 text-xs text-chrome-muted">{description}</p>
       </header>
-      <div className="flex flex-col gap-5">{children}</div>
+      <div className="flex flex-col gap-6">{children}</div>
     </div>
   );
 }
@@ -33,26 +33,14 @@ export function SettingsPage({
  */
 export function Section({
   title,
-  planned,
   children,
 }: {
   title: string;
-  /** Marks a group the build does not have yet. */
-  planned?: boolean;
   children: ReactNode;
 }) {
   return (
     <section aria-label={title} className="flex flex-col">
-      <div className="flex h-5 items-center justify-between gap-3">
-        <h3 className="text-chrome-micro font-medium text-chrome-muted">
-          {title}
-        </h3>
-        {planned ? (
-          <span className="rounded-full border border-chrome-line px-1.5 py-px text-chrome-micro text-chrome-muted">
-            Planned
-          </span>
-        ) : null}
-      </div>
+      <h3 className="pb-1.5 text-xs font-medium text-chrome-muted">{title}</h3>
       <div className="flex flex-col">{children}</div>
     </section>
   );
@@ -84,7 +72,7 @@ export function SettingRow({
   return (
     <div
       className={cn(
-        "gap-4 py-2.5",
+        "gap-4 py-2",
         stacked ? "flex flex-col" : "flex items-center justify-between",
       )}
     >
@@ -97,9 +85,7 @@ export function SettingRow({
           <span className={name}>{label}</span>
         )}
         {hint ? (
-          <p className="text-chrome-micro leading-4 text-chrome-muted">
-            {hint}
-          </p>
+          <p className="text-chrome-micro leading-4 text-chrome-muted">{hint}</p>
         ) : null}
       </div>
       <div className={stacked ? "w-full" : "shrink-0"}>{children}</div>

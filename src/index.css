@@ -242,6 +242,9 @@
      controls. */
   --radius: 0.75rem;
 
+  /* The custom scrollbar track is drawn thin and follows the theme. */
+  --scrollbar-width: 6px;
+
   /*
     One canvas, one colour: every surface is the same near-black, and panes,
     popups, fields and buttons find their edge with a hairline instead of a
@@ -545,6 +548,9 @@
   /* The connection details step into the room the window grows for them. */
   --animate-details-in: details-in 180ms ease-out;
 
+  /* A settings page settles in when its tab is picked. */
+  --animate-page-in: page-in 160ms ease-out;
+
   /* Secondary metadata, one step below the body size. */
   --text-chrome-micro: 0.6875rem;
   --text-chrome-micro--line-height: 1rem;
@@ -636,6 +642,18 @@
   }
 }
 
+/* A page rises the last few pixels as it replaces the one before it. */
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.2rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /*
   The tooltip rises out of its trigger, softens into focus, and leaves on the
   same curve in reverse. The node is dropped when the leave transition ends;
@@ -706,6 +724,41 @@
 
   &::-webkit-scrollbar {
     display: none;
+  }
+}
+
+/*
+  A thin custom scrollbar drawn from the theme tokens, so it follows the
+  appearance switch instead of painting a foreign OS bar over the window.
+*/
+@utility scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-muted-foreground) var(--color-background);
+
+  &::-webkit-scrollbar {
+    width: var(--scrollbar-width);
+    height: var(--scrollbar-width);
+  }
+
+  &::-webkit-scrollbar-track {
+    background: var(--color-background);
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background-color: var(--color-muted-foreground);
+    border-radius: calc(var(--scrollbar-width) * 2);
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-accent-foreground);
+  }
+
+  &::-webkit-scrollbar-button {
+    display: none;
+  }
+
+  &::-webkit-scrollbar-corner {
+    background: var(--color-background);
   }
 }
 

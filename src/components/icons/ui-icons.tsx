@@ -171,7 +171,9 @@ export type SettingsGlyphKind =
   | "proxy"
   | "sites"
   | "dial-up"
-  | "sounds";
+  | "sounds"
+  | "planned"
+  | "browser";
 
 export function SettingsGlyph({
   kind,
@@ -229,6 +231,23 @@ export function SettingsGlyph({
         <Glyph className={className}>
           <path d="M2.4 6.2h2.4L8 3.4v9.2L4.8 9.8H2.4z" />
           <path d="M10.4 6a3 3 0 0 1 0 4M12.2 4a5.6 5.6 0 0 1 0 8" />
+        </Glyph>
+      );
+    case "planned":
+      return (
+        <Glyph className={className}>
+          <circle cx="8" cy="8" r="5.8" />
+          <path d="M8 4.8V8l2.2 1.4" />
+        </Glyph>
+      );
+    case "browser":
+      return (
+        <Glyph className={className}>
+          <rect x="2.2" y="2.8" width="11.6" height="10.4" rx="1.6" />
+          <path d="M2.2 5.8h11.6" />
+          <path d="M4.4 4.3h.01M6 4.3h.01" />
+          <circle cx="8" cy="9.4" r="2.1" />
+          <path d="M5.9 9.4h4.2" />
         </Glyph>
       );
     default:

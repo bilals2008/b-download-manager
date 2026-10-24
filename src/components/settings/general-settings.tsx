@@ -5,7 +5,6 @@ import {
   SettingRow,
   SettingsPage,
 } from "@/components/settings/settings-page";
-import { Checkbox } from "@/components/ui/checkbox";
 import { ListBox } from "@/components/ui/listbox";
 import { Switch } from "@/components/ui/switch";
 import { FONT_OPTIONS, WEIGHT_OPTIONS } from "@/lib/fonts";
@@ -16,48 +15,15 @@ interface GeneralSettingsProps {
   onChange: <K extends keyof Settings>(key: K, value: Settings[K]) => void;
 }
 
-/** The browsers IDM watches, in the order its General page lists them. */
-const BROWSERS = [
-  "Apple Safari",
-  "Google Chrome",
-  "Internet Explorer",
-  "Microsoft Edge",
-  "Microsoft Edge Legacy",
-  "Mozilla Firefox",
-  "Opera",
-];
-
-const INTEGRATIONS = [
-  {
-    label: "Keyboard shortcuts",
-    description: "Prevent or force a download from the keyboard.",
-    action: "Set keys",
-  },
-  {
-    label: "Browser context menu",
-    description: "Add download commands to the browser menu.",
-    action: "Edit",
-  },
-  {
-    label: "Download panel",
-    description: "Show the download panel inside browsers.",
-    action: "Edit",
-  },
-];
-
-const OUTLINE_BUTTON =
-  "inline-flex h-7 shrink-0 items-center justify-center rounded-chrome border border-chrome-line bg-chrome-canvas px-2.5 text-xs text-chrome-menu-text transition-colors hover:border-chrome-muted focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none disabled:cursor-default disabled:opacity-45 disabled:hover:border-chrome-line";
-
 /**
- * The General page: appearance, startup, the tray, and the browser sections.
- * Preferences are stored locally; the browser sections are marked Planned
- * because capture ships separately.
+ * The General page: appearance, startup and the tray. Everything that needs a
+ * browser, a shortcut or a sound lives on the Planned page until it works.
  */
 export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
   return (
     <SettingsPage
       title="General"
-      description="Startup, appearance and browser capture."
+      description="Startup, appearance and the tray."
     >
       <Section title="Appearance">
         <SettingRow label="Theme" hint="Auto follows Windows.">
@@ -125,49 +91,6 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
             onChange={(checked) => onChange("minimizeToTray", checked)}
           />
         </SettingRow>
-      </Section>
-
-      <Section title="Browser integration">
-        <SettingRow
-          label="Status"
-          hint="Browser integration is not part of this build yet."
-        >
-          <div className="flex items-center gap-2">
-            <span className="flex items-center gap-1.5 rounded-full border border-chrome-line px-2 py-0.5 text-chrome-micro text-chrome-muted">
-              <span
-                aria-hidden="true"
-                className="size-1.5 rounded-full bg-chrome-muted"
-              />
-              Not connected
-            </span>
-            <button type="button" disabled className={OUTLINE_BUTTON}>
-              Restart
-            </button>
-          </div>
-        </SettingRow>
-      </Section>
-
-      <Section title="Capture from browsers" planned>
-        <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-2">
-          {BROWSERS.map((browser) => (
-            <Checkbox key={browser} label={browser} defaultChecked disabled />
-          ))}
-        </div>
-        <div className="py-2.5">
-          <button type="button" disabled className={OUTLINE_BUTTON}>
-            Add browser…
-          </button>
-        </div>
-      </Section>
-
-      <Section title="Integration" planned>
-        {INTEGRATIONS.map(({ label, description, action }) => (
-          <SettingRow key={label} label={label} hint={description}>
-            <button type="button" disabled className={OUTLINE_BUTTON}>
-              {action}
-            </button>
-          </SettingRow>
-        ))}
       </Section>
     </SettingsPage>
   );

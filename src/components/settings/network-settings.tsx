@@ -1,4 +1,4 @@
-import { NumberInput } from "@/components/settings/fields";
+import { NumberInput, TextInput } from "@/components/settings/fields";
 import {
   Section,
   SettingRow,
@@ -7,25 +7,22 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { MAX_CONNECTIONS, type Settings } from "@/lib/settings";
 
-interface ConnectionSettingsProps {
+interface NetworkSettingsProps {
   settings: Settings;
   onChange: <K extends keyof Settings>(key: K, value: Settings[K]) => void;
 }
 
 /**
- * The Connection page: the cap on the connections of the whole application
- * and the bandwidth cap.
+ * The Network page: how much of the connection the app may use, and the proxy
+ * the downloads go through.
  */
-export function ConnectionSettings({
-  settings,
-  onChange,
-}: ConnectionSettingsProps) {
+export function NetworkSettings({ settings, onChange }: NetworkSettingsProps) {
   const limitInKb = Math.round(settings.speedLimitBytes / 1024);
 
   return (
     <SettingsPage
-      title="Connection"
-      description="How much of the network the app may use."
+      title="Network"
+      description="Connections, speed limit and the proxy."
     >
       <Section title="Connections">
         <SettingRow
@@ -68,6 +65,23 @@ export function ConnectionSettings({
             suffix="KB/s"
             disabled={!settings.speedLimitEnabled}
             onChange={(value) => onChange("speedLimitBytes", value * 1024)}
+          />
+        </SettingRow>
+      </Section>
+
+      <Section title="Proxy">
+        <SettingRow
+          stacked
+          label="Proxy address"
+          htmlFor="proxy-address"
+          hint="For example socks5://127.0.0.1:1080. Empty connects directly."
+        >
+          <TextInput
+            id="proxy-address"
+            mono
+            value={settings.proxyUrl}
+            placeholder="socks5://127.0.0.1:1080"
+            onChange={(value) => onChange("proxyUrl", value)}
           />
         </SettingRow>
       </Section>

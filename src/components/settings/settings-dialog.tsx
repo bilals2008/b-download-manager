@@ -1,19 +1,29 @@
 import { useEffect, useRef, useState } from "react";
 
-import { ConnectionSettings } from "@/components/settings/connection-settings";
 import { DownloadsSettings } from "@/components/settings/downloads-settings";
 import { GeneralSettings } from "@/components/settings/general-settings";
-import { ProxySettings } from "@/components/settings/proxy-settings";
-import { SaveToSettings } from "@/components/settings/save-to-settings";
+import { NetworkSettings } from "@/components/settings/network-settings";
+import { PlannedSettings } from "@/components/settings/planned-settings";
 import {
-  SettingsNav,
-  type SettingsPageId,
+  OPEN_PAGES,
+  PLANNED_TAB,
+  type SettingsTabId,
 } from "@/components/settings/settings-nav";
+import { SettingsGlyph } from "@/components/icons/ui-icons";
 import { Dialog } from "@/components/ui/dialog";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { broadcastSettings } from "@/lib/app-events";
 import { describeError } from "@/lib/errors";
 import { applyFont, applyWeight } from "@/lib/fonts";
-import { setBrowserFolder, setMaxConnections, setMinimizeToTray, setProxy, setShowCompleteDialog, setSpeedLimit } from "@/lib/ipc";
+import { cn } from "@/lib/utils";
+import {
+  setBrowserFolder,
+  setMaxConnections,
+  setMinimizeToTray,
+  setProxy,
+  setShowCompleteDialog,
+  setSpeedLimit,
+} from "@/lib/ipc";
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type Settings } from "@/lib/settings";
 import { applyTheme } from "@/lib/theme";
 
@@ -47,7 +57,7 @@ const ENGINE_KEYS: readonly (keyof Settings)[] = [
  */
 export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const [page, setPage] = useState<SettingsPageId>("general");
+  const [page, setPage] = useState<SettingsTabId>("general");
   const [error, setError] = useState<string | null>(null);
   const pushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -115,11 +125,10 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
       open={open}
       title="Settings"
       onClose={onClose}
-      // The options window is the main window's sibling, not a popup: the same
-      // canvas, the same hairline, so the two windows read as one product.
-      className="h-[min(40rem,calc(100dvh-2rem))] w-[min(48rem,calc(100vw-2rem))] max-w-none bg-chrome-panel"
+      className="h-[min(42rem,calc(100dvh-2rem))] w-[min(52rem,calc(100vw-2rem))] max-w-none bg-chrome-panel"
       headerClassName="border-b border-chrome-line pr-1.5"
-      bodyClassName="flex min-h-0 gap-0 p-0"
+      tooltips={false}
+      bodyClassName="flex min-h-0 flex-col gap-0 p-0"
       footerClassName="items-center border-t border-chrome-line px-4 py-2.5"
       footer={
         <>
@@ -141,24 +150,51 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
         </>
       }
     >
-      <SettingsNav page={page} onSelect={setPage} />
-      <div className="scrollbar-none min-h-0 flex-1 overflow-y-auto">
-        {page === "general" ? (
+      <Tabs
+        value={page}
+        onValueChange={setPage as (value: string) => void}
+        className="min-h-0 w-full flex-1"
+      >
+        <TabsList className="w-full">
+          {OPEN_PAGES.map(({ id, label, glyph }) => (
+            <TabsTrigger key={id} value={id}>
+              <SettingsGlyph
+                kind={glyph}
+                className={cn(
+                  "size-4 shrink-0",
+                  page === id ? "text-chrome-focus" : "text-chrome-muted",
+                )}
+              />
+              <span className="ml-1.5 shrink-0 truncate">{label}</span>
+            </TabsTrigger>
+          ))}
+          <TabsTrigger value={PLANNED_TAB}>
+            <SettingsGlyph
+              kind="planned"
+              className={cn(
+                "size-4 shrink-0",
+                page === PLANNED_TAB
+                  ? "text-chrome-focus"
+                  : "text-chrome-muted",
+              )}
+            />
+            <span className="ml-1.5 shrink-0 truncate">Planned</span>
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="general">
           <GeneralSettings settings={settings} onChange={update} />
-        ) : null}
-        {page === "save-to" ? (
-          <SaveToSettings settings={settings} onChange={update} />
-        ) : null}
-        {page === "downloads" ? (
+        </TabsContent>
+        <TabsContent value="downloads">
           <DownloadsSettings settings={settings} onChange={update} />
-        ) : null}
-        {page === "connection" ? (
-          <ConnectionSettings settings={settings} onChange={update} />
-        ) : null}
-        {page === "proxy" ? (
-          <ProxySettings settings={settings} onChange={update} />
-        ) : null}
-      </div>
+        </TabsContent>
+        <TabsContent value="network">
+          <NetworkSettings settings={settings} onChange={update} />
+        </TabsContent>
+        <TabsContent value={PLANNED_TAB}>
+          <PlannedSettings />
+        </TabsContent>
+      </Tabs>
     </Dialog>
   );
 }

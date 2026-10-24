@@ -24,6 +24,11 @@ interface DialogProps {
    * flight with nothing to explain it.
    */
   dismissible?: boolean;
+  /**
+   * Whether the title and the close button carry tooltips. A window that is
+   * itself the title bar turns them off: nothing there needs explaining.
+   */
+  tooltips?: boolean;
 }
 
 /**
@@ -41,6 +46,7 @@ export function Dialog({
   headerClassName,
   footerClassName,
   dismissible = true,
+  tooltips = true,
 }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
 
@@ -56,6 +62,18 @@ export function Dialog({
       element.close();
     }
   }, [open]);
+
+  const closeButton = (
+    <button
+      type="button"
+      onClick={onClose}
+      aria-label="Close"
+      disabled={!dismissible}
+      className="flex size-7 shrink-0 items-center justify-center rounded-chrome text-chrome-muted transition-colors hover:bg-chrome-menu-hover hover:text-chrome-menu-text focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-chrome-muted"
+    >
+      <CloseGlyph className="size-3.5" />
+    </button>
+  );
 
   return (
     <dialog
@@ -83,22 +101,26 @@ export function Dialog({
           headerClassName,
         )}
       >
-        <Tooltip content={title} side="bottom" className="min-w-0 flex-1">
-          <span className="block truncate text-sm text-chrome-title-text">
-            {title}
-          </span>
-        </Tooltip>
-        <Tooltip content="Close" side="bottom">
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            disabled={!dismissible}
-            className="flex size-7 shrink-0 items-center justify-center rounded-chrome text-chrome-muted transition-colors hover:bg-chrome-menu-hover hover:text-chrome-menu-text focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-chrome-muted"
-          >
-            <CloseGlyph className="size-3.5" />
-          </button>
-        </Tooltip>
+        {tooltips ? (
+          <Tooltip content={title} side="bottom" className="min-w-0 flex-1">
+            <span className="block truncate text-sm text-chrome-title-text">
+              {title}
+            </span>
+          </Tooltip>
+        ) : (
+          <div className="min-w-0 flex-1">
+            <span className="block truncate text-sm text-chrome-title-text">
+              {title}
+            </span>
+          </div>
+        )}
+        {tooltips ? (
+          <Tooltip content="Close" side="bottom">
+            {closeButton}
+          </Tooltip>
+        ) : (
+          closeButton
+        )}
       </div>
       <div className={cn("min-h-0 flex-1 px-4 pb-3", bodyClassName)}>
         {children}

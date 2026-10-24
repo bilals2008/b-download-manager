@@ -1,4 +1,4 @@
-import { NumberInput } from "@/components/settings/fields";
+import { NumberInput, TextInput } from "@/components/settings/fields";
 import {
   Section,
   SettingRow,
@@ -13,15 +13,32 @@ interface DownloadsSettingsProps {
 }
 
 /**
- * The Downloads page: how many connections a file gets, and what happens when
- * one finishes.
+ * The Downloads page: where a file lands, how many connections it gets, and
+ * what happens when it finishes.
  */
 export function DownloadsSettings({ settings, onChange }: DownloadsSettingsProps) {
   return (
     <SettingsPage
       title="Downloads"
-      description="How a new download starts, and how many connections it gets."
+      description="Where files are saved and how a download runs."
     >
+      <Section title="Save to">
+        <SettingRow
+          stacked
+          label="Default folder"
+          htmlFor="save-to-folder"
+          hint="Empty uses the Downloads folder of Windows."
+        >
+          <TextInput
+            id="save-to-folder"
+            mono
+            value={settings.defaultFolder}
+            placeholder="C:\Users\you\Downloads"
+            onChange={(value) => onChange("defaultFolder", value)}
+          />
+        </SettingRow>
+      </Section>
+
       <Section title="Connections">
         <SettingRow
           label="Default number of connections"
@@ -50,13 +67,6 @@ export function DownloadsSettings({ settings, onChange }: DownloadsSettingsProps
             onChange={(checked) => onChange("showCompleteDialog", checked)}
           />
         </SettingRow>
-      </Section>
-
-      <Section title="The list">
-        <p className="py-2.5 text-xs leading-5 text-chrome-muted">
-          The list keeps every download that was started, and a download that
-          was stopped can be started again from where it stopped.
-        </p>
       </Section>
     </SettingsPage>
   );
