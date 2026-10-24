@@ -146,6 +146,549 @@ fn spawn_flaky_server(data: Vec<u8>, failures: usize) -> String {
     format!("http://127.0.0.1:{port}/file.bin")
 }
 
+/// A server whose answer is built from the request head and the number of
+/// requests it has seen. `None` closes the connection without an answer.
+fn spawn_scripted_server(
+    answer: impl Fn(&str, usize) -> Option<Vec<u8>> + Send + 'static,
+) -> (String, mpsc::Receiver<String>) {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+    let port = listener.local_addr().expect("addr").port();
+    let (tx, rx) = mpsc::channel();
+
+    std::thread::spawn(move || {
+        for (seen, stream) in listener.incoming().enumerate() {
+            let Ok(mut stream) = stream else { break };
+            let mut buf = [0u8; 4096];
+            let Ok(read) = stream.read(&mut buf) else {
+                break;
+            };
+            let head = String::from_utf8_lossy(&buf[..read]).to_string();
+            let _ = tx.send(head.clone());
+            if let Some(response) = answer(&head, seen) {
+                let _ = stream.write_all(&response);
+                let _ = stream.flush();
+            }
+        }
+    });
+
+    (format!("http://127.0.0.1:{port}/file.bin"), rx)
+}
+
+/// The byte range a request asks for, with the end defaulting to the last
+/// byte of the file.
+fn requested_range(head: &str, len: usize) -> (usize, usize) {
+    let value = head
+        .lines()
+        .find(|line| line.to_ascii_lowercase().starts_with("range:"))
+        .and_then(|line| line.split(':').nth(1))
+        .map(|value| value.trim().trim_start_matches("bytes=").to_string())
+        .unwrap_or_else(|| format!("0-{}", len.saturating_sub(1)));
+
+    let mut parts = value.split('-');
+    let start = parts
+        .next()
+        .and_then(|start| start.parse().ok())
+        .unwrap_or(0);
+    let end = parts
+        .next()
+        .and_then(|end| end.parse().ok())
+        .unwrap_or(len.saturating_sub(1))
+        .min(len.saturating_sub(1));
+    (start, end)
+}
+
+/// A `206` answer for the bytes `start..=end` of `data`, with extra headers.
+fn partial_response(data: &[u8], start: usize, end: usize, extra: &str) -> Vec<u8> {
+    let end = end.min(data.len().saturating_sub(1));
+    let slice: &[u8] = if start <= end {
+        &data[start..=end]
+    } else {
+        &[]
+    };
+    let mut response = format!(
+        "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {start}-{end}/{}\r\nAccept-Ranges: bytes\r\nConnection: close\r\n{}\r\n",
+        slice.len(),
+        data.len(),
+        extra
+    )
+    .into_bytes();
+    response.extend_from_slice(slice);
+    response
+}
+
+/// The heads of the requests the server has answered so far, in lower case.
+fn requests_so_far(requests: &mpsc::Receiver<String>) -> Vec<String> {
+    std::iter::from_fn(|| requests.try_recv().ok())
+        .map(|head| head.to_ascii_lowercase())
+        .collect()
+}
+
+#[tokio::test]
+async fn every_range_carries_the_validator_of_the_probe() {
+    let data = sample_data();
+    let served = data.clone();
+    let (url, requests) = spawn_scripted_server(move |head, _| {
+        let (start, end) = requested_range(head, served.len());
+        Some(partial_response(&served, start, end, "ETag: \"v1\"\r\n"))
+    });
+    let dir = temp_dir("if-range");
+    let dest = dir.join("out.bin");
+
+    let download = Download::new(50, url, dest.clone(), 1, None, None).expect("download");
+    run(silent(), Limits::default(), download.clone()).await;
+
+    assert_eq!(download.info().status, Status::Completed);
+    assert_eq!(std::fs::read(&dest).expect("destination"), data);
+
+    let heads = requests_so_far(&requests);
+    let data_requests: Vec<&String> = heads
+        .iter()
+        .filter(|head| !head.contains("range: bytes=0-0\r\n"))
+        .collect();
+    assert!(!data_requests.is_empty(), "the range was never asked for");
+    assert!(
+        data_requests
+            .iter()
+            .all(|head| head.contains("if-range: \"v1\"")),
+        "every range must name the version it belongs to: {heads:?}"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn a_resume_of_a_file_that_changed_starts_over() {
+    let data = sample_data();
+    let served = data.clone();
+    let (url, requests) = spawn_scripted_server(move |head, _| {
+        let (start, end) = requested_range(head, served.len());
+        Some(partial_response(&served, start, end, "ETag: \"new\"\r\n"))
+    });
+    let dir = temp_dir("changed-validator");
+    let dest = dir.join("out.bin");
+    let download = Download::new(51, url, dest.clone(), 1, None, None).expect("download");
+
+    // The plan on disk belongs to the version the server served before.
+    let mut segments = segmenter::plan(data.len() as u64, 1, &dir, &download.stem);
+    segments[0].downloaded = 400;
+    std::fs::write(&segments[0].part, &data[..400]).expect("part file");
+    let manifest = Manifest {
+        url: download.url.clone(),
+        total: data.len() as u64,
+        segments,
+        validator: Some("\"old\"".to_string()),
+    };
+    std::fs::write(
+        &download.manifest,
+        serde_json::to_string(&manifest).expect("manifest"),
+    )
+    .expect("write manifest");
+
+    run(silent(), Limits::default(), download.clone()).await;
+
+    assert_eq!(
+        download.info().status,
+        Status::Completed,
+        "error: {:?}",
+        download.info().error
+    );
+    assert_eq!(std::fs::read(&dest).expect("destination"), data);
+
+    let heads = requests_so_far(&requests);
+    assert!(
+        heads
+            .iter()
+            .any(|head| head.contains("range: bytes=0-1023")),
+        "the bytes of the old version must be fetched again: {heads:?}"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn a_changed_size_in_the_answer_is_refused() {
+    let data = sample_data();
+    let (url, requests) = spawn_scripted_server(move |head, seen| {
+        let (start, end) = requested_range(head, data.len());
+        if seen == 0 {
+            return Some(partial_response(&data, start, end, "ETag: \"v1\"\r\n"));
+        }
+        // The same range, from a file that is now twice as big.
+        Some(
+            format!(
+                "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {start}-{end}/{}\r\nConnection: close\r\n\r\n",
+                end - start + 1,
+                data.len() * 2
+            )
+            .into_bytes(),
+        )
+    });
+    let dir = temp_dir("changed-size");
+    let dest = dir.join("out.bin");
+    let download = Download::new(52, url, dest.clone(), 1, None, None).expect("download");
+
+    run(silent(), Limits::default(), download.clone()).await;
+
+    let info = download.info();
+    assert_eq!(info.status, Status::Failed);
+    let error = info.error.expect("a reason");
+    assert!(
+        error.contains("changed on the server"),
+        "the reason names the change: {error}"
+    );
+    assert!(!dest.exists(), "a refused file is not written");
+    assert_eq!(
+        requests_so_far(&requests).len(),
+        2,
+        "a changed file is not asked for again"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn a_range_the_server_does_not_have_fails_at_once() {
+    let data = sample_data();
+    let (url, requests) = spawn_scripted_server(move |head, seen| {
+        if seen == 0 {
+            let (start, end) = requested_range(head, data.len());
+            return Some(partial_response(&data, start, end, ""));
+        }
+        Some(
+            b"HTTP/1.1 416 Range Not Satisfiable\r\nContent-Range: bytes */1024\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                .to_vec(),
+        )
+    });
+    let dir = temp_dir("416");
+    let dest = dir.join("out.bin");
+    let download = Download::new(53, url, dest.clone(), 1, None, None).expect("download");
+    download.max_attempts.store(4, Ordering::SeqCst);
+
+    run(silent(), Limits::default(), download.clone()).await;
+
+    let info = download.info();
+    assert_eq!(info.status, Status::Failed);
+    assert!(
+        info.error.expect("a reason").contains("416"),
+        "the reason names the answer"
+    );
+    assert_eq!(
+        requests_so_far(&requests).len(),
+        2,
+        "a 416 is not asked for again"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn an_unreadable_content_range_is_refused() {
+    let data = sample_data();
+    let (url, requests) = spawn_scripted_server(move |head, seen| {
+        let (start, end) = requested_range(head, data.len());
+        if seen == 0 {
+            return Some(partial_response(&data, start, end, ""));
+        }
+        Some(
+            format!(
+                "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: nonsense\r\nConnection: close\r\n\r\n",
+                end - start + 1
+            )
+            .into_bytes(),
+        )
+    });
+    let dir = temp_dir("bad-content-range");
+    let dest = dir.join("out.bin");
+    let download = Download::new(54, url, dest.clone(), 1, None, None).expect("download");
+
+    run(silent(), Limits::default(), download.clone()).await;
+
+    let info = download.info();
+    assert_eq!(info.status, Status::Failed);
+    assert!(
+        info.error.expect("a reason").contains("Content-Range"),
+        "the reason names the header"
+    );
+    assert_eq!(
+        requests_so_far(&requests).len(),
+        2,
+        "an answer that cannot be read is not asked for again"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn a_short_answer_is_asked_for_again() {
+    let data = sample_data();
+    let served = data.clone();
+    let (url, _requests) = spawn_scripted_server(move |head, seen| {
+        let (start, end) = requested_range(head, served.len());
+        if seen == 1 {
+            // The headers promise the whole range, the body stops in the
+            // middle of it.
+            let mut response = format!(
+                "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {start}-{end}/{}\r\nConnection: close\r\n\r\n",
+                end - start + 1,
+                served.len()
+            )
+            .into_bytes();
+            response.extend_from_slice(&served[start..start + 512]);
+            return Some(response);
+        }
+        Some(partial_response(&served, start, end, ""))
+    });
+    let dir = temp_dir("short-answer");
+    let dest = dir.join("out.bin");
+    let download = Download::new(55, url, dest.clone(), 1, None, None).expect("download");
+
+    run(silent(), Limits::default(), download.clone()).await;
+
+    assert_eq!(
+        download.info().status,
+        Status::Completed,
+        "error: {:?}",
+        download.info().error
+    );
+    assert_eq!(std::fs::read(&dest).expect("destination"), data);
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn a_part_file_that_cannot_be_written_fails_at_once() {
+    let data = sample_data();
+    let served = data.clone();
+    let (url, requests) = spawn_scripted_server(move |head, _| {
+        let (start, end) = requested_range(head, served.len());
+        Some(partial_response(&served, start, end, ""))
+    });
+    let dir = temp_dir("disk-error");
+    let dest = dir.join("out.bin");
+    let download = Download::new(56, url, dest.clone(), 1, None, None).expect("download");
+    download.max_attempts.store(4, Ordering::SeqCst);
+
+    // A directory where the part file should be: the write cannot work, and
+    // no number of retries can make it work.
+    std::fs::create_dir_all(segmenter::part_path(&dir, &download.stem, 0)).expect("part dir");
+
+    run(silent(), Limits::default(), download.clone()).await;
+
+    let info = download.info();
+    assert_eq!(info.status, Status::Failed);
+    assert!(
+        info.error.is_some(),
+        "the reason the part could not be opened"
+    );
+    assert_eq!(
+        requests_so_far(&requests).len(),
+        2,
+        "a disk that cannot be written is not asked again"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn an_unknown_size_download_resumes_from_a_validator() {
+    let data = sample_data();
+    let served = data.clone();
+    let (url, requests) = spawn_scripted_server(move |head, seen| {
+        let (start, end) = requested_range(head, served.len());
+        if seen == 0 {
+            // The probe: the server does not know the size of the file.
+            let mut probe = b"HTTP/1.1 206 Partial Content\r\nContent-Length: 1\r\nContent-Range: bytes 0-0/*\r\nETag: \"v1\"\r\nConnection: close\r\n\r\n".to_vec();
+            probe.extend_from_slice(&served[..1]);
+            return Some(probe);
+        }
+        let mut response = format!(
+            "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {start}-{end}/*\r\nETag: \"v1\"\r\nConnection: close\r\n\r\n",
+            end - start + 1
+        )
+        .into_bytes();
+        response.extend_from_slice(&served[start..=end]);
+        Some(response)
+    });
+    let dir = temp_dir("unknown-resume");
+    let dest = dir.join("out.bin");
+    let download = Download::new(57, url, dest.clone(), 2, None, None).expect("download");
+
+    // The first run got 400 bytes of a file whose end it never learned.
+    let segments = segmenter::plan_unknown(&dir, &download.stem);
+    std::fs::write(&segments[0].part, &data[..400]).expect("part file");
+    let mut segments = segments;
+    segments[0].downloaded = 400;
+    let manifest = Manifest {
+        url: download.url.clone(),
+        total: 0,
+        segments,
+        validator: Some("\"v1\"".to_string()),
+    };
+    std::fs::write(
+        &download.manifest,
+        serde_json::to_string(&manifest).expect("manifest"),
+    )
+    .expect("write manifest");
+
+    run(silent(), Limits::default(), download.clone()).await;
+
+    let info = download.info();
+    assert_eq!(info.status, Status::Completed, "error: {:?}", info.error);
+    assert_eq!(info.resumable, Some(true));
+    assert_eq!(std::fs::read(&dest).expect("destination"), data);
+
+    let heads = requests_so_far(&requests);
+    let resumed = heads
+        .iter()
+        .find(|head| head.contains("range: bytes=400-"))
+        .expect("the range must continue where the first run stopped");
+    assert!(
+        resumed.contains("if-range: \"v1\""),
+        "the resume must name the version it continues: {resumed}"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn a_redirected_download_finishes() {
+    let data = sample_data();
+    let served = data.clone();
+    let (url, requests) = spawn_scripted_server(move |head, _| {
+        let request_line = head.lines().next().unwrap_or("");
+        if request_line.contains(" /file.bin ") {
+            return Some(
+                b"HTTP/1.1 302 Found\r\nLocation: /real.bin\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                    .to_vec(),
+            );
+        }
+        let (start, end) = requested_range(head, served.len());
+        Some(partial_response(&served, start, end, ""))
+    });
+    let dir = temp_dir("redirect");
+    let dest = dir.join("out.bin");
+    let download = Download::new(58, url, dest.clone(), 1, None, None).expect("download");
+
+    run(silent(), Limits::default(), download.clone()).await;
+
+    assert_eq!(
+        download.info().status,
+        Status::Completed,
+        "error: {:?}",
+        download.info().error
+    );
+    assert_eq!(std::fs::read(&dest).expect("destination"), data);
+    assert!(
+        requests_so_far(&requests)
+            .iter()
+            .any(|head| head.contains(" /real.bin ")),
+        "the redirect must be followed"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A server that gives every connection its own share of the bandwidth: it
+/// answers a range in chunks and waits between them, on a thread per
+/// connection. Two connections therefore cost twice the wall clock of one
+/// only because this server is built that way, which is what makes it a fair
+/// way to measure whether the engine uses the connections it opens.
+fn spawn_paced_server(data: Vec<u8>, chunk: usize, delay: Duration) -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+    let port = listener.local_addr().expect("addr").port();
+    let data = Arc::new(data);
+
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { break };
+            let data = data.clone();
+            std::thread::spawn(move || {
+                let _ = stream.set_nodelay(true);
+                let mut buf = [0u8; 4096];
+                let Ok(read) = stream.read(&mut buf) else {
+                    return;
+                };
+                let head = String::from_utf8_lossy(&buf[..read]).to_string();
+                let (start, end) = requested_range(&head, data.len());
+                let slice = &data[start..=end];
+                let response = format!(
+                    "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {start}-{end}/{}\r\nAccept-Ranges: bytes\r\nConnection: close\r\n\r\n",
+                    slice.len(),
+                    data.len()
+                );
+                if stream.write_all(response.as_bytes()).is_err() {
+                    return;
+                }
+                for piece in slice.chunks(chunk) {
+                    if stream.write_all(piece).is_err() {
+                        return;
+                    }
+                    std::thread::sleep(delay);
+                }
+            });
+        }
+    });
+
+    format!("http://127.0.0.1:{port}/file.bin")
+}
+
+/// Compare one connection with four against a server that gives every
+/// connection the same paced bandwidth.
+///
+/// The server is artificial on purpose: it isolates the engine's use of
+/// connections from the network between this machine and a real server. Four
+/// connections can only win here because the server hands each of them its
+/// own budget; a real site may cap it, which is why the engine does not
+/// assume that more is faster.
+#[tokio::test]
+#[ignore = "a measurement, not a test: cargo test --release bench_local -- --ignored --nocapture"]
+async fn bench_local_segmented() {
+    const CHUNK: usize = 256 * 1024;
+    let delay = Duration::from_millis(15);
+    // Four ranges of sixteen megabytes: the plan is four ranges when four
+    // connections are allowed and one when only one is.
+    let data: Vec<u8> = (0..4 * SEGMENT_TARGET).map(|i| (i % 251) as u8).collect();
+    let url = spawn_paced_server(data.clone(), CHUNK, delay);
+    let dir = temp_dir("bench-local");
+
+    for connections in [1u32, 4] {
+        let dest = dir.join(format!("bench-{connections}.bin"));
+        let download = Download::new(
+            60 + connections as u64,
+            url.clone(),
+            dest.clone(),
+            connections,
+            None,
+            None,
+        )
+        .expect("download");
+
+        let started = Instant::now();
+        run(silent(), Limits::default(), download.clone()).await;
+        let elapsed = started.elapsed();
+
+        assert_eq!(
+            download.info().status,
+            Status::Completed,
+            "error: {:?}",
+            download.info().error
+        );
+        assert_eq!(
+            std::fs::read(&dest).expect("destination"),
+            data,
+            "the file must hold every byte"
+        );
+        eprintln!(
+            "{connections} connection(s): {elapsed:?} for {} bytes ({:.1} MB/s)",
+            data.len(),
+            data.len() as f64 / elapsed.as_secs_f64() / 1_000_000.0
+        );
+        let _ = std::fs::remove_file(&dest);
+    }
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// A server that drips the range it was asked for, a chunk at a time, so a
 /// test has a transfer that is still running when it pauses it.
 fn spawn_slow_server(data: Vec<u8>) -> String {
@@ -338,9 +881,10 @@ fn spawn_unknown_size_server(data: Vec<u8>) -> String {
 
             let slice = &data[from.min(data.len())..];
             let response = format!(
-                    "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {}-/*\r\nAccept-Ranges: bytes\r\nConnection: close\r\n\r\n",
+                    "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {}-{end}/*\r\nAccept-Ranges: bytes\r\nConnection: close\r\n\r\n",
                     slice.len(),
-                    from
+                    from,
+                    end = data.len().saturating_sub(1)
                 );
             let _ = stream.write_all(response.as_bytes());
             let _ = stream.write_all(slice);
@@ -385,9 +929,10 @@ fn spawn_slow_unknown_size_server(data: Vec<u8>) -> String {
 
             let slice = &data[from..];
             let response = format!(
-                    "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {}-/*\r\nAccept-Ranges: bytes\r\nConnection: close\r\n\r\n",
+                    "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {}-{end}/*\r\nAccept-Ranges: bytes\r\nConnection: close\r\n\r\n",
                     slice.len(),
-                    from
+                    from,
+                    end = data.len().saturating_sub(1)
                 );
             if stream.write_all(response.as_bytes()).is_err() {
                 continue;
@@ -866,7 +1411,10 @@ fn the_category_and_note_are_trimmed_and_kept_short() {
     )
     .expect("download");
 
-    download.set_meta(Some("  Video  ".to_string()), Some("  a note  ".to_string()));
+    download.set_meta(
+        Some("  Video  ".to_string()),
+        Some("  a note  ".to_string()),
+    );
     let info = download.info();
     assert_eq!(info.category.as_deref(), Some("Video"));
     assert_eq!(info.description.as_deref(), Some("a note"));
@@ -959,7 +1507,9 @@ async fn a_file_that_was_not_allowed_to_be_replaced_is_left_alone() {
     let info = download.info();
     assert_eq!(info.status, Status::Failed);
     assert!(
-        info.error.expect("a reason").contains("appeared while the download was running"),
+        info.error
+            .expect("a reason")
+            .contains("appeared while the download was running"),
         "the failure names the file that appeared"
     );
     assert_eq!(
@@ -993,8 +1543,15 @@ async fn a_confirmed_replace_puts_the_download_over_the_old_file() {
 fn discarding_progress_removes_the_parts_and_the_manifest() {
     let dir = temp_dir("discard-progress");
     let dest = dir.join("out.bin");
-    let download = Download::new(72, "https://example.com/a.bin".to_string(), dest, 4, None, None)
-        .expect("download");
+    let download = Download::new(
+        72,
+        "https://example.com/a.bin".to_string(),
+        dest,
+        4,
+        None,
+        None,
+    )
+    .expect("download");
 
     let mut segments = segmenter::plan(1024, 2, &dir, &download.stem);
     for segment in &mut segments {
@@ -1041,6 +1598,7 @@ async fn a_download_resumes_from_the_manifest() {
         url: download.url.clone(),
         total: data.len() as u64,
         segments: segments.clone(),
+        validator: None,
     };
     std::fs::write(
         &download.manifest,
@@ -1060,6 +1618,74 @@ async fn a_download_resumes_from_the_manifest() {
     assert!(
         heads.iter().any(|head| head.contains("range: bytes=400-")),
         "the download must continue where it stopped: {heads:?}"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A crash can leave a plan with ranges that never started. Their part files
+/// were never created, and that must not throw away the bytes of the ranges
+/// that did run.
+#[tokio::test]
+async fn a_resume_keeps_the_ranges_whose_parts_were_never_created() {
+    let data = sample_data();
+    let (url, requests) = spawn_range_server(data.clone());
+    let dir = temp_dir("resume-missing-part");
+    let dest = dir.join("out.bin");
+    let download = Download::new(18, url, dest.clone(), 2, None, None).expect("download");
+
+    let first = Segment {
+        id: 0,
+        start: 0,
+        end: 600,
+        downloaded: 600,
+        part: segmenter::part_path(&dir, &download.stem, 0),
+        status: SegmentStatus::Done,
+    };
+    std::fs::write(&first.part, &data[..600]).expect("part file");
+    let second = Segment {
+        id: 1,
+        start: 600,
+        end: data.len() as u64,
+        downloaded: 0,
+        part: segmenter::part_path(&dir, &download.stem, 1),
+        status: SegmentStatus::Pending,
+    };
+    assert!(!second.part.exists(), "the second range never ran");
+    let manifest = Manifest {
+        url: download.url.clone(),
+        total: data.len() as u64,
+        segments: vec![first, second],
+        validator: None,
+    };
+    std::fs::write(
+        &download.manifest,
+        serde_json::to_string(&manifest).expect("manifest"),
+    )
+    .expect("write manifest");
+
+    run(silent(), Limits::default(), download.clone()).await;
+
+    assert_eq!(
+        download.info().status,
+        Status::Completed,
+        "error: {:?}",
+        download.info().error
+    );
+    assert_eq!(std::fs::read(&dest).expect("destination"), data);
+
+    let heads = requests_so_far(&requests);
+    assert!(
+        heads
+            .iter()
+            .any(|head| head.contains("range: bytes=600-1023")),
+        "the range that never ran must be fetched: {heads:?}"
+    );
+    assert!(
+        !heads
+            .iter()
+            .any(|head| head.contains("range: bytes=0-1023")),
+        "the bytes that were already there must not be fetched again: {heads:?}"
     );
 
     let _ = std::fs::remove_dir_all(&dir);
@@ -1205,6 +1831,7 @@ async fn a_manifest_with_broken_ranges_is_not_resumed_from() {
         url: download.url.clone(),
         total: data.len() as u64,
         segments,
+        validator: None,
     };
     std::fs::write(
         &download.manifest,

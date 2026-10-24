@@ -278,8 +278,10 @@ struct LinkProbe {
     /// Whether the server honours a range request.
     ranges: bool,
     /// Whether a stopped download of this link could continue: the server
-    /// honours ranges and knows how big the file is. This is the engine's own
-    /// rule, so the dialog cannot promise a resume the engine would not make.
+    /// honours ranges and either knows how big the file is or gives a
+    /// validator that proves the bytes on disk are still the first bytes of
+    /// the file. This is the engine's own rule, so the dialog cannot promise
+    /// a resume the engine would not make.
     resumable: bool,
 }
 
@@ -308,11 +310,12 @@ async fn probe_link(
     let proxy = state.limits().proxy();
     let source = Source::parse(url, proxy.as_deref(), referer.as_deref())?;
     let probe = source.probe().await.map_err(|error| error.message)?;
+    let resumable = probe.ranges && (probe.total.is_some() || probe.validator().is_some());
     Ok(LinkProbe {
         name: probe.name,
         total: probe.total,
         ranges: probe.ranges,
-        resumable: probe.ranges && probe.total.is_some(),
+        resumable,
     })
 }
 

@@ -22,7 +22,7 @@
 
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -36,7 +36,7 @@ use crate::http;
 use crate::limits::{Limits, SpeedLimiter};
 use crate::log;
 use crate::segmenter::{self, Segment, SegmentStatus, MIN_SPLIT, UNKNOWN_END};
-use crate::transfer::{Probe, Source, TransferError};
+use crate::transfer::{FailureKind, Probe, Source, TransferError, RANGE_IGNORED_MESSAGE};
 use crate::verify;
 
 /// IDM's default `MaxConnectionsNumber`, read from
@@ -186,6 +186,10 @@ struct Manifest {
     url: String,
     total: u64,
     segments: Vec<Segment>,
+    /// The validator the server gave when this plan was made. A resume whose
+    /// probe reports another validator is not the same file.
+    #[serde(default)]
+    validator: Option<String>,
 }
 
 impl Manifest {
@@ -238,6 +242,9 @@ pub struct Download {
     /// Whether the file can be resumed from the parts on disk, once the probe
     /// has answered.
     resumable: Mutex<Option<bool>>,
+    /// The validator the probe was answered with, sent as `If-Range` on
+    /// every range. It proves all the bytes come from one version of the file.
+    validator: Mutex<Option<String>>,
     /// Held for the length of a run, so two tasks never drive the same
     /// download at once. A resume that arrives while a cancelled task is still
     /// winding down waits here instead of writing over its range plan.
@@ -329,6 +336,7 @@ impl Download {
             referer,
             limiter: Arc::new(SpeedLimiter::unlimited()),
             resumable: Mutex::new(None),
+            validator: Mutex::new(None),
             driver: AsyncMutex::new(()),
             head: Mutex::new(Vec::new()),
             degraded: AtomicBool::new(false),
@@ -390,7 +398,11 @@ impl Download {
             segments,
             resumable,
             speed_limit: self.limiter.rate(),
-            category: self.category.lock().expect("category lock poisoned").clone(),
+            category: self
+                .category
+                .lock()
+                .expect("category lock poisoned")
+                .clone(),
             description: self
                 .description
                 .lock()
@@ -411,10 +423,7 @@ impl Download {
                 .map(|value| value.chars().take(limit).collect::<String>())
         };
         *self.category.lock().expect("category lock poisoned") = clean(category, 40);
-        *self
-            .description
-            .lock()
-            .expect("description lock poisoned") = clean(description, 500);
+        *self.description.lock().expect("description lock poisoned") = clean(description, 500);
     }
 
     /// The bandwidth cap of this download, in bytes per second. Zero means no
@@ -426,6 +435,19 @@ impl Download {
     /// Record whether the file can be resumed, once the probe has answered.
     pub fn set_resumable(&self, resumable: bool) {
         *self.resumable.lock().expect("resumable lock poisoned") = Some(resumable);
+    }
+
+    /// Record the validator the probe was answered with.
+    fn set_validator(&self, validator: Option<String>) {
+        *self.validator.lock().expect("validator lock poisoned") = validator;
+    }
+
+    /// The validator the probe was answered with, when there is one.
+    fn validator(&self) -> Option<String> {
+        self.validator
+            .lock()
+            .expect("validator lock poisoned")
+            .clone()
     }
 
     /// Allow the destination file to be replaced when the transfer finishes.
@@ -445,16 +467,7 @@ impl Download {
         if self.is_running() {
             return Err("the download is still running".to_string());
         }
-        let parts: Vec<PathBuf> = self
-            .segments
-            .lock()
-            .expect("segments lock poisoned")
-            .iter()
-            .map(|segment| segment.part.clone())
-            .collect();
-        for part in parts {
-            let _ = std::fs::remove_file(part);
-        }
+        remove_orphan_parts(&self.dir, &self.stem, &[]);
         let _ = std::fs::remove_file(&self.manifest);
         self.segments
             .lock()
@@ -465,6 +478,7 @@ impl Download {
         self.head.lock().expect("head lock poisoned").clear();
         self.degraded.store(false, Ordering::SeqCst);
         *self.resumable.lock().expect("resumable lock poisoned") = None;
+        self.set_validator(None);
         Ok(())
     }
 
@@ -582,10 +596,13 @@ impl Download {
         .ok()?;
 
         if let Some(manifest) = read_manifest(&download) {
+            let validator = manifest.validator.clone();
             download.total.store(manifest.total, Ordering::SeqCst);
             let next_id = manifest.segments.iter().map(|s| s.id).max().unwrap_or(0) + 1;
             download.next_segment_id.store(next_id, Ordering::SeqCst);
             *download.segments.lock().expect("segments lock poisoned") = manifest.segments;
+            // The validator outlives the process with the plan it belongs to.
+            download.set_validator(validator);
         } else {
             download.total.store(known.total, Ordering::SeqCst);
         }
@@ -643,11 +660,6 @@ impl Download {
             .iter()
             .find(|s| s.id == id)
             .map(|s| (s.start, s.end, s.downloaded))
-    }
-
-    fn seg_end(&self, id: u32) -> Option<u64> {
-        let segments = self.segments.lock().expect("segments lock poisoned");
-        segments.iter().find(|s| s.id == id).map(|s| s.end)
     }
 
     fn seg_part(&self, id: u32) -> Option<PathBuf> {
@@ -770,45 +782,94 @@ async fn wait_while_active(download: &Arc<Download>, epoch: u64, wait: Duration)
     }
 }
 
-/// Rebuild the segment list, resuming from the manifest when possible.
-fn restore(download: &Arc<Download>, total: Option<u64>, max_connections: u32) -> Vec<Segment> {
-    if let Some(total) = total {
-        if let Some(manifest) = read_manifest(download) {
-            if manifest.total == total {
-                let mut segments = manifest.segments;
-                // A crash can leave extra bytes behind. Cut the part file back
-                // to the recorded length, the way IDM truncates the file when
-                // it resumes ("Trucate at %I64d").
-                for segment in &mut segments {
-                    if let Ok(file) = OpenOptions::new().write(true).open(&segment.part) {
-                        let _ = file.set_len(segment.downloaded);
-                    }
-                    // The connections of a manifest are not running now.
-                    segment.status = if segment.done() {
-                        SegmentStatus::Done
-                    } else {
-                        SegmentStatus::Pending
-                    };
-                }
-                let next_id = segments.iter().map(|s| s.id).max().unwrap_or(0) + 1;
-                download.next_segment_id.store(next_id, Ordering::SeqCst);
-                *download.segments.lock().expect("segments lock poisoned") = segments.clone();
-                return segments;
+/// Whether the manifest on disk describes the file the server just showed.
+fn can_resume(manifest: &Manifest, probe: &Probe) -> bool {
+    // The probe only proves the server honours ranges if it answered `206`.
+    if !probe.ranges {
+        return false;
+    }
+    let current = probe.validator();
+    match probe.total {
+        Some(total) => {
+            if manifest.total != total {
+                return false;
+            }
+            // When both sides name a version, they have to agree. A server
+            // that stopped sending a validator leaves the size as the only
+            // proof, and an older manifest has no validator at all.
+            match (&manifest.validator, current) {
+                (Some(old), Some(new)) => *old == new,
+                _ => true,
             }
         }
+        // Without a size, only a matching validator proves that the bytes on
+        // disk are the first bytes of the file the server still serves.
+        None => {
+            manifest.total == 0
+                && manifest.segments.len() == 1
+                && manifest.segments[0].is_unknown()
+                && matches!((&manifest.validator, current), (Some(old), Some(new)) if *old == new)
+        }
+    }
+}
+
+/// Rebuild the segment list, resuming from the manifest when possible.
+fn restore(download: &Arc<Download>, probe: &Probe, max_connections: u32) -> Vec<Segment> {
+    // The head is rebuilt from the range that starts at the first byte: from
+    // the part on disk when the download resumes, from the stream when it
+    // starts over. An old run's head belongs to none of them.
+    download.head.lock().expect("head lock poisoned").clear();
+
+    if let Some(manifest) = read_manifest(download) {
+        if can_resume(&manifest, probe) {
+            let mut segments = manifest.segments;
+            // A crash can leave extra bytes behind. Cut the part file back
+            // to the recorded length, the way IDM truncates the file when
+            // it resumes ("Trucate at %I64d").
+            for segment in &mut segments {
+                if let Ok(file) = OpenOptions::new().write(true).open(&segment.part) {
+                    let _ = file.set_len(segment.downloaded);
+                }
+                // The connections of a manifest are not running now.
+                segment.status = if segment.done() {
+                    SegmentStatus::Done
+                } else {
+                    SegmentStatus::Pending
+                };
+            }
+            // The other ranges are checked against the head of the file. A
+            // resumed download already has the head in its first part.
+            if let Some(first) = segments.iter().find(|segment| segment.start == 0) {
+                let len = first.downloaded.min(verify::HEAD_BUFFER as u64) as usize;
+                let head = read_head(&first.part, 0, len);
+                *download.head.lock().expect("head lock poisoned") = head;
+            }
+            let next_id = segments.iter().map(|s| s.id).max().unwrap_or(0) + 1;
+            download.next_segment_id.store(next_id, Ordering::SeqCst);
+            *download.segments.lock().expect("segments lock poisoned") = segments.clone();
+            return segments;
+        }
+
+        // The plan on disk belongs to another version of the file, or the
+        // server no longer honours ranges. Its bytes are not used again, and
+        // every part goes, not only the ones whose ids the new plan reuses.
+        remove_orphan_parts(&download.dir, &download.stem, &[]);
+        let _ = std::fs::remove_file(&download.manifest);
+        log::write(
+            "info",
+            "the resume state did not match the server, the file starts over",
+        );
     }
 
-    let segments = match total {
+    let segments = match probe.total {
         Some(total) => segmenter::plan(total, max_connections, &download.dir, &download.stem),
         // The server did not tell us the size, so the file is fetched by a
         // single connection, from the first byte to the end of the response.
         None => segmenter::plan_unknown(&download.dir, &download.stem),
     };
-    // A fresh plan starts from scratch: the part files of an earlier run are
-    // stale and would leave bytes behind that belong to no range.
-    for segment in &segments {
-        let _ = std::fs::remove_file(&segment.part);
-    }
+    // A fresh plan starts from scratch: every part file of an earlier run is
+    // stale, including the ones whose ids the new plan does not reuse.
+    remove_orphan_parts(&download.dir, &download.stem, &[]);
     download
         .next_segment_id
         .store(segments.len() as u32, Ordering::SeqCst);
@@ -822,7 +883,14 @@ fn read_manifest(download: &Arc<Download>) -> Option<Manifest> {
     let manifest: Manifest = serde_json::from_str(&text).ok()?;
     if manifest.url != crate::transfer::redacted(&download.url)
         || manifest.segments.is_empty()
-        || !manifest.segments.iter().all(|s| s.part.exists())
+        // A range that recorded bytes must still have them. A range that
+        // recorded none has nothing to lose: its part is created when the
+        // first byte arrives, so a crash before that is not a reason to
+        // throw the rest of the plan away.
+        || manifest
+            .segments
+            .iter()
+            .any(|segment| segment.downloaded > 0 && !segment.part.exists())
         || !manifest.is_consistent()
     {
         return None;
@@ -842,6 +910,7 @@ pub fn save_manifest(download: &Download) {
         url: crate::transfer::redacted(&download.url),
         total: download.total.load(Ordering::SeqCst),
         segments,
+        validator: download.validator(),
     };
     let Ok(text) = serde_json::to_string_pretty(&manifest) else {
         return;
@@ -968,16 +1037,32 @@ async fn fetch_range(
     download.set_seg_status(seg_id, SegmentStatus::Connecting);
 
     // The whole file in one range, or a file whose size is unknown: the
-    // server may answer with the whole file instead of the range.
+    // server may answer with the whole file instead of the range. A range
+    // that starts after the first byte is never the whole file, whatever its
+    // end says.
     let total = download.total.load(Ordering::SeqCst);
-    let covers_all = to.is_none() || (total > 0 && download.seg_end(seg_id) == Some(total));
+    let covers_all = from == 0
+        && match to {
+            None => true,
+            Some(to) => total > 0 && to + 1 == total && seg_start == 0,
+        };
 
-    let mut stream = download.source.open(from, to, covers_all).await?;
+    // The validator proves that every range is answered from the same version
+    // of the file. A server whose copy changed answers the whole file
+    // instead, which `open` turns into an error.
+    let validator = download.validator();
+    let expected_total = (total > 0).then_some(total);
+    let mut stream = download
+        .source
+        .open(from, to, covers_all, validator.as_deref(), expected_total)
+        .await?;
     download.set_seg_status(seg_id, SegmentStatus::Receiving);
 
-    let part = download
-        .seg_part(seg_id)
-        .ok_or_else(|| TransferError::msg("segment disappeared"))?;
+    let Some(part) = download.seg_part(seg_id) else {
+        // The range was given up while the connection was opening: another
+        // connection owns the file now, and this one has nothing to write.
+        return Ok(());
+    };
     let mut file = OpenOptions::new()
         .create(true)
         // The part file holds the bytes of one range, from the first byte of
@@ -986,11 +1071,11 @@ async fn fetch_range(
         .truncate(false)
         .write(true)
         .open(&part)
-        .map_err(|e| TransferError::msg(e.to_string()))?;
+        .map_err(|e| TransferError::permanent(e.to_string()))?;
 
     let base = from - seg_start;
     file.seek(SeekFrom::Start(base))
-        .map_err(|e| TransferError::msg(e.to_string()))?;
+        .map_err(|e| TransferError::permanent(e.to_string()))?;
 
     let mut written = 0u64;
     // Set when the response was dropped because the user paused or stopped
@@ -1017,10 +1102,12 @@ async fn fetch_range(
         }
 
         // The segment may have been shortened while this request was running,
-        // because a new connection took over the tail of the range.
-        let seg_end = download
-            .seg_end(seg_id)
-            .unwrap_or(to.map(|t| t + 1).unwrap_or(UNKNOWN_END));
+        // because a new connection took over the tail of the range. A range
+        // that is gone was given up as a whole: the other connection fetches
+        // the file.
+        let Some((_, seg_end, _)) = download.seg_snapshot(seg_id) else {
+            return Ok(());
+        };
         let position = from + written;
         if position >= seg_end {
             break;
@@ -1033,7 +1120,7 @@ async fn fetch_range(
         download.limiter.reserve(take as u64).await;
 
         file.write_all(&bytes[..take])
-            .map_err(|e| TransferError::msg(e.to_string()))?;
+            .map_err(|e| TransferError::permanent(e.to_string()))?;
         written += take as u64;
 
         download.record_progress(seg_id, base + written, SegmentStatus::Receiving);
@@ -1051,28 +1138,42 @@ async fn fetch_range(
 
         // The range may have been rolled back while this request was
         // running, because the data was not the data of this range.
-        let (_, _, current) = download
-            .seg_snapshot(seg_id)
-            .ok_or_else(|| TransferError::msg("segment disappeared"))?;
+        let Some((_, _, current)) = download.seg_snapshot(seg_id) else {
+            // The plan was given up (the download fell back to one
+            // connection) while this chunk was being written.
+            return Ok(());
+        };
         if current < base + written {
-            return Err(TransferError::msg("the range was rolled back"));
+            return Err(TransferError::msg(ROLLED_BACK_MESSAGE));
         }
     }
 
     file.flush()
-        .map_err(|e| TransferError::msg(e.to_string()))?;
+        .map_err(|e| TransferError::permanent(e.to_string()))?;
 
     // A segment whose length the server never told us ends with the response.
     // An interrupted response is not an end: the rest is asked for again after
     // the resume, from the byte the part file stopped on.
-    if download.seg_end(seg_id) == Some(UNKNOWN_END) {
+    let Some((_, end, downloaded)) = download.seg_snapshot(seg_id) else {
+        return Ok(());
+    };
+    if end == UNKNOWN_END {
         if !interrupted {
             download.finish_unknown_segment(seg_id);
         }
-    } else if download
-        .seg_snapshot(seg_id)
-        .is_some_and(|(start, end, downloaded)| downloaded >= end - start)
-    {
+        return Ok(());
+    }
+
+    let expected = end.saturating_sub(from);
+    if !interrupted && written < expected {
+        // The connection closed before the end of the range, and the rest of
+        // the range is still to come. Asking again from the byte the part
+        // file reached is what a resumed download does anyway.
+        return Err(TransferError::msg(format!(
+            "the response ended after {written} of {expected} bytes"
+        )));
+    }
+    if downloaded >= end - seg_start {
         // A known range that has every byte is done even if the pause landed
         // exactly on the last one.
         download.set_seg_status(seg_id, SegmentStatus::Done);
@@ -1121,11 +1222,6 @@ fn downgrade_to_one_connection(download: &Arc<Download>, total: Option<u64>) -> 
     let part = segmenter::part_path(&download.dir, &download.stem, new_id);
 
     let mut segments = download.segments.lock().expect("segments lock poisoned");
-    // The bytes that were fetched cannot be trusted, so the file is fetched
-    // again from the start.
-    for segment in segments.iter() {
-        let _ = std::fs::remove_file(&segment.part);
-    }
 
     let segment = Segment {
         id: new_id,
@@ -1135,6 +1231,16 @@ fn downgrade_to_one_connection(download: &Arc<Download>, total: Option<u64>) -> 
         part,
         status: SegmentStatus::Pending,
     };
+    // The bytes that were fetched cannot be trusted, so the file is fetched
+    // again from the start. Parts another connection is still writing go too;
+    // a file that is open on Windows refuses the delete, and the sweep after
+    // the download catches that one.
+    remove_orphan_parts(
+        &download.dir,
+        &download.stem,
+        std::slice::from_ref(&segment),
+    );
+    let _ = std::fs::remove_file(&segment.part);
     segments.clear();
     segments.push(segment.clone());
 
@@ -1250,15 +1356,14 @@ async fn segment_task(
                 emit_throttled(&reporter, &download, false);
             }
             Err(error) => {
-                attempt += 1;
-                // A status that will not change by asking again is not asked
-                // again: a 404 stays a 404.
-                if let Some(status) = error.status {
-                    if !http::is_retryable(status) {
-                        download.set_seg_status(seg_id, SegmentStatus::Failed);
-                        return Err(format!("segment {seg_id} failed: {}", error.message));
-                    }
+                // A failure that asking again cannot fix is not asked again:
+                // a 404 stays a 404, a changed file stays changed, and a disk
+                // that cannot be written stays unwritable.
+                if error.kind != FailureKind::Transient {
+                    download.set_seg_status(seg_id, SegmentStatus::Failed);
+                    return Err(format!("segment {seg_id} failed: {}", error.message));
                 }
+                attempt += 1;
                 if attempt >= download.max_attempts.load(Ordering::SeqCst) {
                     download.set_seg_status(seg_id, SegmentStatus::Failed);
                     return Err(format!(
@@ -1295,9 +1400,16 @@ async fn assemble(download: &Arc<Download>) -> Result<(), String> {
         let Some(segment) = segments.first() else {
             return Err("the download has no parts".to_string());
         };
+        // The part is about to become the destination, so its bytes have to
+        // reach the disk before its name does.
+        OpenOptions::new()
+            .write(true)
+            .open(&segment.part)
+            .and_then(|file| file.sync_all())
+            .map_err(|e| format!("{}: {e}", segment.part.display()))?;
         guard_replace(download)?;
         disk::replace_file(&segment.part, &dest).map_err(|e| e.to_string())?;
-        cleanup(download, &segments);
+        cleanup(download);
         return Ok(());
     }
 
@@ -1328,6 +1440,10 @@ async fn assemble(download: &Arc<Download>) -> Result<(), String> {
         }
 
         out.flush().map_err(|e| e.to_string())?;
+        // The rename makes the joined file the destination. The bytes behind
+        // that name have to be on the disk before it is, or a crash leaves a
+        // destination that is shorter than the file it claims to be.
+        out.sync_all().map_err(|e| e.to_string())?;
 
         // The file that is about to replace the destination has to be the
         // size the server promised, or it is not the file that was asked for.
@@ -1358,7 +1474,7 @@ async fn assemble(download: &Arc<Download>) -> Result<(), String> {
         return Err(error.to_string());
     }
 
-    cleanup(download, &segments);
+    cleanup(download);
     Ok(())
 }
 
@@ -1378,11 +1494,37 @@ fn guard_replace(download: &Arc<Download>) -> Result<(), String> {
     Ok(())
 }
 
-/// Remove the part files and the manifest of a finished download.
-fn cleanup(download: &Arc<Download>, segments: &[Segment]) {
-    for segment in segments {
-        let _ = std::fs::remove_file(&segment.part);
+/// Remove the part files of a download that no range in `keep` owns.
+///
+/// A split, a downgrade or a crash can leave parts whose ids are no longer in
+/// the plan. Nobody will ever join those bytes, so they go.
+fn remove_orphan_parts(dir: &Path, stem: &str, keep: &[Segment]) {
+    let prefix = format!("{stem}.part");
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        let Some(id) = name.strip_prefix(&prefix) else {
+            continue;
+        };
+        // Only `{stem}.part<number>` belongs to this download: another file
+        // whose name merely starts with the prefix is not ours.
+        if id.is_empty() || !id.bytes().all(|byte| byte.is_ascii_digit()) {
+            continue;
+        }
+        if !keep.iter().any(|segment| segment.part == path) {
+            let _ = std::fs::remove_file(path);
+        }
     }
+}
+
+/// Remove the part files and the manifest of a finished download.
+fn cleanup(download: &Arc<Download>) {
+    remove_orphan_parts(&download.dir, &download.stem, &[]);
     let _ = std::fs::remove_file(&download.manifest);
 }
 
@@ -1421,12 +1563,8 @@ async fn probe_with_retries(download: &Arc<Download>, epoch: u64) -> Result<Prob
             Ok(probe) => return Ok(probe),
             Err(error) => {
                 attempt += 1;
-                if let Some(status) = error.status {
-                    if !http::is_retryable(status) {
-                        return Err(error.message);
-                    }
-                }
-                if attempt >= download.max_attempts.load(Ordering::SeqCst) {
+                if !error.is_transient() || attempt >= download.max_attempts.load(Ordering::SeqCst)
+                {
                     return Err(error.message);
                 }
                 let wait = error.retry_after.unwrap_or_else(|| http::backoff(attempt));
@@ -1465,10 +1603,15 @@ async fn drive(
 
     let probe = probe_with_retries(download, epoch).await?;
 
-    // A file can be resumed when the server honours ranges and knows how big
-    // the file is: the manifest of a download is only used again when the size
-    // the probe reports matches the size it recorded.
-    download.set_resumable(probe.ranges && probe.total.is_some());
+    // The validator of the probe travels with every range as `If-Range`, so
+    // a file that changes between the probe and a range is refused instead of
+    // being mixed into the bytes already on disk.
+    download.set_validator(probe.validator());
+
+    // A file can be resumed when the server honours ranges and either knows
+    // how big the file is or gives a validator that proves the bytes on disk
+    // are still the first bytes of the file it serves now.
+    download.set_resumable(probe.ranges && (probe.total.is_some() || probe.validator().is_some()));
 
     // A server that answers a range request with 200 cannot be segmented.
     let host = crate::limits::host_of(&download.url);
@@ -1494,7 +1637,7 @@ async fn drive(
         .total
         .store(probe.total.unwrap_or(0), Ordering::SeqCst);
 
-    let segments = restore(download, probe.total, max_connections);
+    let segments = restore(download, &probe, max_connections);
     save_manifest(download);
     emit(reporter, download);
     log::write(
@@ -1530,9 +1673,11 @@ async fn drive(
                 match joined {
                     Some(Ok(Ok(()))) => {}
                     Some(Ok(Err(error))) => {
-                        if error.contains(CORRUPT_MESSAGE) {
-                            // The data of the ranges does not match. The
-                            // download goes on with a single connection.
+                        if error.contains(CORRUPT_MESSAGE) || error.contains(RANGE_IGNORED_MESSAGE) {
+                            // The server sent bytes that are not the range
+                            // that was asked for. The download goes on with a
+                            // single connection, which asks for the whole
+                            // file and cannot be given the wrong part of it.
                             let already_degraded =
                                 download.degraded.load(Ordering::SeqCst);
                             if !already_degraded {
