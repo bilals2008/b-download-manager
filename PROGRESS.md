@@ -38,7 +38,17 @@ Done items stay in the list as a record of what is already standing.
 - [x] Progress as a percentage, transfer rate, time left, status with a dot and
       a word; the row stays one line and opens nothing under it
 - [x] The error of a failed download shows under its name, the way IDM shows
-      it in the row
+      it in the row, and opens the Download Failed window
+- [x] Download Failed window: the failure as a headline, one hint, the file
+      and its folder, how much arrived and whether it can be resumed
+- [x] The engine's raw sentence waits behind Technical details
+- [x] Retry resumes from the parts on disk, Start over drops them and fetches
+      the file again, and Choose another location moves the parts before it
+      continues
+- [x] Network, refusal, missing file, busy server, disk space, permission,
+      invalid destination and a short assembly each get their own words
+- [x] A file that appeared during the transfer offers only a new location: a
+      retry at the same name cannot work and is not offered as if it could
 - [x] Delete key on a selection, Shift+click for a range
 - [x] Arrow keys, Home and End walk the list, Shift+arrow extends the range
 - [ ] Inline edit of file name and save path
@@ -63,7 +73,13 @@ Done items stay in the list as a record of what is already standing.
 
 ## Queue and scheduler
 
+The full queue and scheduler interface is not built yet. The Scheduler entry
+in the Downloads menu and the toolbar says "coming soon" instead of opening a
+half-working screen; the one queue below is the part that exists.
+
 - [x] One queue, driven by the two toolbar buttons
+- [x] The Scheduler is marked "coming soon" in the menu and the toolbar
+      tooltip, instead of looking like a control that is merely greyed out
 - [ ] Named queues, pick one from the dropdown like IDM does
 - [ ] Queue order and the drag handles
 - [ ] Scheduler windows and schedule files (`s_%s.dt`, `q_%s.dt`)
@@ -83,7 +99,22 @@ Done items stay in the list as a record of what is already standing.
       loop) is a line of advice rather than a block
 - [x] Double submits are ignored while a start is in flight, and a link that
       is already in the list is noted without being refused
-- [x] An existing file is announced once and replaced on the second press
+- [x] The dialog reopens on the folder of the last download, then the
+      configured default, then the system Downloads folder
+- [x] A taken destination is the engine's question, not a second press:
+      Rename, Replace, Skip or Cancel in a compact File Exists window
+- [x] The conflict is settled again while the start is claimed, so a file
+      that appears after the dialog opened, or a second start of the same
+      download, is a question and never a silent overwrite
+- [x] Rename picks the first free `name (2).ext` beside the file, keeping the
+      extension and the name under the length the file system allows
+- [x] Replace is offered only for a file no other download uses; a file a
+      row still holds can only be saved under a new name
+- [x] A finished download whose file appeared meanwhile is not overwritten:
+      the transfer fails with a sentence that says exactly that
+- [x] Redownload asks the same question without dropping the row first, so a
+      cancelled question leaves the download where it was
+- [x] Batch redownload asks per file and can apply one answer to the rest
 - [x] Enter starts, Escape cancels and Ctrl+N opens the dialog from anywhere
       in the shell
 - [ ] Batch download, many URLs in one dialog
@@ -214,8 +245,19 @@ Done items stay in the list as a record of what is already standing.
 - [x] `tsc --noEmit` and a production build, both clean
 - [x] `cargo clippy --all-targets -- -D warnings` on both Rust crates, clean
 - [x] Smoke test of the rendered shell, categories pane and list
-- [x] `cargo test` in `crates/idm-core`, 87 tests: the engine runs from end to end over HTTP and over FTP, resumes, refuses a broken chunk list, gives back a range that holds the head of the file, holds a real bandwidth cap, retries a range that answered `503`, pauses and resumes (including a file of an unknown size), releases a paused range when it is cancelled, refuses a stale resume, does not run a finished download again, adds a second connection to a file that started on one range, and reports stopped ranges as stopped
-- [x] `cargo test` in `src-tauri`, 17 tests: the bridge, the completion window, and the progress window's payload, label, label parsing, tray id and title
+- [x] `cargo test` in `crates/idm-core`, 92 tests: the engine runs from end to end over HTTP and over FTP, resumes, refuses a broken chunk list, gives back a range that holds the head of the file, holds a real bandwidth cap, retries a range that answered `503`, pauses and resumes (including a file of an unknown size), releases a paused range when it is cancelled, refuses a stale resume,      does not run a finished download again, adds a second connection to a
+      file that started on one range, reports stopped ranges as stopped, keeps
+      a file that was not allowed to be replaced, puts a confirmed replace
+      over the old file, and drops the parts and manifest on Start over
+- [x] `npm run check:recovery`, 61 checks: the conflict as a question, the
+      answers a running download rules out, the batch label, the start loop
+      (a free name asks nothing, an answer that fails is reported instead of
+      asked again, one answer covers a batch), and the sentence each engine
+      failure becomes
+- [x] `cargo test` in `src-tauri`, 44 tests: the bridge, the completion window,
+      the progress window's payload, label, label parsing, tray id and title,
+      the destination question (a taken name, a free name beside it, a row
+      restarted from its own file), and the start request the window sends
 - [ ] Keyboard-only pass over the whole shell
 - [ ] Screen reader pass over the tree, the list and the listbox
 - [ ] Unit tests for the store: filtering, sorting, queue transitions

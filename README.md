@@ -112,7 +112,7 @@ planning/             scope, engine specification, milestones and ADRs
 
 ### Checks
 
-Run the build, the eight project gates and both Rust test suites before opening a pull request:
+Run the build, the nine project gates and both Rust test suites before opening a pull request:
 
 ```bash
 npm run build
@@ -123,6 +123,7 @@ npm run check:selection
 npm run check:find
 npm run check:progress
 npm run check:add-dialog
+npm run check:recovery
 npm run check:tooltip
 npm run check:extension
 
@@ -130,7 +131,7 @@ cargo test --manifest-path crates/idm-core/Cargo.toml
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
-The gates cover colour contrast, offered typefaces, the selection model, the Find bar, the progress window, the add dialog, tooltip placement, and both browser extensions.
+The gates cover colour contrast, offered typefaces, the selection model, the Find bar, the progress window, the add dialog, the File Exists and Download Failed windows, tooltip placement, and both browser extensions.
 
 ## How It Works
 
