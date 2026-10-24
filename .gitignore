@@ -1,8 +1,11 @@
 node_modules
 dist
 dist-ssr
+.astro
+.vercel
 release
 *.local
+*.log
 *.tsbuildinfo
 .DS_Store
 src-tauri/target

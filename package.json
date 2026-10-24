@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "packageManager": "pnpm@12.15.0",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
@@ -16,6 +17,8 @@
     "check:recovery": "node scripts/check-recovery.mjs",
     "check:tooltip": "node scripts/check-tooltip.mjs",
     "check:extension": "node scripts/check-extension.mjs",
+    "site:dev": "pnpm --filter site dev",
+    "site:build": "pnpm --filter site build",
     "tauri": "tauri"
   },
   "dependencies": {

@@ -12,11 +12,12 @@ engine is in `ANALYSIS.md`; the plans and ADRs are in `planning/`.
 ## Commands
 
 ```bash
-npm install
-npm run tauri dev        # desktop app (the only way to see real window chrome)
-npm run dev              # UI only in a browser; IPC calls are no-ops
-npm run build            # tsc --noEmit + vite build
-npm run check:palette    # WCAG contrast gate for the colour tokens
+pnpm install
+pnpm tauri dev           # desktop app (the only way to see real window chrome)
+pnpm dev                 # UI only in a browser; IPC calls are no-ops
+pnpm build               # tsc --noEmit + vite build
+pnpm check:palette       # WCAG contrast gate for the colour tokens
+pnpm site:dev            # Astro docs site (site/)
 cd crates/idm-core && cargo test   # the engine, without a window
 cd src-tauri && cargo test         # the application
 ```
@@ -109,7 +110,7 @@ Single source of truth: `src/index.css` (CSS variables + `@theme inline`), read
 by `scripts/check-palette.mjs`. Slate black chrome with the Windows accent blue
 for actions, a neutral light appearance that follows the system, and green only
 for finished work. Changing a colour means changing it there and re-running
-`npm run check:palette`.
+`pnpm check:palette`.
 
 Surfaces are borderless: panes, bars and rows separate by surface colour and
 spacing, not by divider lines. Radii are `rounded-lg` (12px) for panes and

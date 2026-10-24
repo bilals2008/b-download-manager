@@ -59,8 +59,8 @@ The window frame, tray icon and rounded corners are tuned for Windows. The engin
 ### Run from source
 
 ```bash
-npm install
-npm run tauri dev
+pnpm install
+pnpm tauri dev
 ```
 
 The first run compiles the Rust engine and can take a few minutes. Later starts are fast.
@@ -68,19 +68,19 @@ The first run compiles the Rust engine and can take a few minutes. Later starts 
 To run the frontend alone, knowing that every engine call will fail:
 
 ```bash
-npm run dev
+pnpm dev
 ```
 
 ### Build
 
 ```bash
-npm run tauri build
+pnpm tauri build
 ```
 
 The installer and binary land in `src-tauri/target/release/bundle/`. Application icons are generated from the single brand source:
 
 ```bash
-npm run tauri icon src/assets/brand/logo.png
+pnpm tauri icon src/assets/brand/logo.png
 ```
 
 ## Tech Stack
@@ -104,6 +104,7 @@ crates/
   idm-cli/            headless client for the engine
 src-tauri/            Tauri commands, tray, windows and loopback bridge
 src/                  React interface: shell, workspace, windows, settings, ui
+site/                 Astro + Starlight site: landing page and docs (deployed to Vercel)
 extension-firefox/    Firefox extension
 browser-extension/    Chrome and Edge extension
 docs/                 development guide
@@ -115,17 +116,17 @@ planning/             scope, engine specification, milestones and ADRs
 Run the build, the nine project gates and both Rust test suites before opening a pull request:
 
 ```bash
-npm run build
+pnpm build
 
-npm run check:palette
-npm run check:fonts
-npm run check:selection
-npm run check:find
-npm run check:progress
-npm run check:add-dialog
-npm run check:recovery
-npm run check:tooltip
-npm run check:extension
+pnpm check:palette
+pnpm check:fonts
+pnpm check:selection
+pnpm check:find
+pnpm check:progress
+pnpm check:add-dialog
+pnpm check:recovery
+pnpm check:tooltip
+pnpm check:extension
 
 cargo test --manifest-path crates/idm-core/Cargo.toml
 cargo test --manifest-path src-tauri/Cargo.toml
