@@ -1,0 +1,477 @@
+---
+import Icon from "./Icon.astro";
+
+type Row = {
+  name: string;
+  size: string;
+  progress: number;
+  speed: string;
+  tone?: "paused";
+};
+
+const rows: Row[] = [
+  { name: "brand-footage-4k.mp4", size: "842.6 MB", progress: 68, speed: "3.1 MB/s" },
+  { name: "ubuntu-24.04.iso", size: "6.1 GB", progress: 42, speed: "1.4 MB/s" },
+  { name: "typeface-pack.zip", size: "128.4 MB", progress: 91, speed: "0.3 MB/s" },
+];
+---
+
+<figure class="app-preview">
+  <div class="preview-window" aria-hidden="true">
+    <div class="preview-titlebar">
+      <span class="preview-app">
+        <img src="/images/app-icon.png" alt="" width="16" height="16" />
+        <span>B Download Manager</span>
+      </span>
+      <span class="preview-count">
+        <span class="preview-count-dot"></span>
+        3 active
+      </span>
+      <span class="preview-controls">
+        <span class="preview-control preview-control--min"></span>
+        <span class="preview-control preview-control--max"></span>
+        <span class="preview-control preview-control--close"></span>
+      </span>
+    </div>
+
+    <div class="preview-body">
+      <aside class="preview-side">
+        <p class="preview-side-label">Downloads</p>
+        <ul>
+          <li class="is-active">All downloads <span>6</span></li>
+          <li>Unfinished <span>3</span></li>
+          <li>Finished <span>3</span></li>
+        </ul>
+        <p class="preview-side-label">Categories</p>
+        <ul>
+          <li>General <span>2</span></li>
+          <li>Video <span>1</span></li>
+          <li>Documents <span>1</span></li>
+        </ul>
+      </aside>
+
+      <div class="preview-main">
+        <div class="preview-toolbar">
+          <span class="preview-heading">All downloads</span>
+          <span class="preview-tools">
+            <span class="preview-tool"><Icon name="play" size={12} /></span>
+            <span class="preview-tool"><Icon name="pause" size={12} /></span>
+            <span class="preview-tool"><Icon name="plus" size={12} /></span>
+          </span>
+        </div>
+
+        <div class="preview-table">
+          <div class="preview-row preview-row--head">
+            <span>Name</span>
+            <span>Size</span>
+            <span>Progress</span>
+            <span>Speed</span>
+          </div>
+
+          {
+            rows.map((row) => (
+              <div class="preview-row">
+                <span class="preview-name">
+                  <span class="preview-file">
+                    <Icon name="file" size={13} />
+                  </span>
+                  {row.name}
+                </span>
+                <span class="preview-size">{row.size}</span>
+                <span class="preview-progress">
+                  <span class="preview-bar">
+                    <span
+                      class="preview-bar-fill"
+                      style={`--progress:${row.progress}%`}
+                    />
+                  </span>
+                  <span class="preview-percent">{row.progress}%</span>
+                </span>
+                <span class="preview-speed">{row.speed}</span>
+              </div>
+            ))
+          }
+        </div>
+
+        <div class="preview-status">
+          <span>4.8 MB/s total</span>
+          <span>24 connections</span>
+          <span class="preview-status-live">
+            <span class="preview-status-dot"></span>
+            Queue running
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <figcaption class="sr-only">
+    Interface preview: three downloads in progress, using 24 connections at
+    4.8 MB/s in total, with the queue running.
+  </figcaption>
+</figure>
+
+<style>
+  .app-preview {
+    position: relative;
+    isolation: isolate;
+    margin: 0;
+    max-width: 70rem;
+    margin-inline: auto;
+  }
+
+  .app-preview::before {
+    content: "";
+    position: absolute;
+    inset: -8% -6% 6%;
+    z-index: -1;
+    border-radius: 50%;
+    background: radial-gradient(
+      ellipse at 50% 0%,
+      color-mix(in srgb, var(--accent) 18%, transparent),
+      transparent 62%
+    );
+    filter: blur(42px);
+    pointer-events: none;
+  }
+
+  .preview-window {
+    overflow: hidden;
+    border: 1px solid var(--figure-border);
+    border-radius: var(--radius-md);
+    background-color: var(--figure-bg);
+    color: var(--figure-ink);
+    box-shadow: var(--shadow-panel);
+  }
+
+  .preview-titlebar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--figure-line);
+    background-color: var(--figure-soft);
+  }
+
+  .preview-app {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: var(--figure-ink);
+    font-size: var(--type-caption);
+    font-weight: 500;
+    line-height: 1;
+  }
+
+  .preview-app img {
+    border-radius: 0.2rem;
+  }
+
+  .preview-count {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-inline: auto;
+    padding: 0.25rem 0.55rem;
+    border-radius: 999px;
+    background-color: color-mix(in srgb, var(--figure-accent) 12%, transparent);
+    color: var(--figure-accent);
+    font-size: var(--type-micro);
+    font-weight: 600;
+    letter-spacing: 0.03em;
+  }
+
+  .preview-count-dot {
+    width: 0.35rem;
+    height: 0.35rem;
+    border-radius: 50%;
+    background-color: var(--figure-accent);
+  }
+
+  .preview-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  .preview-control {
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 50%;
+    background-color: var(--figure-line);
+  }
+
+  .preview-control--close {
+    background-color: var(--figure-danger);
+  }
+
+  .preview-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .preview-side {
+    display: none;
+  }
+
+  .preview-main {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .preview-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.75rem 0.9rem;
+    border-bottom: 1px solid var(--figure-line);
+  }
+
+  .preview-heading {
+    font-size: var(--type-caption);
+    font-weight: 600;
+  }
+
+  .preview-tools {
+    display: inline-flex;
+    gap: 0.3rem;
+  }
+
+  .preview-tool {
+    display: grid;
+    place-items: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    border: 1px solid var(--figure-line);
+    border-radius: 0.3rem;
+    color: var(--figure-muted);
+  }
+
+  .preview-table {
+    display: grid;
+  }
+
+  .preview-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "name speed"
+      "progress progress";
+    gap: 0.45rem 0.75rem;
+    padding: 0.7rem 0.9rem;
+    border-bottom: 1px solid var(--figure-line);
+    font-size: var(--type-micro);
+    line-height: 1.3;
+  }
+
+  .preview-row--head {
+    display: none;
+  }
+
+  .preview-name {
+    grid-area: name;
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--figure-ink);
+    font-size: var(--type-caption);
+    font-weight: 500;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .preview-file {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 1.35rem;
+    height: 1.35rem;
+    border-radius: 0.3rem;
+    background-color: var(--figure-soft);
+    color: var(--figure-muted);
+  }
+
+  .preview-size {
+    display: none;
+    color: var(--figure-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .preview-progress {
+    grid-area: progress;
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+  }
+
+  .preview-bar {
+    position: relative;
+    flex: 1;
+    height: 0.3rem;
+    border-radius: 999px;
+    background-color: var(--figure-line);
+    overflow: hidden;
+  }
+
+  .preview-bar::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: repeating-linear-gradient(
+      90deg,
+      transparent 0 calc(12.5% - 1px),
+      var(--figure-bg) calc(12.5% - 1px) 12.5%
+    );
+    opacity: 0.55;
+  }
+
+  .preview-bar-fill {
+    display: block;
+    width: var(--progress);
+    height: 100%;
+    border-radius: inherit;
+    background-color: var(--figure-accent);
+  }
+
+  .preview-percent {
+    color: var(--figure-ink);
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
+
+  .preview-speed {
+    grid-area: speed;
+    color: var(--figure-muted);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+
+  .preview-status {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.9rem;
+    margin-top: auto;
+    padding: 0.6rem 0.9rem;
+    background-color: var(--figure-soft);
+    color: var(--figure-muted);
+    font-size: var(--type-micro);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .preview-status-live {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-left: auto;
+    color: var(--figure-ink);
+  }
+
+  .preview-status-dot {
+    width: 0.35rem;
+    height: 0.35rem;
+    border-radius: 50%;
+    background-color: var(--figure-accent);
+  }
+
+  @media (min-width: 40rem) {
+    .preview-body {
+      grid-template-columns: 9.5rem minmax(0, 1fr);
+    }
+
+    .preview-side {
+      display: block;
+      padding: 0.85rem 0.6rem;
+      border-right: 1px solid var(--figure-line);
+      background-color: var(--figure-soft);
+    }
+
+    .preview-side-label {
+      margin-bottom: 0.35rem;
+      padding-inline: 0.45rem;
+      color: var(--figure-muted);
+      font-size: var(--type-micro);
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .preview-side-label:not(:first-child) {
+      margin-top: 0.9rem;
+    }
+
+    .preview-side ul {
+      display: grid;
+      gap: 0.1rem;
+    }
+
+    .preview-side li {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      padding: 0.3rem 0.45rem;
+      border-radius: 0.3rem;
+      color: var(--figure-muted);
+      font-size: var(--type-micro);
+    }
+
+    .preview-side li.is-active {
+      background-color: color-mix(in srgb, var(--figure-accent) 12%, transparent);
+      color: var(--figure-ink);
+    }
+
+    .preview-side li span {
+      font-variant-numeric: tabular-nums;
+    }
+
+    .preview-row,
+    .preview-row--head {
+      display: grid;
+      grid-template-columns: minmax(0, 1.6fr) 0.6fr minmax(5.5rem, 1fr) 0.6fr;
+      grid-template-areas: none;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .preview-name,
+    .preview-size,
+    .preview-progress,
+    .preview-speed {
+      grid-area: auto;
+    }
+
+    .preview-row--head {
+      color: var(--figure-muted);
+      font-size: var(--type-micro);
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .preview-size {
+      display: block;
+    }
+
+    .preview-progress {
+      grid-area: auto;
+    }
+  }
+
+  @media (min-width: 56rem) {
+    .preview-window {
+      border-radius: var(--radius-lg);
+    }
+
+    .preview-row {
+      font-size: var(--type-caption);
+    }
+
+    .preview-name {
+      font-size: var(--type-small);
+    }
+  }
+</style>

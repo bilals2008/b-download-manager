@@ -17,8 +17,9 @@
     monospace;
 
   /* Type scale */
-  --type-hero: clamp(3.15rem, 8.4vw, 6.5rem);
+  --type-hero: clamp(2.7rem, 8.4vw, 6.5rem);
   --type-section: clamp(2.1rem, 4.2vw, 3.4rem);
+  --type-subsection: clamp(1.55rem, 2.4vw, 2.05rem);
   --type-step: 1.375rem;
   --type-lede: clamp(1.0625rem, 1.5vw, 1.25rem);
   --type-body: 1.0625rem;

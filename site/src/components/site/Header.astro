@@ -3,59 +3,99 @@ import Button from "./Button.astro";
 import ThemeToggle from "./ThemeToggle.astro";
 ---
 
-<div class="nav-shell">
-  <header class="nav-pill">
+<div class="nav-sentinel" data-nav-sentinel aria-hidden="true"></div>
+
+<header class="nav" data-nav>
+  <div class="nav-inner">
     <a class="brand" href="/" aria-label="B Download Manager home">
       <img
         src="/images/app-icon.png"
         alt=""
-        width="30"
-        height="30"
+        width="28"
+        height="28"
         class="brand-mark"
       />
       <span class="brand-name">B Download Manager</span>
     </a>
 
-    <nav class="nav-links" aria-label="Sections">
-      <a href="#features">Features</a>
-      <a href="#how-it-works">How it works</a>
-      <a href="#faq">FAQ</a>
+    <nav class="nav-links" aria-label="Primary">
+      <a href="#features" data-spy>Features</a>
+      <a href="#download" data-spy>Download</a>
+      <a href="#faq" data-spy>FAQ</a>
       <a href="/getting-started/">Docs</a>
     </nav>
 
     <div class="nav-actions">
       <ThemeToggle />
-      <Button href="/installation/" variant="nav" icon="download">
+      <Button
+        href="/installation/"
+        variant="nav"
+        icon="arrow-right"
+        class="nav-install"
+      >
         Install
       </Button>
+
+      <details class="nav-menu" data-nav-menu>
+        <summary class="nav-menu-toggle" aria-label="Open menu">
+          <span aria-hidden="true"></span>
+          <span aria-hidden="true"></span>
+        </summary>
+        <div class="nav-menu-panel">
+          <nav class="nav-menu-links" aria-label="Mobile">
+            <a href="#features">Features</a>
+            <a href="#download">Download</a>
+            <a href="#faq">FAQ</a>
+            <a href="/getting-started/">Documentation</a>
+          </nav>
+          <div class="nav-menu-foot">
+            <Button href="/installation/" variant="nav" icon="arrow-right">
+              Install from source
+            </Button>
+          </div>
+        </div>
+      </details>
     </div>
-  </header>
-</div>
+  </div>
+</header>
 
 <style>
-  .nav-shell {
-    position: sticky;
+  .nav-sentinel {
+    position: absolute;
     top: 0;
-    z-index: 40;
-    padding-block: 0.75rem;
+    left: 0;
+    width: 1px;
+    height: 1px;
     pointer-events: none;
   }
 
-  .nav-pill {
-    width: calc(100% - (var(--gutter) * 2));
-    max-width: var(--container);
-    min-height: 3.25rem;
-    margin-inline: auto;
-    display: flex;
-    align-items: center;
-    gap: 1.25rem;
-    padding: 0.35rem 0.4rem 0.35rem 0.8rem;
-    border: 1px solid color-mix(in srgb, var(--line) 88%, transparent);
-    border-radius: 999px;
-    background-color: var(--page);
-    background-color: color-mix(in srgb, var(--page) 86%, transparent);
+  .nav {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    border-bottom: 1px solid transparent;
+    transition:
+      background-color var(--duration-base) var(--ease-out),
+      border-color var(--duration-base) var(--ease-out);
+  }
+
+  .nav.is-scrolled {
+    border-bottom-color: var(--line);
+    background-color: color-mix(in srgb, var(--page) 88%, transparent);
     backdrop-filter: blur(16px) saturate(1.15);
-    pointer-events: auto;
+  }
+
+  .nav-inner {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+    max-width: var(--container);
+    min-height: 4rem;
+    margin-inline: auto;
+    padding-inline: var(--gutter);
   }
 
   .brand {
@@ -78,10 +118,10 @@ import ThemeToggle from "./ThemeToggle.astro";
   }
 
   .brand-mark {
-    width: 1.875rem;
-    height: 1.875rem;
+    width: 1.75rem;
+    height: 1.75rem;
     flex: none;
-    border-radius: 0.5rem;
+    border-radius: 0.45rem;
   }
 
   .brand-name {
@@ -93,51 +133,194 @@ import ThemeToggle from "./ThemeToggle.astro";
   .nav-links {
     display: none;
     align-items: center;
-    gap: 1.4rem;
+    justify-content: center;
+    gap: 0.25rem;
   }
 
-  .nav-links a {
+  .nav-links a,
+  .nav-menu-links a {
     display: inline-flex;
     align-items: center;
     min-height: 2.5rem;
+    padding-inline: 0.8rem;
+    border-radius: 999px;
     color: var(--muted);
     font-size: var(--type-label);
     font-weight: 500;
     text-decoration: none;
-    transition: color var(--duration-fast) var(--ease-out);
+    transition:
+      color var(--duration-fast) var(--ease-out),
+      background-color var(--duration-fast) var(--ease-out);
   }
 
-  .nav-links a:hover {
+  .nav-links a:hover,
+  .nav-menu-links a:hover {
+    background-color: var(--surface);
     color: var(--ink);
+  }
+
+  .nav-links a[aria-current="location"] {
+    background-color: var(--accent-soft);
+    color: var(--accent);
   }
 
   .nav-actions {
     display: flex;
     align-items: center;
-    gap: 0.35rem;
-    margin-left: auto;
+    gap: 0.3rem;
+    justify-self: end;
   }
 
-  @media (min-width: 30rem) {
-    .nav-pill {
-      padding-inline: 1rem 0.4rem;
+  .nav-install {
+    display: none;
+  }
+
+  .nav-menu {
+    position: relative;
+  }
+
+  .nav-menu-toggle {
+    display: grid;
+    place-content: center;
+    gap: 5px;
+    width: 2.4rem;
+    height: 2.4rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: var(--ink);
+    cursor: pointer;
+    transition:
+      border-color var(--duration-fast) var(--ease-out),
+      background-color var(--duration-fast) var(--ease-out);
+  }
+
+  .nav-menu-toggle:hover {
+    border-color: var(--line-strong);
+    background-color: var(--surface);
+  }
+
+  .nav-menu-toggle span {
+    width: 0.95rem;
+    height: 1.5px;
+    background-color: currentColor;
+    transition: transform var(--duration-fast) var(--ease-out);
+  }
+
+  .nav-menu[open] .nav-menu-toggle span:first-child {
+    transform: translateY(3.25px) rotate(45deg);
+  }
+
+  .nav-menu[open] .nav-menu-toggle span:last-child {
+    transform: translateY(-3.25px) rotate(-45deg);
+  }
+
+  .nav-menu-panel {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 0.6rem);
+    width: min(19rem, calc(100vw - (var(--gutter) * 2)));
+    padding: 0.5rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background-color: var(--page);
+    box-shadow: var(--shadow-panel);
+  }
+
+  .nav-menu-links {
+    display: grid;
+  }
+
+  .nav-menu-links a {
+    display: flex;
+    justify-content: space-between;
+    border-radius: var(--radius-xs);
+    padding-inline: 0.7rem;
+  }
+
+  .nav-menu-foot {
+    margin-top: 0.5rem;
+    padding-top: 0.6rem;
+    border-top: 1px solid var(--line);
+  }
+
+  .nav-menu-foot :global(.btn) {
+    width: 100%;
+    border-radius: var(--radius-xs);
+  }
+
+  @media (min-width: 56rem) {
+    .nav-inner {
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      min-height: 4.25rem;
     }
-  }
 
-  @media (max-width: 29.99rem) {
-    .brand-name {
+    .nav-links,
+    .nav-install {
+      display: flex;
+    }
+
+    .nav-menu {
       display: none;
     }
   }
-
-  @media (min-width: 48rem) {
-    .nav-pill {
-      min-height: 3.5rem;
-      gap: 1.75rem;
-    }
-
-    .nav-links {
-      display: flex;
-    }
-  }
 </style>
+
+<script>
+  const nav = document.querySelector<HTMLElement>("[data-nav]");
+  const sentinel = document.querySelector<HTMLElement>("[data-nav-sentinel]");
+
+  if (nav && sentinel && "IntersectionObserver" in window) {
+    const observer = new IntersectionObserver(([entry]) => {
+      nav.classList.toggle("is-scrolled", !entry.isIntersecting);
+    });
+
+    observer.observe(sentinel);
+  }
+
+  const menu = document.querySelector<HTMLDetailsElement>("[data-nav-menu]");
+
+  menu?.addEventListener("toggle", () => {
+    const toggle = menu.querySelector("summary");
+    toggle?.setAttribute("aria-label", menu.open ? "Close menu" : "Open menu");
+  });
+
+  menu?.addEventListener("click", (event) => {
+    if ((event.target as HTMLElement).closest("a")) {
+      menu.open = false;
+    }
+  });
+
+  const spyLinks = Array.from(
+    document.querySelectorAll<HTMLAnchorElement>("[data-spy]"),
+  );
+
+  const spySections = spyLinks
+    .map((link) => {
+      const hash = link.getAttribute("href") ?? "";
+      return hash.startsWith("#") ? document.querySelector(hash) : null;
+    })
+    .filter((section): section is Element => section !== null);
+
+  if (spySections.length && "IntersectionObserver" in window) {
+    const setActive = (id: string) => {
+      for (const link of spyLinks) {
+        if (link.getAttribute("href") === `#${id}`) {
+          link.setAttribute("aria-current", "location");
+        } else {
+          link.removeAttribute("aria-current");
+        }
+      }
+    };
+
+    const spy = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) setActive(entry.target.id);
+        }
+      },
+      { rootMargin: "-40% 0px -55% 0px" },
+    );
+
+    for (const section of spySections) spy.observe(section);
+  }
+</script>

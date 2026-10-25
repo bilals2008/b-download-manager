@@ -3,7 +3,7 @@ import Icon from "./Icon.astro";
 
 interface Props {
   href: string;
-  variant?: "primary" | "nav";
+  variant?: "primary" | "secondary" | "nav";
   icon?: "arrow-right" | "arrow-down" | "arrow-up-right" | "download";
   class?: string;
 }
@@ -27,8 +27,11 @@ const {
     align-items: center;
     justify-content: center;
     gap: 0.55rem;
+    min-height: 2.75rem;
+    padding: 0.7rem 1.2rem;
     border: 1px solid transparent;
     border-radius: 999px;
+    font-size: var(--type-small);
     font-weight: 500;
     line-height: 1;
     text-decoration: none;
@@ -45,7 +48,7 @@ const {
   }
 
   .btn:active {
-    transform: translateY(0);
+    transform: translateY(0) scale(0.99);
   }
 
   .btn :global(svg) {
@@ -57,20 +60,27 @@ const {
   }
 
   .btn--primary {
-    min-height: 3rem;
-    padding: 0.9rem 1.35rem;
     background-color: var(--action-bg);
     color: var(--action-ink);
-    font-size: var(--type-small);
   }
 
   .btn--primary:hover {
     background-color: var(--action-hover);
   }
 
+  .btn--secondary {
+    border-color: var(--line-strong);
+    color: var(--ink);
+  }
+
+  .btn--secondary:hover {
+    border-color: var(--muted);
+    background-color: var(--surface);
+  }
+
   .btn--nav {
     min-height: 2.25rem;
-    padding: 0.55rem 0.85rem;
+    padding: 0.55rem 0.9rem;
     background-color: var(--action-bg);
     color: var(--action-ink);
     font-size: var(--type-caption);
@@ -85,8 +95,13 @@ const {
     height: 14px;
   }
 
+  .btn--secondary:hover :global(svg) {
+    transform: translateY(2px);
+  }
+
   @media (prefers-reduced-motion: reduce) {
-    .btn:hover {
+    .btn:hover,
+    .btn:active {
       transform: none;
     }
   }

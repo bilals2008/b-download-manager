@@ -1,66 +1,72 @@
 ---
 import Button from "./Button.astro";
 import Icon from "./Icon.astro";
+import PlatformIcon from "./PlatformIcon.astro";
+import AppPreview from "./AppPreview.astro";
+
+const platforms = [
+  { name: "windows", label: "Windows" },
+  { name: "apple", label: "macOS" },
+  { name: "linux", label: "Linux" },
+] as const;
 ---
 
 <section class="hero" aria-labelledby="hero-title">
   <div class="container-page">
     <div class="hero-copy">
       <p class="hero-eyebrow">
-        <span class="hero-eyebrow-mark" aria-hidden="true"></span>
-        Desktop download manager · 0.1.0 preview
+        <span class="hero-eyebrow-dot" aria-hidden="true"></span>
+        Version 0.1.0 · early preview
       </p>
 
       <h1 id="hero-title" class="hero-title">
-        Pick up where it stopped<span class="hero-title-dot">.</span>
+        Pick up where
+        <span class="hero-title-line">it stopped<span class="hero-title-dot">.</span></span>
       </h1>
 
       <p class="hero-lede">
-        B Download Manager splits large files across parallel connections and
-        keeps every byte on disk. Pause, crash, or restart: it continues from
-        where it stopped.
+        Splits files across parallel connections and keeps every byte on disk.
+        Pause or restart: it continues where it stopped.
       </p>
 
       <div class="hero-actions">
         <Button href="/installation/" variant="primary" icon="arrow-right">
           Install from source
         </Button>
-        <a class="hero-secondary" href="#how-it-works">
-          <span>See how it works</span>
-          <Icon name="arrow-down" size={15} />
-        </a>
+        <Button href="#features" variant="secondary" icon="arrow-down">
+          See what it does
+        </Button>
       </div>
 
-      <ul class="hero-specs" aria-label="Product facts">
-        <li>Up to 32 connections</li>
-        <li>HTTP, HTTPS, FTP</li>
-        <li>Windows, macOS, Linux</li>
+      <ul class="hero-platforms" aria-label="Supported platforms">
+        {
+          platforms.map((platform) => (
+            <li>
+              <PlatformIcon name={platform.name} size={15} />
+              {platform.label}
+            </li>
+          ))
+        }
       </ul>
     </div>
 
-    <figure class="hero-figure reveal">
-      <div class="hero-figure-frame">
-        <img
-          src="https://placehold.co/1200x640/0a1511/e9efe9?text=Main+window+preview&font=montserrat"
-          width="1200"
-          height="640"
-          alt="Placeholder for the B Download Manager main window with the download list"
-          loading="eager"
-          fetchpriority="high"
-          decoding="async"
-        />
-      </div>
-    </figure>
+    <div class="hero-figure reveal">
+      <AppPreview />
+      <p class="hero-figure-caption">
+        <Icon name="file" size={13} />
+        Interface preview · Windows layout at 0.1.0
+      </p>
+    </div>
   </div>
 </section>
 
 <style>
   .hero {
-    padding-block: clamp(3.5rem, 7vw, 6.5rem) clamp(4.5rem, 9vw, 8rem);
+    padding-block: clamp(2.75rem, 6vw, 4.5rem) var(--section-space);
   }
 
   .hero-copy {
-    max-width: 64rem;
+    max-width: 54rem;
     margin-inline: auto;
     text-align: center;
   }
@@ -72,26 +78,28 @@ import Icon from "./Icon.astro";
   .hero-eyebrow {
     display: inline-flex;
     align-items: center;
-    gap: 0.55rem;
+    gap: 0.5rem;
+    padding: 0.35rem 0.7rem 0.35rem 0.55rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
     color: var(--muted);
     font-size: var(--type-caption);
     font-weight: 500;
-    letter-spacing: 0.02em;
-    line-height: 1.3;
+    line-height: 1.2;
     animation-delay: 40ms;
   }
 
-  .hero-eyebrow-mark {
+  .hero-eyebrow-dot {
     width: 0.4rem;
     height: 0.4rem;
     flex: none;
-    border-radius: 1px;
+    border-radius: 50%;
     background-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
   }
 
   .hero-title {
-    max-width: 18ch;
-    margin: 1.35rem auto 0;
+    margin-top: 1.4rem;
     color: var(--ink);
     font-family: var(--face-display);
     font-size: var(--type-hero);
@@ -103,16 +111,22 @@ import Icon from "./Icon.astro";
     animation-delay: 120ms;
   }
 
-  .hero-title-dot {
+  .hero-title-line {
+    display: block;
     color: var(--accent);
   }
 
+  .hero-title-dot {
+    color: var(--ink);
+  }
+
   .hero-lede {
-    max-width: 56ch;
-    margin: 1.75rem auto 0;
+    max-width: 44ch;
+    margin: 1.6rem auto 0;
     color: var(--muted);
     font-size: var(--type-lede);
     line-height: 1.55;
+    text-wrap: pretty;
     animation-delay: 220ms;
   }
 
@@ -121,89 +135,53 @@ import Icon from "./Icon.astro";
     flex-wrap: wrap;
     align-items: center;
     justify-content: center;
-    gap: 0.75rem 1.5rem;
-    margin-top: 2.25rem;
+    gap: 0.65rem;
+    margin-top: 2rem;
     animation-delay: 320ms;
   }
 
-  .hero-secondary {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    min-height: 2.75rem;
-    padding: 0.25rem 0;
-    border-bottom: 1px solid transparent;
-    color: var(--ink-soft);
-    font-size: var(--type-small);
-    font-weight: 500;
-    text-decoration: none;
-    transition:
-      color var(--duration-fast) var(--ease-out),
-      border-color var(--duration-fast) var(--ease-out);
-  }
-
-  .hero-secondary:hover {
-    color: var(--ink);
-    border-color: var(--muted);
-  }
-
-  .hero-secondary :global(svg) {
-    transition: transform var(--duration-fast) var(--ease-out);
-  }
-
-  .hero-secondary:hover :global(svg) {
-    transform: translateY(2px);
-  }
-
-  .hero-specs {
+  .hero-platforms {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     justify-content: center;
-    gap: 0.4rem 1.25rem;
-    margin-top: 2.5rem;
+    gap: 0.4rem 1.4rem;
+    margin-top: 1.6rem;
     color: var(--muted);
     font-size: var(--type-caption);
-    font-variant-numeric: tabular-nums;
-    line-height: 1.5;
+    line-height: 1.4;
     animation-delay: 400ms;
   }
 
-  .hero-specs li {
+  .hero-platforms li {
     display: inline-flex;
     align-items: center;
-    gap: 1.25rem;
+    gap: 0.4rem;
   }
 
-  .hero-specs li + li::before {
-    content: "/";
-    color: var(--line-strong);
-    font-family: var(--face-mono);
+  .hero-platforms :global(svg) {
+    color: var(--ink-soft);
   }
 
   .hero-figure {
-    margin-top: clamp(3rem, 6vw, 5rem);
+    margin-top: clamp(2.5rem, 5vw, 4rem);
   }
 
-  .hero-figure-frame {
-    overflow: hidden;
-    border: 1px solid var(--figure-border);
-    border-radius: var(--radius-md);
-    background-color: var(--figure-bg);
-    box-shadow: var(--shadow-figure);
+  .hero-figure-caption {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    margin-top: 1.1rem;
+    color: var(--muted);
+    font-size: var(--type-micro);
+    letter-spacing: 0.02em;
+    line-height: 1.4;
   }
 
-  .hero-figure img {
-    display: block;
-    width: 100%;
-    height: auto;
-    aspect-ratio: 1200 / 640;
-    object-fit: cover;
-  }
-
-  @media (min-width: 48rem) {
-    .hero-figure-frame {
-      border-radius: var(--radius-lg);
+  @media (min-width: 40rem) {
+    .hero-actions {
+      gap: 0.75rem;
     }
   }
 

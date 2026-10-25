@@ -1,152 +1,357 @@
 ---
 import Icon from "./Icon.astro";
-import TextLink from "./TextLink.astro";
+import FeatureVisual from "./FeatureVisual.astro";
+import type { IconName } from "./Icon.astro";
+import type { VisualKind } from "./FeatureVisual.astro";
 
 type Feature = {
-  icon: "network" | "resume" | "globe" | "gauge" | "browser" | "tray";
+  icon: IconName;
+  kicker: string;
   title: string;
   body: string;
+  bullets: string[];
+  visual: VisualKind;
 };
 
 const features: Feature[] = [
   {
     icon: "network",
-    title: "Parallel by default",
-    body: "Each file is split into byte ranges with one connection each, up to 32, with a per-site cap and an application-wide connection budget.",
+    kicker: "Segmented transfers",
+    title: "One file, up to 32 connections.",
+    body: "The engine cuts a file into byte ranges and gives each one its own connection, with a per-site cap and an application-wide budget.",
+    bullets: [
+      "Up to 32 connections per file",
+      "Per-site and global caps",
+      "Ranges sized at 16 MiB",
+    ],
+    visual: "parallel",
   },
   {
     icon: "resume",
-    title: "Resume, not restart",
-    body: "A crash-safe manifest records every finished range. Pause, close the app, or lose power; the next run continues from the bytes on disk.",
+    kicker: "Resume",
+    title: "Resume, not restart.",
+    body: "A crash-safe manifest records every finished range. Pause, close the app or lose power; the next run reads the bytes already on disk.",
+    bullets: [
+      "Manifest beside the part files",
+      "Overlaps and out-of-order ranges rejected",
+      "FTP REST offsets for the same job",
+    ],
+    visual: "resume",
   },
   {
     icon: "globe",
-    title: "HTTP, HTTPS and FTP",
-    body: "Range requests over HTTP and HTTPS, and REST offsets over FTP. If a server ignores ranges, the file is fetched on one connection.",
+    kicker: "HTTP, HTTPS and FTP",
+    title: "Range requests where they work.",
+    body: "HTTP and HTTPS ask for identity-encoded ranges. FTP seeks with REST. A server that answers with a plain 200 is fetched on one connection.",
+    bullets: [
+      "Range-first requests",
+      "FTP data connection per range",
+      "One-connection fallback",
+    ],
+    visual: "protocol",
   },
   {
     icon: "gauge",
-    title: "Speed you set",
-    body: "A global ceiling and a per-download cap, applied across every connection, in KB/s or MB/s.",
+    kicker: "Limits",
+    title: "A ceiling you choose.",
+    body: "Set one cap for the whole application and one for each download, in KB/s or MB/s. The engine applies the limit across every open connection.",
+    bullets: [
+      "Global and per-download caps",
+      "KB/s or MB/s",
+      "Applied per connection",
+    ],
+    visual: "speed",
   },
   {
     icon: "browser",
-    title: "Browser hand-off",
-    body: "Firefox, Chrome and Edge extensions send links to the app over a local bridge. No native messaging host, no registry entry.",
+    kicker: "Browser hand-off",
+    title: "Send links from the browser.",
+    body: "Firefox, Chrome and Edge extensions pass a link to the app over a versioned loopback bridge. No native messaging host and no registry entry.",
+    bullets: [
+      "Right-click hand-off",
+      "Firefox video button",
+      "Chrome and Edge build",
+    ],
+    visual: "browser",
   },
   {
     icon: "tray",
-    title: "Out of the way",
-    body: "Close the window and the queue keeps going. The tray restores it, starts or stops the queue, and is the way out.",
+    kicker: "Tray",
+    title: "Close the window, keep the queue.",
+    body: "The tray restores the window, starts or stops the queue, and is the way out. Closing the window hides it; nothing stops downloading.",
+    bullets: [
+      "Queue keeps running",
+      "Start and stop from the tray",
+      "Quit from the tray",
+    ],
+    visual: "tray",
   },
 ];
 ---
 
-<section id="features" class="section" aria-labelledby="features-title">
+<section id="features" class="section features" aria-labelledby="features-title">
   <div class="container-page">
-    <div class="feature-grid">
-      <div class="feature-intro reveal">
-        <p class="eyebrow">What it does</p>
-        <h2 id="features-title" class="section-title">
-          The hard part is finishing.
-        </h2>
-        <p class="section-copy">
-          A dropped connection, a closed lid, a server that ignores ranges. The
-          engine handles the edges so the file still lands.
-        </p>
-        <TextLink href="/getting-started/" class="feature-link">
-          Read the documentation
-        </TextLink>
-      </div>
+    <header class="features-head reveal">
+      <p class="eyebrow">What it does</p>
+      <h2 id="features-title" class="section-title">
+        The hard part is finishing.
+      </h2>
+      <p class="section-copy">
+        No account, no cloud, no editor you did not ask for. A focused engine
+        and a Windows-style queue that stays out of the way.
+      </p>
+    </header>
 
-      <ul class="feature-list reveal">
-        {
-          features.map((feature) => (
-            <li class="feature">
-              <span class="feature-icon">
-                <Icon name={feature.icon} size={18} />
-              </span>
-              <div>
-                <h3 class="feature-title">{feature.title}</h3>
-                <p class="feature-body">{feature.body}</p>
+    <div class="feature-stack">
+      <span class="feature-spine" aria-hidden="true"></span>
+
+      {
+        features.map((feature, index) => (
+          <article
+            class:list={[
+              "feature-row",
+              index % 2 === 1 && "feature-row--reverse",
+              "reveal",
+            ]}
+          >
+            <span class="feature-index" aria-hidden="true">
+              {String(index + 1).padStart(2, "0")}
+            </span>
+
+            <div class="feature-copy">
+              <div class="feature-kicker">
+                <span class="feature-icon">
+                  <Icon name={feature.icon} size={17} />
+                </span>
+                <span>{feature.kicker}</span>
               </div>
-            </li>
-          ))
-        }
-      </ul>
+              <h3 class="feature-title">{feature.title}</h3>
+              <p class="feature-body">{feature.body}</p>
+              <ul class="feature-bullets">
+                {feature.bullets.map((bullet) => (
+                  <li>
+                    <span class="feature-check">
+                      <Icon name="check" size={11} strokeWidth={2} />
+                    </span>
+                    {bullet}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div class="feature-visual">
+              <FeatureVisual kind={feature.visual} />
+            </div>
+          </article>
+        ))
+      }
     </div>
   </div>
 </section>
 
 <style>
-  .feature-grid {
+  .features-head {
+    max-width: 46rem;
+    margin-inline: auto;
+    text-align: center;
+  }
+
+  .features-head :global(.section-title),
+  .features-head :global(.section-copy) {
+    margin-inline: auto;
+  }
+
+  .feature-stack {
+    position: relative;
+    margin-top: clamp(3rem, 6vw, 5rem);
+  }
+
+  .feature-spine {
+    display: none;
+  }
+
+  .feature-row {
+    position: relative;
     display: grid;
-    gap: 2.75rem;
-  }
-
-  .feature-intro {
-    align-self: start;
-  }
-
-  .feature-link {
-    margin-top: 2rem;
-  }
-
-  .feature-list {
-    display: grid;
-  }
-
-  .feature {
-    display: grid;
-    grid-template-columns: 1.5rem minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr);
     gap: 1rem;
-    padding-block: 1.4rem;
-  }
-
-  .feature:first-child {
-    padding-top: 0;
-  }
-
-  .feature:last-child {
-    padding-bottom: 0;
-  }
-
-  .feature + .feature {
+    padding-top: 2.25rem;
     border-top: 1px solid var(--line);
   }
 
-  .feature-icon {
+  .feature-row:first-of-type {
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .feature-row + .feature-row {
+    margin-top: 3rem;
+  }
+
+  .feature-index {
+    display: inline-flex;
+    grid-column: 1;
+    grid-row: 1;
+    align-self: start;
+    align-items: center;
+    justify-content: center;
+    width: 2.35rem;
+    height: 2.35rem;
+    border: 1px solid var(--line-strong);
+    border-radius: 50%;
+    color: var(--accent);
+    font-family: var(--face-mono);
+    font-size: var(--type-caption);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+
+  .feature-copy {
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 0;
+  }
+
+  .feature-kicker {
     display: flex;
-    justify-content: flex-start;
-    padding-top: 0.15rem;
+    align-items: center;
+    gap: 0.6rem;
+    color: var(--muted);
+    font-size: var(--type-caption);
+    font-weight: 500;
+    line-height: 1.3;
+  }
+
+  .feature-icon {
+    display: grid;
+    place-items: center;
+    width: 2.1rem;
+    height: 2.1rem;
+    flex: none;
+    border: 1px solid var(--line);
+    border-radius: 0.55rem;
+    background-color: var(--accent-soft);
     color: var(--accent);
   }
 
   .feature-title {
+    margin-top: 0.95rem;
     color: var(--ink);
-    font-size: var(--type-feature);
-    font-weight: 600;
-    letter-spacing: -0.005em;
-    line-height: 1.35;
+    font-family: var(--face-display);
+    font-size: var(--type-subsection);
+    font-weight: 500;
+    letter-spacing: -0.03em;
+    line-height: 1.12;
+    text-wrap: balance;
   }
 
   .feature-body {
-    margin-top: 0.4rem;
-    max-width: 56ch;
+    max-width: 48ch;
+    margin-top: 1rem;
     color: var(--muted);
-    font-size: var(--type-small);
+    font-size: var(--type-body);
     line-height: 1.65;
   }
 
+  .feature-bullets {
+    display: grid;
+    gap: 0.55rem;
+    margin-top: 1.4rem;
+  }
+
+  .feature-bullets li {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    color: var(--ink);
+    font-size: var(--type-small);
+    line-height: 1.45;
+  }
+
+  .feature-check {
+    display: grid;
+    place-items: center;
+    width: 1.3rem;
+    height: 1.3rem;
+    flex: none;
+    border-radius: 50%;
+    background-color: var(--accent-soft);
+    color: var(--accent);
+  }
+
+  .feature-visual {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    width: 100%;
+    max-width: 30rem;
+    justify-self: center;
+  }
+
   @media (min-width: 56rem) {
-    .feature-grid {
-      grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
-      gap: clamp(3.5rem, 7vw, 6rem);
+    .feature-stack {
+      display: grid;
+      gap: clamp(4rem, 8vw, 7rem);
     }
 
-    .feature-intro {
-      position: sticky;
-      top: var(--nav-offset);
+    .feature-spine {
+      display: block;
+      position: absolute;
+      top: 1.2rem;
+      bottom: 1.2rem;
+      left: 50%;
+      width: 1px;
+      background: linear-gradient(
+        to bottom,
+        transparent,
+        var(--line) 8%,
+        var(--line) 92%,
+        transparent
+      );
+      transform: translateX(-50%);
+    }
+
+    .feature-row {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      align-items: center;
+      gap: clamp(3rem, 7vw, 6rem);
+      padding-top: 0;
+      padding-block: 0;
+      border-top: 0;
+    }
+
+    .feature-row + .feature-row {
+      margin-top: 0;
+    }
+
+    .feature-copy {
+      grid-column: 1;
+      grid-row: 1;
+    }
+
+    .feature-visual {
+      grid-column: 2;
+      grid-row: 1;
+    }
+
+    .feature-row--reverse .feature-copy {
+      grid-column: 2;
+      grid-row: 1;
+    }
+
+    .feature-row--reverse .feature-visual {
+      grid-column: 1;
+      grid-row: 1;
+    }
+
+    .feature-index {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      z-index: 1;
+      width: 2.75rem;
+      height: 2.75rem;
+      background-color: var(--page);
+      transform: translate(-50%, -50%);
     }
   }
 </style>
