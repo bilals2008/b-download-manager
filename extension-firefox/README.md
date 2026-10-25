@@ -16,7 +16,8 @@ lives in `browser-extension/` and speaks the same versioned loopback API.
 - **Takes over browser downloads** when the setting is on. A download the
   browser starts is handed to the application **before** the browser copy is
   cancelled, so a closed application never loses the file. File-type and site
-  rules are applied here.
+  rules follow the app's Settings while it runs, and the extension's own copy
+  while it is closed.
 - **IDM-style video button** on supported HTML5 videos. A 30 px button appears
   at the video's top-right corner on hover. Clicking it opens a compact panel
   with the direct media files that video offers, a progress bar and an
@@ -30,7 +31,10 @@ lives in `browser-extension/` and speaks the same versioned loopback API.
 - **Settings**: interception, ask-before-saving, video overlay, file-type
   filter, excluded sites, and Auto/Light/Dark theme. Every change is saved
   immediately; *Reset to defaults* is the only destructive action and asks for
-  a second click.
+  a second click. While the app is running, its Settings page owns interception,
+  ask, file types and excluded sites; the extension's copy is the fallback for
+  when it is closed. The video overlay and the theme always stay
+  extension-owned.
 
 The panel deliberately offers only addresses the engine can fetch as a file.
 A `blob:` URL from Media Source Extensions, an HLS/DASH manifest, and a
@@ -53,6 +57,7 @@ form or `<script>` request is therefore refused as well. Requests without an
 | Request | Answer |
 | --- | --- |
 | `GET /v1/ping` | `{ app, api, version, port }` |
+| `GET /v1/capture` | `{ capture, ask, types, skipSites }` |
 | `GET /v1/downloads` | `{ downloads, active }` |
 | `POST /v1/downloads` | `{ mode: "direct", id, name, dest }` or `{ mode: "ask" }` |
 | `POST /v1/downloads/:id/pause` | the download's new state |
@@ -65,6 +70,12 @@ form or `<script>` request is therefore refused as well. Requests without an
 `http://`, `https://` or `ftp://`, and `mode` is `direct` or `ask`. The server
 sanitises the file name and makes it unique in the download folder, so a
 hand-over cannot escape the folder or overwrite an existing file.
+
+`GET /v1/capture` is the app-owned copy of the capture rules. While the app
+answers, its Settings page wins for the hand-over switch, the ask switch, the
+file types and the excluded sites. When the app is closed the request fails and
+the extension uses its own saved copy, so the rules still apply with the app
+gone.
 
 The extension pings first. If nothing answers, the app is reported as not
 running. If something answers but does not identify itself as

@@ -21,7 +21,10 @@ itself, so there is no native messaging host to register.
   *Download with B Download Manager*.
 - **Take over browser downloads** when the popup switch is on. The file is
   handed to the application **before** the browser copy is cancelled; if the
-  app is closed, the browser download continues untouched.
+  app is closed, the browser download continues untouched. While the app runs,
+  its Settings page owns the capture switch, the ask switch, the file types and
+  the excluded sites; the popup switch and the extension storage are the
+  fallback for when it is closed.
 - The popup checks `/v1/ping` with the client header, so a different program
   on the port is reported as a mismatch instead of a connection.
 
@@ -34,5 +37,6 @@ accepts only extension origins and refuses a page's preflight.
 ## Limitations
 
 - No video overlay and no live download list; use the Firefox build for those.
-- No options page. The takeover switch lives in the popup.
+- No options page. The takeover switch lives in the popup, but while the app is
+  running its Settings page owns the capture rules; the popup is the fallback.
 - The app must be running; a web extension cannot start a desktop program.

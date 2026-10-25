@@ -109,6 +109,16 @@ async function bdmBridgeList() {
   return bdmBridgeRequest("GET", "/v1/downloads", undefined, 2500);
 }
 
+/**
+ * The capture rules the application owns while it is running.
+ *
+ * The extension keeps its own rules for when the application is closed; this
+ * answer is the newer one whenever the bridge can be reached.
+ */
+async function bdmBridgeCapturePolicy() {
+  return bdmBridgeRequest("GET", "/v1/capture", undefined, 1500);
+}
+
 /** Start a download in the app. `mode` is "direct" or "ask". */
 async function bdmBridgeSend(payload) {
   return bdmBridgeRequest(

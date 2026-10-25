@@ -55,10 +55,20 @@ async function createMenus() {
 
 browser.runtime.onInstalled.addListener(() => {
   void createMenus();
+  announce();
 });
 browser.runtime.onStartup.addListener(() => {
   void createMenus();
+  announce();
 });
+
+/**
+ * Tell the application the browser is here. A failed ping is normal: the
+ * application may not be running, and nothing else depends on it.
+ */
+function announce() {
+  void bdmBridgePing().catch(() => {});
+}
 
 /* --------------------------------------------------------------- statuses */
 
@@ -94,12 +104,35 @@ browser.tabs.onRemoved.addListener((tabId) => {
 
 /* ---------------------------------------------------------- hand-overs */
 
+/*
+  The capture rules. While the application runs, its Settings page owns the
+  hand-over switch, the ask switch, the file types and the site list; the
+  extension's own copy is the fallback for when the application is closed. The
+  overlay and the theme stay the extension's own.
+*/
+async function bdmEffectiveSettings() {
+  const local = await bdmLoadSettings();
+  try {
+    const policy = await bdmBridgeCapturePolicy();
+    if (!policy || typeof policy !== "object") return local;
+    return bdmNormalizeSettings({
+      ...local,
+      intercept: policy.capture === true,
+      ask: policy.ask === true,
+      types: Array.isArray(policy.types) ? policy.types : local.types,
+      skipSites: Array.isArray(policy.skipSites) ? policy.skipSites : local.skipSites,
+    });
+  } catch {
+    return local;
+  }
+}
+
 /** Send one link to the app. The settings decide whether it asks first. */
 async function sendLink(url, name, referer) {
   if (!bdmIsHttpUrl(url) && !/^ftp:\/\//i.test(url)) {
     return { ok: false, error: { kind: "refused", message: "This link is not a download." } };
   }
-  const settings = await bdmLoadSettings();
+  const settings = await bdmEffectiveSettings();
   const mode = settings.ask ? "ask" : "direct";
   const result = await bdmBridgeSend({
     url,
@@ -153,7 +186,7 @@ browser.downloads.onCreated.addListener(async (item) => {
   handedOver.add(item.id);
   setTimeout(() => handedOver.delete(item.id), 30000);
 
-  const settings = await bdmLoadSettings();
+  const settings = await bdmEffectiveSettings();
   if (!bdmShouldIntercept(settings, item.url, item.referrer || "")) return;
 
   const name = bdmFileNameOfPath(item.filename) || bdmNameFromUrl(item.url);
@@ -214,7 +247,7 @@ async function handleMessage(message, sender) {
         return { ok: false, error: { kind: "refused", message: "This link is not a download." } };
       }
       try {
-        const settings = await bdmLoadSettings();
+        const settings = await bdmEffectiveSettings();
         const result = await bdmBridgeSend({
           url: payload.url,
           name: payload.name || bdmNameFromUrl(payload.url),

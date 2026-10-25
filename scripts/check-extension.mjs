@@ -266,6 +266,7 @@ const sandbox = mockBrowser();
 let bridgeMode = "online";
 let pingApp = "b-download-manager";
 let listPayload = { downloads: [], active: 0 };
+let capturePolicy = { capture: true, ask: false, types: [], skipSites: [] };
 const lastSend = { body: null };
 
 async function fakeFetch(url, options = {}) {
@@ -276,6 +277,8 @@ async function fakeFetch(url, options = {}) {
   let data;
   if (pathName === "/v1/ping") {
     data = { app: pingApp, api: 1, version: "0.1.0", port: 27500 };
+  } else if (pathName === "/v1/capture") {
+    data = capturePolicy;
   } else if (pathName === "/v1/downloads" && options.method === "GET") {
     data = listPayload;
   } else if (pathName === "/v1/downloads" && options.method === "POST") {
@@ -294,6 +297,10 @@ async function fakeFetch(url, options = {}) {
     },
   };
 }
+
+/** The hand-over requests, so a test can tell a filtered download from a send. */
+const sentDownloads = () =>
+  sandbox.calls.fetches.filter((call) => new URL(String(call.url)).pathname === "/v1/downloads");
 
 // A cleanup timer in the takeover path waits 30 s; the sandbox does not need
 // to keep the check alive for it.
@@ -558,11 +565,13 @@ assert.equal(sendAnswer.result.mode, "direct");
 assert.equal(lastSend.body.referer, "");
 
 store.ask = true;
+capturePolicy = { ...capturePolicy, ask: true };
 await onMessage(
   { type: "bdm:send", payload: { url: "https://example.org/b.bin", referer: "https://example.org/" } },
   {},
 );
-assert.equal(lastSend.body.mode, "ask", "the ask preference reaches the bridge");
+assert.equal(lastSend.body.mode, "ask", "the app's ask setting reaches the bridge");
+capturePolicy = { ...capturePolicy, ask: false };
 delete store.ask;
 
 sandbox.calls.fetches.length = 0;
@@ -593,11 +602,12 @@ assert.ok(
 );
 
 // A download the browser starts is handed over before the browser copy is
-// cancelled; a failure leaves the browser copy alone.
+// cancelled; a failure leaves the browser copy alone. While the app runs, its
+// policy wins over the extension's local copy.
 const onCreated = sandbox.listeners.get("created")[0];
 assert.ok(onCreated, "the background watches browser downloads");
 
-store.intercept = true;
+store.intercept = false;
 sandbox.calls.cancelled.length = 0;
 sandbox.calls.erased.length = 0;
 await onCreated({
@@ -612,6 +622,12 @@ assert.deepEqual(
   [7],
   "the browser copy is erased",
 );
+assert.equal(
+  sandbox.calls.cancelled.length,
+  1,
+  "the app policy takes precedence over the local switch",
+);
+delete store.intercept;
 
 bridgeMode = "offline";
 sandbox.calls.cancelled.length = 0;
@@ -626,7 +642,21 @@ assert.deepEqual([...sandbox.calls.cancelled], [], "a closed app never loses the
 assert.deepEqual([...sandbox.calls.erased], []);
 bridgeMode = "online";
 
-store.types = ["mp4"];
+// The local copy still applies when the app is not running.
+store.intercept = false;
+bridgeMode = "offline";
+sandbox.calls.fetches.length = 0;
+await onCreated({
+  id: 12,
+  url: "https://example.org/other.mp4",
+  filename: "C:\\Users\\me\\Downloads\\other.mp4",
+  referrer: "https://example.org/",
+});
+assert.equal(sentDownloads().length, 0, "a closed app falls back to the local switch");
+bridgeMode = "online";
+delete store.intercept;
+
+capturePolicy = { ...capturePolicy, types: ["mp4"] };
 sandbox.calls.fetches.length = 0;
 sandbox.calls.cancelled.length = 0;
 await onCreated({
@@ -635,11 +665,11 @@ await onCreated({
   filename: "C:\\Users\\me\\Downloads\\setup.exe",
   referrer: "https://example.org/",
 });
-assert.equal(sandbox.calls.fetches.length, 0, "a type off the list stays in the browser");
+assert.equal(sentDownloads().length, 0, "a type off the app's list stays in the browser");
 assert.deepEqual([...sandbox.calls.cancelled], []);
-delete store.types;
+capturePolicy = { ...capturePolicy, types: [] };
 
-store.skipSites = ["example.org"];
+capturePolicy = { ...capturePolicy, skipSites: ["example.org"] };
 sandbox.calls.fetches.length = 0;
 await onCreated({
   id: 10,
@@ -647,10 +677,10 @@ await onCreated({
   filename: "C:\\Users\\me\\Downloads\\movie.mp4",
   referrer: "https://example.org/",
 });
-assert.equal(sandbox.calls.fetches.length, 0, "a skipped site keeps its download");
-delete store.skipSites;
+assert.equal(sentDownloads().length, 0, "a skipped site keeps its download");
+capturePolicy = { ...capturePolicy, skipSites: [] };
 
-store.intercept = false;
+capturePolicy = { ...capturePolicy, capture: false };
 sandbox.calls.fetches.length = 0;
 await onCreated({
   id: 11,
@@ -658,8 +688,8 @@ await onCreated({
   filename: "C:\\Users\\me\\Downloads\\movie.mp4",
   referrer: "https://example.org/",
 });
-assert.equal(sandbox.calls.fetches.length, 0, "the switch turns interception off");
-delete store.intercept;
+assert.equal(sentDownloads().length, 0, "the app's switch turns interception off");
+capturePolicy = { ...capturePolicy, capture: true };
 
 // The menus are built on install and startup, from an empty slate.
 const install = sandbox.listeners.get("installed")[0];
@@ -673,8 +703,7 @@ assert.ok(sandbox.calls.menus.some((item) => item.id === "bdm-open"));
 assert.ok(sandbox.calls.menus.some((item) => item.id === "bdm-settings"));
 
 // The menu hand-over goes through the same bridge, even on a skipped site.
-store.skipSites = ["example.org"];
-store.ask = false;
+capturePolicy = { ...capturePolicy, ask: false, skipSites: ["example.org"] };
 sandbox.calls.fetches.length = 0;
 const onMenu = sandbox.listeners.get("menu-clicked")[0];
 assert.ok(onMenu, "the menu answers clicks");
@@ -684,10 +713,15 @@ await onMenu({
   pageUrl: "https://example.org/page",
   tab: { id: 3 },
 });
-assert.equal(sandbox.calls.fetches.length, 1, "a menu click is sent even on a skipped site");
+assert.equal(sentDownloads().length, 1, "a menu click is sent even on a skipped site");
+assert.equal(
+  new URL(String(sandbox.calls.fetches.at(-1).url)).pathname,
+  "/v1/downloads",
+  "the capture policy is read first, then the hand-over",
+);
 assert.equal(lastSend.body.url, "https://example.org/file.zip");
 assert.equal(lastSend.body.referer, "https://example.org/page");
-delete store.skipSites;
+capturePolicy = { ...capturePolicy, skipSites: [] };
 
 // Opening the settings from the menu works.
 sandbox.calls.openedOptions = 0;
@@ -715,7 +749,9 @@ for (const file of [
 
 const chromeListeners = new Map();
 const chromeCalls = [];
+const chromeStore = {};
 let chromeOnline = true;
+let chromePolicy = { capture: true, ask: false, types: [], skipSites: [] };
 
 const chromeBrowser = {
   runtime: {
@@ -733,14 +769,16 @@ const chromeBrowser = {
     erase: async (query) => chromeCalls.push(["erase", query]),
   },
   storage: {
-    local: { get: async (defaults) => ({ ...defaults }) },
+    local: { get: async (defaults) => ({ ...defaults, ...chromeStore }) },
   },
 };
 
 async function chromeFetch(url, options = {}) {
   chromeCalls.push(["fetch", url, options]);
   if (!chromeOnline) throw new TypeError("Failed to fetch");
-  return { json: async () => ({ ok: true, data: { mode: "direct", id: 7 } }) };
+  const pathName = new URL(String(url)).pathname;
+  const data = pathName === "/v1/capture" ? chromePolicy : { mode: "direct", id: 7 };
+  return { json: async () => ({ ok: true, data }) };
 }
 
 const chromeContext = vm.createContext({
@@ -766,12 +804,17 @@ await chromeCreated({
 });
 assert.deepEqual(
   chromeCalls.map((call) => call[0]),
-  ["fetch", "cancel", "erase"],
+  ["fetch", "fetch", "cancel", "erase"],
   "chrome: the hand-over happens before the browser copy is cancelled",
 );
-assert.equal(new URL(chromeCalls[0][1]).pathname, "/v1/downloads");
-assert.equal(chromeCalls[0][2].headers["X-BDM-Client"], "browser-extension");
-assert.equal(JSON.parse(chromeCalls[0][2].body).mode, "direct");
+assert.equal(new URL(chromeCalls[0][1]).pathname, "/v1/capture");
+assert.equal(
+  new URL(chromeCalls[1][1]).pathname,
+  "/v1/downloads",
+  "chrome: the app's capture rules are read first",
+);
+assert.equal(chromeCalls[1][2].headers["X-BDM-Client"], "browser-extension");
+assert.equal(JSON.parse(chromeCalls[1][2].body).mode, "direct");
 
 chromeOnline = false;
 chromeCalls.length = 0;
@@ -782,8 +825,39 @@ await chromeCreated({
 });
 assert.deepEqual(
   chromeCalls.map((call) => call[0]),
-  ["fetch"],
+  ["fetch", "fetch"],
   "chrome: a closed app leaves the browser download alone",
 );
+chromeOnline = true;
+
+chromePolicy = { ...chromePolicy, capture: false };
+chromeCalls.length = 0;
+await chromeCreated({
+  id: 3,
+  url: "https://example.org/c.mp4",
+  referrer: "https://example.org/",
+});
+assert.deepEqual(
+  chromeCalls.map((call) => call[0]),
+  ["fetch"],
+  "chrome: the app's switch turns capture off",
+);
+chromePolicy = { ...chromePolicy, capture: true };
+
+chromeOnline = false;
+chromeStore.takeover = false;
+chromeCalls.length = 0;
+await chromeCreated({
+  id: 4,
+  url: "https://example.org/d.mp4",
+  referrer: "https://example.org/",
+});
+assert.deepEqual(
+  chromeCalls.map((call) => call[0]),
+  ["fetch"],
+  "chrome: the local switch applies while the app is closed",
+);
+delete chromeStore.takeover;
+chromeOnline = true;
 
 console.log("extension: all checks pass");
