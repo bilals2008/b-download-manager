@@ -6,8 +6,9 @@
   shadow root with a constructed stylesheet, so the page's CSS and its CSP can
   neither change it nor block it, and the page cannot reach into it.
 
-  The overlay only offers addresses the application can fetch. A protected
-  (EME) video, a blob: stream from MSE and an HLS or DASH manifest are not
+  The overlay offers every address the application can fetch: the file an
+  element names, or for a player that streams through MSE the requests that
+  player made. A protected (EME) video and an HLS or DASH manifest are not
   offered, because the engine cannot download them as a file.
 */
 
@@ -93,6 +94,7 @@
     root: null,
     ui: null,
     video: null,
+    hovered: null,
     sources: [],
     visible: false,
     open: false,
@@ -111,11 +113,6 @@
 
   function clamp(value, min, max) {
     return Math.min(Math.max(value, min), max);
-  }
-
-  function pageName() {
-    const title = String(document.title || "").trim();
-    return title ? title.slice(0, 90) : "Video";
   }
 
   /** The switch is on and this page is not one the user excluded. */
@@ -274,6 +271,16 @@
 
   /* --------------------------------------------------------------- showing */
 
+  /**
+   * What this video offers. A player that streams through MSE names no file of
+   * its own, so the addresses the page requested stand in for it.
+   */
+  function sourcesFor(video) {
+    if (video.mediaKeys) return [];
+    const direct = bdmSourcesFor(video);
+    return direct.length ? direct : bdmCapturedSources();
+  }
+
   function showFor(video) {
     if (!state.ready || !overlayAllowed()) return;
     if (!(video instanceof HTMLVideoElement)) return;
@@ -283,7 +290,7 @@
     const rect = video.getBoundingClientRect();
     if (rect.width < MIN_WIDTH || rect.height < MIN_HEIGHT) return;
 
-    const sources = bdmSourcesFor(video);
+    const sources = sourcesFor(video);
     if (!sources.length) {
       if (state.video === video) hide();
       return;
@@ -313,7 +320,8 @@
 
   function updateHeading() {
     if (!state.ui) return;
-    const name = bdmNameFromUrl(state.sources[0]) || pageName();
+    const first = state.sources[0];
+    const name = bdmIsCapturedMedia(first) ? bdmPageName() : bdmNameFromUrl(first) || bdmPageName();
     state.ui.title.textContent = name;
     state.ui.fab.setAttribute("aria-label", `Download ${name} with B Download Manager`);
     state.ui.fab.title = `Download ${name}`;
@@ -329,6 +337,7 @@
     }
     state.visible = false;
     state.video = null;
+    state.hovered = null;
     state.sources = [];
     state.fab = null;
     if (state.positionFrame) {
@@ -382,11 +391,11 @@
 
       const tag = document.createElement("span");
       tag.className = "tag";
-      tag.textContent = bdmSourceLabel(url);
+      tag.textContent = bdmMediaLabel(url);
 
       const name = document.createElement("span");
       name.className = "name";
-      name.textContent = bdmNameFromUrl(url) || pageName();
+      name.textContent = bdmMediaName(url, "");
       name.title = url;
 
       const button = document.createElement("button");
@@ -450,9 +459,12 @@
     try {
       const answer = await browser.runtime.sendMessage({
         type: "bdm:send",
+        // A video is one of several streams; the dialog names it and picks the
+        // folder before anything starts.
+        mode: "ask",
         payload: {
           url,
-          name: bdmNameFromUrl(url) || pageName(),
+          name: bdmMediaFileName(url, bdmPageName()),
           referer: location.href,
         },
       });
@@ -597,6 +609,11 @@
 
   function startObserver() {
     if (state.observer || !document.documentElement) return;
+    bdmWatchMediaRequests(() => {
+      scheduleCountRefresh();
+      // The streams often arrive after the pointer is already on the video.
+      if (state.hovered?.isConnected) showFor(state.hovered);
+    });
     state.observer = new MutationObserver((records) => {
       const touchesMedia = records.some((record) => {
         if (record.target instanceof HTMLMediaElement) return true;
@@ -630,6 +647,7 @@
     }
 
     const video = videoInPath(path);
+    state.hovered = video;
     if (video) {
       cancelHide();
       showFor(video);
@@ -677,7 +695,7 @@
     scheduleCountRefresh();
     if (video !== state.video) return;
 
-    state.sources = bdmSourcesFor(video);
+    state.sources = sourcesFor(video);
     if (!state.sources.length || video.mediaKeys) {
       hide();
       return;
@@ -750,6 +768,8 @@
 
   browser.runtime.onMessage.addListener((message) => {
     if (!message || message.type !== "bdm:media-list") return undefined;
+    // The popup can ask on a page whose overlay is switched off.
+    bdmWatchMediaRequests();
     return Promise.resolve({
       ok: true,
       items: bdmPageMedia(),

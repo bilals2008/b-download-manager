@@ -391,9 +391,11 @@ function renderMedia(items, referer) {
       button.disabled = true;
       const answer = await message({
         type: "bdm:send",
+        // The list is a choice of streams, so the app's dialog confirms it.
+        mode: "ask",
         payload: {
           url: item.url,
-          name: item.name || bdmNameFromUrl(item.url),
+          name: item.file || item.name || bdmNameFromUrl(item.url),
           referer,
         },
       });

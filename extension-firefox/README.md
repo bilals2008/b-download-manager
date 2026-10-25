@@ -20,11 +20,11 @@ lives in `browser-extension/` and speaks the same versioned loopback API.
   while it is closed.
 - **IDM-style video button** on supported HTML5 videos. A 30 px button appears
   at the video's top-right corner on hover. Clicking it opens a compact panel
-  with the direct media files that video offers, a progress bar and an
-  *Open app* action. It is built in a closed shadow root with a constructed
-  stylesheet, so page CSS and CSP cannot change it.
-- **Toolbar badge** shows how many download-capable media elements are on the
-  tab. It is cleared when the tab navigates or the overlay is turned off.
+  with the files or streams that video offers, each labelled with its quality,
+  a progress bar and an *Open app* action. It is built in a closed shadow root
+  with a constructed stylesheet, so page CSS and CSP cannot change it.
+- **Toolbar badge** shows how many downloadable media the tab offers. It is
+  cleared when the tab navigates or the overlay is turned off.
 - **Compact popup**: connection state, active downloads (progress, size,
   speed, pause/resume, two-click stop, open in app), media on the current
   page, and one settings button.
@@ -36,10 +36,12 @@ lives in `browser-extension/` and speaks the same versioned loopback API.
   when it is closed. The video overlay and the theme always stay
   extension-owned.
 
-The panel deliberately offers only addresses the engine can fetch as a file.
-A `blob:` URL from Media Source Extensions, an HLS/DASH manifest, and a
-DRM-protected element are not offered, because they are not downloadable as a
-plain file by this application. The extension does not pretend otherwise.
+The panel offers only addresses the engine can fetch as a file. When a player
+streams through Media Source Extensions it names only a `blob:` URL, so the
+panel reads the requests that player made and offers the whole-file address of
+each stream: a quality badge and the size it will take. A picture-only DASH
+stream says `video only`, because the engine saves picture and sound as separate
+files. An HLS/DASH manifest and a DRM-protected element are still not offered.
 
 ## How it talks to the application
 
@@ -148,7 +150,9 @@ npx web-ext build --source-dir extension-firefox --overwrite-dest
 
 - Click a link's right-click menu → *Download with B Download Manager*, or
   start a download normally and let the takeover send it to the app.
-- Hover a supported video and click the small download button.
+- Hover a supported video and click the small download button. The app's
+  Add URL dialog opens with the stream, its quality name and the folder, and
+  nothing starts until you confirm.
 - Click the toolbar icon for connection state, active downloads and the media
   on the current page.
 - Open the extension settings from the popup or the right-click menu.
@@ -165,8 +169,9 @@ npx web-ext build --source-dir extension-firefox --overwrite-dest
 The content script is declared for `http://*/*` and `https://*/*`, so Firefox
 shows **Access your data for all websites** at install. That broad grant is
 what lets the video button appear without a click. The script reads media
-addresses and the page URL as a referrer; it does not read page text, form
-values, cookies or storage, and it never sends anything to a remote server.
+addresses, the page title and URL as a referrer, and the addresses of the media
+requests the page made; it does not read page text, form values, cookies or
+storage, and it never sends anything to a remote server.
 Nothing leaves the machine: the only network destination is the loopback
 bridge, and the application downloads the file itself.
 
@@ -182,9 +187,9 @@ npx web-ext lint --source-dir extension-firefox --self-hosted
 ```
 
 `check:extension` parses every script, resolves every file a page loads,
-checks the shared colour tokens, runs the settings and media helpers in a
-sandbox, exercises the background against a mocked bridge, verifies that every
-icon name exists, and runs the Chrome build's hand-over contract too.
+checks the shared colour tokens, runs the settings, media and page-list helpers
+in a sandbox, exercises the background against a mocked bridge, verifies that
+every icon name exists, and runs the Chrome build's hand-over contract too.
 `web-ext lint` is Mozilla's own manifest and API validation.
 
 ## Files
@@ -213,9 +218,10 @@ These are honest boundaries, not unfinished UI:
 - **HLS and DASH are not offered.** The engine has no muxer yet
   (`PROGRESS.md`: *Media splitting for MP4 DASH, HLS and MPEG-TS*). A `.m3u8`
   would be saved as a playlist, not a video.
-- **DRM/EME and `blob:` media are not offered.** There is no file address the
-  application may read. The overlay checks `mediaKeys` and never pretends a
-  protected stream is available.
+- **DRM/EME media is not offered.** The overlay checks `mediaKeys` and never
+  pretends a protected stream is available. An MSE player's `blob:` URL is
+  replaced by the file requests it made; those addresses are signed and expire,
+  so send one while the page is playing or it will fail later.
 - **A type filter matches the URL path.** A URL with no extension but a
   `Content-Disposition` file name is filtered out when the type list is
   non-empty; leave the list empty to take every type.
