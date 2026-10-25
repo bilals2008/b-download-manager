@@ -1,60 +1,65 @@
 import type { SettingsGlyphKind } from "@/components/icons/ui-icons";
 
-interface SettingsPageEntry {
-  id: string;
+/** One page of the options window. */
+export interface SettingsPageEntry {
+  id: SettingsPageId;
   label: string;
   glyph: SettingsGlyphKind;
 }
 
-/** The pages this build opens, in the order IDM lists them. */
-export const OPEN_PAGES = [
-  { id: "general", label: "General", glyph: "general" },
-  { id: "downloads", label: "Downloads", glyph: "downloads" },
-  { id: "network", label: "Network", glyph: "connection" },
-] as const satisfies readonly SettingsPageEntry[];
+export type SettingsPageId =
+  | "general"
+  | "appearance"
+  | "downloads"
+  | "save-locations"
+  | "browser"
+  | "connections"
+  | "proxy"
+  | "advanced";
 
 /**
- * The pages this build does not have yet. They share one tab and one page, so
- * the working pages are not crowded by pages that cannot be opened.
+ * The pages, grouped the way the window reads: what the application is, what a
+ * download does, how it reaches the network, and the maintenance behind it.
+ * The order is also the order the sidebar draws.
  */
-export const PLANNED_PAGES = [
+export const SETTINGS_GROUPS: readonly {
+  label: string;
+  pages: readonly SettingsPageEntry[];
+}[] = [
   {
-    id: "file-types",
-    label: "File types",
-    glyph: "file-types",
-    note: "Which downloads start by themselves and which ask first.",
+    label: "Basics",
+    pages: [
+      { id: "general", label: "General", glyph: "general" },
+      { id: "appearance", label: "Appearance", glyph: "appearance" },
+    ],
   },
   {
-    id: "browser",
-    label: "Browser capture",
-    glyph: "browser",
-    note: "Downloads started from a browser, its menu and the keyboard.",
+    label: "Downloads",
+    pages: [
+      { id: "downloads", label: "Downloads", glyph: "downloads" },
+      { id: "save-locations", label: "Save locations", glyph: "save-to" },
+      { id: "browser", label: "Browser integration", glyph: "browser" },
+    ],
   },
   {
-    id: "sites",
-    label: "Sites Logins",
-    glyph: "sites",
-    note: "Saved logins for sites that ask before they hand over a file.",
+    label: "Network",
+    pages: [
+      { id: "connections", label: "Connections", glyph: "connection" },
+      { id: "proxy", label: "Proxy", glyph: "proxy" },
+    ],
   },
   {
-    id: "dial-up",
-    label: "Dial Up / VPN",
-    glyph: "dial-up",
-    note: "The connection opened before a download starts.",
+    label: "Application",
+    pages: [{ id: "advanced", label: "Advanced", glyph: "advanced" }],
   },
-  {
-    id: "sounds",
-    label: "Sounds",
-    glyph: "sounds",
-    note: "What plays when a download starts, finishes or fails.",
-  },
-] as const satisfies readonly (SettingsPageEntry & { note: string })[];
+];
 
-type SettingsPageId =
-  | (typeof OPEN_PAGES)[number]["id"]
-  | (typeof PLANNED_PAGES)[number]["id"];
+/** The flat list, for the title of the page that is open. */
+export const SETTINGS_PAGES: readonly SettingsPageEntry[] = SETTINGS_GROUPS.flatMap(
+  (group) => group.pages,
+);
 
-/** The tab that holds every page above, none of which open on their own. */
-export const PLANNED_TAB = "planned";
-
-export type SettingsTabId = SettingsPageId | typeof PLANNED_TAB;
+/** The name of a page, for the region the reader is in. */
+export function settingsPageLabel(id: SettingsPageId): string {
+  return SETTINGS_PAGES.find((page) => page.id === id)?.label ?? "Settings";
+}

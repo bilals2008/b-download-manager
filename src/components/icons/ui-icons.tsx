@@ -164,6 +164,7 @@ export function SpinnerGlyph({ className }: GlyphProps) {
 /** The settings pages. One glyph per page, all at the same weight. */
 export type SettingsGlyphKind =
   | "general"
+  | "appearance"
   | "file-types"
   | "save-to"
   | "downloads"
@@ -173,7 +174,8 @@ export type SettingsGlyphKind =
   | "dial-up"
   | "sounds"
   | "planned"
-  | "browser";
+  | "browser"
+  | "advanced";
 
 export function SettingsGlyph({
   kind,
@@ -248,6 +250,20 @@ export function SettingsGlyph({
           <path d="M4.4 4.3h.01M6 4.3h.01" />
           <circle cx="8" cy="9.4" r="2.1" />
           <path d="M5.9 9.4h4.2" />
+        </Glyph>
+      );
+    case "appearance":
+      return (
+        <Glyph className={className}>
+          <circle cx="8" cy="8" r="2.9" />
+          <path d="M8 1.8v1.4M8 12.8v1.4M1.8 8h1.4M12.8 8h1.4M3.6 3.6l1 1M11.4 11.4l1 1M12.4 3.6l-1 1M4.6 11.4l-1 1" />
+        </Glyph>
+      );
+    case "advanced":
+      return (
+        <Glyph className={className}>
+          <circle cx="8" cy="8" r="2.2" />
+          <path d="M8 1.8v1.9M8 12.3v1.9M1.8 8h1.9M12.3 8h1.9M3.6 3.6l1.4 1.4M11 11l1.4 1.4M12.4 3.6 11 5M5 11l-1.4 1.4" />
         </Glyph>
       );
     default:

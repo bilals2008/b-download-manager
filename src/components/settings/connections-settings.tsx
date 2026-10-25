@@ -1,4 +1,4 @@
-import { NumberInput, TextInput } from "@/components/settings/fields";
+import { NumberInput } from "@/components/settings/fields";
 import {
   Section,
   SettingRow,
@@ -7,28 +7,35 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { MAX_CONNECTIONS, type Settings } from "@/lib/settings";
 
-interface NetworkSettingsProps {
+interface ConnectionsSettingsProps {
   settings: Settings;
   onChange: <K extends keyof Settings>(key: K, value: Settings[K]) => void;
 }
 
 /**
- * The Network page: how much of the connection the app may use, and the proxy
- * the downloads go through.
+ * The Connections page: the ceiling on open connections and the cap on the
+ * bandwidth they may use together.
  */
-export function NetworkSettings({ settings, onChange }: NetworkSettingsProps) {
-  const limitInKb = Math.round(settings.speedLimitBytes / 1024);
+export function ConnectionsSettings({
+  settings,
+  onChange,
+}: ConnectionsSettingsProps) {
+  // Zero means the cap has never been set; the field shows a usable starting
+  // point rather than an empty box, because turning the cap on fills it in.
+  const limitKb = Math.round(
+    (settings.speedLimitBytes || 1024 * 1024) / 1024,
+  );
 
   return (
     <SettingsPage
-      title="Network"
-      description="Connections, speed limit and the proxy."
+      title="Connections"
+      description="How much of the connection the application may use."
     >
       <Section title="Connections">
         <SettingRow
           label="Maximum number of connections"
           htmlFor="connection-max"
-          hint="Open at once, over all downloads."
+          hint="Open at once, over every download in the list."
         >
           <NumberInput
             id="connection-max"
@@ -55,33 +62,16 @@ export function NetworkSettings({ settings, onChange }: NetworkSettingsProps) {
         <SettingRow
           label="Speed limit"
           htmlFor="connection-speed"
-          hint="Total bytes per second, all downloads together."
+          hint="Kilobytes per second, all downloads together."
         >
           <NumberInput
             id="connection-speed"
-            value={limitInKb}
+            value={limitKb}
             min={1}
             max={1024 * 1024}
             suffix="KB/s"
             disabled={!settings.speedLimitEnabled}
             onChange={(value) => onChange("speedLimitBytes", value * 1024)}
-          />
-        </SettingRow>
-      </Section>
-
-      <Section title="Proxy">
-        <SettingRow
-          stacked
-          label="Proxy address"
-          htmlFor="proxy-address"
-          hint="For example socks5://127.0.0.1:1080. Empty connects directly."
-        >
-          <TextInput
-            id="proxy-address"
-            mono
-            value={settings.proxyUrl}
-            placeholder="socks5://127.0.0.1:1080"
-            onChange={(value) => onChange("proxyUrl", value)}
           />
         </SettingRow>
       </Section>

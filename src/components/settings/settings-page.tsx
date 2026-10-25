@@ -33,14 +33,20 @@ export function SettingsPage({
  */
 export function Section({
   title,
+  action,
   children,
 }: {
   title: string;
+  /** A control for the group as a whole, beside its caption. */
+  action?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <section aria-label={title} className="flex flex-col">
-      <h3 className="pb-1.5 text-xs font-medium text-chrome-muted">{title}</h3>
+      <div className="flex items-center justify-between gap-3 pb-1.5">
+        <h3 className="text-xs font-medium text-chrome-muted">{title}</h3>
+        {action}
+      </div>
       <div className="flex flex-col">{children}</div>
     </section>
   );

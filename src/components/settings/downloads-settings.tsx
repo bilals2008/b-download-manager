@@ -1,11 +1,17 @@
-import { NumberInput, TextInput } from "@/components/settings/fields";
+import { NumberInput } from "@/components/settings/fields";
 import {
   Section,
   SettingRow,
   SettingsPage,
 } from "@/components/settings/settings-page";
+import { ListBox } from "@/components/ui/listbox";
 import { Switch } from "@/components/ui/switch";
-import { MAX_CONNECTIONS, type Settings } from "@/lib/settings";
+import {
+  DUPLICATE_POLICIES,
+  MAX_CONNECTIONS,
+  type DuplicatePolicy,
+  type Settings,
+} from "@/lib/settings";
 
 interface DownloadsSettingsProps {
   settings: Settings;
@@ -13,37 +19,20 @@ interface DownloadsSettingsProps {
 }
 
 /**
- * The Downloads page: where a file lands, how many connections it gets, and
- * what happens when it finishes.
+ * The Downloads page: how a new download runs and what happens when it
+ * finishes.
  */
 export function DownloadsSettings({ settings, onChange }: DownloadsSettingsProps) {
   return (
     <SettingsPage
       title="Downloads"
-      description="Where files are saved and how a download runs."
+      description="How a new download runs and what is shown while it does."
     >
-      <Section title="Save to">
-        <SettingRow
-          stacked
-          label="Default folder"
-          htmlFor="save-to-folder"
-          hint="Empty uses the Downloads folder of Windows."
-        >
-          <TextInput
-            id="save-to-folder"
-            mono
-            value={settings.defaultFolder}
-            placeholder="C:\Users\you\Downloads"
-            onChange={(value) => onChange("defaultFolder", value)}
-          />
-        </SettingRow>
-      </Section>
-
       <Section title="Connections">
         <SettingRow
           label="Default number of connections"
           htmlFor="download-connections"
-          hint="One connection per 10 KB of the file, up to this number."
+          hint="Used for a new download. One connection per 10 KB of the file, up to this number."
         >
           <NumberInput
             id="download-connections"
@@ -56,13 +45,44 @@ export function DownloadsSettings({ settings, onChange }: DownloadsSettingsProps
         </SettingRow>
       </Section>
 
-      <Section title="When a download finishes">
+      <Section title="Existing files">
         <SettingRow
-          label="Show download complete dialog"
-          hint="A small window when a download finishes."
+          label="When a file of the same name is already there"
+          hint="A new download follows this answer. Ask opens the File Exists dialog."
+        >
+          <div className="w-52">
+            <ListBox
+              label="When a file of the same name is already there"
+              value={settings.duplicatePolicy}
+              onChange={(value) =>
+                onChange("duplicatePolicy", value as DuplicatePolicy)
+              }
+              options={DUPLICATE_POLICIES}
+            />
+          </div>
+        </SettingRow>
+      </Section>
+
+      <Section title="While a download runs">
+        <SettingRow
+          label="Open the progress window when a download starts"
+          hint="Applies to a download started here and to one handed over by the browser."
         >
           <Switch
-            label="Show download complete dialog"
+            label="Open the progress window when a download starts"
+            checked={settings.showProgressOnStart}
+            onChange={(checked) => onChange("showProgressOnStart", checked)}
+          />
+        </SettingRow>
+      </Section>
+
+      <Section title="When a download finishes">
+        <SettingRow
+          label="Show the download complete dialog"
+          hint="A small window with the file and the folder when a download finishes."
+        >
+          <Switch
+            label="Show the download complete dialog"
             checked={settings.showCompleteDialog}
             onChange={(checked) => onChange("showCompleteDialog", checked)}
           />
