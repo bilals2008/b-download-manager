@@ -10,13 +10,19 @@ import { AddDownloadDialog } from "@/components/workspace/add-download-dialog";
 import { Workspace } from "@/components/workspace/workspace";
 import { applyFont } from "@/lib/fonts";
 import {
+  onClipboardLink,
   onTrayCommand,
   quitApp,
+  setBrowserConnections,
   setBrowserFolder,
+  setBrowserPolicy,
+  setClipboardCapture,
+  setLaunchOnStartup,
   setMaxConnections,
   setMinimizeToTray,
   setProxy,
   setShowCompleteDialog,
+  setShowProgressOnStart,
   setSpeedLimit,
 } from "@/lib/ipc";
 import {
@@ -38,9 +44,14 @@ export default function App() {
   );
   const [categoriesVisible, setCategoriesVisible] = useState(true);
   const [addDownloadOpen, setAddDownloadOpen] = useState(false);
+  const [clipboardLink, setClipboardLink] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [toolbarSize, setToolbarSize] = useState<ToolbarSize>(loadToolbarSize);
+  // The clipboard listener is subscribed once; the ref carries the current
+  // dialog state so a link that arrives mid-edit cannot overwrite the field.
+  const addOpenRef = useRef(addDownloadOpen);
+  addOpenRef.current = addDownloadOpen;
 
   // The accelerators the menus print work anywhere in the shell, but not while
   // a menu or a window of its own has the keyboard.
@@ -74,6 +85,34 @@ export default function App() {
     });
     void setBrowserFolder(settings.defaultFolder).catch(() => {
       // As above; the browser hand-over falls back to the Downloads folder.
+    });
+    void setBrowserConnections(settings.defaultConnections).catch(() => {
+      // As above; a hand-over falls back to the engine default.
+    });
+    void setShowProgressOnStart(settings.showProgressOnStart).catch(() => {
+      // As above.
+    });
+    void setClipboardCapture(settings.clipboardCapture).catch(() => {
+      // As above.
+    });
+    void setLaunchOnStartup(settings.launchOnStartup)
+      .then((actual) => {
+        // The system may have removed the entry or refused it. Save what it
+        // reports, so the switch opens on the truth rather than on the request.
+        if (actual !== settings.launchOnStartup) {
+          saveSettings({ ...loadSettings(), launchOnStartup: actual });
+        }
+      })
+      .catch(() => {
+        // The switch shows its own failure the next time it is changed.
+      });
+    void setBrowserPolicy({
+      capture: settings.browserCapture,
+      ask: settings.captureAsk,
+      types: settings.captureTypes,
+      skipSites: settings.skipSites,
+    }).catch(() => {
+      // The extension falls back to its own rules when the bridge is closed.
     });
   }, []);
 
@@ -112,9 +151,40 @@ export default function App() {
     };
   }, []);
 
+  // A copied link opens the add dialog with its address in it. Nothing starts
+  // until the reader confirms, and a link that arrives while the dialog is
+  // being filled in does not overwrite the field.
+  useEffect(() => {
+    let dispose: (() => void) | undefined;
+    let closed = false;
+    void onClipboardLink((url) => {
+      if (addOpenRef.current) {
+        return;
+      }
+      setClipboardLink(url);
+      setAddDownloadOpen(true);
+    }).then((unlisten) => {
+      if (closed) {
+        unlisten();
+      } else {
+        dispose = unlisten;
+      }
+    });
+    return () => {
+      closed = true;
+      dispose?.();
+    };
+  }, []);
+
   function setToolbar(size: ToolbarSize) {
     setToolbarSize(size);
     saveToolbarSize(size);
+  }
+
+  // A copied link seeds one add dialog; closing it must not seed the next one.
+  function closeAddDownload() {
+    setAddDownloadOpen(false);
+    setClipboardLink(null);
   }
 
   // The face lands at once; the root variable is what every component reads.
@@ -234,7 +304,8 @@ export default function App() {
       />
       <AddDownloadDialog
         open={addDownloadOpen}
-        onClose={() => setAddDownloadOpen(false)}
+        seedUrl={clipboardLink}
+        onClose={closeAddDownload}
       />
       <SettingsDialog
         open={settingsOpen}

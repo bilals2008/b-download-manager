@@ -13,7 +13,6 @@ import {
   CATEGORIES,
   categoryName,
   categoryOfFile,
-  DEFAULT_CONNECTIONS,
   fileNameFromUrl,
   folderLabel,
   isFinished,
@@ -51,6 +50,7 @@ import {
 import { describeError, isDesktop } from "@/lib/errors";
 import { nextMatch } from "@/lib/find";
 import { rangeIds } from "@/lib/selection";
+import { loadSettings } from "@/lib/settings";
 import { etaSeconds, nextSpeedSample, type SpeedSample } from "@/lib/speed";
 import type { DownloadInfo, DownloadStatus as EngineStatus } from "@/types";
 
@@ -518,10 +518,15 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
   /** Start one download and put its row in the list. */
   async function beginDownload(input: NewDownload): Promise<AddOutcome> {
     const dest = joinPath(input.savePath, input.fileName);
+    // The options window owns both values, and they can change while the add
+    // dialog is open, so they are read at the moment the download starts.
+    const settings = loadSettings();
+    const connections = settings.defaultConnections;
+    const policy = settings.duplicatePolicy;
     const request: StartDownloadInput = {
       url: input.url,
       dest,
-      connections: DEFAULT_CONNECTIONS,
+      connections,
       referer: input.referer,
       queue: input.queue,
       category: input.category,
@@ -532,6 +537,11 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
       outcome = await startResolving(
         (choice) => startDownload({ ...request, conflict: choice }),
         askConflict,
+        // A chosen answer is the first attempt; a refusal that it cannot
+        // settle still becomes the File Exists question.
+        policy === "ask"
+          ? undefined
+          : { remaining: 0, choice: policy as ConflictAnswer },
       );
     } catch (failure) {
       if (failure instanceof StartCancelled) {
@@ -562,7 +572,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
       savePath: dir,
       dest: written,
       referer: input.referer?.trim() || null,
-      connections: DEFAULT_CONNECTIONS,
+      connections,
       error: null,
       resumable: null,
       description: input.description?.trim() || null,

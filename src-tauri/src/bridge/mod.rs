@@ -61,6 +61,7 @@ pub fn start(app: AppHandle) {
                 return;
             }
         };
+        app.state::<AppState>().set_bridge_running(true);
         log::write(
             "info",
             &format!("the browser bridge waits on 127.0.0.1:{PORT}"),
@@ -146,6 +147,11 @@ async fn serve(app: AppHandle, mut stream: tokio::net::TcpStream) -> std::io::Re
         .await;
     }
 
+    // Only an authenticated request counts as the extension having reached
+    // the application, so a stray page cannot make the window say it is
+    // connected.
+    app.state::<AppState>().touch_extension();
+
     let (status, body) = route(&app, &request).await;
     let bytes = serde_json::to_vec(&body).unwrap_or_else(|_| {
         serde_json::to_vec(&error_body("internal", "the answer could not be written"))
@@ -167,6 +173,7 @@ async fn route(app: &AppHandle, request: &Request) -> (u16, Value) {
     let path = request.path();
     match (request.method.as_str(), path) {
         ("GET", "/v1/ping") => (200, ok(ping())),
+        ("GET", "/v1/capture") => (200, ok(capture_policy(app))),
         ("GET", "/v1/downloads") => (200, ok(downloads(app))),
         ("POST", "/v1/downloads") => add_download(app, &request.body).await,
         ("POST", "/v1/focus") => {
@@ -198,6 +205,20 @@ fn ping() -> Value {
         "api": API_VERSION,
         "version": env!("CARGO_PKG_VERSION"),
         "port": PORT,
+    })
+}
+
+/// The capture rules the extension follows while the application is running.
+///
+/// The extension keeps its own rules for when the app is closed; this answer
+/// is the newer one whenever it can be reached.
+fn capture_policy(app: &AppHandle) -> Value {
+    let policy = app.state::<AppState>().browser_policy();
+    json!({
+        "capture": policy.capture,
+        "ask": policy.ask,
+        "types": policy.types,
+        "skipSites": policy.skip_sites,
     })
 }
 
@@ -283,6 +304,9 @@ async fn add_download(app: &AppHandle, body: &[u8]) -> (u16, Value) {
                 target.clone(),
                 crate::actions::StartOptions {
                     referer,
+                    // The hand-over has no dialog, so it follows the default
+                    // connection count the options window pushed.
+                    connections: Some(state.browser_connections()),
                     // A hand-over has no dialog to ask, so it never replaces
                     // a file: it takes the next free name beside it.
                     conflict: crate::conflict::Choice::Rename,
@@ -290,6 +314,7 @@ async fn add_download(app: &AppHandle, body: &[u8]) -> (u16, Value) {
                 },
             ) {
                 Ok(started) => {
+                    crate::show_progress_if_requested(app, &state, &started);
                     let id = started.id;
                     log::write("info", &format!("the browser started {url} as {id:?}"));
                     (

@@ -2,12 +2,38 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use idm_core::downloader::{Download, DownloadInfo, Status};
 use idm_core::limits::Limits;
 use idm_core::session::{Index, KnownDownload};
+
+/// The capture rules the browser extension follows while the application is
+/// running. The extension keeps its own copy for when the app is closed.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct BrowserPolicy {
+    /// Whether a browser download is handed to the application.
+    pub capture: bool,
+    /// Whether the hand-over opens the add dialog instead of starting.
+    pub ask: bool,
+    /// File types to take over. Empty means every type.
+    pub types: Vec<String>,
+    /// Hosts left to the browser.
+    pub skip_sites: Vec<String>,
+}
+
+impl Default for BrowserPolicy {
+    fn default() -> Self {
+        Self {
+            capture: true,
+            ask: false,
+            types: Vec::new(),
+            skip_sites: Vec::new(),
+        }
+    }
+}
 
 pub struct AppState {
     next_id: AtomicU64,
@@ -17,10 +43,23 @@ pub struct AppState {
     /// Where a download handed over by the browser is saved. `None` means the
     /// system Downloads folder.
     browser_folder: Mutex<Option<PathBuf>>,
+    /// The rules the extension follows while this application runs.
+    browser_policy: Mutex<BrowserPolicy>,
+    /// Connections a browser hand-over gets, since it has no dialog to ask.
+    browser_connections: AtomicU32,
+    /// Whether the loopback bridge bound its port.
+    bridge_running: AtomicBool,
+    /// The last time the extension reached the bridge, in seconds since the
+    /// Unix epoch. Zero means it has not reached it yet.
+    last_extension_contact: AtomicU64,
     /// Whether closing the window hides it into the tray.
     minimize_to_tray: AtomicBool,
     /// Whether the window of a finished download is shown.
     show_complete_dialog: AtomicBool,
+    /// Whether a new download opens its progress window.
+    show_progress_on_start: AtomicBool,
+    /// Whether the clipboard is watched for download links.
+    clipboard_capture: AtomicBool,
     /// Held while a start checks its destination and inserts the download, so
     /// two starts cannot both find the same name free.
     start_gate: Mutex<()>,
@@ -34,8 +73,14 @@ impl Default for AppState {
             limits: Limits::default(),
             index: Mutex::new(None),
             browser_folder: Mutex::new(None),
+            browser_policy: Mutex::new(BrowserPolicy::default()),
+            browser_connections: AtomicU32::new(8),
+            bridge_running: AtomicBool::new(false),
+            last_extension_contact: AtomicU64::new(0),
             minimize_to_tray: AtomicBool::new(true),
             show_complete_dialog: AtomicBool::new(true),
+            show_progress_on_start: AtomicBool::new(false),
+            clipboard_capture: AtomicBool::new(false),
             start_gate: Mutex::new(()),
         }
     }
@@ -139,6 +184,75 @@ impl AppState {
             .browser_folder
             .lock()
             .expect("browser folder lock poisoned") = folder;
+    }
+
+    /// The capture rules the extension follows while the app runs.
+    pub fn browser_policy(&self) -> BrowserPolicy {
+        self.browser_policy
+            .lock()
+            .expect("browser policy lock poisoned")
+            .clone()
+    }
+
+    pub fn set_browser_policy(&self, policy: BrowserPolicy) {
+        *self
+            .browser_policy
+            .lock()
+            .expect("browser policy lock poisoned") = policy;
+    }
+
+    /// Connections a browser hand-over gets. Clamped to what the engine takes.
+    pub fn browser_connections(&self) -> u32 {
+        self.browser_connections.load(Ordering::SeqCst)
+    }
+
+    pub fn set_browser_connections(&self, count: u32) {
+        self.browser_connections
+            .store(count.clamp(1, 32), Ordering::SeqCst);
+    }
+
+    /// Whether the loopback bridge bound its port.
+    pub fn bridge_running(&self) -> bool {
+        self.bridge_running.load(Ordering::SeqCst)
+    }
+
+    pub fn set_bridge_running(&self, running: bool) {
+        self.bridge_running.store(running, Ordering::SeqCst);
+    }
+
+    /// Record that the extension has just talked to the bridge.
+    pub fn touch_extension(&self) {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_secs())
+            .unwrap_or(0);
+        self.last_extension_contact.store(now, Ordering::SeqCst);
+    }
+
+    /// The last extension contact, in seconds since the Unix epoch.
+    pub fn last_extension_contact(&self) -> Option<u64> {
+        match self.last_extension_contact.load(Ordering::SeqCst) {
+            0 => None,
+            seconds => Some(seconds),
+        }
+    }
+
+    /// Whether a new download opens its progress window.
+    pub fn show_progress_on_start(&self) -> bool {
+        self.show_progress_on_start.load(Ordering::SeqCst)
+    }
+
+    pub fn set_show_progress_on_start(&self, on: bool) {
+        self.show_progress_on_start.store(on, Ordering::SeqCst);
+    }
+
+    /// Whether the clipboard is watched for download links.
+    pub fn clipboard_capture(&self) -> bool {
+        self.clipboard_capture.load(Ordering::SeqCst)
+    }
+
+    pub fn set_clipboard_capture(&self, on: bool) {
+        self.clipboard_capture.store(on, Ordering::SeqCst);
     }
 
     /// Whether closing the window hides it into the tray.

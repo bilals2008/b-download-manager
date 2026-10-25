@@ -1,5 +1,6 @@
 mod actions;
 mod bridge;
+mod clipboard;
 mod complete;
 mod conflict;
 mod dest;
@@ -16,7 +17,7 @@ use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
 use idm_core::downloader::{DownloadInfo, Status};
 use idm_core::session::Index;
 use idm_core::transfer::Source;
-use state::AppState;
+use state::{AppState, BrowserPolicy};
 
 use actions::UPDATE_EVENT;
 
@@ -47,7 +48,7 @@ fn start_download(
     state: State<'_, AppState>,
     request: StartRequest,
 ) -> Result<conflict::Started, conflict::Refusal> {
-    actions::start(
+    let started = actions::start(
         &app,
         &state,
         request.url,
@@ -60,7 +61,32 @@ fn start_download(
             description: request.description,
             conflict: request.conflict.unwrap_or_default(),
         },
-    )
+    )?;
+    show_progress_if_requested(&app, &state, &started);
+    Ok(started)
+}
+
+/// Open the progress window of a start when the reader asked for it.
+///
+/// A skipped start has no window: there is no download behind it. The window
+/// is built on the main thread, the one the window toolkit runs on.
+pub(crate) fn show_progress_if_requested(
+    app: &AppHandle,
+    state: &AppState,
+    started: &conflict::Started,
+) {
+    if !state.show_progress_on_start() || started.skipped {
+        return;
+    }
+    let Some(id) = started.id else {
+        return;
+    };
+    let Some(download) = state.get(id) else {
+        return;
+    };
+    let info = download.info();
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || progress::show(&handle, &info));
 }
 
 #[tauri::command]
@@ -105,7 +131,9 @@ fn redownload_download(
     id: u64,
     conflict: Option<conflict::Choice>,
 ) -> Result<conflict::Started, conflict::Refusal> {
-    actions::redownload(&app, &state, id, conflict.unwrap_or_default())
+    let started = actions::redownload(&app, &state, id, conflict.unwrap_or_default())?;
+    show_progress_if_requested(&app, &state, &started);
+    Ok(started)
 }
 
 /// Move a download that is not running to another folder, parts included.
@@ -196,8 +224,53 @@ fn set_download_speed_limit(
 
 /// The proxy that new downloads go through. `None` means no proxy.
 #[tauri::command]
-fn set_proxy(state: State<'_, AppState>, url: Option<String>) {
-    state.limits().set_proxy(url.as_deref());
+fn set_proxy(state: State<'_, AppState>, url: Option<String>) -> Result<(), String> {
+    let cleaned = match url {
+        Some(value) => validate_proxy(value)?,
+        None => String::new(),
+    };
+    state
+        .limits()
+        .set_proxy(if cleaned.is_empty() { None } else { Some(&cleaned) });
+    Ok(())
+}
+
+/// Check a proxy address before it is stored or used.
+///
+/// Only the schemes the engine can actually dial are accepted, the port has to
+/// make sense, and a username or password is refused: the preference lives in
+/// plain local storage, so it must never carry a credential. Proxy
+/// authentication is not part of this build.
+#[tauri::command]
+fn validate_proxy(url: String) -> Result<String, String> {
+    let trimmed = url.trim();
+    if trimmed.is_empty() {
+        return Ok(String::new());
+    }
+    let parsed = reqwest::Url::parse(trimmed).map_err(|_| {
+        "Use a full address, for example socks5://127.0.0.1:1080.".to_string()
+    })?;
+    let scheme = parsed.scheme();
+    if !matches!(scheme, "http" | "https" | "socks5" | "socks5h") {
+        return Err(format!(
+            "{scheme} is not a proxy this build can use. Use http, https, socks5 or socks5h."
+        ));
+    }
+    if parsed.host_str().is_none() {
+        return Err("The proxy address has no host.".to_string());
+    }
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        return Err(
+            "Proxy authentication is not supported. Remove the username and password."
+                .to_string(),
+        );
+    }
+    // The engine builds its client from this exact string, so refuse what it
+    // would refuse instead of storing an address that fails at the first
+    // download.
+    Source::parse("https://example.com/", Some(trimmed), None)
+        .map_err(|error| format!("The proxy address is not usable: {error}"))?;
+    Ok(trimmed.to_string())
 }
 
 /// The number of connections one site may use.
@@ -240,6 +313,282 @@ fn set_minimize_to_tray(state: State<'_, AppState>, on: bool) -> bool {
 fn set_show_complete_dialog(state: State<'_, AppState>, on: bool) -> bool {
     state.set_show_complete_dialog(on);
     on
+}
+
+/// Whether a new download opens its progress window.
+#[tauri::command]
+fn set_show_progress_on_start(state: State<'_, AppState>, on: bool) -> bool {
+    state.set_show_progress_on_start(on);
+    on
+}
+
+/// The connections a browser hand-over gets, since it has no dialog to ask.
+#[tauri::command]
+fn set_browser_connections(state: State<'_, AppState>, count: u32) -> u32 {
+    state.set_browser_connections(count);
+    state.browser_connections()
+}
+
+/// Whether the clipboard is watched for download links.
+#[tauri::command]
+fn set_clipboard_capture(state: State<'_, AppState>, on: bool) -> bool {
+    state.set_clipboard_capture(on);
+    on
+}
+
+/// Register or remove the operating system's startup entry.
+#[tauri::command]
+fn set_launch_on_startup(app: AppHandle, on: bool) -> Result<bool, String> {
+    use tauri_plugin_autostart::ManagerExt;
+
+    let manager = app.autolaunch();
+    if on {
+        manager.enable()
+    } else {
+        manager.disable()
+    }
+    .map_err(|error| error.to_string())?;
+    manager.is_enabled().map_err(|error| error.to_string())
+}
+
+/// The capture rules the extension follows while this application runs.
+///
+/// The lists are cleaned here as well as in the window: this is the value the
+/// extension acts on, so it is the boundary that has to be safe.
+#[tauri::command]
+fn set_browser_policy(
+    state: State<'_, AppState>,
+    policy: BrowserPolicy,
+) -> BrowserPolicy {
+    let policy = normalize_policy(policy);
+    state.set_browser_policy(policy.clone());
+    policy
+}
+
+/// What the window can say about the browser bridge without guessing.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BrowserStatus {
+    /// Whether the bridge bound its port.
+    bridge_running: bool,
+    port: u16,
+    api: u32,
+    /// The last authenticated extension request, in milliseconds since the
+    /// Unix epoch. `None` means the extension has not reached it yet.
+    last_contact_ms: Option<u64>,
+}
+
+#[tauri::command]
+fn browser_status(state: State<'_, AppState>) -> BrowserStatus {
+    BrowserStatus {
+        bridge_running: state.bridge_running(),
+        port: bridge::PORT,
+        api: bridge::API_VERSION,
+        last_contact_ms: state.last_extension_contact().map(|seconds| seconds * 1000),
+    }
+}
+
+/// Whether a folder can hold a download, and how much room is left.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FolderStatus {
+    /// The folder that was checked. Empty input means the system Downloads
+    /// folder, and this is the folder it resolved to.
+    path: String,
+    exists: bool,
+    writable: bool,
+    free_bytes: Option<u64>,
+    /// One sentence for the window when the folder cannot be used.
+    error: Option<String>,
+}
+
+#[tauri::command]
+fn folder_status(app: AppHandle, folder: String) -> FolderStatus {
+    let trimmed = folder.trim();
+    let path = if trimmed.is_empty() {
+        app.path()
+            .download_dir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+    } else {
+        PathBuf::from(trimmed)
+    };
+    let shown = path.to_string_lossy().to_string();
+
+    if !path.exists() {
+        return FolderStatus {
+            path: shown,
+            exists: false,
+            writable: false,
+            free_bytes: None,
+            error: Some("This folder is not there yet. It is created when the first download starts.".to_string()),
+        };
+    }
+    if !path.is_dir() {
+        return FolderStatus {
+            path: shown,
+            exists: true,
+            writable: false,
+            free_bytes: None,
+            error: Some("This path is a file, not a folder.".to_string()),
+        };
+    }
+
+    let writable = can_write(&path);
+    FolderStatus {
+        free_bytes: free_space(&path),
+        error: if writable {
+            None
+        } else {
+            Some("This folder cannot be written to. Choose another one.".to_string())
+        },
+        path: shown,
+        exists: true,
+        writable,
+    }
+}
+
+/// Where the log and the saved download index live.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AppPaths {
+    data_dir: String,
+    log_path: String,
+}
+
+#[tauri::command]
+fn app_paths(app: AppHandle) -> AppPaths {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .unwrap_or_else(|_| PathBuf::from("."));
+    AppPaths {
+        log_path: dir.join("idm-clone.log").to_string_lossy().to_string(),
+        data_dir: dir.to_string_lossy().to_string(),
+    }
+}
+
+/// The longest list one policy carries, matching the window's limit.
+const MAX_RULES: usize = 64;
+
+fn normalize_policy(mut policy: BrowserPolicy) -> BrowserPolicy {
+    policy.types = clean_list(policy.types, clean_file_type);
+    policy.skip_sites = clean_list(policy.skip_sites, clean_site);
+    policy
+}
+
+fn clean_list(values: Vec<String>, clean: fn(&str) -> Option<String>) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for value in values {
+        let Some(cleaned) = clean(&value) else {
+            continue;
+        };
+        if !out.contains(&cleaned) {
+            out.push(cleaned);
+        }
+        if out.len() >= MAX_RULES {
+            break;
+        }
+    }
+    out
+}
+
+fn clean_file_type(value: &str) -> Option<String> {
+    let cleaned = value
+        .trim()
+        .to_ascii_lowercase()
+        .trim_start_matches('*')
+        .trim_start_matches('.')
+        .to_string();
+    if cleaned.is_empty() || cleaned.len() > 16 {
+        return None;
+    }
+    let mut chars = cleaned.chars();
+    if !chars.next()?.is_ascii_alphanumeric() {
+        return None;
+    }
+    if !chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '_' | '-')) {
+        return None;
+    }
+    Some(cleaned)
+}
+
+/// A host out of anything the reader may have typed, without a scheme or a
+/// path. Junk becomes `None`.
+fn clean_site(value: &str) -> Option<String> {
+    let text = value.trim().trim_start_matches('*').trim_start_matches('.');
+    if text.is_empty() {
+        return None;
+    }
+    let with_scheme = if text.contains("://") {
+        text.to_string()
+    } else {
+        format!("http://{text}")
+    };
+    let url = reqwest::Url::parse(&with_scheme).ok()?;
+    let host = url.host_str()?.trim_end_matches('.').to_ascii_lowercase();
+    if host == "localhost" {
+        return Some(host);
+    }
+    let labels: Vec<&str> = host.split('.').collect();
+    if labels.len() < 2 {
+        return None;
+    }
+    let valid = labels.iter().all(|label| {
+        !label.is_empty()
+            && label
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-')
+            && !label.starts_with('-')
+            && !label.ends_with('-')
+    });
+    valid.then_some(host)
+}
+
+/// Whether a file can be created in the folder. The test file is removed
+/// again; a folder that refuses it cannot hold a download either.
+fn can_write(folder: &std::path::Path) -> bool {
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_nanos())
+        .unwrap_or(0);
+    let probe = folder.join(format!(".bdm-write-{}-{stamp}", std::process::id()));
+    match std::fs::File::create(&probe) {
+        Ok(_) => {
+            let _ = std::fs::remove_file(&probe);
+            true
+        }
+        Err(_) => false,
+    }
+}
+
+/// The room left on the volume of a folder, when the system can tell.
+#[cfg(target_os = "windows")]
+fn free_space(folder: &std::path::Path) -> Option<u64> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
+
+    let wide: Vec<u16> = folder
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let mut free = 0u64;
+    let mut total = 0u64;
+    let mut total_free = 0u64;
+    let ok = unsafe {
+        GetDiskFreeSpaceExW(
+            wide.as_ptr(),
+            &mut free,
+            &mut total,
+            &mut total_free,
+        )
+    };
+    (ok != 0).then_some(free)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn free_space(_folder: &std::path::Path) -> Option<u64> {
+    None
 }
 
 /// The folder a download handed over by the browser is saved to.
@@ -496,6 +845,11 @@ pub(crate) fn show_window(app: &AppHandle) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
+        .plugin(tauri_plugin_clipboard_manager::init())
         .manage(AppState::default())
         .setup(|app| {
             // The downloads of an earlier run are brought back, so the list is
@@ -515,6 +869,8 @@ pub fn run() {
             }
             // The browser extension talks to the application through this.
             bridge::start(app.handle().clone());
+            // A copied link is offered while the application is in the tray.
+            clipboard::start(app.handle().clone());
             Ok(())
         })
         .on_window_event(|window, event| match event {
@@ -561,6 +917,15 @@ pub fn run() {
             set_max_connections,
             set_minimize_to_tray,
             set_show_complete_dialog,
+            set_show_progress_on_start,
+            set_browser_connections,
+            set_clipboard_capture,
+            set_launch_on_startup,
+            set_browser_policy,
+            browser_status,
+            folder_status,
+            app_paths,
+            validate_proxy,
             set_browser_folder,
             quit_app,
             default_destination,
@@ -642,5 +1007,51 @@ mod tests {
         let missing = std::env::temp_dir().join("idm-clone-missing-8c41.bin");
         let error = open_path(missing.to_string_lossy().to_string()).unwrap_err();
         assert!(error.contains("not there yet"), "the error was: {error}");
+    }
+
+    #[test]
+    fn a_capture_policy_is_cleaned_at_the_boundary() {
+        let policy = normalize_policy(BrowserPolicy {
+            capture: true,
+            ask: true,
+            types: vec![
+                " .MP4 ".to_string(),
+                "mp4".to_string(),
+                "not a type".to_string(),
+                "*.zip".to_string(),
+            ],
+            skip_sites: vec![
+                "https://Example.ORG/download".to_string(),
+                "example.org".to_string(),
+                "not a host".to_string(),
+            ],
+        });
+
+        assert_eq!(policy.types, vec!["mp4", "zip"]);
+        assert_eq!(policy.skip_sites, vec!["example.org"]);
+    }
+
+    #[test]
+    fn a_browser_hand_over_connection_count_is_clamped() {
+        let state = AppState::default();
+        assert_eq!(state.browser_connections(), 8, "the engine default");
+        state.set_browser_connections(0);
+        assert_eq!(state.browser_connections(), 1, "a count below the minimum");
+        state.set_browser_connections(99);
+        assert_eq!(state.browser_connections(), 32, "a count above the ceiling");
+        state.set_browser_connections(16);
+        assert_eq!(state.browser_connections(), 16, "a count in range");
+    }
+
+    #[test]
+    fn a_proxy_is_checked_before_it_is_stored() {
+        assert_eq!(
+            validate_proxy(" socks5://127.0.0.1:1080 ".to_string()),
+            Ok("socks5://127.0.0.1:1080".to_string())
+        );
+        assert_eq!(validate_proxy("  ".to_string()), Ok(String::new()));
+        assert!(validate_proxy("127.0.0.1:1080".to_string()).is_err());
+        assert!(validate_proxy("ftp://127.0.0.1:1080".to_string()).is_err());
+        assert!(validate_proxy("http://user:secret@127.0.0.1:8080".to_string()).is_err());
     }
 }

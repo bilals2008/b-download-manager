@@ -33,6 +33,8 @@ import { useDownloads } from "@/state/download-store";
 interface AddDownloadDialogProps {
   open: boolean;
   onClose: () => void;
+  /** An address to open with, from a link watched on the clipboard. */
+  seedUrl?: string | null;
 }
 
 /** What the server said about the address, in the order the dialog asks. */
@@ -70,7 +72,11 @@ const FOLDER_ROW =
  * engine's question to ask, so the File Exists window answers it after the
  * start, not a second press of the same button.
  */
-export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
+export function AddDownloadDialog({
+  open,
+  onClose,
+  seedUrl,
+}: AddDownloadDialogProps) {
   const {
     addDownload,
     browserRequest,
@@ -94,12 +100,13 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
   const urlField = useRef<HTMLInputElement>(null);
   const folderButton = useRef<HTMLButtonElement>(null);
 
-  // Open on a fresh form, whatever the last one left behind.
+  // Open on a fresh form, whatever the last one left behind. A link the
+  // clipboard watch offered is the only thing it carries in.
   useEffect(() => {
     if (!open) {
       return;
     }
-    setUrl("");
+    setUrl(seedUrl?.trim() ?? "");
     setHandedOver(null);
     setFolder("");
     setProbe({ kind: "idle" });
@@ -107,7 +114,7 @@ export function AddDownloadDialog({ open, onClose }: AddDownloadDialogProps) {
     setError(null);
     setTouched(false);
     setBusy(false);
-  }, [open]);
+  }, [open, seedUrl]);
 
   // Start from the folder of the last download, then from the folder of the
   // options window, and from the Downloads folder of the system when neither
