@@ -68,6 +68,15 @@ assert.deepEqual(contentScript.matches, ["http://*/*", "https://*/*"]);
 assert.equal(contentScript.run_at, "document_idle");
 assert.ok(!contentScript.all_frames, "the overlay runs in the top frame only");
 assert.ok(contentScript.js.includes("content/overlay.js"), "the overlay is injected");
+assert.ok(
+  contentScript.js.includes("content/video-registry.js"),
+  "the video registry is injected",
+);
+assert.ok(
+  contentScript.js.indexOf("content/video-registry.js") <
+    contentScript.js.indexOf("content/overlay.js"),
+  "the registry loads before the overlay that asks it for a video",
+);
 for (const file of contentScript.js) {
   assert.ok(exists(file), `${file} is in the manifest but not in the folder`);
 }
@@ -971,5 +980,9 @@ assert.deepEqual(
 );
 delete chromeStore.takeover;
 chromeOnline = true;
+
+// The overlay needs a page rather than a sandbox: scripts/check-overlay.mjs
+// runs the content scripts in a fake one and exercises the button there.
+await import("./check-overlay.mjs");
 
 console.log("extension: all checks pass");

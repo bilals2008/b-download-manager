@@ -125,14 +125,68 @@ const BDM_OVERLAY_STYLE = `
     outline-offset: 2px;
   }
 
-  .fab svg {
+  .fab .glyph {
+    display: grid;
+    place-items: center;
+    width: 15px;
+    height: 15px;
+  }
+
+  .fab .glyph svg {
     width: 15px;
     height: 15px;
     color: var(--bdm-progress);
     transition: transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
   }
 
-  .fab:hover svg { transform: translateY(1px); }
+  .fab:hover .glyph svg { transform: translateY(1px); }
+
+  /*
+    The ring is the download behind the button: an arc for how far it got, a
+    full circle for a finished file, a dashed one while the application still
+    has its add dialog open. It only appears on the video it belongs to.
+  */
+  .ring {
+    position: absolute;
+    inset: -4px;
+    width: 38px;
+    height: 38px;
+    overflow: visible;
+    transform: rotate(-90deg);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 160ms ease;
+  }
+
+  .fab[data-progress="true"] .ring { opacity: 1; }
+
+  .ring circle {
+    fill: none;
+    stroke-width: 2;
+  }
+
+  .ring-track { stroke: color-mix(in srgb, var(--bdm-line) 80%, transparent); }
+
+  .ring-arc {
+    stroke: var(--bdm-progress);
+    stroke-linecap: round;
+    /* The circle's pathLength makes these 100 units the whole way round. */
+    stroke-dasharray: 100 100;
+    stroke-dashoffset: 100;
+    transition: stroke-dashoffset 320ms ease, stroke 160ms ease;
+  }
+
+  .fab[data-tone="waiting"] .ring-arc {
+    stroke: var(--bdm-muted);
+    stroke-dasharray: 6 6;
+    stroke-dashoffset: 0;
+  }
+
+  .fab[data-tone="success"] .ring-arc { stroke: var(--bdm-success); }
+  .fab[data-tone="success"] .glyph svg { color: var(--bdm-success); }
+
+  .fab[data-tone="error"] .ring-arc { stroke: var(--bdm-danger); }
+  .fab[data-tone="error"] .glyph svg { color: var(--bdm-danger); }
 
   .fab[data-expanded="true"] {
     background: var(--bdm-active);
@@ -363,7 +417,9 @@ const BDM_OVERLAY_STYLE = `
   @media (prefers-reduced-motion: reduce) {
     .fab,
     .panel,
-    .fab svg,
+    .fab .glyph svg,
+    .ring,
+    .ring-arc,
     .bar > span {
       transition: none;
     }
@@ -385,5 +441,8 @@ const BDM_OVERLAY_STYLE = `
       color: LinkText;
       forced-color-adjust: none;
     }
+
+    .ring-track { stroke: CanvasText; }
+    .ring-arc { stroke: Highlight; }
   }
 `;

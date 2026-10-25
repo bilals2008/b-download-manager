@@ -25,6 +25,7 @@
         "lib/settings.js",
         "lib/icons.js",
         "content/page-media.js",
+        "content/video-registry.js",
         "content/overlay-style.js",
         "content/overlay.js"
       ],

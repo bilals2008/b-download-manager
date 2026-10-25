@@ -19,10 +19,25 @@ lives in `browser-extension/` and speaks the same versioned loopback API.
   rules follow the app's Settings while it runs, and the extension's own copy
   while it is closed.
 - **IDM-style video button** on supported HTML5 videos. A 30 px button appears
-  at the video's top-right corner on hover. Clicking it opens a compact panel
-  with the files or streams that video offers, each labelled with its quality,
-  a progress bar and an *Open app* action. It is built in a closed shadow root
-  with a constructed stylesheet, so page CSS and CSP cannot change it.
+  at the video's top-right corner while the pointer is over the player — over
+  the picture, or over the player's own gradient and controls, which sit above
+  it. Clicking it opens a compact panel with the files or streams that video
+  offers, each labelled with its quality, a progress bar and an *Open app*
+  action. It is built in a closed shadow root with a constructed stylesheet, so
+  page CSS and CSP cannot change it.
+
+  The button follows the video rather than the event that announced it: a
+  player that resizes, goes to the theatre layout or enters fullscreen moves it,
+  and there is only ever one of them. A stream the player asks for after the
+  pointer has arrived brings the button up, and a navigation inside the page
+  (YouTube's watch page) drops the streams of the video that was left behind, so
+  the panel never offers an expired address for the next one.
+
+  After a stream is handed over, the button carries the download itself: a thin
+  ring around it fills as the file arrives, the icon becomes a check when it is
+  saved, and the ring turns red when it fails. The ring only appears on the
+  video the download came from, and it stays while the panel is closed — which
+  is the point of it.
 - **Toolbar badge** shows how many downloadable media the tab offers. It is
   cleared when the tab navigates or the overlay is turned off.
 - **Compact popup**: connection state, active downloads (progress, size,
@@ -190,7 +205,14 @@ npx web-ext lint --source-dir extension-firefox --self-hosted
 checks the shared colour tokens, runs the settings, media and page-list helpers
 in a sandbox, exercises the background against a mocked bridge, verifies that
 every icon name exists, and runs the Chrome build's hand-over contract too.
-`web-ext lint` is Mozilla's own manifest and API validation.
+
+It also runs the content scripts in a fake page (`scripts/lib/fake-dom.mjs`):
+a YouTube-shaped player whose controls cover the picture, a stream that arrives
+after the pointer, a video inserted later, a navigation inside the document,
+fullscreen, a protected video, the switch turned off, a closed application and a
+page that unloads. That is where the button's behaviour is checked, because a
+static screenshot cannot show whether it appears at all. `web-ext lint` is
+Mozilla's own manifest and API validation.
 
 ## Files
 
@@ -202,6 +224,7 @@ lib/settings.js        defaults, normalisation, the takeover and overlay rules
 lib/media.js           what counts as a downloadable media address
 lib/icons.js           the SVG icons drawn by the popup and the overlay
 content/page-media.js  reads media addresses out of the page
+content/video-registry.js  which videos the page has, and which is under the pointer
 content/overlay.js     the floating button, panel and live progress
 content/overlay-style.js  the shadow-root stylesheet and its token copy
 popup/                 connection, downloads, page media, settings entry
@@ -222,6 +245,17 @@ These are honest boundaries, not unfinished UI:
   pretends a protected stream is available. An MSE player's `blob:` URL is
   replaced by the file requests it made; those addresses are signed and expire,
   so send one while the page is playing or it will fail later.
+- **A page that navigates inside the document starts from an empty list.** The
+  streams belong to the address that fetched them, so the ones from the video
+  that was left behind are dropped. Until the player asks for its next segment
+  the button is not offered on the new video; that takes as long as playback
+  needs, usually a second or two.
+- **A hand-over that asks is followed by its address.** The add dialog keeps
+  the address it was given, and the download list carries it, so the button
+  finds its download without guessing. If the address is edited in the dialog,
+  or the dialog is never confirmed, nothing is followed: the button says *Not
+  started in the app* and clears itself, instead of showing a progress that
+  belongs to nothing. The wait for the dialog is two minutes.
 - **A type filter matches the URL path.** A URL with no extension but a
   `Content-Disposition` file name is filtered out when the type list is
   non-empty; leave the list empty to take every type.
