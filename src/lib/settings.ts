@@ -5,18 +5,18 @@
  * application starts. The ones the engine owns — the proxy, the bandwidth
  * cap, the number of connections — are pushed to the engine as well, so a
  * change takes effect at once.
- *
- * shortcut: `launchOnStartup` and `clipboardCapture` are stored but not
- * enforced by the operating system yet. Wire them to autostart and clipboard
- * monitoring when those subsystems land.
  */
 export interface Settings {
+  /** Register the application in the operating system's startup entry. */
   launchOnStartup: boolean;
+  /** Watch the clipboard for links and offer them to the add dialog. */
   clipboardCapture: boolean;
   /** Whether closing the window hides it into the tray. */
   minimizeToTray: boolean;
   /** Whether a finished download gets its own window. */
   showCompleteDialog: boolean;
+  /** Whether a new download opens its progress window. */
+  showProgressOnStart: boolean;
   /** Auto follows the system; the other two override it. */
   theme: ThemePreference;
   /** The face the whole window is drawn in, built in or imported. */
@@ -25,6 +25,8 @@ export interface Settings {
   uiWeight: UiWeight;
   /** Where a new download is saved when the user does not say. */
   defaultFolder: string;
+  /** Open on the folder of the last download instead of the default. */
+  rememberLastFolder: boolean;
   /** Connections one download gets by default. */
   defaultConnections: number;
   /** Connections the whole application may have open at once. */
@@ -35,22 +37,48 @@ export interface Settings {
   speedLimitBytes: number;
   /** The proxy new downloads go through, empty for none. */
   proxyUrl: string;
+  /** What happens when a file of the same name is already there. */
+  duplicatePolicy: DuplicatePolicy;
+  /** Whether the browser extension hands downloads to the application. */
+  browserCapture: boolean;
+  /** Whether a hand-over opens the add dialog instead of starting. */
+  captureAsk: boolean;
+  /** File types the extension takes over. Empty means every type. */
+  captureTypes: string[];
+  /** Hosts the extension leaves to the browser. */
+  skipSites: string[];
 }
+
+export type DuplicatePolicy = "ask" | "rename" | "replace" | "skip";
+
+export const DUPLICATE_POLICIES: { value: DuplicatePolicy; label: string }[] = [
+  { value: "ask", label: "Ask every time" },
+  { value: "rename", label: "Save under a free name" },
+  { value: "replace", label: "Replace the file" },
+  { value: "skip", label: "Skip the download" },
+];
 
 export const DEFAULT_SETTINGS: Settings = {
   launchOnStartup: false,
   clipboardCapture: false,
   minimizeToTray: true,
   showCompleteDialog: true,
+  showProgressOnStart: false,
   theme: "auto",
   uiFont: "googlesans",
   uiWeight: "medium",
   defaultFolder: "",
+  rememberLastFolder: true,
   defaultConnections: 8,
   maxConnections: 32,
   speedLimitEnabled: false,
   speedLimitBytes: 0,
   proxyUrl: "",
+  duplicatePolicy: "ask",
+  browserCapture: true,
+  captureAsk: false,
+  captureTypes: [],
+  skipSites: [],
 };
 
 const STORAGE_KEY = "idm-clone.settings.v1";
@@ -63,6 +91,15 @@ const LAST_FOLDER_KEY = "idm-clone.last-folder.v1";
 
 /** The range the engine accepts for a connection count. */
 export const MAX_CONNECTIONS = 32;
+
+/** The longest list of capture rules one page keeps. */
+export const MAX_RULE_ENTRIES = 64;
+
+const TYPE_PATTERN = /^[a-z0-9][a-z0-9+_-]{0,15}$/;
+
+/** The same host rule the extension uses, so a rule means the same thing. */
+const HOST_PATTERN =
+  /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
 
 /** Read the saved preferences, falling back field by field on bad data. */
 export function loadSettings(): Settings {
@@ -84,10 +121,18 @@ export function loadSettings(): Settings {
         value.showCompleteDialog,
         DEFAULT_SETTINGS.showCompleteDialog,
       ),
+      showProgressOnStart: boolean(
+        value.showProgressOnStart,
+        DEFAULT_SETTINGS.showProgressOnStart,
+      ),
       theme: theme(value.theme, DEFAULT_SETTINGS.theme),
       uiFont: font(value.uiFont, DEFAULT_SETTINGS.uiFont),
       uiWeight: weight(value.uiWeight, DEFAULT_SETTINGS.uiWeight),
       defaultFolder: text(value.defaultFolder, DEFAULT_SETTINGS.defaultFolder),
+      rememberLastFolder: boolean(
+        value.rememberLastFolder,
+        DEFAULT_SETTINGS.rememberLastFolder,
+      ),
       defaultConnections: number(
         value.defaultConnections,
         DEFAULT_SETTINGS.defaultConnections,
@@ -111,6 +156,21 @@ export function loadSettings(): Settings {
         1024 * 1024 * 1024,
       ),
       proxyUrl: text(value.proxyUrl, DEFAULT_SETTINGS.proxyUrl),
+      duplicatePolicy: duplicate(
+        value.duplicatePolicy,
+        DEFAULT_SETTINGS.duplicatePolicy,
+      ),
+      browserCapture: boolean(
+        value.browserCapture,
+        DEFAULT_SETTINGS.browserCapture,
+      ),
+      captureAsk: boolean(value.captureAsk, DEFAULT_SETTINGS.captureAsk),
+      captureTypes: entries(
+        value.captureTypes,
+        DEFAULT_SETTINGS.captureTypes,
+        cleanCaptureType,
+      ),
+      skipSites: entries(value.skipSites, DEFAULT_SETTINGS.skipSites, cleanSite),
     };
   } catch {
     return DEFAULT_SETTINGS;
@@ -122,6 +182,32 @@ export function saveSettings(settings: Settings): void {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
   } catch {
     // Storage can be blocked; the dialog still closes with the chosen values.
+  }
+}
+
+/** ".MP4", "*.mp4" and " mp4 " are all the same extension. */
+export function cleanCaptureType(value: string): string {
+  const cleaned = value.trim().toLowerCase().replace(/^\*?\./, "");
+  return TYPE_PATTERN.test(cleaned) ? cleaned : "";
+}
+
+/** A host name out of anything the user may have typed. Junk becomes "". */
+export function cleanSite(value: string): string {
+  const text = value.trim().replace(/^\*?\./, "");
+  if (!text) {
+    return "";
+  }
+  try {
+    const url = new URL(
+      text.includes("://") ? text : `http://${text}`,
+    );
+    const host = url.hostname.toLowerCase().replace(/\.$/, "");
+    if (host === "localhost") {
+      return host;
+    }
+    return HOST_PATTERN.test(host) ? host : "";
+  } catch {
+    return "";
   }
 }
 
@@ -147,13 +233,29 @@ export function saveLastFolder(folder: string): void {
   }
 }
 
+/** Forget the folder of the last download, for a full reset. */
+export function clearLastFolder(): void {
+  try {
+    window.localStorage.removeItem(LAST_FOLDER_KEY);
+  } catch {
+    // Storage can be blocked; the remembered folder does no harm.
+  }
+}
+
 /**
- * The folder the add dialog opens on: the one the last download used, and the
- * configured default until there is one. Empty means the system Downloads
- * folder, which the dialog asks the engine for.
+ * The folder the add dialog opens on: the configured default, or the folder of
+ * the last download when the reader asked to remember it. Empty means the
+ * system Downloads folder, which the dialog asks the engine for.
  */
 export function preferredFolder(): string {
-  return loadLastFolder() || loadSettings().defaultFolder.trim();
+  const settings = loadSettings();
+  if (settings.rememberLastFolder) {
+    const last = loadLastFolder();
+    if (last) {
+      return last;
+    }
+  }
+  return settings.defaultFolder.trim();
 }
 
 /** The size of the toolbar buttons, the way IDM keeps it in the View menu. */
@@ -242,4 +344,37 @@ function number(value: unknown, fallback: number, min: number, max: number): num
     return fallback;
   }
   return Math.min(max, Math.max(min, Math.round(value)));
+}
+
+function duplicate(value: unknown, fallback: DuplicatePolicy): DuplicatePolicy {
+  return value === "ask" ||
+    value === "rename" ||
+    value === "replace" ||
+    value === "skip"
+    ? value
+    : fallback;
+}
+
+function entries(
+  value: unknown,
+  fallback: readonly string[],
+  clean: (value: string) => string,
+): string[] {
+  if (!Array.isArray(value)) {
+    return [...fallback];
+  }
+  const out: string[] = [];
+  for (const entry of value) {
+    if (typeof entry !== "string") {
+      continue;
+    }
+    const cleaned = clean(entry);
+    if (cleaned && !out.includes(cleaned)) {
+      out.push(cleaned);
+    }
+    if (out.length >= MAX_RULE_ENTRIES) {
+      break;
+    }
+  }
+  return out;
 }

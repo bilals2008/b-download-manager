@@ -16,6 +16,7 @@
     "check:add-dialog": "node scripts/check-add-dialog.mjs",
     "check:recovery": "node scripts/check-recovery.mjs",
     "check:tooltip": "node scripts/check-tooltip.mjs",
+    "check:settings": "node scripts/check-settings.mjs",
     "check:extension": "node scripts/check-extension.mjs",
     "site:dev": "pnpm --filter site dev",
     "site:build": "pnpm --filter site build",

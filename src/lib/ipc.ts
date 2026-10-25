@@ -33,6 +33,13 @@ export function onBridgeDownload(
   );
 }
 
+/** A link copied to the clipboard while the reader asked to watch it. */
+export function onClipboardLink(
+  handler: (url: string) => void,
+): Promise<UnlistenFn> {
+  return listen<string>("clipboard://url", (event) => handler(event.payload));
+}
+
 /** What the File Exists dialog answered. */
 export type ConflictChoice = "ask" | "rename" | "replace" | "skip";
 
@@ -259,6 +266,86 @@ export function setShowCompleteDialog(on: boolean): Promise<boolean> {
  */
 export function setBrowserFolder(folder: string): Promise<string> {
   return invoke<string>("set_browser_folder", { folder });
+}
+
+/** Whether a new download opens its progress window. */
+export function setShowProgressOnStart(on: boolean): Promise<boolean> {
+  return invoke<boolean>("set_show_progress_on_start", { on });
+}
+
+/** The connections a browser hand-over gets, since it has no dialog to ask. */
+export function setBrowserConnections(count: number): Promise<number> {
+  return invoke<number>("set_browser_connections", { count });
+}
+
+/** Whether the clipboard is watched for download links. */
+export function setClipboardCapture(on: boolean): Promise<boolean> {
+  return invoke<boolean>("set_clipboard_capture", { on });
+}
+
+/**
+ * Register or remove the operating system's startup entry.
+ *
+ * Resolves with the state the operating system reports, which is what the
+ * switch follows rather than the request.
+ */
+export function setLaunchOnStartup(on: boolean): Promise<boolean> {
+  return invoke<boolean>("set_launch_on_startup", { on });
+}
+
+/** The capture rules the extension follows while the application runs. */
+export interface BrowserPolicyInput {
+  capture: boolean;
+  ask: boolean;
+  types: string[];
+  skipSites: string[];
+}
+
+export function setBrowserPolicy(
+  policy: BrowserPolicyInput,
+): Promise<BrowserPolicyInput> {
+  return invoke<BrowserPolicyInput>("set_browser_policy", { policy });
+}
+
+/** What the application can verify about the browser bridge. */
+export interface BrowserStatus {
+  bridgeRunning: boolean;
+  port: number;
+  api: number;
+  /** The last authenticated extension request, in Unix milliseconds. */
+  lastContactMs: number | null;
+}
+
+export function browserStatus(): Promise<BrowserStatus> {
+  return invoke<BrowserStatus>("browser_status");
+}
+
+/** Whether a folder can hold a download, and how much room is left. */
+export interface FolderStatus {
+  path: string;
+  exists: boolean;
+  writable: boolean;
+  freeBytes: number | null;
+  error: string | null;
+}
+
+export function folderStatus(folder: string): Promise<FolderStatus> {
+  return invoke<FolderStatus>("folder_status", { folder });
+}
+
+/** Check a proxy address before it is stored. Empty means no proxy. */
+export function validateProxy(url: string): Promise<string> {
+  return invoke<string>("validate_proxy", { url });
+}
+
+/** Where the log and the saved download index live. */
+export interface AppPaths {
+  dataDir: string;
+  logPath: string;
+}
+
+export function appPaths(): Promise<AppPaths> {
+  return invoke<AppPaths>("app_paths");
 }
 
 /** Leave the application for good. */
