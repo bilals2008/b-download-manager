@@ -20,6 +20,7 @@
     "check:tooltip": "node scripts/check-tooltip.mjs",
     "check:settings": "node scripts/check-settings.mjs",
     "check:extension": "node scripts/check-extension.mjs",
+    "check:grabber": "node scripts/check-grabber.mjs",
     "site:dev": "pnpm --filter site dev",
     "site:build": "pnpm --filter site build",
     "tauri": "tauri"

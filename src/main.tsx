@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 
 import App from "./App";
 import { DownloadCompleteWindow } from "./components/windows/download-complete-window";
+import { GrabberWindow } from "./components/windows/grabber-window";
 import { DownloadProgressWindow } from "./components/windows/progress/download-progress-window";
 import { startAppearanceSync } from "./lib/appearance";
 import { DownloadProvider } from "./state/download-store";
@@ -24,11 +25,13 @@ const progress = (
 const completed = (
   window as Window & { __IDM_COMPLETE__?: DownloadInfo }
 ).__IDM_COMPLETE__;
+const grabber = (window as Window & { __IDM_GRABBER__?: boolean })
+  .__IDM_GRABBER__;
 
 // The two small windows round their own corners. The page behind them has to
 // be the same surface, or the curve shows a sliver of the app canvas outside
 // it. The token is overridden here, before the first paint.
-if (progress || completed) {
+if (progress || completed || grabber) {
   document.documentElement.style.setProperty(
     "--background",
     "var(--chrome-popup)",
@@ -41,6 +44,8 @@ createRoot(document.getElementById("root")!).render(
       <DownloadProgressWindow initial={progress} />
     ) : completed ? (
       <DownloadCompleteWindow info={completed} />
+    ) : grabber ? (
+      <GrabberWindow />
     ) : (
       <DownloadProvider>
         <App />

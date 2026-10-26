@@ -34,7 +34,7 @@ export function buildMenus(fonts: FontOption[]): MenuDefinition[] {
         label: "Add batch download from clipboard",
         disabled: true,
       },
-      { command: "run-grabber", label: "Run site grabber", disabled: true },
+      { command: "run-grabber", label: "Run site grabber" },
       { command: "drop-target", label: "Show drop target", disabled: true },
       "separator",
       {

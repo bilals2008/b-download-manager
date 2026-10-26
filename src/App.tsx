@@ -9,6 +9,7 @@ import { AboutDialog } from "@/components/workspace/about-dialog";
 import { AddDownloadDialog } from "@/components/workspace/add-download-dialog";
 import { Workspace } from "@/components/workspace/workspace";
 import { applyFont } from "@/lib/fonts";
+import { openGrabberWindow } from "@/lib/grabber";
 import {
   onClipboardLink,
   onTrayCommand,
@@ -211,6 +212,12 @@ export default function App() {
         break;
       case "options":
         setSettingsOpen(true);
+        break;
+      case "run-grabber":
+        // The window opens beside this one, so a crawl does not block the
+        // download list. A refusal is only possible if the window toolkit
+        // cannot build a window, which the log records.
+        void openGrabberWindow().catch(() => {});
         break;
       case "about":
         setAboutOpen(true);
