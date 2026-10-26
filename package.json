@@ -14,6 +14,8 @@
     "check:find": "node scripts/check-find.mjs",
     "check:progress": "node scripts/check-progress.mjs",
     "check:add-dialog": "node scripts/check-add-dialog.mjs",
+    "check:categories": "node scripts/check-categories.mjs",
+    "check:properties": "node scripts/check-properties.mjs",
     "check:recovery": "node scripts/check-recovery.mjs",
     "check:tooltip": "node scripts/check-tooltip.mjs",
     "check:settings": "node scripts/check-settings.mjs",
