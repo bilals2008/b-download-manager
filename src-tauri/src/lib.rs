@@ -4,6 +4,7 @@ mod clipboard;
 mod complete;
 mod conflict;
 mod dest;
+mod grabber;
 mod progress;
 mod state;
 mod window_style;
@@ -194,11 +195,7 @@ fn dequeue_download(app: AppHandle, state: State<'_, AppState>, id: u64) -> Resu
 
 /// Delete the file of a finished download, then forget the row.
 #[tauri::command]
-fn delete_download_file(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    id: u64,
-) -> Result<(), String> {
+fn delete_download_file(app: AppHandle, state: State<'_, AppState>, id: u64) -> Result<(), String> {
     actions::delete_file(&app, &state, id)
 }
 
@@ -295,9 +292,11 @@ fn set_proxy(state: State<'_, AppState>, url: Option<String>) -> Result<(), Stri
         Some(value) => validate_proxy(value)?,
         None => String::new(),
     };
-    state
-        .limits()
-        .set_proxy(if cleaned.is_empty() { None } else { Some(&cleaned) });
+    state.limits().set_proxy(if cleaned.is_empty() {
+        None
+    } else {
+        Some(&cleaned)
+    });
     Ok(())
 }
 
@@ -313,9 +312,8 @@ fn validate_proxy(url: String) -> Result<String, String> {
     if trimmed.is_empty() {
         return Ok(String::new());
     }
-    let parsed = reqwest::Url::parse(trimmed).map_err(|_| {
-        "Use a full address, for example socks5://127.0.0.1:1080.".to_string()
-    })?;
+    let parsed = reqwest::Url::parse(trimmed)
+        .map_err(|_| "Use a full address, for example socks5://127.0.0.1:1080.".to_string())?;
     let scheme = parsed.scheme();
     if !matches!(scheme, "http" | "https" | "socks5" | "socks5h") {
         return Err(format!(
@@ -327,8 +325,7 @@ fn validate_proxy(url: String) -> Result<String, String> {
     }
     if !parsed.username().is_empty() || parsed.password().is_some() {
         return Err(
-            "Proxy authentication is not supported. Remove the username and password."
-                .to_string(),
+            "Proxy authentication is not supported. Remove the username and password.".to_string(),
         );
     }
     // The engine builds its client from this exact string, so refuse what it
@@ -422,10 +419,7 @@ fn set_launch_on_startup(app: AppHandle, on: bool) -> Result<bool, String> {
 /// The lists are cleaned here as well as in the window: this is the value the
 /// extension acts on, so it is the boundary that has to be safe.
 #[tauri::command]
-fn set_browser_policy(
-    state: State<'_, AppState>,
-    policy: BrowserPolicy,
-) -> BrowserPolicy {
+fn set_browser_policy(state: State<'_, AppState>, policy: BrowserPolicy) -> BrowserPolicy {
     let policy = normalize_policy(policy);
     state.set_browser_policy(policy.clone());
     policy
@@ -486,7 +480,10 @@ fn folder_status(app: AppHandle, folder: String) -> FolderStatus {
             exists: false,
             writable: false,
             free_bytes: None,
-            error: Some("This folder is not there yet. It is created when the first download starts.".to_string()),
+            error: Some(
+                "This folder is not there yet. It is created when the first download starts."
+                    .to_string(),
+            ),
         };
     }
     if !path.is_dir() {
@@ -601,9 +598,7 @@ fn clean_site(value: &str) -> Option<String> {
     }
     let valid = labels.iter().all(|label| {
         !label.is_empty()
-            && label
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '-')
+            && label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
             && !label.starts_with('-')
             && !label.ends_with('-')
     });
@@ -641,14 +636,7 @@ fn free_space(folder: &std::path::Path) -> Option<u64> {
     let mut free = 0u64;
     let mut total = 0u64;
     let mut total_free = 0u64;
-    let ok = unsafe {
-        GetDiskFreeSpaceExW(
-            wide.as_ptr(),
-            &mut free,
-            &mut total,
-            &mut total_free,
-        )
-    };
+    let ok = unsafe { GetDiskFreeSpaceExW(wide.as_ptr(), &mut free, &mut total, &mut total_free) };
     (ok != 0).then_some(free)
 }
 
@@ -917,6 +905,7 @@ pub fn run() {
         ))
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(AppState::default())
+        .manage(grabber::Grabber::default())
         .setup(|app| {
             // The downloads of an earlier run are brought back, so the list is
             // still there after a restart.
@@ -1003,6 +992,11 @@ pub fn run() {
             default_destination,
             probe_link,
             inspect_destination,
+            grabber::open_grabber_window,
+            grabber::grabber_start,
+            grabber::grabber_cancel,
+            grabber::grabber_state,
+            grabber::grabber_download,
             show_ready,
             set_window_background,
             open_path,
