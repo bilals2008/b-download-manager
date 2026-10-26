@@ -1,8 +1,7 @@
 ---
 import Icon from "./Icon.astro";
-import FeatureVisual from "./FeatureVisual.astro";
 import type { IconName } from "./Icon.astro";
-import type { VisualKind } from "./FeatureVisual.astro";
+import PreviewPlaceholder from "./PreviewPlaceholder.astro";
 
 type Feature = {
   icon: IconName;
@@ -10,7 +9,6 @@ type Feature = {
   title: string;
   body: string;
   bullets: string[];
-  visual: VisualKind;
 };
 
 const features: Feature[] = [
@@ -24,7 +22,6 @@ const features: Feature[] = [
       "Per-site and global caps",
       "Ranges sized at 16 MiB",
     ],
-    visual: "parallel",
   },
   {
     icon: "resume",
@@ -36,7 +33,6 @@ const features: Feature[] = [
       "Overlaps and out-of-order ranges rejected",
       "FTP REST offsets for the same job",
     ],
-    visual: "resume",
   },
   {
     icon: "globe",
@@ -48,7 +44,6 @@ const features: Feature[] = [
       "FTP data connection per range",
       "One-connection fallback",
     ],
-    visual: "protocol",
   },
   {
     icon: "gauge",
@@ -60,7 +55,6 @@ const features: Feature[] = [
       "KB/s or MB/s",
       "Applied per connection",
     ],
-    visual: "speed",
   },
   {
     icon: "browser",
@@ -72,7 +66,6 @@ const features: Feature[] = [
       "Firefox video button",
       "Chrome and Edge build",
     ],
-    visual: "browser",
   },
   {
     icon: "tray",
@@ -84,7 +77,6 @@ const features: Feature[] = [
       "Start and stop from the tray",
       "Quit from the tray",
     ],
-    visual: "tray",
   },
 ];
 ---
@@ -140,7 +132,7 @@ const features: Feature[] = [
             </div>
 
             <div class="feature-visual">
-              <FeatureVisual kind={feature.visual} />
+              <PreviewPlaceholder />
             </div>
           </article>
         ))
@@ -285,6 +277,10 @@ const features: Feature[] = [
     width: 100%;
     max-width: 30rem;
     justify-self: center;
+  }
+
+  .feature-visual :global(.preview-placeholder) {
+    aspect-ratio: 4 / 3;
   }
 
   @media (min-width: 56rem) {

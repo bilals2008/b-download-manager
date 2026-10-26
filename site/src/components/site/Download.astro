@@ -1,135 +1,80 @@
 ---
 import Button from "./Button.astro";
-import Icon from "./Icon.astro";
 import PlatformIcon from "./PlatformIcon.astro";
 
-const facts = [
+const platforms = [
   {
-    icon: "cpu",
-    label: "Rust engine",
-    detail: "Headless, tested against local HTTP and FTP servers.",
+    id: "windows",
+    name: "Windows 10 and 11",
+    meta: "WebView2 runtime",
+    status: "Tuned target",
+    tuned: true,
   },
   {
-    icon: "lock",
-    label: "Local by default",
-    detail: "Part files and the manifest stay on your disk.",
+    id: "apple",
+    name: "macOS 11 or later",
+    meta: "Universal build",
+    status: "Builds from source",
+    tuned: false,
   },
   {
-    icon: "bolt",
-    label: "Tauri 2 shell",
-    detail: "A small native shell, not a browser bundle.",
-  },
-  {
-    icon: "tray",
-    label: "Tray resident",
-    detail: "The queue outlives the window.",
+    id: "linux",
+    name: "Major distributions",
+    meta: "WebKitGTK",
+    status: "Builds from source",
+    tuned: false,
   },
 ] as const;
-
-const windowsTags = [
-  "Frameless window",
-  "Custom title bar",
-  "Tray icon",
-  "Rounded corners",
-];
 ---
 
 <section id="download" class="section download" aria-labelledby="download-title">
   <div class="container-page">
-    <header class="download-head reveal">
-      <h2 id="download-title" class="section-title">
-        Get it on your machine.
+    <div class="download-band reveal">
+      <p class="eyebrow">Get the app</p>
+      <h2 id="download-title" class="download-title">
+        The source is the release.
       </h2>
-      <p class="section-copy">
-        There is no packaged release yet. Version 0.1.0 builds from source on
-        Windows, macOS and Linux.
+      <p class="download-copy">
+        Version 0.1.0 has no packaged installer. Build it once with Node.js,
+        Rust and pnpm, and later updates are a pull and a rebuild.
       </p>
-    </header>
-
-    <div class="platform-grid">
-      <article class="platform platform--featured reveal">
-        <div class="platform-head">
-          <span class="platform-mark">
-            <PlatformIcon name="windows" size={24} />
-          </span>
-          <span class="platform-tag">Tuned target</span>
-        </div>
-
-        <div>
-          <h3 class="platform-name">Windows</h3>
-          <p class="platform-meta">Windows 10 and 11 · WebView2</p>
-          <p class="platform-body">
-            The build the interface is designed around: a frameless window, a
-            custom title bar, the tray icon and rounded corners.
-          </p>
-        </div>
-
-        <ul class="platform-tags" aria-label="Windows details">
-          {windowsTags.map((tag) => <li>{tag}</li>)}
-        </ul>
-
-        <div class="platform-foot">
-          <Button href="/installation/" variant="primary" icon="arrow-right">
-            Read the Windows steps
-          </Button>
-          <p class="platform-requires">Node 20+, Rust 1.77+ and pnpm.</p>
-        </div>
-      </article>
-
-      <article class="platform reveal">
-        <div class="platform-head">
-          <span class="platform-mark">
-            <PlatformIcon name="apple" size={22} />
-          </span>
-          <span class="platform-badge">Builds from source</span>
-        </div>
-        <div>
-          <h3 class="platform-name">macOS</h3>
-          <p class="platform-meta">macOS 11 or later · Universal</p>
-          <p class="platform-body">
-            Builds with the Xcode Command Line Tools. Window corners fall back
-            to the square shape the content draws itself.
-          </p>
-        </div>
-        <a class="platform-link" href="/installation/">
-          Read the macOS steps
-          <Icon name="arrow-up-right" size={13} />
-        </a>
-      </article>
-
-      <article class="platform reveal">
-        <div class="platform-head">
-          <span class="platform-mark">
-            <PlatformIcon name="linux" size={22} />
-          </span>
-          <span class="platform-badge">Builds from source</span>
-        </div>
-        <div>
-          <h3 class="platform-name">Linux</h3>
-          <p class="platform-meta">Major distros · WebKitGTK</p>
-          <p class="platform-body">
-            Needs the Tauri prerequisites for your distribution. The engine and
-            the interface are the same as every other platform.
-          </p>
-        </div>
-        <a class="platform-link" href="/installation/">
-          Read the Linux steps
-          <Icon name="arrow-up-right" size={13} />
-        </a>
-      </article>
+      <div class="download-action">
+        <Button href="/installation/" variant="primary" icon="download">
+          Read the installation steps
+        </Button>
+      </div>
+      <p class="download-meta">
+        Windows, macOS and Linux · no account · no telemetry
+      </p>
     </div>
 
-    <ul class="download-facts reveal">
+    <p class="requirements-label">Platforms and what they need</p>
+
+    <ul class="requirements" aria-label="Platform requirements">
       {
-        facts.map((fact) => (
-          <li class="download-fact">
-            <span class="download-fact-icon">
-              <Icon name={fact.icon} size={16} />
+        platforms.map((platform) => (
+          <li class="requirement">
+            <span class="requirement-mark">
+              <PlatformIcon name={platform.id} size={18} />
             </span>
-            <span>
-              <span class="download-fact-label">{fact.label}</span>
-              <span class="download-fact-detail">{fact.detail}</span>
+
+            <span class="requirement-name">
+              {platform.name}
+              <span class="requirement-meta">{platform.meta}</span>
             </span>
+
+            <span
+              class:list={[
+                "requirement-status",
+                platform.tuned && "requirement-status--tuned",
+              ]}
+            >
+              {platform.status}
+            </span>
+
+            <a class="requirement-link" href="/installation/">
+              Steps
+            </a>
           </li>
         ))
       }
@@ -138,229 +83,167 @@ const windowsTags = [
 </section>
 
 <style>
-  .download-head {
-    max-width: 40rem;
-    margin-inline: auto;
+  .download-band {
+    padding: clamp(2.5rem, 6vw, 4rem) clamp(1.25rem, 5vw, 4rem);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    background-color: var(--surface);
     text-align: center;
   }
 
-  .download-head :global(.section-title),
-  .download-head :global(.section-copy) {
-    margin-inline: auto;
-  }
-
-  .platform-grid {
-    display: grid;
-    gap: 1rem;
-    margin-top: clamp(2.5rem, 5vw, 4rem);
-  }
-
-  .platform {
-    display: flex;
-    flex-direction: column;
-    gap: 1.3rem;
-    padding: 1.4rem;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-md);
-    background-color: transparent;
-  }
-
-  .platform--featured {
-    border-color: var(--line-strong);
-    background-color: var(--surface);
-  }
-
-  .platform-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-  }
-
-  .platform-mark {
-    display: grid;
-    place-items: center;
-    width: 3rem;
-    height: 3rem;
-    border: 1px solid var(--line);
-    border-radius: 0.8rem;
-    background-color: var(--page);
-    color: var(--ink);
-  }
-
-  .platform--featured .platform-mark {
-    width: 3.5rem;
-    height: 3.5rem;
-    border-color: var(--line-strong);
-    background-color: var(--action-bg);
-    color: var(--action-ink);
-  }
-
-  .platform-tag {
-    padding: 0.3rem 0.6rem;
-    border-radius: 999px;
-    background-color: var(--accent-soft);
-    color: var(--accent);
-    font-size: var(--type-micro);
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
-  .platform-badge {
-    color: var(--muted);
-    font-size: var(--type-caption);
-  }
-
-  .platform-name {
+  .download-title {
+    margin-top: 1rem;
     color: var(--ink);
     font-family: var(--face-display);
-    font-size: var(--type-subsection);
+    font-size: var(--type-section);
     font-weight: 500;
-    letter-spacing: -0.03em;
-    line-height: 1.1;
+    letter-spacing: -0.035em;
+    line-height: 1.02;
+    text-wrap: balance;
   }
 
-  .platform-meta {
-    margin-top: 0.4rem;
-    color: var(--accent);
-    font-family: var(--face-mono);
-    font-size: var(--type-micro);
-    line-height: 1.4;
-  }
-
-  .platform-body {
+  .download-copy {
     max-width: 46ch;
-    margin-top: 0.85rem;
+    margin: 1.25rem auto 0;
     color: var(--muted);
-    font-size: var(--type-small);
+    font-size: var(--type-body);
     line-height: 1.65;
   }
 
-  .platform-tags {
+  .download-action {
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem;
+    justify-content: center;
+    margin-top: 1.9rem;
   }
 
-  .platform-tags li {
-    padding: 0.3rem 0.55rem;
-    border: 1px solid var(--line);
-    border-radius: 0.3rem;
-    background-color: var(--page);
-    color: var(--ink-soft);
-    font-size: var(--type-micro);
-    line-height: 1.2;
+  .download-action :global(.btn) {
+    min-height: 3.1rem;
+    padding-inline: 1.6rem;
+    border-radius: var(--radius-sm);
+    font-size: var(--type-body);
   }
 
-  .platform-foot {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.7rem;
-    margin-top: auto;
-    padding-top: 0.3rem;
-  }
-
-  .platform-requires {
-    color: var(--muted);
-    font-size: var(--type-micro);
-    line-height: 1.5;
-  }
-
-  .platform-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    min-height: 2.75rem;
-    margin-top: auto;
-    color: var(--ink);
-    font-size: var(--type-small);
-    font-weight: 500;
-    text-decoration: none;
-    text-underline-offset: 0.22em;
-    text-decoration-color: var(--line-strong);
-    text-decoration-line: underline;
-    transition: color var(--duration-fast) var(--ease-out);
-  }
-
-  .platform-link:hover {
-    color: var(--accent);
-    text-decoration-color: currentColor;
-  }
-
-  .platform-link :global(svg) {
-    transition: transform var(--duration-fast) var(--ease-out);
-  }
-
-  .platform-link:hover :global(svg) {
-    transform: translate(2px, -2px);
-  }
-
-  .download-facts {
-    display: grid;
-    gap: 1rem;
-    margin-top: clamp(2.5rem, 5vw, 3.5rem);
-    padding-top: clamp(2rem, 4vw, 2.75rem);
-    border-top: 1px solid var(--line);
-  }
-
-  .download-fact {
-    display: flex;
-    gap: 0.7rem;
-  }
-
-  .download-fact-icon {
-    display: grid;
-    place-items: center;
-    width: 2.1rem;
-    height: 2.1rem;
-    flex: none;
-    border: 1px solid var(--line);
-    border-radius: 0.55rem;
-    color: var(--accent);
-  }
-
-  .download-fact-label {
-    display: block;
-    color: var(--ink);
-    font-size: var(--type-label);
-    font-weight: 600;
-    line-height: 1.35;
-  }
-
-  .download-fact-detail {
-    display: block;
-    margin-top: 0.2rem;
+  .download-meta {
+    margin-top: 1.1rem;
     color: var(--muted);
     font-size: var(--type-caption);
     line-height: 1.5;
   }
 
-  @media (min-width: 40rem) {
-    .download-facts {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 1.4rem 2rem;
-    }
-
-    .platform {
-      padding: 1.75rem;
-    }
+  .requirements {
+    margin-top: 0.5rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    overflow: hidden;
   }
 
-  @media (min-width: 56rem) {
-    .platform-grid {
-      grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
-      gap: 1.25rem;
+  .requirements-label {
+    margin-top: clamp(2rem, 4vw, 2.75rem);
+    color: var(--muted);
+    font-size: var(--type-micro);
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    line-height: 1.4;
+    text-transform: uppercase;
+  }
+
+  .requirement {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "mark name status"
+      "mark link link";
+    align-items: center;
+    gap: 0.35rem 0.9rem;
+    padding: 1rem 1.1rem;
+    transition: background-color var(--duration-fast) var(--ease-out);
+  }
+
+  .requirement + .requirement {
+    border-top: 1px solid var(--line);
+  }
+
+  .requirement:hover {
+    background-color: var(--surface);
+  }
+
+  .requirement-mark {
+    grid-area: mark;
+    display: grid;
+    place-items: center;
+    width: 2.4rem;
+    height: 2.4rem;
+    border: 1px solid var(--line);
+    border-radius: 0.6rem;
+    background-color: var(--surface);
+    color: var(--ink);
+  }
+
+  .requirement:hover .requirement-mark {
+    background-color: var(--page);
+  }
+
+  .requirement-name {
+    grid-area: name;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.15rem 0.6rem;
+    color: var(--ink);
+    font-size: var(--type-small);
+    font-weight: 500;
+    line-height: 1.35;
+  }
+
+  .requirement-meta {
+    color: var(--muted);
+    font-family: var(--face-mono);
+    font-size: var(--type-micro);
+    font-weight: 400;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+
+  .requirement-status {
+    grid-area: status;
+    color: var(--muted);
+    font-size: var(--type-caption);
+    line-height: 1.3;
+    text-align: right;
+  }
+
+  .requirement-status--tuned {
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  .requirement-link {
+    grid-area: link;
+    display: inline-flex;
+    align-items: center;
+    justify-self: start;
+    min-height: 2rem;
+    padding-inline: 0.15rem;
+    color: var(--accent);
+    font-size: var(--type-caption);
+    font-weight: 500;
+    text-underline-offset: 0.25em;
+  }
+
+  .requirement-link:hover {
+    color: var(--ink);
+  }
+
+  @media (min-width: 48rem) {
+    .requirement {
+      grid-template-columns: auto minmax(0, 1fr) auto auto;
+      grid-template-areas: "mark name status link";
+      gap: 1rem;
+      padding: 1.1rem 1.35rem;
     }
 
-    .platform--featured {
-      grid-row: span 2;
-      padding: 2rem;
-    }
-
-    .download-facts {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+    .requirement-link {
+      justify-self: end;
     }
   }
 </style>

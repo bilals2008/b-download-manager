@@ -1,8 +1,7 @@
 ---
 import Button from "./Button.astro";
-import Icon from "./Icon.astro";
 import PlatformIcon from "./PlatformIcon.astro";
-import AppPreview from "./AppPreview.astro";
+import PreviewPlaceholder from "./PreviewPlaceholder.astro";
 
 const platforms = [
   { name: "windows", label: "Windows" },
@@ -30,7 +29,7 @@ const platforms = [
       </p>
 
       <div class="hero-actions">
-        <Button href="/installation/" variant="primary" icon="arrow-right">
+        <Button href="/installation/" variant="primary" icon="download">
           Install from source
         </Button>
         <Button href="#features" variant="secondary" icon="arrow-down">
@@ -51,18 +50,30 @@ const platforms = [
     </div>
 
     <div class="hero-figure reveal">
-      <AppPreview />
-      <p class="hero-figure-caption">
-        <Icon name="file" size={13} />
-        Interface preview · Windows layout at 0.1.0
-      </p>
+      <PreviewPlaceholder />
     </div>
   </div>
 </section>
 
 <style>
   .hero {
+    position: relative;
+    isolation: isolate;
     padding-block: clamp(2.75rem, 6vw, 4.5rem) var(--section-space);
+  }
+
+  .hero::before {
+    content: "";
+    position: absolute;
+    inset: -4rem 0 auto;
+    z-index: -1;
+    height: 30rem;
+    background: radial-gradient(
+      58% 62% at 50% 0%,
+      color-mix(in srgb, var(--accent) 9%, transparent),
+      transparent 72%
+    );
+    pointer-events: none;
   }
 
   .hero-copy {
@@ -159,24 +170,25 @@ const platforms = [
     gap: 0.4rem;
   }
 
+  .hero-actions :global(.btn--primary) {
+    min-height: 3.15rem;
+    padding-inline: 1.6rem;
+    border-radius: var(--radius-sm);
+    font-size: var(--type-body);
+  }
+
+  .hero-actions :global(.btn--secondary) {
+    min-height: 3.15rem;
+    padding-inline: 1.35rem;
+    border-radius: var(--radius-sm);
+  }
+
   .hero-platforms :global(svg) {
     color: var(--ink-soft);
   }
 
   .hero-figure {
     margin-top: clamp(2.5rem, 5vw, 4rem);
-  }
-
-  .hero-figure-caption {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.4rem;
-    margin-top: 1.1rem;
-    color: var(--muted);
-    font-size: var(--type-micro);
-    letter-spacing: 0.02em;
-    line-height: 1.4;
   }
 
   @media (min-width: 40rem) {

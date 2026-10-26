@@ -1,0 +1,46 @@
+---
+import Icon from "./Icon.astro";
+
+interface Props {
+  class?: string;
+}
+
+const { class: className } = Astro.props;
+---
+
+<div class:list={["preview-placeholder", className]} aria-hidden="true">
+  <span class="preview-placeholder-mark">
+    <Icon name="image" size={22} />
+  </span>
+</div>
+
+<style>
+  .preview-placeholder {
+    display: grid;
+    place-items: center;
+    width: 100%;
+    max-width: 70rem;
+    aspect-ratio: 16 / 9;
+    margin-inline: auto;
+    border: 1px solid var(--figure-border);
+    border-radius: var(--radius-md);
+    background-color: var(--figure-bg);
+  }
+
+  .preview-placeholder-mark {
+    display: grid;
+    place-items: center;
+    width: 3rem;
+    height: 3rem;
+    border: 1px solid var(--figure-line);
+    border-radius: 0.8rem;
+    background-color: var(--figure-soft);
+    color: var(--figure-muted);
+  }
+
+  @media (min-width: 56rem) {
+    .preview-placeholder {
+      border-radius: var(--radius-lg);
+    }
+  }
+</style>
