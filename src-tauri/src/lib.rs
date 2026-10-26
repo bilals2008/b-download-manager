@@ -147,6 +147,61 @@ fn relocate_download(
     actions::relocate(&app, &state, id, PathBuf::from(folder.trim()))
 }
 
+/// Record the category and the note the properties window edited.
+#[tauri::command]
+fn set_download_meta(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: u64,
+    category: Option<String>,
+    description: Option<String>,
+) -> Result<(), String> {
+    actions::set_meta(&app, &state, id, category, description)
+}
+
+/// Point a download at another file, moving the file or its parts with it.
+///
+/// `conflict` is the answer to the File Exists question; a taken name is not
+/// replaced without one.
+#[tauri::command]
+fn set_download_destination(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: u64,
+    dest: String,
+    conflict: Option<conflict::Choice>,
+) -> Result<String, conflict::Refusal> {
+    actions::set_destination(
+        &app,
+        &state,
+        id,
+        PathBuf::from(dest.trim()),
+        conflict.unwrap_or_default(),
+    )
+}
+
+/// Park a download in the queue, keeping the bytes it already received.
+#[tauri::command]
+fn queue_download(app: AppHandle, state: State<'_, AppState>, id: u64) -> Result<(), String> {
+    actions::queue(&app, &state, id)
+}
+
+/// Take a download out of the queue and leave it paused.
+#[tauri::command]
+fn dequeue_download(app: AppHandle, state: State<'_, AppState>, id: u64) -> Result<(), String> {
+    actions::dequeue(&app, &state, id)
+}
+
+/// Delete the file of a finished download, then forget the row.
+#[tauri::command]
+fn delete_download_file(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: u64,
+) -> Result<(), String> {
+    actions::delete_file(&app, &state, id)
+}
+
 /// Open the progress window of one download, or bring it back to the front.
 ///
 /// The window is built on the main thread, the one the window toolkit runs
@@ -186,6 +241,17 @@ fn remove_download(app: AppHandle, state: State<'_, AppState>, id: u64) -> Resul
     progress::close(&app, id);
     complete::close(&app, id);
     Ok(())
+}
+
+/// Move a download to another category. The file and its folder stay put.
+#[tauri::command]
+fn set_download_category(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: u64,
+    category: Option<String>,
+) -> Result<(), String> {
+    actions::set_category(&app, &state, id, category)
 }
 
 /// Cap the bandwidth of the whole application. Zero means no cap.
@@ -906,10 +972,16 @@ pub fn run() {
             retry_download,
             redownload_download,
             relocate_download,
+            set_download_meta,
+            set_download_destination,
+            queue_download,
+            dequeue_download,
+            delete_download_file,
             remove_download,
             set_speed_limit,
             set_proxy,
             set_download_speed_limit,
+            set_download_category,
             open_progress_window,
             set_progress_details,
             set_site_connections,

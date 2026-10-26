@@ -262,6 +262,215 @@ pub fn redownload(
     })
 }
 
+/// Put a download in another category.
+///
+/// The category is metadata: the destination, the file on disk and the resume
+/// state are left alone. The update event reaches the list, so a rename in the
+/// categories pane shows at once.
+pub fn set_category(
+    app: &AppHandle,
+    state: &AppState,
+    id: u64,
+    category: Option<String>,
+) -> Result<(), String> {
+    let download = state.get(id).ok_or("unknown download")?;
+    download.set_category(category);
+    let _ = app.emit(UPDATE_EVENT, download.info());
+    state.save_index();
+    Ok(())
+}
+
+/// Record the category and the note of a download together.
+///
+/// Both are metadata the user edits in the properties window, so the file on
+/// disk and the resume state stay exactly as they are.
+pub fn set_meta(
+    app: &AppHandle,
+    state: &AppState,
+    id: u64,
+    category: Option<String>,
+    description: Option<String>,
+) -> Result<(), String> {
+    let download = state.get(id).ok_or("unknown download")?;
+    download.set_meta(category, description);
+    let _ = app.emit(UPDATE_EVENT, download.info());
+    state.save_index();
+    Ok(())
+}
+
+/// Point a download at another file, taking what it already wrote along.
+///
+/// A finished file is moved itself; an unfinished row takes its part files and
+/// manifest, so a resume continues from the bytes already received. A row with
+/// a task cannot move, because the transfer would keep writing to the old
+/// file. A taken name is a question, never a silent replacement.
+pub fn set_destination(
+    app: &AppHandle,
+    state: &AppState,
+    id: u64,
+    dest: PathBuf,
+    choice: Choice,
+) -> Result<String, Refusal> {
+    let target = rewrite_destination(state, id, &dest, choice)?;
+    if let Some(download) = state.get(id) {
+        let _ = app.emit(UPDATE_EVENT, download.info());
+    }
+    Ok(target.to_string_lossy().to_string())
+}
+
+fn rewrite_destination(
+    state: &AppState,
+    id: u64,
+    dest: &std::path::Path,
+    choice: Choice,
+) -> Result<PathBuf, Refusal> {
+    let old = state
+        .get(id)
+        .ok_or_else(|| refused("invalid", "unknown download".to_string(), dest))?;
+    if old.is_running() || matches!(old.status(), Status::Running | Status::Queued) {
+        return Err(refused(
+            "busy",
+            "stop the download before changing where it is saved".to_string(),
+            &old.dest,
+        ));
+    }
+    // The same file is not a move: asking about it would report the row's own
+    // file as a conflict, and renaming it would move the parts for no reason.
+    if conflict::same_path(&old.dest, dest) {
+        return Ok(old.dest.clone());
+    }
+
+    let completed = old.status() == Status::Completed;
+
+    // A finished file is the only copy there is, so a taken name is asked
+    // about. An unfinished row only has parts, and putting those over a file
+    // in the target folder would not save anything; a free name is chosen.
+    let answer = if completed { choice } else { Choice::Rename };
+
+    let _gate = state.start_gate();
+    let (target, replace) = match conflict::resolve(state, dest, answer, Some(id))? {
+        conflict::Resolved::Start { dest, replace } => (dest, replace),
+        conflict::Resolved::Skip => return Ok(old.dest.clone()),
+    };
+
+    if completed && !old.dest.is_file() {
+        return Err(refused(
+            "missing",
+            format!(
+                "{} is not there any more, so it cannot be moved",
+                old.dest.display()
+            ),
+            &old.dest,
+        ));
+    }
+
+    // Build the row while the old file is still there, so a failure here
+    // leaves both the file and the row untouched.
+    let moved = moved_download(state, &old, target.clone(), replace)
+        .map_err(|message| refused("invalid", message, &target))?;
+    if completed && replace && target.exists() {
+        // The user confirmed replacing the file at the new path. A part file
+        // holds bytes, not the finished file, which is why this only applies
+        // to a completed download.
+        std::fs::remove_file(&target).map_err(|error| {
+            refused(
+                "invalid",
+                format!("the existing file could not be replaced: {error}"),
+                &target,
+            )
+        })?;
+    }
+    if completed {
+        move_file(&old.dest, &target).map_err(|error| {
+            refused(
+                "invalid",
+                format!("the file could not be moved: {error}"),
+                &target,
+            )
+        })?;
+    }
+
+    state.replace(moved);
+    state.save_index();
+    Ok(target)
+}
+
+/// Build the row that writes `dest` in place of `old`.
+///
+/// Everything that describes the download travels with it: the metadata, the
+/// speed cap, the byte counters and the ranges. The part files are moved to
+/// the new name, and a failure puts them back before the old row is touched.
+fn moved_download(
+    state: &AppState,
+    old: &Download,
+    dest: PathBuf,
+    replace: bool,
+) -> Result<Arc<Download>, String> {
+    let previous = old.info();
+    let moved = Download::new(
+        old.id,
+        old.url.clone(),
+        dest,
+        old.max_connections,
+        state.limits().proxy().as_deref(),
+        old.referer.as_deref(),
+    )?;
+    moved.set_meta(previous.category, previous.description);
+    moved.set_speed_limit(previous.speed_limit);
+    moved.set_allow_replace(replace);
+
+    let old_segments = old
+        .segments
+        .lock()
+        .expect("segments lock poisoned")
+        .clone();
+    let mut new_segments = Vec::with_capacity(old_segments.len());
+    let mut moved_files: Vec<(PathBuf, PathBuf)> = Vec::new();
+    for mut segment in old_segments {
+        let target = part_path(&moved.dir, &moved.stem, segment.id);
+        if segment.part.exists() {
+            // A file already at the target name belongs to the row that is
+            // moving; its own part file is not a conflict with itself.
+            if let Err(error) = move_file(&segment.part, &target) {
+                for (from, to) in moved_files.iter().rev() {
+                    let _ = move_file(to, from);
+                }
+                return Err(format!("cannot move the partial file: {error}"));
+            }
+            moved_files.push((segment.part.clone(), target.clone()));
+        }
+        segment.part = target;
+        new_segments.push(segment);
+    }
+
+    let order = std::sync::atomic::Ordering::SeqCst;
+    moved.total.store(old.total.load(order), order);
+    moved
+        .next_segment_id
+        .store(old.next_segment_id.load(order), order);
+    *moved.segments.lock().expect("segments lock poisoned") = new_segments;
+    // A move is neither a resume nor a failure: the row keeps the state it
+    // had, including the message of an attempt that could not finish.
+    moved.set_status(previous.status);
+    *moved.error.lock().expect("error lock poisoned") = previous.error;
+    if let Some(resumable) = previous.resumable {
+        moved.set_resumable(resumable);
+    }
+
+    // A download that failed before it planned its ranges has nothing to
+    // resume, and an empty manifest would only sit beside the file.
+    if !moved
+        .segments
+        .lock()
+        .expect("segments lock poisoned")
+        .is_empty()
+    {
+        moved.save_manifest();
+    }
+    let _ = std::fs::remove_file(&old.manifest);
+    Ok(moved)
+}
+
 /// Move a download that has no task to another folder.
 ///
 /// The part files and the manifest travel with it, so a server that supports
@@ -306,55 +515,7 @@ pub fn relocate(
         conflict::Resolved::Skip => return Err("the download was not moved".to_string()),
     };
 
-    let moved = Download::new(
-        old.id,
-        old.url.clone(),
-        new_dest.clone(),
-        old.max_connections,
-        state.limits().proxy().as_deref(),
-        old.referer.as_deref(),
-    )?;
-    moved.set_speed_limit(old.speed_limit());
-
-    let old_segments = old
-        .segments
-        .lock()
-        .expect("segments lock poisoned")
-        .clone();
-    let mut new_segments = Vec::with_capacity(old_segments.len());
-    let mut moved_files: Vec<(PathBuf, PathBuf)> = Vec::new();
-    for mut segment in old_segments {
-        let target = part_path(&moved.dir, &moved.stem, segment.id);
-        if segment.part.exists() {
-            if let Err(error) = move_file(&segment.part, &target) {
-                for (from, to) in moved_files.iter().rev() {
-                    let _ = move_file(to, from);
-                }
-                return Err(format!("cannot move the partial file: {error}"));
-            }
-            moved_files.push((segment.part.clone(), target.clone()));
-        }
-        segment.part = target;
-        new_segments.push(segment);
-    }
-
-    moved.total.store(old.total.load(std::sync::atomic::Ordering::SeqCst), std::sync::atomic::Ordering::SeqCst);
-    moved
-        .next_segment_id
-        .store(old.next_segment_id.load(std::sync::atomic::Ordering::SeqCst), std::sync::atomic::Ordering::SeqCst);
-    *moved.segments.lock().expect("segments lock poisoned") = new_segments;
-    // A download that failed before it planned its ranges has nothing to
-    // resume, and an empty manifest would only sit beside the file.
-    if !moved
-        .segments
-        .lock()
-        .expect("segments lock poisoned")
-        .is_empty()
-    {
-        moved.save_manifest();
-    }
-    let _ = std::fs::remove_file(&old.manifest);
-
+    let moved = moved_download(state, &old, new_dest, false)?;
     state.replace(moved);
     state.save_index();
     let _ = app.emit(
@@ -362,6 +523,101 @@ pub fn relocate(
         state.get(id).expect("the moved download").info(),
     );
     resume(app, state, id)
+}
+
+/// Put a download in the queue, parking its task but keeping its bytes.
+///
+/// The row then waits for Start Queue, which starts it the same way a paused
+/// one is started. A finished row has nothing left to queue.
+pub fn queue(app: &AppHandle, state: &AppState, id: u64) -> Result<(), String> {
+    queue_row(state, id)?;
+    if let Some(download) = state.get(id) {
+        let _ = app.emit(UPDATE_EVENT, download.info());
+    }
+    Ok(())
+}
+
+fn queue_row(state: &AppState, id: u64) -> Result<(), String> {
+    let download = state.get(id).ok_or("unknown download")?;
+    match download.status() {
+        Status::Completed => {
+            return Err("a finished download cannot be queued".to_string())
+        }
+        // The state the user asked for is the state it is in.
+        Status::Queued => return Ok(()),
+        _ => {}
+    }
+    // Stopping keeps the parts and the manifest; the queue starts the row
+    // again from the bytes already received.
+    // A task that is still closing would otherwise finish as cancelled and
+    // overwrite the queue state it was just given; a new epoch makes its last
+    // write a no-op.
+    if download.is_running() {
+        download.next_epoch();
+    }
+    download.cancel();
+    download.set_status(Status::Queued);
+    download.save_manifest();
+    state.save_index();
+    Ok(())
+}
+
+/// Take a queued download back out of the queue and leave it paused.
+pub fn dequeue(app: &AppHandle, state: &AppState, id: u64) -> Result<(), String> {
+    dequeue_row(state, id)?;
+    if let Some(download) = state.get(id) {
+        let _ = app.emit(UPDATE_EVENT, download.info());
+    }
+    Ok(())
+}
+
+fn dequeue_row(state: &AppState, id: u64) -> Result<(), String> {
+    let download = state.get(id).ok_or("unknown download")?;
+    if download.status() != Status::Queued {
+        return Err("this download is not in the queue".to_string());
+    }
+    download.set_status(Status::Paused);
+    state.save_index();
+    Ok(())
+}
+
+/// Delete the file of a finished download and forget the row.
+///
+/// The caller asks first: this is the one command that removes something from
+/// the disk. An unfinished row is refused because its file does not exist yet
+/// and its parts are the resume state.
+pub fn delete_file(app: &AppHandle, state: &AppState, id: u64) -> Result<(), String> {
+    delete_file_of(state, id)?;
+    // The progress and completion windows of a row that is gone have nothing
+    // to show.
+    crate::progress::close(app, id);
+    crate::complete::close(app, id);
+    Ok(())
+}
+
+fn delete_file_of(state: &AppState, id: u64) -> Result<(), String> {
+    let download = state.get(id).ok_or("unknown download")?;
+    match download.status() {
+        Status::Completed => {}
+        Status::Running | Status::Queued => {
+            return Err("stop the download before deleting its file".to_string())
+        }
+        _ => return Err("only a finished file can be deleted".to_string()),
+    }
+    if !download.dest.is_file() {
+        return Err(format!(
+            "{} is not there any more",
+            download.dest.display()
+        ));
+    }
+    std::fs::remove_file(&download.dest)
+        .map_err(|error| format!("the file could not be deleted: {error}"))?;
+    // A finished download has no parts left; remove a manifest that survived
+    // an earlier version instead of leaving it beside a file that is gone.
+    let _ = std::fs::remove_file(&download.manifest);
+    state.remove(id);
+    state.save_index();
+    Ok(())
 }
 
 /// Put `from` at `to`, across volumes as well.
@@ -461,4 +717,249 @@ pub fn cancel(app: &AppHandle, state: &AppState, id: u64) -> Result<(), String> 
     let _ = app.emit(UPDATE_EVENT, download.info());
     state.save_index();
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use idm_core::segmenter::{part_path, Segment, SegmentStatus};
+    use std::path::Path;
+    use std::sync::atomic::Ordering;
+
+    fn temp_dir(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "my-idm-clone-actions-{tag}-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        dir
+    }
+
+    fn row(id: u64, dest: &Path) -> Arc<Download> {
+        Download::new(
+            id,
+            "https://example.org/film.mp4".to_string(),
+            dest.to_path_buf(),
+            4,
+            None,
+            None,
+        )
+        .expect("a download")
+    }
+
+    #[test]
+    fn a_finished_file_moves_with_its_metadata() {
+        let dir = temp_dir("completed");
+        let source = dir.join("old").join("film.mp4");
+        std::fs::create_dir_all(source.parent().expect("a folder")).expect("folder");
+        std::fs::write(&source, b"done").expect("write");
+
+        let state = AppState::default();
+        let download = row(1, &source);
+        download.set_meta(Some("Video".to_string()), Some("a note".to_string()));
+        download.set_status(Status::Completed);
+        state.insert(download);
+
+        let target = dir.join("new").join("film.mp4");
+        let written = rewrite_destination(&state, 1, &target, Choice::Ask).expect("a free name");
+        assert_eq!(written, target);
+        assert_eq!(std::fs::read(&target).expect("the moved file"), b"done");
+        assert!(!source.exists(), "the old file is gone");
+
+        let info = state.get(1).expect("the row").info();
+        assert_eq!(info.status, Status::Completed);
+        assert_eq!(info.dest, target.to_string_lossy());
+        assert_eq!(info.category.as_deref(), Some("Video"));
+        assert_eq!(info.description.as_deref(), Some("a note"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_same_file_is_not_a_move() {
+        let dir = temp_dir("same");
+        let dest = dir.join("film.mp4");
+        std::fs::write(&dest, b"done").expect("write");
+
+        let state = AppState::default();
+        let download = row(1, &dest);
+        download.set_status(Status::Completed);
+        state.insert(download);
+
+        let written =
+            rewrite_destination(&state, 1, &dest, Choice::Ask).expect("its own file is no conflict");
+        assert_eq!(written, dest);
+        assert_eq!(std::fs::read(&dest).expect("the file"), b"done");
+        assert_eq!(state.get(1).expect("the row").dest, dest);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_taken_name_asks_before_a_finished_file_moves() {
+        let dir = temp_dir("taken");
+        let source = dir.join("film.mp4");
+        std::fs::write(&source, b"new").expect("write");
+        let taken = dir.join("taken").join("film.mp4");
+        std::fs::create_dir_all(taken.parent().expect("a folder")).expect("folder");
+        std::fs::write(&taken, b"old").expect("write");
+
+        let state = AppState::default();
+        let download = row(1, &source);
+        download.set_status(Status::Completed);
+        state.insert(download);
+
+        let refusal = rewrite_destination(&state, 1, &taken, Choice::Ask).expect_err("a question");
+        assert_eq!(refusal.kind, "exists");
+        assert_eq!(std::fs::read(&taken).expect("the file that was there"), b"old");
+
+        let moved = rewrite_destination(&state, 1, &taken, Choice::Rename).expect("a free name");
+        assert_eq!(moved, dir.join("taken").join("film (2).mp4"));
+        assert_eq!(std::fs::read(&taken).expect("the file that was there"), b"old");
+        assert_eq!(std::fs::read(&moved).expect("the moved file"), b"new");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_replaced_file_only_goes_after_the_answer() {
+        let dir = temp_dir("replace");
+        let source = dir.join("film.mp4");
+        std::fs::write(&source, b"new").expect("write");
+        let taken = dir.join("taken").join("film.mp4");
+        std::fs::create_dir_all(taken.parent().expect("a folder")).expect("folder");
+        std::fs::write(&taken, b"old").expect("write");
+
+        let state = AppState::default();
+        let download = row(1, &source);
+        download.set_status(Status::Completed);
+        state.insert(download);
+
+        let written = rewrite_destination(&state, 1, &taken, Choice::Replace).expect("replace");
+        assert_eq!(written, taken);
+        assert_eq!(std::fs::read(&taken).expect("the replaced file"), b"new");
+        assert!(!source.exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_unfinished_download_takes_its_parts_along() {
+        let dir = temp_dir("parts");
+        let source = dir.join("film.mp4");
+        let state = AppState::default();
+        let download = row(1, &source);
+        download.set_status(Status::Paused);
+        let part = part_path(&download.dir, &download.stem, 0);
+        std::fs::write(&part, b"half").expect("write");
+        {
+            let mut segments = download.segments.lock().expect("segments");
+            segments.push(Segment {
+                id: 0,
+                start: 0,
+                end: 10,
+                downloaded: 4,
+                part: part.clone(),
+                status: SegmentStatus::Paused,
+            });
+        }
+        download.total.store(10, Ordering::SeqCst);
+        state.insert(download);
+
+        let target = dir.join("new").join("film.mp4");
+        rewrite_destination(&state, 1, &target, Choice::Ask).expect("a free name");
+
+        let info = state.get(1).expect("the row").info();
+        assert_eq!(info.status, Status::Paused, "a move is not a resume");
+        assert_eq!(info.downloaded, 4, "the bytes travel with the row");
+        let new_part = part_path(target.parent().expect("a folder"), "film.mp4", 0);
+        assert_eq!(std::fs::read(&new_part).expect("the moved part"), b"half");
+        assert!(!part.exists());
+        assert!(
+            target.with_file_name("film.mp4.idm.json").exists(),
+            "the manifest goes with the parts"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_row_with_a_task_cannot_change_its_file() {
+        let dir = temp_dir("busy");
+        let state = AppState::default();
+        let download = row(1, &dir.join("film.mp4"));
+        download.set_status(Status::Running);
+        state.insert(download);
+
+        let refusal = rewrite_destination(&state, 1, &dir.join("other.mp4"), Choice::Ask)
+            .expect_err("a running row");
+        assert_eq!(refusal.kind, "busy");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn deleting_a_finished_file_removes_the_file_and_the_row() {
+        let dir = temp_dir("delete");
+        let dest = dir.join("film.mp4");
+        std::fs::write(&dest, b"done").expect("write");
+
+        let state = AppState::default();
+        let download = row(1, &dest);
+        download.set_status(Status::Completed);
+        state.insert(download);
+
+        delete_file_of(&state, 1).expect("the file is deleted");
+        assert!(!dest.exists());
+        assert!(state.get(1).is_none(), "the row is gone too");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_missing_file_is_not_deleted_silently() {
+        let dir = temp_dir("missing");
+        let state = AppState::default();
+        let download = row(1, &dir.join("film.mp4"));
+        download.set_status(Status::Completed);
+        state.insert(download);
+
+        let error = delete_file_of(&state, 1).expect_err("nothing to delete");
+        assert!(error.contains("not there"), "the error was: {error}");
+        assert!(state.get(1).is_some(), "the record stays");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_running_download_keeps_its_file() {
+        let dir = temp_dir("delete-busy");
+        let dest = dir.join("film.mp4");
+        std::fs::write(&dest, b"part").expect("write");
+
+        let state = AppState::default();
+        let download = row(1, &dest);
+        download.set_status(Status::Running);
+        state.insert(download);
+
+        let error = delete_file_of(&state, 1).expect_err("a running row");
+        assert!(error.contains("stop the download"), "the error was: {error}");
+        assert!(dest.exists(), "the file is left alone");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_queue_parks_a_row_and_lets_it_out_again() {
+        let dir = temp_dir("queue");
+        let state = AppState::default();
+        let download = row(1, &dir.join("film.mp4"));
+        download.set_status(Status::Paused);
+        state.insert(download);
+
+        queue_row(&state, 1).expect("the row is queued");
+        assert_eq!(state.get(1).expect("the row").status(), Status::Queued);
+        // A second click is not a failure.
+        queue_row(&state, 1).expect("already queued");
+
+        dequeue_row(&state, 1).expect("the row leaves the queue");
+        assert_eq!(state.get(1).expect("the row").status(), Status::Paused);
+
+        state.get(1).expect("the row").set_status(Status::Completed);
+        assert!(queue_row(&state, 1).is_err(), "a finished row has nothing to queue");
+        assert!(dequeue_row(&state, 1).is_err(), "it is not in the queue");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
