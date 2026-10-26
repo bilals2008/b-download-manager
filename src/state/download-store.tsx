@@ -10,21 +10,30 @@ import {
 } from "react";
 
 import {
-  CATEGORIES,
-  categoryName,
-  categoryOfFile,
+  detectCategory,
   fileNameFromUrl,
   folderLabel,
   isFinished,
   isUnfinished,
   joinPath,
+  knownCategory,
+  matchesStatusFilter,
   splitPath,
+  type CategoryDefinition,
+  type CategoryDraft,
   type CategoryName,
   type Download,
   type DownloadFilter,
   type SortKey,
   type SortState,
+  type StatusFilter,
 } from "@/lib/downloads";
+import {
+  OTHER_CATEGORY,
+  categoryDraftProblem,
+  loadCategories,
+  saveCategories,
+} from "@/lib/categories";
 import {
   StartCancelled,
   startResolving,
@@ -35,15 +44,22 @@ import {
 } from "@/lib/conflict";
 import {
   cancelDownload,
+  dequeueDownload,
+  deleteDownloadFile,
   listDownloads,
   onBridgeDownload,
   onDownloadUpdate,
   pauseDownload,
+  queueDownload,
   redownloadDownload,
   removeDownload,
   resumeDownload,
+  setDownloadDestination,
+  setDownloadMeta,
   startDownload,
+  setDownloadCategory,
   type BridgeDownload,
+  type ConflictChoice,
   type StartDownloadInput,
   type StartOutcome,
 } from "@/lib/ipc";
@@ -63,6 +79,8 @@ export type SelectMode = "replace" | "toggle" | "range" | "add-range";
 interface WorkspaceState {
   downloads: Download[];
   filter: DownloadFilter;
+  /** The status filter of the list, inside the category filter. */
+  statusFilter: StatusFilter;
   /** Save folder picked in the tree, on top of the category filter. */
   filterPath: string | null;
   /** Ids of the selected rows. Empty means nothing is selected. */
@@ -99,7 +117,44 @@ export interface BrowserRequest {
 
 export interface DownloadStore {
   downloads: Download[];
+  /** The category definitions, built in and user made. */
+  categories: CategoryDefinition[];
   filter: DownloadFilter;
+  /** The status filter applied inside the category filter. */
+  statusFilter: StatusFilter;
+  setStatusFilter: (filter: StatusFilter) => void;
+  /** Add a user category. Returns what is wrong with it, or null. */
+  addCategory: (draft: CategoryDraft) => string | null;
+  /** Change a category. Returns what is wrong with it, or null. */
+  updateCategory: (
+    originalName: CategoryName,
+    draft: CategoryDraft,
+  ) => string | null;
+  /** Remove a user category and move its rows to Other. Built-ins refuse. */
+  removeCategory: (name: CategoryName) => string | null;
+  /** Put downloads in a category. The files themselves do not move. */
+  assignCategory: (ids: number[], category: CategoryName) => void;
+  /** Save the category and the note the properties window edited. */
+  updateMeta: (
+    id: number,
+    category: CategoryName,
+    description: string | null,
+  ) => Promise<void>;
+  /**
+   * Move a download, settling a taken destination with `choice`. Resolves with
+   * the path the engine used, or rejects with a `StartRefusal`.
+   */
+  changeDestination: (
+    id: number,
+    dest: string,
+    choice: ConflictChoice,
+  ) => Promise<string>;
+  /** Delete the file of a finished row, then drop the row. */
+  deleteFile: (id: number) => Promise<void>;
+  /** Park rows in the queue, keeping what they already received. */
+  queue: (ids: number[]) => void;
+  /** Take rows out of the queue and leave them paused. */
+  dequeue: (ids: number[]) => void;
   /** The save folder the tree has drilled into, or null for the whole category. */
   filterPath: string | null;
   selected: number[];
@@ -204,6 +259,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<WorkspaceState>(() => ({
     downloads: [],
     filter: "all",
+    statusFilter: "all",
     filterPath: null,
     selected: [],
     anchor: null,
@@ -214,6 +270,12 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
     findOpen: false,
     matchId: null,
   }));
+  const [categories, setCategories] = useState<CategoryDefinition[]>(
+    loadCategories,
+  );
+  // The engine events and the derived rows read the definitions at the moment
+  // they run, so a rule added this second applies to the next row.
+  const categoriesRef = useRef(categories);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [browserRequest, setBrowserRequest] = useState<BrowserRequest | null>(
@@ -267,12 +329,13 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
         fileName,
         url: info.url,
         // The engine keeps the category the dialog gave it, so a row looks
-        // the same after a restart. An older index has none, and the file
-        // name is the next best answer.
+        // the same after a restart. An older index has none, or names a
+        // category that has since been removed, and the file name is the
+        // next best answer.
         category:
+          knownCategory(info.category, categoriesRef.current) ??
           previous?.category ??
-          categoryName(info.category) ??
-          categoryOfFile(fileName),
+          detectCategory(fileName, categoriesRef.current),
         size: info.total,
         downloaded: info.downloaded,
         status: ENGINE_STATUS[info.status],
@@ -305,7 +368,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
         // so look again inside the updater and never append a second row.
         const existing = current.downloads.find((item) => item.id === info.id);
         const merged = existing
-          ? { ...next, category: existing.category, addedAt: existing.addedAt }
+          ? { ...next, addedAt: existing.addedAt }
           : next;
         return {
           ...current,
@@ -404,10 +467,21 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
   const visible = useMemo(
     () =>
       sortDownloads(
-        filterDownloads(state.downloads, state.filter, state.filterPath),
+        filterDownloads(
+          state.downloads,
+          state.filter,
+          state.filterPath,
+          state.statusFilter,
+        ),
         state.sort,
       ),
-    [state.downloads, state.filter, state.filterPath, state.sort],
+    [
+      state.downloads,
+      state.filter,
+      state.filterPath,
+      state.statusFilter,
+      state.sort,
+    ],
   );
 
   const findMatches = useMemo(() => {
@@ -424,9 +498,14 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
     state.matchId === null ? -1 : findMatches.indexOf(state.matchId);
 
   const counts = useMemo(() => {
-    const result: Record<string, number> = { all: 0, unfinished: 0, finished: 0 };
-    for (const category of CATEGORIES) {
-      result[category] = 0;
+    // A category may be called "toString"; a bare object would answer with a
+    // function instead of a count.
+    const result: Record<string, number> = Object.create(null);
+    result.all = 0;
+    result.unfinished = 0;
+    result.finished = 0;
+    for (const category of categories) {
+      result[category.name] = 0;
     }
     for (const item of state.downloads) {
       result.all += 1;
@@ -436,15 +515,18 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
       if (isUnfinished(item)) {
         result.unfinished += 1;
       }
-      result[item.category] += 1;
+      // A row left on a category that no longer exists is not in the tree.
+      if (result[item.category] !== undefined) {
+        result[item.category] += 1;
+      }
     }
     return result;
-  }, [state.downloads]);
+  }, [categories, state.downloads]);
 
   const folders = useMemo(() => {
-    const result = {} as Record<CategoryName, CategoryFolder[]>;
-    for (const category of CATEGORIES) {
-      result[category] = [];
+    const result = Object.create(null) as Record<CategoryName, CategoryFolder[]>;
+    for (const category of categories) {
+      result[category.name] = [];
     }
     const paths = new Map<CategoryName, Map<string, number>>();
     for (const item of state.downloads) {
@@ -464,7 +546,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
         .sort((left, right) => left.path.localeCompare(right.path));
     }
     return result;
-  }, [state.downloads]);
+  }, [categories, state.downloads]);
 
   /** Put the File Exists question on screen and wait for the answer. */
   function askConflict(question: FileConflict): Promise<ConflictReply | null> {
@@ -601,9 +683,231 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
     });
   }
 
+  /** Keep the definitions, the saved preference and the live rows in step. */
+  function commitCategories(next: CategoryDefinition[]) {
+    categoriesRef.current = next;
+    setCategories(next);
+    saveCategories(next);
+  }
+
+  function addCategory(draft: CategoryDraft): string | null {
+    const current = categoriesRef.current;
+    const problem = categoryDraftProblem(draft, current);
+    if (problem) {
+      return problem;
+    }
+    commitCategories([
+      ...current,
+      {
+        name: draft.name.trim(),
+        extensions: [...draft.extensions],
+        folder: draft.folder.trim(),
+        builtin: false,
+      },
+    ]);
+    return null;
+  }
+
+  /**
+   * Change a category. A rename reaches the index, so the rows keep the name
+   * after a restart; a folder change stays a preference and never moves a file.
+   */
+  function updateCategory(
+    originalName: CategoryName,
+    draft: CategoryDraft,
+  ): string | null {
+    const current = categoriesRef.current;
+    const original = current.find((category) => category.name === originalName);
+    if (!original) {
+      return "That category no longer exists.";
+    }
+    const problem = categoryDraftProblem(draft, current, originalName);
+    if (problem) {
+      return problem;
+    }
+    const name = draft.name.trim();
+    commitCategories(
+      current.map((category) =>
+        category.name === originalName
+          ? {
+              ...category,
+              name,
+              folder: draft.folder.trim(),
+              // A built-in owns its file types; only its folder is editable.
+              extensions: category.builtin
+                ? category.extensions
+                : [...draft.extensions],
+            }
+          : category,
+      ),
+    );
+    if (name === originalName) {
+      return null;
+    }
+
+    const affected = latest.current.downloads.filter(
+      (item) => item.category === originalName,
+    );
+    setState((state) => ({
+      ...state,
+      filter: state.filter === originalName ? name : state.filter,
+      downloads: state.downloads.map((item) =>
+        item.category === originalName ? { ...item, category: name } : item,
+      ),
+    }));
+    for (const item of affected) {
+      run(setDownloadCategory(item.id, name));
+    }
+    return null;
+  }
+
+  /** Remove a user category. Its downloads move to Other, their files do not. */
+  function removeCategory(name: CategoryName): string | null {
+    const current = categoriesRef.current;
+    const target = current.find((category) => category.name === name);
+    if (!target) {
+      return "That category no longer exists.";
+    }
+    if (target.builtin) {
+      return "A built-in category cannot be removed.";
+    }
+    commitCategories(current.filter((category) => category.name !== name));
+
+    const affected = latest.current.downloads.filter(
+      (item) => item.category === name,
+    );
+    setState((state) => ({
+      ...state,
+      filter: state.filter === name ? OTHER_CATEGORY : state.filter,
+      filterPath: state.filter === name ? null : state.filterPath,
+      downloads: state.downloads.map((item) =>
+        item.category === name ? { ...item, category: OTHER_CATEGORY } : item,
+      ),
+    }));
+    for (const item of affected) {
+      run(setDownloadCategory(item.id, OTHER_CATEGORY));
+    }
+    return null;
+  }
+
+  /** Put rows in a category. Only the index changes; no file is moved. */
+  function assignCategory(ids: number[], category: CategoryName) {
+    if (ids.length === 0) {
+      return;
+    }
+    const changed = latest.current.downloads.filter(
+      (item) => ids.includes(item.id) && item.category !== category,
+    );
+    if (changed.length === 0) {
+      return;
+    }
+    setState((state) => ({
+      ...state,
+      downloads: state.downloads.map((item) =>
+        ids.includes(item.id) ? { ...item, category } : item,
+      ),
+    }));
+    for (const item of changed) {
+      run(setDownloadCategory(item.id, category));
+    }
+  }
+
+  /** Save the category and the note of one row. */
+  async function updateMeta(
+    id: number,
+    category: CategoryName,
+    description: string | null,
+  ) {
+    await setDownloadMeta(id, category, description);
+  }
+
+  /** Move one row. A taken destination rejects with the engine's refusal. */
+  async function changeDestination(
+    id: number,
+    dest: string,
+    choice: ConflictChoice,
+  ): Promise<string> {
+    return setDownloadDestination(id, dest, choice);
+  }
+
+  /** Delete the file of a finished row, then drop the row it belongs to. */
+  async function deleteFile(id: number) {
+    await deleteDownloadFile(id);
+    forget(id);
+  }
+
+  /** Park rows in the queue. A finished row has nothing left to wait for. */
+  function queue(ids: number[]) {
+    const changed = latest.current.downloads.filter(
+      (item) =>
+        ids.includes(item.id) &&
+        item.status !== "completed" &&
+        item.status !== "queued",
+    );
+    if (changed.length === 0) {
+      return;
+    }
+    setState((state) => ({
+      ...state,
+      downloads: state.downloads.map((item) =>
+        changed.some((picked) => picked.id === item.id)
+          ? { ...item, status: "queued", speed: 0, eta: 0 }
+          : item,
+      ),
+    }));
+    for (const item of changed) {
+      run(queueDownload(item.id));
+    }
+  }
+
+  /** Take queued rows out of the queue and leave them paused. */
+  function dequeue(ids: number[]) {
+    const changed = latest.current.downloads.filter(
+      (item) => ids.includes(item.id) && item.status === "queued",
+    );
+    if (changed.length === 0) {
+      return;
+    }
+    setState((state) => ({
+      ...state,
+      downloads: state.downloads.map((item) =>
+        changed.some((picked) => picked.id === item.id)
+          ? { ...item, status: "paused", speed: 0, eta: 0 }
+          : item,
+      ),
+    }));
+    for (const item of changed) {
+      run(dequeueDownload(item.id));
+    }
+  }
+
   const store: DownloadStore = {
     downloads: state.downloads,
+    categories,
     filter: state.filter,
+    statusFilter: state.statusFilter,
+    setStatusFilter: (statusFilter) =>
+      setState((current) => ({
+        ...current,
+        statusFilter,
+        selected: current.selected.filter((id) =>
+          filterDownloads(
+            current.downloads,
+            current.filter,
+            current.filterPath,
+            statusFilter,
+          ).some((item) => item.id === id),
+        ),
+      })),
+    addCategory,
+    updateCategory,
+    removeCategory,
+    assignCategory,
+    updateMeta,
+    changeDestination,
+    deleteFile,
+    queue,
+    dequeue,
     filterPath: state.filterPath,
     selected: state.selected,
     cursor: state.cursor,
@@ -628,9 +932,12 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
         filter,
         filterPath: null,
         selected: current.selected.filter((id) =>
-          filterDownloads(current.downloads, filter, null).some(
-            (item) => item.id === id,
-          ),
+          filterDownloads(
+            current.downloads,
+            filter,
+            null,
+            current.statusFilter,
+          ).some((item) => item.id === id),
         ),
       })),
     setFolder: (category, path) =>
@@ -639,9 +946,12 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
         filter: category,
         filterPath: path,
         selected: current.selected.filter((id) =>
-          filterDownloads(current.downloads, category, path).some(
-            (item) => item.id === id,
-          ),
+          filterDownloads(
+            current.downloads,
+            category,
+            path,
+            current.statusFilter,
+          ).some((item) => item.id === id),
         ),
       })),
     selectRow: (id, mode) =>
@@ -662,7 +972,12 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
         }
         // Shift picks the range in the order the list shows, not the id order.
         const ids = sortDownloads(
-          filterDownloads(current.downloads, current.filter, current.filterPath),
+          filterDownloads(
+            current.downloads,
+            current.filter,
+            current.filterPath,
+            current.statusFilter,
+          ),
           current.sort,
         ).map((row) => row.id);
         const picked = rangeIds(ids, current.anchor, id);
@@ -686,9 +1001,12 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
     selectByFilter: (filter) =>
       setState((current) => ({
         ...current,
-        selected: filterDownloads(current.downloads, filter, null).map(
-          (item) => item.id,
-        ),
+        selected: filterDownloads(
+          current.downloads,
+          filter,
+          null,
+          current.statusFilter,
+        ).map((item) => item.id),
       })),
     clearSelection: () =>
       setState((current) => ({
@@ -719,7 +1037,12 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
           return { ...current, findOpen: true };
         }
         const ids = sortDownloads(
-          filterDownloads(current.downloads, current.filter, current.filterPath),
+          filterDownloads(
+            current.downloads,
+            current.filter,
+            current.filterPath,
+            current.statusFilter,
+          ),
           current.sort,
         )
           .filter((item) => matchesQuery(item, query))
@@ -980,11 +1303,13 @@ function filterDownloads(
   downloads: Download[],
   filter: DownloadFilter,
   path: string | null,
+  status: StatusFilter,
 ): Download[] {
-  const scoped =
+  const scoped = (
     path === null
       ? downloads
-      : downloads.filter((item) => item.savePath === path);
+      : downloads.filter((item) => item.savePath === path)
+  ).filter((item) => matchesStatusFilter(item, status));
   switch (filter) {
     case "all":
       return scoped;

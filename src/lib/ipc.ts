@@ -126,12 +126,70 @@ export function relocateDownload(id: number, folder: string): Promise<void> {
   return invoke<void>("relocate_download", { id, folder });
 }
 
+/**
+ * Record the category and the note the properties window edited.
+ *
+ * Both are metadata: the file on disk and the resume state stay as they are.
+ */
+export function setDownloadMeta(
+  id: number,
+  category: string | null,
+  description: string | null,
+): Promise<void> {
+  return invoke<void>("set_download_meta", {
+    id,
+    category: category?.trim() || null,
+    description: description?.trim() || null,
+  });
+}
+
+/**
+ * Point a download at another file, taking what it already wrote along.
+ *
+ * `conflict` settles a file that is already at the new name; without one the
+ * engine refuses with a `StartRefusal` and the window asks. Resolves with the
+ * path the engine actually used, which a rename changes.
+ */
+export function setDownloadDestination(
+  id: number,
+  dest: string,
+  conflict: ConflictChoice = "ask",
+): Promise<string> {
+  return invoke<string>("set_download_destination", { id, dest, conflict });
+}
+
+/** Park a download in the queue, keeping the bytes it already received. */
+export function queueDownload(id: number): Promise<void> {
+  return invoke<void>("queue_download", { id });
+}
+
+/** Take a download out of the queue and leave it paused. */
+export function dequeueDownload(id: number): Promise<void> {
+  return invoke<void>("dequeue_download", { id });
+}
+
+/** Delete the file of a finished download, then forget its row. */
+export function deleteDownloadFile(id: number): Promise<void> {
+  return invoke<void>("delete_download_file", { id });
+}
+
 export function cancelDownload(id: number): Promise<void> {
   return invoke<void>("cancel_download", { id });
 }
 
 export function removeDownload(id: number): Promise<void> {
   return invoke<void>("remove_download", { id });
+}
+
+/**
+ * Put a download in a category. This changes the index only; the file and
+ * its folder stay exactly where they are.
+ */
+export function setDownloadCategory(
+  id: number,
+  category: string | null,
+): Promise<void> {
+  return invoke<void>("set_download_category", { id, category });
 }
 
 /** Open the progress window of a download, or bring it back to the front. */

@@ -1,14 +1,14 @@
 import { useRef, useState, type KeyboardEvent } from "react";
 
 import { CategoryFolderIcon, ViewIcon } from "@/components/icons/desktop-icons";
-import { DisclosureGlyph, PanelGlyph } from "@/components/icons/ui-icons";
+import { DisclosureGlyph, PanelGlyph, PlusGlyph } from "@/components/icons/ui-icons";
 import { Tooltip } from "@/components/ui/tooltip";
 import { CategoryContextMenu } from "@/components/workspace/category-context-menu";
 import {
-  CATEGORIES,
-  type CategoryName,
-  type DownloadFilter,
-} from "@/lib/downloads";
+  CategoryEditorDialog,
+  RemoveCategoryDialog,
+} from "@/components/workspace/category-dialogs";
+import type { CategoryName, DownloadFilter } from "@/lib/downloads";
 import { cn } from "@/lib/utils";
 import { useDownloads } from "@/state/download-store";
 
@@ -53,8 +53,15 @@ type Row =
  * a file manager does.
  */
 export function CategoriesPane() {
-  const { filter, filterPath, setFilter, setFolder, counts, folders } =
-    useDownloads();
+  const {
+    categories,
+    filter,
+    filterPath,
+    setFilter,
+    setFolder,
+    counts,
+    folders,
+  } = useDownloads();
   const [collapsed, setCollapsed] = useState(false);
   // Only categories the user opened or closed explicitly are recorded; the
   // rest follow their content, so a category fills out as files arrive.
@@ -67,6 +74,9 @@ export function CategoriesPane() {
     isFolder: boolean;
     at: { x: number; y: number };
   } | null>(null);
+  // "new" opens the editor on an empty category; a name opens it on that one.
+  const [editing, setEditing] = useState<CategoryName | "new" | null>(null);
+  const [removing, setRemoving] = useState<CategoryName | null>(null);
   const itemRefs = useRef(new Map<string, HTMLButtonElement | null>());
 
   const viewRows: Row[] = VIEWS.map((view) => ({
@@ -77,16 +87,16 @@ export function CategoriesPane() {
     count: counts[view.id] ?? 0,
   }));
 
-  const treeRows: Row[] = CATEGORIES.flatMap<Row>((category) => {
-    const children = folders[category];
+  const treeRows: Row[] = categories.flatMap<Row>((category) => {
+    const children = folders[category.name] ?? [];
     const expanded =
-      !collapsed && (openCategories[category] ?? children.length > 0);
+      !collapsed && (openCategories[category.name] ?? children.length > 0);
     const categoryRow: Row = {
       kind: "category",
-      key: `category:${category}`,
-      id: category,
-      label: category,
-      count: counts[category] ?? 0,
+      key: `category:${category.name}`,
+      id: category.name,
+      label: category.name,
+      count: counts[category.name] ?? 0,
       expanded,
       hasFolders: children.length > 0,
     };
@@ -97,8 +107,8 @@ export function CategoriesPane() {
       categoryRow,
       ...children.map<Row>((child) => ({
         kind: "folder",
-        key: `folder:${category}:${child.path}`,
-        id: category,
+        key: `folder:${category.name}:${child.path}`,
+        id: category.name,
         path: child.path,
         label: child.label,
         count: child.count,
@@ -116,7 +126,7 @@ export function CategoriesPane() {
   }
 
   function toggleCategory(category: CategoryName) {
-    const children = folders[category];
+    const children = folders[category] ?? [];
     const expanded = openCategories[category] ?? children.length > 0;
     // Collapsing a category must not leave its folder filtered behind hidden rows.
     if (expanded && filter === category && filterPath !== null) {
@@ -191,6 +201,13 @@ export function CategoriesPane() {
   }
 
   const selectedRow = rows.find(isSelected);
+  const editingCategory =
+    editing && editing !== "new"
+      ? (categories.find((category) => category.name === editing) ?? null)
+      : null;
+  const editorOpen = editing === "new" || editingCategory !== null;
+  const removingCategory =
+    categories.find((category) => category.name === removing) ?? null;
   const focusedKey = rows.some((row) => row.key === focusKey) ? focusKey : null;
   const rovingKey = focusedKey ?? selectedRow?.key ?? rows[0]?.key;
 
@@ -321,6 +338,18 @@ export function CategoriesPane() {
             <span className="truncate">Categories</span>
           </span>
         )}
+        {collapsed ? null : (
+          <Tooltip content="Add category" side="bottom">
+            <button
+              type="button"
+              aria-label="Add category"
+              onClick={() => setEditing("new")}
+              className="grid size-6 shrink-0 place-items-center rounded-chrome text-chrome-muted hover:bg-chrome-menu-hover hover:text-chrome-menu-text focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
+            >
+              <PlusGlyph className="size-3.5" />
+            </button>
+          </Tooltip>
+        )}
         <Tooltip
           content={collapsed ? "Expand categories" : "Collapse categories"}
           side="bottom"
@@ -353,8 +382,31 @@ export function CategoriesPane() {
         <CategoryContextMenu
           filter={menu.filter}
           isFolder={menu.isFolder}
+          custom={
+            categories.find((category) => category.name === menu.filter)
+              ?.builtin === false
+          }
           at={menu.at}
+          onAddCategory={() => setEditing("new")}
+          onEditCategory={(name) => setEditing(name)}
+          onRemoveCategory={(name) => setRemoving(name)}
           onClose={() => setMenu(null)}
+        />
+      ) : null}
+
+      {editorOpen ? (
+        <CategoryEditorDialog
+          open
+          category={editingCategory}
+          onClose={() => setEditing(null)}
+        />
+      ) : null}
+
+      {removingCategory ? (
+        <RemoveCategoryDialog
+          open
+          category={removingCategory}
+          onClose={() => setRemoving(null)}
         />
       ) : null}
     </nav>

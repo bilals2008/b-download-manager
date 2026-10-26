@@ -2,13 +2,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { FolderGlyph } from "@/components/icons/action-icons";
 import { FileTypeIcon, WarningMark } from "@/components/icons/desktop-icons";
-import { DownloadGlyph, SpinnerGlyph } from "@/components/icons/ui-icons";
+import { ChevronDown, DownloadGlyph, SpinnerGlyph } from "@/components/icons/ui-icons";
+import { MenuPopup, type MenuRow } from "@/components/shell/menu-popup";
 import { Dialog } from "@/components/ui/dialog";
 import { DialogAction } from "@/components/ui/dialog-action";
 import { FIELD } from "@/components/ui/field";
 import { Tooltip } from "@/components/ui/tooltip";
 import {
-  categoryOfFile,
+  categoryFolder,
+  detectCategory,
   downloadUrl,
   fileNameFromUrl,
   formatSize,
@@ -18,6 +20,7 @@ import {
   sameAddress,
   splitPath,
   urlProblem,
+  type CategoryName,
 } from "@/lib/downloads";
 import { describeError, isDesktop } from "@/lib/errors";
 import {
@@ -80,12 +83,20 @@ export function AddDownloadDialog({
   const {
     addDownload,
     browserRequest,
+    categories,
     clearBrowserRequest,
     downloads: allDownloads,
   } = useDownloads();
   const [url, setUrl] = useState("");
   const [handedOver, setHandedOver] = useState<HandedOver | null>(null);
   const [folder, setFolder] = useState("");
+  // Null follows the file name; a pick holds the category the user chose.
+  const [categoryOverride, setCategoryOverride] = useState<CategoryName | null>(
+    null,
+  );
+  const [categoryAt, setCategoryAt] = useState<{ x: number; y: number } | null>(
+    null,
+  );
   const [probe, setProbe] = useState<Probe>({ kind: "idle" });
   const [destination, setDestination] = useState<DestinationInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -99,6 +110,13 @@ export function AddDownloadDialog({
   // attribute carries that to `Dialog`, which focuses it after `showModal`.
   const urlField = useRef<HTMLInputElement>(null);
   const folderButton = useRef<HTMLButtonElement>(null);
+  const categoryButton = useRef<HTMLButtonElement>(null);
+  // A folder the user picked is theirs until the dialog closes, so a category
+  // folder never overwrites it. A category folder applied below does the same
+  // for the slower default the engine answers with.
+  const folderPicked = useRef(false);
+  const categoryFolderApplied = useRef(false);
+  const baseFolder = useRef("");
 
   // Open on a fresh form, whatever the last one left behind. A link the
   // clipboard watch offered is the only thing it carries in.
@@ -109,6 +127,11 @@ export function AddDownloadDialog({
     setUrl(seedUrl?.trim() ?? "");
     setHandedOver(null);
     setFolder("");
+    folderPicked.current = false;
+    categoryFolderApplied.current = false;
+    baseFolder.current = "";
+    setCategoryOverride(null);
+    setCategoryAt(null);
     setProbe({ kind: "idle" });
     setDestination(null);
     setError(null);
@@ -126,6 +149,7 @@ export function AddDownloadDialog({
     let active = true;
     const remembered = preferredFolder();
     if (remembered) {
+      baseFolder.current = remembered;
       setFolder(remembered);
       return () => {
         active = false;
@@ -133,8 +157,10 @@ export function AddDownloadDialog({
     }
     defaultDestination()
       .then((answer) => {
-        if (active) {
-          setFolder(splitPath(answer).dir || ".");
+        if (active && !folderPicked.current && !categoryFolderApplied.current) {
+          const target = splitPath(answer).dir || ".";
+          baseFolder.current = target;
+          setFolder(target);
         }
       })
       .catch(() => {
@@ -235,16 +261,28 @@ export function AddDownloadDialog({
     };
   }, [open, url, referer]);
 
-  // The name and the category follow what was detected until the user changes
-  // the address or picks a new folder. Nothing here is typed.
+  // The name and the category follow what was detected until the user picks a
+  // category. Nothing here is typed.
   const suggestedName = valid ? safeFileName(fileNameFromUrl(address)) : "";
   const servedName =
     probe.kind === "ready" && probe.name ? safeFileName(probe.name) : null;
   const browserName = handed?.name ? safeFileName(handed.name) : null;
   const name = servedName ?? browserName ?? suggestedName;
-  const category = name ? categoryOfFile(name) : "General";
+  const category =
+    categoryOverride ?? (name ? detectCategory(name, categories) : "General");
   const target =
     folder.trim() && name.trim() ? joinPath(folder.trim(), name.trim()) : "";
+
+  // A category with a folder of its own starts the dialog there. Switching to
+  // one without a folder gives the remembered or default folder back.
+  useEffect(() => {
+    if (!open || folderPicked.current) {
+      return;
+    }
+    const configured = categoryFolder(categories, category);
+    categoryFolderApplied.current = configured !== "";
+    setFolder(configured || baseFolder.current);
+  }, [open, category, categories]);
 
   // Say so when the exact link is already in the list, without refusing it:
   // a second copy is a legitimate choice.
@@ -284,6 +322,8 @@ export function AddDownloadDialog({
     setUrl("");
     setHandedOver(null);
     setFolder("");
+    setCategoryOverride(null);
+    setCategoryAt(null);
     setProbe({ kind: "idle" });
     setDestination(null);
     setTouched(false);
@@ -306,6 +346,7 @@ export function AddDownloadDialog({
     try {
       const picked = await chooseFolder(folder.trim());
       if (picked) {
+        folderPicked.current = true;
         setFolder(picked);
         setError(null);
       }
@@ -374,6 +415,20 @@ export function AddDownloadDialog({
     }
   }
 
+  function toggleCategoryMenu() {
+    const box = categoryButton.current?.getBoundingClientRect();
+    setCategoryAt(
+      categoryAt || !box ? null : { x: box.left, y: box.bottom + 4 },
+    );
+  }
+
+  const categoryRows: MenuRow<CategoryName>[] = categories.map((entry) => ({
+    command: entry.name,
+    label: entry.name,
+    radio: true,
+    icon: <FileTypeIcon category={entry.name} className="size-3.5" />,
+  }));
+
   const showProblem = touched && problem !== null;
   const sizeLabel =
     probe.kind === "ready"
@@ -388,7 +443,6 @@ export function AddDownloadDialog({
         : "Not resumable"
       : null;
   const details = [
-    category,
     probe.kind === "checking" ? "Checking link…" : sizeLabel,
     resumeLabel,
     duplicate ? "Already in your list" : null,
@@ -476,8 +530,8 @@ export function AddDownloadDialog({
         </div>
 
         {/* What the address adds up to, before anything starts: the file it
-            becomes, the category it lands in, its size and whether it can be
-            resumed. It is the answer to "did I paste the right link". */}
+            becomes, its size and whether it can be resumed. It is the answer
+            to "did I paste the right link"; the category below it. */}
         {valid ? (
           <div className="flex min-w-0 items-center gap-2.5">
             <FileTypeIcon category={category} className="size-7 shrink-0" />
@@ -487,9 +541,11 @@ export function AddDownloadDialog({
                   {name}
                 </p>
               </Tooltip>
-              <p className="truncate text-chrome-micro text-chrome-muted">
-                {details}
-              </p>
+              {details ? (
+                <p className="truncate text-chrome-micro text-chrome-muted">
+                  {details}
+                </p>
+              ) : null}
             </div>
           </div>
         ) : null}
@@ -503,6 +559,54 @@ export function AddDownloadDialog({
             <span className="min-w-0 break-words">{probe.reason}</span>
           </p>
         ) : null}
+
+        {/* The category is detected from the name, and the picker beside it is
+            only there to overrule that. It sits above the folder because the
+            category decides which folder the form starts on. */}
+        <div>
+          <span className={LABEL}>Category</span>
+          <button
+            ref={categoryButton}
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded={categoryAt !== null}
+            aria-label={`Category: ${category}`}
+            onClick={toggleCategoryMenu}
+            // Keep the menu's own outside-pointer close from firing first, so
+            // a second click on this button sees the open state and closes it.
+            onPointerDown={(event) => event.stopPropagation()}
+            disabled={busy}
+            className="inline-flex h-9 items-center gap-2 rounded-chrome border border-chrome-line bg-chrome-canvas px-2.5 text-left text-xs text-chrome-menu-text transition-colors hover:border-chrome-muted focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none disabled:cursor-default disabled:opacity-60 disabled:hover:border-chrome-line"
+          >
+            <FileTypeIcon category={category} className="size-3.5 shrink-0" />
+            <span className="min-w-0 truncate">{category}</span>
+            <ChevronDown className="size-3.5 shrink-0 text-chrome-muted" />
+          </button>
+
+          {categoryAt ? (
+            <MenuPopup
+              id="add-url-category"
+              label="Choose a category"
+              rows={categoryRows}
+              level={0}
+              focus="first"
+              at={categoryAt}
+              checked={{ [category]: true }}
+              onChoose={(row) => {
+                setCategoryOverride(row.command);
+                setCategoryAt(null);
+                categoryButton.current?.focus();
+              }}
+              onClose={(reason) => {
+                setCategoryAt(null);
+                // A click elsewhere moves the focus where the user clicked.
+                if (reason !== "pointer") {
+                  categoryButton.current?.focus();
+                }
+              }}
+            />
+          ) : null}
+        </div>
 
         <div>
           <span className={LABEL}>Save to</span>

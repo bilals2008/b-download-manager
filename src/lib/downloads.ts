@@ -1,25 +1,29 @@
 /**
  * Download domain model.
  *
- * The category names, the tree groups and the column set come out of the
- * string tables in `IDMan.exe` (see `ANALYSIS.md`): the categories are
- * General, Video, Music, Documents, Programs, Games, Compressed and Other, and
- * the categories pane is a tree with the groups "All Downloads", "Unfinished"
- * and "Finished" above them.
+ * The category definitions live in `categories.ts`; the names, the tree groups
+ * and the column set come out of the string tables in `IDMan.exe` (see
+ * `ANALYSIS.md`): the categories are General, Video, Music, Documents, Programs,
+ * Games, Compressed and Other, and the categories pane is a tree with the
+ * groups "All Downloads", "Unfinished" and "Finished" above them.
  */
 
-export const CATEGORIES = [
-  "General",
-  "Video",
-  "Music",
-  "Documents",
-  "Programs",
-  "Games",
-  "Compressed",
-  "Other",
-] as const;
+import type { CategoryName } from "./categories.ts";
 
-export type CategoryName = (typeof CATEGORIES)[number];
+export {
+  BUILTIN_CATEGORIES,
+  CATEGORIES,
+  DEFAULT_CATEGORIES,
+  categoryFolder,
+  categoryName,
+  categoryOfFile,
+  detectCategory,
+  knownCategory,
+  type BuiltinCategory,
+  type CategoryDefinition,
+  type CategoryDraft,
+  type CategoryName,
+} from "./categories.ts";
 
 export type DownloadStatus =
   | "downloading"
@@ -92,12 +96,62 @@ export const STATUS_LABELS: Record<DownloadStatus, string> = {
   error: "Error",
 };
 
+/**
+ * The status filter of the list. It applies inside the filter of the
+ * categories pane, so "Video" and "Error" can be asked for together.
+ */
+export type StatusFilter = "all" | DownloadStatus;
+
+export const STATUS_FILTER_LABELS: Record<StatusFilter, string> = {
+  all: "All statuses",
+  ...STATUS_LABELS,
+};
+
+export function matchesStatusFilter(
+  download: Download,
+  filter: StatusFilter,
+): boolean {
+  return filter === "all" || download.status === filter;
+}
+
 export function isFinished(download: Download): boolean {
   return download.status === "completed";
 }
 
 export function isUnfinished(download: Download): boolean {
   return download.status !== "completed";
+}
+
+/**
+ * Why the save location of a download is fixed, or null when it can move.
+ *
+ * A task that is writing holds its file open, so the parts cannot travel. A
+ * queued row is parked with live parts too, and moves after it leaves the
+ * queue.
+ */
+export function destinationLock(download: Download): string | null {
+  if (download.status === "downloading") {
+    return "Stop the download before changing where it is saved.";
+  }
+  if (download.status === "queued") {
+    return "Take the download out of the queue before changing where it is saved.";
+  }
+  return null;
+}
+
+/** Only a finished download has a file of its own to delete. */
+export function canDeleteFile(download: Download): boolean {
+  return isFinished(download);
+}
+
+/** Whether a stopped download would continue from the bytes on disk. */
+export function resumableLabel(value: boolean | null): string {
+  if (value === null) {
+    return "Not known yet";
+  }
+  return value
+    ? "Yes, a stopped download continues from its bytes"
+    : "No, a retry starts from the first byte";
 }
 
 export function progressOf(download: Download): number {
@@ -209,66 +263,8 @@ export function folderLabel(path: string): string {
   return segments.pop() ?? path;
 }
 
-const EXTENSION_CATEGORY: Record<string, CategoryName> = {
-  mp4: "Video",
-  mkv: "Video",
-  avi: "Video",
-  mov: "Video",
-  webm: "Video",
-  m4v: "Video",
-  mpg: "Video",
-  mpeg: "Video",
-  mp3: "Music",
-  flac: "Music",
-  wav: "Music",
-  m4a: "Music",
-  ogg: "Music",
-  aac: "Music",
-  pdf: "Documents",
-  doc: "Documents",
-  docx: "Documents",
-  txt: "Documents",
-  rtf: "Documents",
-  xls: "Documents",
-  xlsx: "Documents",
-  ppt: "Documents",
-  pptx: "Documents",
-  csv: "Documents",
-  epub: "Documents",
-  exe: "Programs",
-  msi: "Programs",
-  msix: "Programs",
-  dmg: "Programs",
-  pkg: "Programs",
-  apk: "Programs",
-  deb: "Programs",
-  rpm: "Programs",
-  appimage: "Programs",
-  zip: "Compressed",
-  rar: "Compressed",
-  "7z": "Compressed",
-  tar: "Compressed",
-  gz: "Compressed",
-  bz2: "Compressed",
-  xz: "Compressed",
-  iso: "Compressed",
-};
-
-/** Best-effort category for a file name, so the categories pane stays useful. */
-export function categoryOfFile(fileName: string): CategoryName {
-  const extension = fileName.split(".").pop()?.toLowerCase() ?? "";
-  return EXTENSION_CATEGORY[extension] ?? "Other";
-}
-
 /** The engine's eight-connection default, matching `DEFAULT_CONNECTIONS` in Rust. */
 export const DEFAULT_CONNECTIONS = 8;
-
-/** A category the list knows, when a value from disk is one. */
-export function categoryName(value: string | null | undefined): CategoryName | null {
-  return CATEGORIES.includes(value as CategoryName)
-    ? (value as CategoryName)
-    : null;
-}
 
 /** The schemes the engine can fetch. */
 const DOWNLOAD_PROTOCOLS = ["http:", "https:", "ftp:"];

@@ -142,8 +142,37 @@ const GLYPHS: Record<CategoryName, (palette: Palette) => ReactNode> = {
   ),
 };
 
-/** One gradient per drawing instance, so the gloss never leaks between rows. */
-function useArtIds(prefix: string): { front: string; back: string } {
+/**
+ * A user category has no drawing of its own, so it borrows one. The colour is
+ * picked from its name, which keeps two categories apart without a palette the
+ * user has to choose.
+ */
+const CUSTOM_PALETTES: Palette[] = [
+  PALETTES.General,
+  PALETTES.Video,
+  PALETTES.Music,
+  PALETTES.Documents,
+  PALETTES.Programs,
+  PALETTES.Compressed,
+];
+
+function paletteFor(category: CategoryName): Palette {
+  // A user may name a category "constructor"; only own keys are drawings.
+  if (Object.hasOwn(PALETTES, category)) {
+    return PALETTES[category];
+  }
+  let hash = 0;
+  for (const char of category) {
+    hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  }
+  return CUSTOM_PALETTES[hash % CUSTOM_PALETTES.length];
+}
+
+function glyphFor(category: CategoryName): (palette: Palette) => ReactNode {
+  return Object.hasOwn(GLYPHS, category) ? GLYPHS[category] : GLYPHS.Other;
+}
+
+/** One gradient per drawing instance, so the gloss never leaks between rows. */function useArtIds(prefix: string): { front: string; back: string } {
   const id = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   return { front: `${prefix}-front-${id}`, back: `${prefix}-back-${id}` };
 }
@@ -201,7 +230,7 @@ export function FileTypeIcon({
   category: CategoryName;
   className?: string;
 }) {
-  const palette = PALETTES[category];
+  const palette = paletteFor(category);
   const ids = useArtIds("file");
   return (
     <svg
@@ -224,7 +253,7 @@ export function FileTypeIcon({
             strokeWidth=".9"
             strokeLinejoin="round"
           >
-            {GLYPHS[category](palette)}
+            {glyphFor(category)(palette)}
           </g>
         }
       />
@@ -247,7 +276,7 @@ export function CategoryFolderIcon({
   open?: boolean;
   className?: string;
 }) {
-  const palette = PALETTES[category];
+  const palette = paletteFor(category);
   const ids = useArtIds("folder");
   return (
     <svg
@@ -292,7 +321,7 @@ export function CategoryFolderIcon({
         strokeLinejoin="round"
         transform="translate(12 14.9) scale(.62) translate(-12 -12)"
       >
-        {GLYPHS[category](palette)}
+        {glyphFor(category)(palette)}
       </g>
     </svg>
   );
