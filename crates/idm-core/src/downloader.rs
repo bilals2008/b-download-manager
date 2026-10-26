@@ -416,14 +416,22 @@ impl Download {
     /// Both come from a text field, so they are trimmed and cut to the length
     /// the index will hold; an empty value is no value.
     pub fn set_meta(&self, category: Option<String>, description: Option<String>) {
-        let clean = |value: Option<String>, limit: usize| {
-            value
-                .map(|value| value.trim().to_string())
-                .filter(|value| !value.is_empty())
-                .map(|value| value.chars().take(limit).collect::<String>())
-        };
-        *self.category.lock().expect("category lock poisoned") = clean(category, 40);
-        *self.description.lock().expect("description lock poisoned") = clean(description, 500);
+        self.set_category(category);
+        self.set_description(description);
+    }
+
+    /// Record the category alone, leaving the note as it is.
+    ///
+    /// Moving a download between categories is metadata: the destination and
+    /// everything on disk stay untouched.
+    pub fn set_category(&self, category: Option<String>) {
+        *self.category.lock().expect("category lock poisoned") = clean_meta(category, 40);
+    }
+
+    /// Record the note alone, leaving the category as it is.
+    pub fn set_description(&self, description: Option<String>) {
+        *self.description.lock().expect("description lock poisoned") =
+            clean_meta(description, 500);
     }
 
     /// The bandwidth cap of this download, in bytes per second. Zero means no
@@ -1839,6 +1847,14 @@ pub async fn run_claimed(
     }
     download.running.store(false, Ordering::SeqCst);
     emit(&reporter, &download);
+}
+
+/// Trim a metadata value and cut it to the length the index holds.
+fn clean_meta(value: Option<String>, limit: usize) -> Option<String> {
+    value
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .map(|value| value.chars().take(limit).collect::<String>())
 }
 
 #[cfg(test)]

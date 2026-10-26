@@ -1428,6 +1428,39 @@ fn the_category_and_note_are_trimmed_and_kept_short() {
 }
 
 #[test]
+fn the_category_can_change_without_touching_the_note() {
+    let dir = temp_dir("category-only");
+    let download = Download::new(
+        25,
+        "https://example.com/a.bin".to_string(),
+        dir.join("out.bin"),
+        2,
+        None,
+        None,
+    )
+    .expect("download");
+
+    download.set_meta(
+        Some("Video".to_string()),
+        Some("keep this note".to_string()),
+    );
+    download.set_category(Some("  Music  ".to_string()));
+    let info = download.info();
+    assert_eq!(info.category.as_deref(), Some("Music"));
+    assert_eq!(info.description.as_deref(), Some("keep this note"));
+
+    download.set_category(None);
+    let info = download.info();
+    assert_eq!(info.category, None, "no category is a valid assignment");
+    assert_eq!(info.description.as_deref(), Some("keep this note"));
+
+    download.set_category(Some("x".repeat(60)));
+    assert_eq!(download.info().category.expect("a category").chars().count(), 40);
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn a_download_read_back_from_the_index_has_no_connection_open() {
     let dir = temp_dir("restored-segments");
     let dest = dir.join("out.bin");
