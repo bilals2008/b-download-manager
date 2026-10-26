@@ -4,7 +4,8 @@ import { FileTypeIcon } from "@/components/icons/desktop-icons";
 import { CheckGlyph, CloseGlyph } from "@/components/icons/ui-icons";
 import { DialogAction } from "@/components/ui/dialog-action";
 import { Tooltip } from "@/components/ui/tooltip";
-import { categoryOfFile, formatSize, splitPath } from "@/lib/downloads";
+import { categoryIcon, categoryOfFile, loadCategories } from "@/lib/categories";
+import { formatSize, splitPath } from "@/lib/downloads";
 import { describeError } from "@/lib/errors";
 import { openPath } from "@/lib/ipc";
 import { closeWindow, showWindowWhenPainted } from "@/lib/window";
@@ -20,10 +21,12 @@ import type { DownloadInfo } from "@/types";
  */
 export function DownloadCompleteWindow({ info }: { info: DownloadInfo }) {
   const [error, setError] = useState<string | null>(null);
+  const [categories] = useState(loadCategories);
   const { dir, base } = splitPath(info.dest);
   const name = base || "The file";
   const folder = dir || ".";
   const bytes = info.total || info.downloaded;
+  const category = categoryOfFile(name, categories);
 
   useEffect(() => {
     void showWindowWhenPainted();
@@ -74,7 +77,11 @@ export function DownloadCompleteWindow({ info }: { info: DownloadInfo }) {
       <div className="flex min-h-0 flex-1 flex-col gap-3 px-4 pb-1 text-xs">
         <div className="flex items-start gap-3">
           <span className="relative shrink-0">
-            <FileTypeIcon category={categoryOfFile(name)} className="size-9" />
+            <FileTypeIcon
+              category={category}
+              icon={categoryIcon(categories, category)}
+              className="size-9"
+            />
             <span className="absolute -right-1 -bottom-1 grid size-4 place-items-center rounded-full bg-success text-success-foreground ring-2 ring-chrome-popup">
               <CheckGlyph className="size-2.5" />
             </span>

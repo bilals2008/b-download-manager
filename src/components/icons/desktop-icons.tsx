@@ -1,5 +1,14 @@
 import { useId, type ReactNode } from "react";
 
+import {
+  CATEGORY_PALETTES,
+  categoryPaint,
+  defaultCategoryIcon,
+  type CategoryGlyphId,
+  type CategoryIcon,
+  type CategoryPaint,
+  type CategoryPalette,
+} from "@/lib/category-icons";
 import type { CategoryName, DownloadStatus } from "@/lib/downloads";
 
 /**
@@ -12,97 +21,58 @@ import type { CategoryName, DownloadStatus } from "@/lib/downloads";
  * without a second copy of the drawings.
  */
 
-interface Palette {
-  bright: string;
-  base: string;
-  deep: string;
-}
-
-const PALETTES: Record<CategoryName, Palette> = {
-  General: {
-    bright: "--icon-amber-bright",
-    base: "--icon-amber",
-    deep: "--icon-amber-deep",
-  },
-  Video: {
-    bright: "--icon-red-bright",
-    base: "--icon-red",
-    deep: "--icon-red-deep",
-  },
-  Music: {
-    bright: "--icon-purple-bright",
-    base: "--icon-purple",
-    deep: "--icon-purple-deep",
-  },
-  Documents: {
-    bright: "--icon-blue-bright",
-    base: "--icon-blue",
-    deep: "--icon-blue-deep",
-  },
-  Programs: {
-    bright: "--icon-green-bright",
-    base: "--icon-green",
-    deep: "--icon-green-deep",
-  },
-  Games: {
-    bright: "--icon-silver-bright",
-    base: "--icon-silver",
-    deep: "--icon-silver-deep",
-  },
-  Compressed: {
-    bright: "--icon-amber-bright",
-    base: "--icon-amber",
-    deep: "--icon-amber-deep",
-  },
-  Other: {
-    bright: "--icon-silver-bright",
-    base: "--icon-silver",
-    deep: "--icon-silver-deep",
-  },
-};
+/** A paint stop is either a theme variable name or a colour already. */
+const cssColor = (value: string) =>
+  value.startsWith("--") ? `var(${value})` : value;
 
 /** The white mark on a plate, drawn on the 24-unit grid. */
-const GLYPHS: Record<CategoryName, (palette: Palette) => ReactNode> = {
-  General: (palette) => (
+const GLYPHS: Record<
+  CategoryGlyphId,
+  (colors: CategoryPaint) => ReactNode
+> = {
+  folder: () => (
+    <path d="M5.2 7.1a1.7 1.7 0 0 1 1.7-1.7h3.2l1.8 2h5.9a1.7 1.7 0 0 1 1.7 1.7v7.8a1.7 1.7 0 0 1-1.7 1.7H6.9a1.7 1.7 0 0 1-1.7-1.7z" />
+  ),
+  page: (colors) => (
     <g>
       <path d="M8.6 6.2h6.8v11.6H8.6z" />
       <path
         d="M12.2 6.4v2.7h2.8"
         fill="none"
-        stroke={`var(${palette.deep})`}
+        stroke={cssColor(colors.deep)}
         strokeWidth="1"
         strokeLinejoin="round"
       />
       <path
         d="M10.6 12.2h2.8M10.6 14.6h2.8"
         fill="none"
-        stroke={`var(${palette.deep})`}
+        stroke={cssColor(colors.deep)}
         strokeWidth="1"
         strokeLinecap="round"
       />
     </g>
   ),
-  Video: () => <path d="M9.8 7.1 16.6 12l-6.8 4.9z" />,
-  Music: () => (
+  video: () => <path d="M9.8 7.1 16.6 12l-6.8 4.9z" />,
+  music: () => (
     <g>
       <circle cx="9.2" cy="15.2" r="1.9" />
       <rect x="10.8" y="7.4" width="1.7" height="7.8" rx="0.4" />
       <path d="M10.8 7.4h4.4v2h-4.4z" />
     </g>
   ),
-  Documents: (palette) => (
+  document: (colors) => (
     <g>
       <path d="M8.4 6.2h7.2v11.6H8.4z" />
       <path
         d="M10.4 9.6h3.2M10.4 12.2h3.2M10.4 14.8h2.2"
         fill="none"
-        stroke={`var(${palette.deep})`}
+        stroke={cssColor(colors.deep)}
         strokeWidth="1.1"
         strokeLinecap="round"
       />
     </g>
   ),
-  Programs: () => (
+  program: () => (
     <g>
       <rect x="6.6" y="6.6" width="4.2" height="4.2" rx="1" />
       <rect x="13.2" y="6.6" width="4.2" height="4.2" rx="1" />
@@ -110,66 +80,103 @@ const GLYPHS: Record<CategoryName, (palette: Palette) => ReactNode> = {
       <rect x="13.2" y="13.2" width="4.2" height="4.2" rx="1" />
     </g>
   ),
-  Games: (palette) => (
+  game: (colors) => (
     <g>
       <path d="M7.7 8.7h8.6a3.2 3.2 0 0 1 3.12 3.9l-.6 2.95a2.3 2.3 0 0 1-4.02 1.1l-.98-1.2h-3.64l-.98 1.2a2.3 2.3 0 0 1-4.02-1.1l-.6-2.95a3.2 3.2 0 0 1 3.12-3.9z" />
       <path
         d="M9 10.5h1.3v1.3h1.3v1.3h-1.3v1.3H9v-1.3H7.7v-1.3H9z"
-        fill={`var(${palette.deep})`}
+        fill={cssColor(colors.deep)}
       />
-      <circle cx="14.6" cy="11.4" r=".85" fill={`var(${palette.deep})`} />
-      <circle cx="16.2" cy="13.3" r=".85" fill={`var(${palette.deep})`} />
+      <circle cx="14.6" cy="11.4" r=".85" fill={cssColor(colors.deep)} />
+      <circle cx="16.2" cy="13.3" r=".85" fill={cssColor(colors.deep)} />
     </g>
   ),
-  Compressed: (palette) => (
+  archive: (colors) => (
     <g>
       <path d="M7.2 6.8h9.6v10.2H7.2z" />
       <path
         d="M7.4 9.5h9.2M7.4 12.2h9.2M7.4 14.9h9.2"
         fill="none"
-        stroke={`var(${palette.deep})`}
+        stroke={cssColor(colors.deep)}
         strokeWidth="1"
         strokeLinecap="round"
       />
     </g>
   ),
-  Other: () => (
+  ellipsis: () => (
     <g>
       <circle cx="7.4" cy="12" r="1.15" />
       <circle cx="12" cy="12" r="1.15" />
       <circle cx="16.6" cy="12" r="1.15" />
     </g>
   ),
+  image: (colors) => (
+    <g>
+      <rect x="5.2" y="6.2" width="13.6" height="11.6" rx="1.8" />
+      <circle cx="9.2" cy="10.2" r="1.2" fill={cssColor(colors.deep)} />
+      <path
+        d="m6.6 16.4 3.5-3.8 2.3 2.4 2-2.2 3.1 3.6z"
+        fill={cssColor(colors.deep)}
+      />
+    </g>
+  ),
+  code: () => (
+    <g
+      fill="none"
+      stroke="#fff"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="m9.4 8.2-3.5 3.8 3.5 3.8" />
+      <path d="m14.6 8.2 3.5 3.8-3.5 3.8" />
+      <path d="M12.9 7.4 11.1 16.6" strokeWidth="1.4" />
+    </g>
+  ),
+  book: (colors) => (
+    <g>
+      <path d="M6.5 6.3h4.3a2 2 0 0 1 1.2.4 2 2 0 0 1 1.2-.4h4.3v10.6h-4.3a2 2 0 0 0-1.2.4 2 2 0 0 0-1.2-.4H6.5z" />
+      <path
+        d="M12 6.9v10.2"
+        fill="none"
+        stroke={cssColor(colors.deep)}
+        strokeWidth="1"
+      />
+    </g>
+  ),
+  cloud: () => (
+    <path d="M9.1 17.3h7a2.8 2.8 0 0 0 .3-5.58 4.3 4.3 0 0 0-8.25-.93A3.4 3.4 0 0 0 9.1 17.3z" />
+  ),
+  globe: (colors) => (
+    <g>
+      <circle cx="12" cy="12" r="5.4" />
+      <g fill="none" stroke={cssColor(colors.deep)} strokeWidth=".9">
+        <ellipse cx="12" cy="12" rx="2.4" ry="5.4" />
+        <path d="M6.7 12h10.6" />
+      </g>
+    </g>
+  ),
+  star: () => (
+    <path d="m12 6.1 1.78 3.6 3.97.58-2.87 2.8.68 3.95L12 15.17l-3.56 1.86.68-3.95-2.87-2.8 3.97-.58z" />
+  ),
+  box: (colors) => (
+    <g>
+      <path d="m12 5.5 6.2 3.3v6.4L12 18.5l-6.2-3.3V8.8z" />
+      <g
+        fill="none"
+        stroke={cssColor(colors.deep)}
+        strokeWidth=".9"
+        strokeLinejoin="round"
+      >
+        <path d="M5.8 8.8 12 12l6.2-3.2M12 12v6.5" />
+      </g>
+    </g>
+  ),
 };
 
-/**
- * A user category has no drawing of its own, so it borrows one. The colour is
- * picked from its name, which keeps two categories apart without a palette the
- * user has to choose.
- */
-const CUSTOM_PALETTES: Palette[] = [
-  PALETTES.General,
-  PALETTES.Video,
-  PALETTES.Music,
-  PALETTES.Documents,
-  PALETTES.Programs,
-  PALETTES.Compressed,
-];
-
-function paletteFor(category: CategoryName): Palette {
-  // A user may name a category "constructor"; only own keys are drawings.
-  if (Object.hasOwn(PALETTES, category)) {
-    return PALETTES[category];
-  }
-  let hash = 0;
-  for (const char of category) {
-    hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
-  }
-  return CUSTOM_PALETTES[hash % CUSTOM_PALETTES.length];
-}
-
-function glyphFor(category: CategoryName): (palette: Palette) => ReactNode {
-  return Object.hasOwn(GLYPHS, category) ? GLYPHS[category] : GLYPHS.Other;
+/** The saved icon of a category, or the one its name has always had. */
+function artFor(category: CategoryName, icon?: CategoryIcon): CategoryIcon {
+  return icon ?? defaultCategoryIcon(category);
 }
 
 /** One gradient per drawing instance, so the gloss never leaks between rows. */function useArtIds(prefix: string): { front: string; back: string } {
@@ -195,7 +202,7 @@ function Plate({
         height="20"
         rx="4.6"
         fill={`url(#${front})`}
-        stroke={`var(${deep})`}
+        stroke={cssColor(deep)}
         strokeOpacity=".55"
         strokeWidth=".9"
       />
@@ -216,8 +223,8 @@ function Gloss({
 }) {
   return (
     <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" style={{ stopColor: `var(${bright})` }} />
-      <stop offset="1" style={{ stopColor: `var(${base})` }} />
+      <stop offset="0" style={{ stopColor: cssColor(bright) }} />
+      <stop offset="1" style={{ stopColor: cssColor(base) }} />
     </linearGradient>
   );
 }
@@ -225,12 +232,16 @@ function Gloss({
 /** The colourful badge a download row, a picker or a category row shows. */
 export function FileTypeIcon({
   category,
+  icon,
   className,
 }: {
   category: CategoryName;
+  /** The saved icon of the category; omitted means the default for its name. */
+  icon?: CategoryIcon;
   className?: string;
 }) {
-  const palette = paletteFor(category);
+  const art = artFor(category, icon);
+  const colors = categoryPaint(art);
   const ids = useArtIds("file");
   return (
     <svg
@@ -240,20 +251,20 @@ export function FileTypeIcon({
       focusable="false"
     >
       <defs>
-        <Gloss id={ids.front} bright={palette.bright} base={palette.base} />
+        <Gloss id={ids.front} bright={colors.bright} base={colors.base} />
       </defs>
       <Plate
         front={ids.front}
-        deep={palette.deep}
+        deep={colors.deep}
         label={
           <g
-            fill="#fff"
+            fill={colors.ink}
             opacity=".96"
-            stroke={`var(${palette.deep})`}
+            stroke={cssColor(colors.deep)}
             strokeWidth=".9"
             strokeLinejoin="round"
           >
-            {glyphFor(category)(palette)}
+            {GLYPHS[art.glyph](colors)}
           </g>
         }
       />
@@ -269,14 +280,18 @@ const OPEN_FACE =
 /** A real folder, tab and all, tinted for its category. */
 export function CategoryFolderIcon({
   category,
+  icon,
   open = false,
   className,
 }: {
   category: CategoryName;
+  /** The saved icon of the category; omitted means the default for its name. */
+  icon?: CategoryIcon;
   open?: boolean;
   className?: string;
 }) {
-  const palette = paletteFor(category);
+  const art = artFor(category, icon);
+  const colors = categoryPaint(art);
   const ids = useArtIds("folder");
   return (
     <svg
@@ -286,23 +301,23 @@ export function CategoryFolderIcon({
       focusable="false"
     >
       <defs>
-        <Gloss id={ids.front} bright={palette.bright} base={palette.base} />
+        <Gloss id={ids.front} bright={colors.bright} base={colors.base} />
         <linearGradient id={ids.back} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" style={{ stopColor: `var(${palette.base})` }} />
-          <stop offset="1" style={{ stopColor: `var(${palette.deep})` }} />
+          <stop offset="0" style={{ stopColor: cssColor(colors.base) }} />
+          <stop offset="1" style={{ stopColor: cssColor(colors.deep) }} />
         </linearGradient>
       </defs>
       <path
         d="M3 6.4a2.2 2.2 0 0 1 2.2-2.2h4.1l2.1 2.4h7.4a2.2 2.2 0 0 1 2.2 2.2v9.2a2.2 2.2 0 0 1-2.2 2.2H5.2A2.2 2.2 0 0 1 3 17.8z"
         fill={`url(#${ids.back})`}
-        stroke={`var(${palette.deep})`}
+        stroke={cssColor(colors.deep)}
         strokeOpacity=".6"
         strokeWidth=".8"
       />
       <path
         d={open ? OPEN_FACE : CLOSED_FACE}
         fill={`url(#${ids.front})`}
-        stroke={`var(${palette.deep})`}
+        stroke={cssColor(colors.deep)}
         strokeOpacity=".55"
         strokeWidth=".8"
       />
@@ -314,23 +329,23 @@ export function CategoryFolderIcon({
         strokeLinecap="round"
       />
       <g
-        fill="#fff"
+        fill={colors.ink}
         opacity=".96"
-        stroke={`var(${palette.deep})`}
+        stroke={cssColor(colors.deep)}
         strokeWidth="1.1"
         strokeLinejoin="round"
         transform="translate(12 14.9) scale(.62) translate(-12 -12)"
       >
-        {glyphFor(category)(palette)}
+        {GLYPHS[art.glyph](colors)}
       </g>
     </svg>
   );
 }
 
 const VIEW_PALETTES = {
-  all: PALETTES.Documents,
-  unfinished: PALETTES.General,
-  finished: PALETTES.Programs,
+  all: CATEGORY_PALETTES.blue,
+  unfinished: CATEGORY_PALETTES.amber,
+  finished: CATEGORY_PALETTES.green,
 } as const;
 
 export type ViewKind = keyof typeof VIEW_PALETTES;
@@ -362,7 +377,7 @@ export function ViewIcon({
           <g
             fill="#fff"
             opacity=".96"
-            stroke={`var(${palette.deep})`}
+            stroke={cssColor(palette.deep)}
             strokeWidth=".9"
             strokeLinejoin="round"
           >
@@ -377,7 +392,7 @@ export function ViewIcon({
                 <path
                   d="M12 8.7V12l2.5 1.6"
                   fill="none"
-                  stroke={`var(${palette.deep})`}
+                  stroke={cssColor(palette.deep)}
                   strokeWidth="1.7"
                   strokeLinecap="round"
                 />
@@ -392,13 +407,13 @@ export function ViewIcon({
   );
 }
 
-const STATUS_PALETTES: Record<DownloadStatus, Palette> = {
-  downloading: PALETTES.Programs,
-  queued: PALETTES.General,
-  paused: PALETTES.Documents,
-  stopped: PALETTES.Other,
-  completed: PALETTES.Programs,
-  error: PALETTES.Video,
+const STATUS_PALETTES: Record<DownloadStatus, CategoryPalette> = {
+  downloading: CATEGORY_PALETTES.green,
+  queued: CATEGORY_PALETTES.amber,
+  paused: CATEGORY_PALETTES.blue,
+  stopped: CATEGORY_PALETTES.silver,
+  completed: CATEGORY_PALETTES.green,
+  error: CATEGORY_PALETTES.red,
 };
 
 /** The round status chip on a download row. */
@@ -489,7 +504,7 @@ export function StatusMark({
       aria-hidden="true"
       focusable="false"
     >
-      <circle cx="8" cy="8" r="6.9" fill={`var(${palette.deep})`} />
+      <circle cx="8" cy="8" r="6.9" fill={cssColor(palette.deep)} />
       <circle
         cx="8"
         cy="8"
@@ -513,7 +528,8 @@ export function WarningMark({
   tone?: "amber" | "red";
   className?: string;
 }) {
-  const palette = tone === "red" ? PALETTES.Video : PALETTES.General;
+  const palette =
+    tone === "red" ? CATEGORY_PALETTES.red : CATEGORY_PALETTES.amber;
   return (
     <svg
       viewBox="0 0 16 16"
@@ -523,7 +539,7 @@ export function WarningMark({
     >
       <path
         d="M8 1.9 14.9 13.5a.9.9 0 0 1-.77 1.35H1.87a.9.9 0 0 1-.77-1.35z"
-        fill={`var(${palette.deep})`}
+        fill={cssColor(palette.deep)}
         stroke={`var(${palette.bright})`}
         strokeOpacity=".55"
         strokeWidth="1"

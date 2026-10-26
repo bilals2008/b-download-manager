@@ -19,8 +19,8 @@ interface CategoryContextMenuProps {
   filter: DownloadFilter;
   /** True for a category folder, false for the three groups above them. */
   isFolder: boolean;
-  /** True when the category was made by the user, so it can be removed. */
-  custom: boolean;
+  /** False for Other, the fallback that must always exist. */
+  removable: boolean;
   /** Where the pointer was, in window coordinates. */
   at: { x: number; y: number };
   onAddCategory: () => void;
@@ -32,14 +32,14 @@ interface CategoryContextMenuProps {
 /**
  * The menu of a category in the tree.
  *
- * A built-in keeps its name and its file types; its folder is still the user's
- * to choose. Only a category the user made can be removed, and removing one
- * moves its rows to Other instead of deleting anything on disk.
+ * A built-in keeps its name and its file types; its folder and icon are still
+ * the user's to choose. Any category except Other can be removed, and the
+ * confirmation decides whether its files go with it.
  */
 export function CategoryContextMenu({
   filter,
   isFolder,
-  custom,
+  removable,
   at,
   onAddCategory,
   onEditCategory,
@@ -55,7 +55,7 @@ export function CategoryContextMenu({
       onAddCategory();
     } else if (command === "category-properties" && isFolder) {
       onEditCategory(filter);
-    } else if (command === "remove-category" && isFolder && custom) {
+    } else if (command === "remove-category" && isFolder && removable) {
       onRemoveCategory(filter);
     }
     onClose();
@@ -76,20 +76,21 @@ export function CategoryContextMenu({
   ];
 
   if (isFolder) {
-    rows.push(
-      {
-        command: "category-properties",
-        label: "Category properties...",
-        icon: <InfoGlyph className="size-3.5" />,
-      },
-      {
+    rows.push({
+      command: "category-properties",
+      label: "Category properties...",
+      icon: <InfoGlyph className="size-3.5" />,
+    });
+    // Other is the fallback every unmatched file lands in, so it has no
+    // remove command at all rather than a greyed one with no reason.
+    if (removable) {
+      rows.push({
         command: "remove-category",
-        label: "Remove category",
+        label: "Remove category...",
         icon: <TrashGlyph className="size-3.5" />,
         danger: true,
-        disabled: !custom,
-      },
-    );
+      });
+    }
   }
 
   return (

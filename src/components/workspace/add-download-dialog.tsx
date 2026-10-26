@@ -270,6 +270,9 @@ export function AddDownloadDialog({
   const name = servedName ?? browserName ?? suggestedName;
   const category =
     categoryOverride ?? (name ? detectCategory(name, categories) : "General");
+  const categoryIcon = categories.find(
+    (entry) => entry.name === category,
+  )?.icon;
   const target =
     folder.trim() && name.trim() ? joinPath(folder.trim(), name.trim()) : "";
 
@@ -426,7 +429,13 @@ export function AddDownloadDialog({
     command: entry.name,
     label: entry.name,
     radio: true,
-    icon: <FileTypeIcon category={entry.name} className="size-3.5" />,
+    icon: (
+      <FileTypeIcon
+        category={entry.name}
+        icon={entry.icon}
+        className="size-3.5"
+      />
+    ),
   }));
 
   const showProblem = touched && problem !== null;
@@ -534,7 +543,11 @@ export function AddDownloadDialog({
             to "did I paste the right link"; the category below it. */}
         {valid ? (
           <div className="flex min-w-0 items-center gap-2.5">
-            <FileTypeIcon category={category} className="size-7 shrink-0" />
+            <FileTypeIcon
+              category={category}
+              icon={categoryIcon}
+              className="size-7 shrink-0"
+            />
             <div className="min-w-0 flex-1" aria-live="polite">
               <Tooltip content={name} side="top" className="block w-full min-w-0">
                 <p className="truncate text-xs text-chrome-title-text">
@@ -578,7 +591,11 @@ export function AddDownloadDialog({
             disabled={busy}
             className="inline-flex h-9 items-center gap-2 rounded-chrome border border-chrome-line bg-chrome-canvas px-2.5 text-left text-xs text-chrome-menu-text transition-colors hover:border-chrome-muted focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none disabled:cursor-default disabled:opacity-60 disabled:hover:border-chrome-line"
           >
-            <FileTypeIcon category={category} className="size-3.5 shrink-0" />
+            <FileTypeIcon
+              category={category}
+              icon={categoryIcon}
+              className="size-3.5 shrink-0"
+            />
             <span className="min-w-0 truncate">{category}</span>
             <ChevronDown className="size-3.5 shrink-0 text-chrome-muted" />
           </button>

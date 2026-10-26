@@ -1,10 +1,15 @@
 import { useState } from "react";
 
 import { FolderGlyph } from "@/components/icons/action-icons";
-import { FileTypeIcon, WarningMark } from "@/components/icons/desktop-icons";
+import {
+  CategoryFolderIcon,
+  WarningMark,
+} from "@/components/icons/desktop-icons";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog } from "@/components/ui/dialog";
 import { DialogAction } from "@/components/ui/dialog-action";
 import { FIELD } from "@/components/ui/field";
+import { CategoryIconPicker } from "@/components/workspace/category-icon-picker";
 import {
   MAX_CATEGORY_EXTENSIONS,
   categoryDraftProblem,
@@ -12,6 +17,7 @@ import {
   parseCategoryExtensions,
   type CategoryDefinition,
 } from "@/lib/categories";
+import { defaultCategoryIcon, type CategoryIcon } from "@/lib/category-icons";
 import { describeError, isDesktop } from "@/lib/errors";
 import { chooseFolder, folderStatus } from "@/lib/ipc";
 import { useDownloads } from "@/state/download-store";
@@ -46,6 +52,9 @@ export function CategoryEditorDialog({
     category?.extensions.join(", ") ?? "",
   );
   const [folder, setFolder] = useState(category?.folder ?? "");
+  const [icon, setIcon] = useState<CategoryIcon>(
+    category?.icon ?? defaultCategoryIcon("Other"),
+  );
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -80,6 +89,7 @@ export function CategoryEditorDialog({
       name,
       extensions: parseCategoryExtensions(extensions),
       folder,
+      icon,
     };
     const wrong = category
       ? categoryDraftProblem(draft, categories, category.name)
@@ -148,8 +158,9 @@ export function CategoryEditorDialog({
         noValidate
       >
         <div className="flex items-end gap-2.5">
-          <FileTypeIcon
+          <CategoryFolderIcon
             category={name.trim() || "Other"}
+            icon={icon}
             className="size-8 shrink-0"
           />
           <div className="min-w-0 flex-1">
@@ -173,10 +184,16 @@ export function CategoryEditorDialog({
         </div>
         {builtin ? (
           <p className={HINT}>
-            A built-in category keeps its name and its file types. Its folder is
-            yours to change.
+            Name and file types are fixed. Folder and icon are yours.
           </p>
         ) : null}
+
+        <CategoryIconPicker
+          category={name.trim() || "Other"}
+          value={icon}
+          onChange={setIcon}
+          disabled={busy}
+        />
 
         <div>
           <label htmlFor="category-extensions" className={LABEL}>
@@ -196,8 +213,7 @@ export function CategoryEditorDialog({
             }}
           />
           <p className={HINT}>
-            Separate the types with commas. A type may be written with or
-            without its dot. Up to {MAX_CATEGORY_EXTENSIONS} types.
+            Comma-separated, dot optional, up to {MAX_CATEGORY_EXTENSIONS}.
           </p>
         </div>
 
@@ -228,10 +244,7 @@ export function CategoryEditorDialog({
               Browse
             </DialogAction>
           </div>
-          <p className={HINT}>
-            Leave this empty to follow the default save folder. The folder is
-            created with the first file that lands in it.
-          </p>
+          <p className={HINT}>Empty uses the default save folder.</p>
         </div>
 
         {problem ? (
@@ -255,21 +268,34 @@ interface RemoveCategoryDialogProps {
 }
 
 /**
- * Removing a category moves its downloads to Other. The files stay where they
- * are, so the question says so before the press.
+ * Removing a category asks what to do with what it holds. Left alone, its
+ * downloads move to Other and every file stays where it is; checked, the
+ * finished files leave the disk and the unfinished rows stop and leave the
+ * list, so the category really takes its contents with it.
  */
 export function RemoveCategoryDialog({
   open,
   category,
   onClose,
 }: RemoveCategoryDialogProps) {
-  const { counts, removeCategory, reportError } = useDownloads();
-  const count = counts[category.name] ?? 0;
+  const { counts, folders, removeCategory } = useDownloads();
+  const [deleteFiles, setDeleteFiles] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  function confirm() {
-    const problem = removeCategory(category.name);
-    if (problem) {
-      reportError(problem);
+  const count = counts[category.name] ?? 0;
+  const folderCount = folders[category.name]?.length ?? 0;
+
+  async function confirm() {
+    if (busy) {
+      return;
+    }
+    setBusy(true);
+    setProblem(null);
+    const wrong = await removeCategory(category.name, { deleteFiles });
+    if (wrong) {
+      setProblem(wrong);
+      setBusy(false);
       return;
     }
     onClose();
@@ -280,24 +306,69 @@ export function RemoveCategoryDialog({
       open={open}
       title="Remove category"
       onClose={onClose}
+      dismissible={!busy}
       footer={
         <>
-          <DialogAction data-autofocus onClick={onClose}>
+          <DialogAction data-autofocus onClick={onClose} disabled={busy}>
             Cancel
           </DialogAction>
-          <DialogAction tone="danger" onClick={confirm}>
-            Remove category
+          <DialogAction
+            tone="danger"
+            onClick={() => void confirm()}
+            disabled={busy}
+          >
+            {busy
+              ? "Removing…"
+              : deleteFiles
+                ? "Delete and remove"
+                : "Remove category"}
           </DialogAction>
         </>
       }
     >
-      <p className="text-xs text-chrome-menu-text">
-        Remove {category.name}?{" "}
-        {count > 0
-          ? `${count === 1 ? "Its download moves" : `Its ${count} downloads move`} to Other.`
-          : "No downloads are in it."}{" "}
-        Files already saved to disk are not deleted or moved.
-      </p>
+      <div className="flex items-center gap-2.5 rounded-chrome border border-chrome-line bg-chrome-canvas p-2.5">
+        <CategoryFolderIcon
+          category={category.name}
+          icon={category.icon}
+          className="size-7 shrink-0"
+        />
+        <div className="min-w-0">
+          <p className="truncate text-xs text-chrome-title-text">
+            {category.name}
+          </p>
+          <p className="truncate text-chrome-micro text-chrome-muted">
+            {count} {count === 1 ? "download" : "downloads"} · {folderCount}{" "}
+            {folderCount === 1 ? "save folder" : "save folders"}
+          </p>
+        </div>
+      </div>
+
+      {count > 0 ? (
+        <Checkbox
+          className="mt-3"
+          label={`Also delete its ${count} ${count === 1 ? "download" : "downloads"}`}
+          checked={deleteFiles}
+          disabled={busy}
+          onChange={(event) => {
+            setDeleteFiles(event.target.checked);
+            setProblem(null);
+          }}
+        />
+      ) : folderCount > 0 ? (
+        <p className="mt-3 text-xs text-chrome-menu-text">
+          The save folders stay on disk.
+        </p>
+      ) : null}
+
+      {problem ? (
+        <p
+          role="alert"
+          className="mt-3 flex items-start gap-1.5 text-xs text-chrome-error"
+        >
+          <WarningMark tone="red" className="mt-px size-3.5 shrink-0" />
+          <span className="min-w-0 break-words">{problem}</span>
+        </p>
+      ) : null}
     </Dialog>
   );
 }

@@ -7,6 +7,12 @@
  * rename or a removal changes the index only. It never moves a file on disk.
  */
 
+import {
+  defaultCategoryIcon,
+  normalizeCategoryIcon,
+  type CategoryIcon,
+} from "./category-icons.ts";
+
 export const BUILTIN_CATEGORIES = [
   "General",
   "Video",
@@ -35,12 +41,15 @@ export interface CategoryDefinition {
   /** An absolute folder, or empty to use the default save folder. */
   folder: string;
   builtin: boolean;
+  /** The drawing and palette the tree shows for it. */
+  icon: CategoryIcon;
 }
 
 export interface CategoryDraft {
   name: string;
   extensions: string[];
   folder: string;
+  icon: CategoryIcon;
 }
 
 /** The file types a built-in category owns before any user rule. */
@@ -83,6 +92,7 @@ export const DEFAULT_CATEGORIES: CategoryDefinition[] = BUILTIN_CATEGORIES.map(
     extensions: [...BUILTIN_EXTENSIONS[name]],
     folder: "",
     builtin: true,
+    icon: defaultCategoryIcon(name),
   }),
 );
 
@@ -210,6 +220,17 @@ export function categoryFolder(
   );
 }
 
+/** The icon a category shows, falling back to the one its name has always had. */
+export function categoryIcon(
+  categories: readonly CategoryDefinition[],
+  name: string,
+): CategoryIcon {
+  return (
+    categories.find((category) => category.name === name)?.icon ??
+    defaultCategoryIcon(name)
+  );
+}
+
 /** What is wrong with a category name, or null when it can be used. */
 export function categoryNameProblem(
   name: string,
@@ -306,19 +327,50 @@ export function categoryDraftProblem(
 /**
  * Bring a saved preference file back in a shape the app can trust.
  *
- * Built-in categories always exist. Unknown names, duplicate names, and types
- * another custom category owns are dropped rather than allowed to make the tree
- * ambiguous. A bad file is the defaults, never a failed start.
+ * The saved file names the categories that exist: a built-in the user removed
+ * stays removed instead of returning on the next start. Other is the fallback
+ * every unmatched file lands in, so it is always restored. Unknown names,
+ * duplicate names, and types another custom category owns are dropped rather
+ * than allowed to make the tree ambiguous. A bad file is the defaults, never a
+ * failed start.
  */
 export function normalizeCategories(value: unknown): CategoryDefinition[] {
-  const builtins = cloneDefaults();
+  const defaults = cloneDefaults();
   if (!Array.isArray(value)) {
-    return builtins;
+    return defaults;
   }
 
-  const byName = new Map<string, CategoryDefinition>(
-    builtins.map((category) => [category.name, category]),
+  const builtinByName = new Map(
+    defaults.map((category) => [category.name, category]),
   );
+  const out: CategoryDefinition[] = [];
+  const seen = new Set<string>();
+
+  /** A folder is kept only when it is absolute; a bad one falls back. */
+  const savedFolder = (saved: Partial<CategoryDefinition>) =>
+    typeof saved.folder === "string" && !categoryFolderProblem(saved.folder)
+      ? saved.folder.trim()
+      : "";
+
+  // Built-ins first, in the order they were saved, so the tree keeps its
+  // familiar top and a built-in owns its file types.
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") {
+      continue;
+    }
+    const saved = entry as Partial<CategoryDefinition>;
+    const name = typeof saved.name === "string" ? saved.name.trim() : "";
+    const builtin = builtinByName.get(name);
+    // `builtin: false` is a user category that took the name of a removed
+    // built-in; it is restored in the second pass as the user made it.
+    if (!builtin || saved.builtin === false || seen.has(name)) {
+      continue;
+    }
+    builtin.folder = savedFolder(saved);
+    builtin.icon = normalizeCategoryIcon(saved.icon, builtin.icon);
+    out.push(builtin);
+    seen.add(name);
+  }
 
   for (const entry of value) {
     if (!entry || typeof entry !== "object") {
@@ -326,24 +378,9 @@ export function normalizeCategories(value: unknown): CategoryDefinition[] {
     }
     const saved = entry as Partial<CategoryDefinition>;
     const name = typeof saved.name === "string" ? saved.name.trim() : "";
-    const builtin = byName.get(name as BuiltinCategory);
-
-    if (builtin) {
-      if (typeof saved.folder === "string" && !categoryFolderProblem(saved.folder)) {
-        builtin.folder = saved.folder.trim();
-      }
-      // A built-in owns its file types wherever the file came from; only its
-      // folder is the user's to change.
+    if (!name || seen.has(name) || categoryNameProblem(name, out) !== null) {
       continue;
     }
-
-    if (categoryNameProblem(name, builtins) !== null) {
-      continue;
-    }
-    const folder =
-      typeof saved.folder === "string" && !categoryFolderProblem(saved.folder)
-        ? saved.folder.trim()
-        : "";
     const extensions: string[] = [];
     if (Array.isArray(saved.extensions)) {
       for (const raw of saved.extensions) {
@@ -356,7 +393,7 @@ export function normalizeCategories(value: unknown): CategoryDefinition[] {
           !extensions.includes(extension) &&
           // A custom rule may claim a built-in type on purpose; it may only
           // not claim one another custom category already owns.
-          !builtins.some(
+          !out.some(
             (category) =>
               !category.builtin && category.extensions.includes(extension),
           )
@@ -368,15 +405,26 @@ export function normalizeCategories(value: unknown): CategoryDefinition[] {
         }
       }
     }
-    builtins.push({
+    out.push({
       name,
       extensions,
-      folder,
+      folder: savedFolder(saved),
       builtin: false,
+      icon: normalizeCategoryIcon(
+        saved.icon,
+        defaultCategoryIcon(name),
+      ),
     });
+    seen.add(name);
   }
 
-  return builtins;
+  // Other holds every file no rule claims; without it a download would have
+  // nowhere to land.
+  if (!out.some((category) => category.name === OTHER_CATEGORY)) {
+    out.push(builtinByName.get(OTHER_CATEGORY) as CategoryDefinition);
+  }
+
+  return out;
 }
 
 /** Read the saved categories, falling back to the built-ins on bad data. */

@@ -12,6 +12,7 @@ import {
   type FileConflict,
 } from "@/lib/conflict";
 import { categoryOfFile } from "@/lib/downloads";
+import { useDownloads } from "@/state/download-store";
 
 interface FileExistsDialogProps {
   conflict: FileConflict;
@@ -37,6 +38,8 @@ export function FileExistsDialog({
   onAnswer,
   onCancel,
 }: FileExistsDialogProps) {
+  const { categories } = useDownloads();
+  const category = categoryOfFile(conflict.name, categories);
   const [applyToRemaining, setApplyToRemaining] = useState(false);
   const batch = canApplyToRemaining(conflict);
   const name = conflict.suggestedName;
@@ -73,7 +76,8 @@ export function FileExistsDialog({
       <div className="flex flex-col gap-3">
         <div className="flex min-w-0 items-start gap-2.5">
           <FileTypeIcon
-            category={categoryOfFile(conflict.name)}
+            category={category}
+            icon={categories.find((entry) => entry.name === category)?.icon}
             className="mt-px size-6 shrink-0"
           />
           <div className="min-w-0 flex-1">

@@ -26,6 +26,11 @@ import {
   parseCategoryExtensions,
   saveCategories,
 } from "../src/lib/categories.ts";
+import {
+  categoryPaint,
+  defaultCategoryIcon,
+  normalizeCategoryIcon,
+} from "../src/lib/category-icons.ts";
 import { matchesStatusFilter } from "../src/lib/downloads.ts";
 
 let checks = 0;
@@ -219,8 +224,20 @@ const restored = normalizeCategories([
 ]);
 is(
   restored.map((category) => category.name),
-  [...defaults, "Courses", "Second"],
+  ["Video", "Courses", "Second", OTHER_CATEGORY],
   "unknown, duplicate and reserved names are dropped",
+);
+is(
+  normalizeCategories([]).map((category) => category.name),
+  [OTHER_CATEGORY],
+  "a built-in the user removed stays removed",
+);
+is(
+  normalizeCategories([{ name: "Courses", extensions: ["xyz"] }]).map(
+    (category) => category.name,
+  ),
+  ["Courses", OTHER_CATEGORY],
+  "Other is always restored as the fallback",
 );
 is(
   categoryFolder(restored, "Video"),
@@ -239,8 +256,8 @@ is(
 );
 is(
   detectCategory("song.mp3", restored),
-  "Music",
-  "the built-ins are still whole",
+  OTHER_CATEGORY,
+  "a removed built-in no longer answers for its types",
 );
 is(
   restored.find((category) => category.name === "Video").extensions,
@@ -251,6 +268,82 @@ is(
   restored.every((category) => BUILTIN_CATEGORIES.includes(category.name) === category.builtin),
   true,
   "only the built-ins are marked built in",
+);
+
+// An icon is two ids the app knows. A saved one comes back as it was; a bad
+// one falls back to the drawing the category has always had.
+is(
+  restored.find((category) => category.name === "Video").icon,
+  { glyph: "video", palette: "red" },
+  "a built-in keeps its icon",
+);
+const painted = normalizeCategories([
+  { name: "Courses", extensions: ["xyz"], icon: { glyph: "star", palette: "green" } },
+  { name: "Second", extensions: [], icon: { glyph: "nope", palette: "#ff0000" } },
+  { name: "Video", icon: { glyph: "cloud", palette: "blue" } },
+]);
+is(
+  painted.find((category) => category.name === "Courses").icon,
+  { glyph: "star", palette: "green" },
+  "a saved icon comes back",
+);
+is(
+  painted.find((category) => category.name === "Second").icon,
+  defaultCategoryIcon("Second"),
+  "an unknown icon falls back to the name's default",
+);
+is(
+  painted.find((category) => category.name === "Video").icon,
+  { glyph: "cloud", palette: "blue" },
+  "a built-in icon can be changed",
+);
+
+// A colour of the user's own is a plain hex, and anything else is dropped so a
+// saved preference cannot paint the icon with something CSS would not accept.
+is(
+  normalizeCategoryIcon(
+    { glyph: "star", palette: "green", color: "#FF8800" },
+    defaultCategoryIcon("Tone"),
+  ).color,
+  "#ff8800",
+  "a custom colour is kept, lowercased",
+);
+is(
+  normalizeCategoryIcon(
+    { glyph: "star", palette: "green", color: "url(x)" },
+    defaultCategoryIcon("Tone"),
+  ),
+  { glyph: "star", palette: "green" },
+  "a colour that is not a hex is dropped",
+);
+is(
+  normalizeCategories([
+    {
+      name: "Tone",
+      extensions: [],
+      icon: { glyph: "star", palette: "green", color: "#123456" },
+    },
+  ]).find((category) => category.name === "Tone").icon,
+  { glyph: "star", palette: "green", color: "#123456" },
+  "a custom colour survives a save",
+);
+
+// The glyph is white on a palette plate and on a dark custom colour, and turns
+// dark when the user picks a pale one, so it never disappears.
+is(
+  categoryPaint({ glyph: "star", palette: "green" }).ink,
+  "#fff",
+  "a palette plate keeps the white glyph",
+);
+is(
+  categoryPaint({ glyph: "star", palette: "green", color: "#f5e7a1" }).ink,
+  "#1b1b1b",
+  "a pale custom plate darkens the glyph",
+);
+is(
+  categoryPaint({ glyph: "star", palette: "green", color: "#123456" }).ink,
+  "#fff",
+  "a dark custom plate keeps the white glyph",
 );
 is(
   normalizeCategories([

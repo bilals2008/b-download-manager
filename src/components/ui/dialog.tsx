@@ -94,7 +94,7 @@ export function Dialog({
         // `open:flex` matters: a plain `flex` would override the native
         // `dialog:not([open]) { display: none }` rule and every dialog would
         // render at once.
-        "m-auto w-96 flex-col overflow-hidden rounded-lg bg-chrome-popup p-0 text-chrome-menu-text shadow-float backdrop:bg-black/60 open:flex",
+        "m-auto w-96 flex-col overflow-hidden rounded-lg border border-chrome-line bg-chrome-popup p-0 text-chrome-menu-text shadow-float backdrop:bg-black/60 open:flex",
         className,
       )}
     >

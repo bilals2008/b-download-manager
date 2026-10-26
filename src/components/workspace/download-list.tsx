@@ -52,6 +52,7 @@ interface DownloadListProps {
 export function DownloadList({ onAddDownload }: DownloadListProps) {
   const {
     downloads,
+    categories,
     visible,
     selected,
     cursor,
@@ -499,6 +500,10 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
                 <DownloadRow
                   key={item.id}
                   item={item}
+                  icon={
+                    categories.find((entry) => entry.name === item.category)
+                      ?.icon
+                  }
                   selected={selected.includes(item.id)}
                   onToggle={() => selectRow(item.id, "toggle")}
                   onSelect={(mode) => {

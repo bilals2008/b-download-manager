@@ -138,21 +138,6 @@ export function MinimizeToTrayGlyph({ className }: GlyphProps) {
   );
 }
 
-export function PanelGlyph({
-  collapsed,
-  className,
-}: GlyphProps & { collapsed: boolean }) {
-  return (
-    <Glyph className={className} width={1.6}>
-      <rect x="2.3" y="3.4" width="11.4" height="9.2" rx="2.4" />
-      <path d="M6.2 3.7v8.6" />
-      <path
-        d={collapsed ? "m8.9 6.5 1.5 1.5-1.5 1.5" : "M10.4 6.5 8.9 8l1.5 1.5"}
-      />
-    </Glyph>
-  );
-}
-
 export function SpinnerGlyph({ className }: GlyphProps) {
   return (
     <Glyph className={className} width={1.8}>

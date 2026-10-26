@@ -17,6 +17,7 @@ import {
   resumeSummary,
 } from "@/lib/failures";
 import { cn } from "@/lib/utils";
+import { useDownloads } from "@/state/download-store";
 
 interface DownloadFailedDialogProps {
   item: Download;
@@ -49,6 +50,7 @@ export function DownloadFailedDialog({
   onRetry,
   onChooseFolder,
 }: DownloadFailedDialogProps) {
+  const { categories } = useDownloads();
   const [detailsOpen, setDetailsOpen] = useState(false);
   const explanation = explainFailure(item.error);
   const canRetry = explanation.retryable;
@@ -129,7 +131,13 @@ export function DownloadFailedDialog({
         </div>
 
         <div className="flex min-w-0 items-start gap-2.5">
-          <FileTypeIcon category={item.category} className="mt-px size-6 shrink-0" />
+          <FileTypeIcon
+            category={item.category}
+            icon={
+              categories.find((entry) => entry.name === item.category)?.icon
+            }
+            className="mt-px size-6 shrink-0"
+          />
           <div className="min-w-0 flex-1">
             <Tooltip content={item.fileName} side="top" className="block min-w-0">
               <p className="truncate text-xs text-chrome-menu-text">

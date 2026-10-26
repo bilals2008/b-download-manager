@@ -130,8 +130,15 @@ export interface DownloadStore {
     originalName: CategoryName,
     draft: CategoryDraft,
   ) => string | null;
-  /** Remove a user category and move its rows to Other. Built-ins refuse. */
-  removeCategory: (name: CategoryName) => string | null;
+  /**
+   * Remove a category, moving what is left of its rows to Other. `deleteFiles`
+   * deletes what the category holds first: finished files leave the disk and
+   * unfinished rows stop and leave the list. Other cannot go.
+   */
+  removeCategory: (
+    name: CategoryName,
+    options?: { deleteFiles?: boolean },
+  ) => Promise<string | null>;
   /** Put downloads in a category. The files themselves do not move. */
   assignCategory: (ids: number[], category: CategoryName) => void;
   /** Save the category and the note the properties window edited. */
@@ -703,6 +710,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
         extensions: [...draft.extensions],
         folder: draft.folder.trim(),
         builtin: false,
+        icon: draft.icon,
       },
     ]);
     return null;
@@ -733,7 +741,9 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
               ...category,
               name,
               folder: draft.folder.trim(),
-              // A built-in owns its file types; only its folder is editable.
+              icon: draft.icon,
+              // A built-in owns its file types; only its folder and icon are
+              // editable.
               extensions: category.builtin
                 ? category.extensions
                 : [...draft.extensions],
@@ -761,21 +771,52 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
     return null;
   }
 
-  /** Remove a user category. Its downloads move to Other, their files do not. */
-  function removeCategory(name: CategoryName): string | null {
+  /**
+   * Remove a category. Its downloads move to Other and their files stay put,
+   * unless the user asked for its contents to go too: a finished file is
+   * deleted from the disk, an unfinished row stops and leaves the list with
+   * its partial files in place. Other is the fallback every unmatched file
+   * needs, so it cannot be removed.
+   */
+  async function removeCategory(
+    name: CategoryName,
+    options?: { deleteFiles?: boolean },
+  ): Promise<string | null> {
     const current = categoriesRef.current;
     const target = current.find((category) => category.name === name);
     if (!target) {
       return "That category no longer exists.";
     }
-    if (target.builtin) {
-      return "A built-in category cannot be removed.";
+    if (name === OTHER_CATEGORY) {
+      return "Other holds every unmatched file, so it cannot be removed.";
     }
-    commitCategories(current.filter((category) => category.name !== name));
 
     const affected = latest.current.downloads.filter(
       (item) => item.category === name,
     );
+
+    const deleted = new Set<number>();
+    if (options?.deleteFiles) {
+      for (const item of affected) {
+        try {
+          // A finished row owns a file; anything else owns parts, and the
+          // engine keeps those on disk while it forgets the row.
+          if (isFinished(item)) {
+            await deleteDownloadFile(item.id);
+          } else {
+            await removeDownload(item.id);
+          }
+        } catch (failure) {
+          return describeError(failure);
+        }
+        forget(item.id);
+        deleted.add(item.id);
+      }
+    }
+
+    commitCategories(current.filter((category) => category.name !== name));
+
+    const remaining = affected.filter((item) => !deleted.has(item.id));
     setState((state) => ({
       ...state,
       filter: state.filter === name ? OTHER_CATEGORY : state.filter,
@@ -784,7 +825,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
         item.category === name ? { ...item, category: OTHER_CATEGORY } : item,
       ),
     }));
-    for (const item of affected) {
+    for (const item of remaining) {
       run(setDownloadCategory(item.id, OTHER_CATEGORY));
     }
     return null;

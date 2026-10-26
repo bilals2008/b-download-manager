@@ -1,13 +1,15 @@
 import { useRef, useState, type KeyboardEvent } from "react";
 
 import { CategoryFolderIcon, ViewIcon } from "@/components/icons/desktop-icons";
-import { DisclosureGlyph, PanelGlyph, PlusGlyph } from "@/components/icons/ui-icons";
+import { DisclosureGlyph, PlusGlyph } from "@/components/icons/ui-icons";
 import { Tooltip } from "@/components/ui/tooltip";
 import { CategoryContextMenu } from "@/components/workspace/category-context-menu";
 import {
   CategoryEditorDialog,
   RemoveCategoryDialog,
 } from "@/components/workspace/category-dialogs";
+import type { CategoryIcon } from "@/lib/category-icons";
+import { OTHER_CATEGORY } from "@/lib/categories";
 import type { CategoryName, DownloadFilter } from "@/lib/downloads";
 import { cn } from "@/lib/utils";
 import { useDownloads } from "@/state/download-store";
@@ -36,6 +38,7 @@ type Row =
       count: number;
       expanded: boolean;
       hasFolders: boolean;
+      icon: CategoryIcon;
     }
   | {
       kind: "folder";
@@ -44,6 +47,7 @@ type Row =
       path: string;
       label: string;
       count: number;
+      icon: CategoryIcon;
     };
 
 /**
@@ -62,7 +66,6 @@ export function CategoriesPane() {
     counts,
     folders,
   } = useDownloads();
-  const [collapsed, setCollapsed] = useState(false);
   // Only categories the user opened or closed explicitly are recorded; the
   // rest follow their content, so a category fills out as files arrive.
   const [openCategories, setOpenCategories] = useState<Record<string, boolean>>(
@@ -89,8 +92,7 @@ export function CategoriesPane() {
 
   const treeRows: Row[] = categories.flatMap<Row>((category) => {
     const children = folders[category.name] ?? [];
-    const expanded =
-      !collapsed && (openCategories[category.name] ?? children.length > 0);
+    const expanded = openCategories[category.name] ?? children.length > 0;
     const categoryRow: Row = {
       kind: "category",
       key: `category:${category.name}`,
@@ -99,6 +101,7 @@ export function CategoriesPane() {
       count: counts[category.name] ?? 0,
       expanded,
       hasFolders: children.length > 0,
+      icon: category.icon,
     };
     if (!expanded) {
       return [categoryRow];
@@ -112,6 +115,7 @@ export function CategoriesPane() {
         path: child.path,
         label: child.label,
         count: child.count,
+        icon: category.icon,
       })),
     ];
   });
@@ -214,20 +218,12 @@ export function CategoriesPane() {
   function renderRow(row: Row) {
     const selected = isSelected(row);
     const depth = row.kind === "folder" ? 1 : 0;
-    // Collapsed rows are icons alone; a folder's path is longer than its row.
-    const hint = collapsed
-      ? `${row.label} (${row.count})`
-      : row.kind === "folder"
-        ? row.path
-        : null;
+    // A folder's path is longer than its row, so it gets the tooltip.
+    const hint = row.kind === "folder" ? row.path : null;
 
     return (
       <li key={row.key}>
-        <Tooltip
-          content={hint}
-          side={collapsed ? "right" : "bottom"}
-          className="flex w-full"
-        >
+        <Tooltip content={hint} side="bottom" className="flex w-full">
           <button
             ref={(node) => {
               if (node) {
@@ -267,47 +263,41 @@ export function CategoriesPane() {
               selected
                 ? "bg-chrome-menu-active text-chrome-title-text"
                 : "text-chrome-menu-text hover:bg-chrome-menu-hover active:bg-chrome-toolbar-active",
-              collapsed && "justify-center px-0",
             )}
           >
-            {collapsed ? null : (
-              <span className="grid size-4 shrink-0 place-items-center text-chrome-muted">
-                {row.kind === "category" && row.hasFolders ? (
-                  <DisclosureGlyph
-                    className={cn(
-                      "size-3.5 transition-transform duration-150 ease-out motion-reduce:transition-none",
-                      row.expanded && "rotate-90",
-                    )}
-                  />
-                ) : null}
-              </span>
-            )}
+            <span className="grid size-4 shrink-0 place-items-center text-chrome-muted">
+              {row.kind === "category" && row.hasFolders ? (
+                <DisclosureGlyph
+                  className={cn(
+                    "size-3.5 transition-transform duration-150 ease-out motion-reduce:transition-none",
+                    row.expanded && "rotate-90",
+                  )}
+                />
+              ) : null}
+            </span>
 
             {row.kind === "view" ? (
               <ViewIcon view={row.id} className="size-5 shrink-0" />
             ) : (
               <CategoryFolderIcon
                 category={row.id}
+                icon={row.icon}
                 open={row.kind === "category" && row.expanded}
                 className="size-5 shrink-0"
               />
             )}
 
-            {collapsed ? null : (
-              <>
-                <span className="min-w-0 flex-1 truncate">{row.label}</span>
-                <span
-                  className={cn(
-                    "shrink-0 text-chrome-micro tabular-nums",
-                    selected
-                      ? "text-chrome-title-text"
-                      : "text-chrome-muted group-hover:text-chrome-menu-text",
-                  )}
-                >
-                  {row.count}
-                </span>
-              </>
-            )}
+            <span className="min-w-0 flex-1 truncate">{row.label}</span>
+            <span
+              className={cn(
+                "shrink-0 text-chrome-micro tabular-nums",
+                selected
+                  ? "text-chrome-title-text"
+                  : "text-chrome-muted group-hover:text-chrome-menu-text",
+              )}
+            >
+              {row.count}
+            </span>
           </button>
         </Tooltip>
       </li>
@@ -317,64 +307,34 @@ export function CategoriesPane() {
   return (
     <nav
       aria-label="Categories"
-      className={cn(
-        "flex shrink-0 flex-col overflow-hidden rounded-lg bg-chrome-panel transition-[width] duration-200 ease-out motion-reduce:transition-none",
-        collapsed ? "w-12" : "w-48 sm:w-56 lg:w-64",
-      )}
+      className="flex w-48 shrink-0 flex-col overflow-hidden rounded-lg bg-chrome-panel sm:w-56 lg:w-64"
     >
-      <div
-        className={cn(
-          "flex h-9 shrink-0 items-center",
-          collapsed ? "justify-center px-1" : "justify-between pl-2.5 pr-1.5",
-        )}
-      >
-        {collapsed ? null : (
-          <span className="flex min-w-0 items-center gap-1.5 text-chrome-micro font-medium tracking-wide text-chrome-muted">
-            <CategoryFolderIcon
-              category="General"
-              open
-              className="size-4 shrink-0"
-            />
-            <span className="truncate">Categories</span>
-          </span>
-        )}
-        {collapsed ? null : (
-          <Tooltip content="Add category" side="bottom">
-            <button
-              type="button"
-              aria-label="Add category"
-              onClick={() => setEditing("new")}
-              className="grid size-6 shrink-0 place-items-center rounded-chrome text-chrome-muted hover:bg-chrome-menu-hover hover:text-chrome-menu-text focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
-            >
-              <PlusGlyph className="size-3.5" />
-            </button>
-          </Tooltip>
-        )}
-        <Tooltip
-          content={collapsed ? "Expand categories" : "Collapse categories"}
-          side="bottom"
-        >
+      <div className="flex h-9 shrink-0 items-center justify-between pl-2.5 pr-1.5">
+        <span className="flex min-w-0 items-center gap-1.5 text-chrome-micro font-medium tracking-wide text-chrome-muted">
+          <CategoryFolderIcon
+            category="General"
+            open
+            className="size-4 shrink-0"
+          />
+          <span className="truncate">Categories</span>
+        </span>
+        <Tooltip content="Add category" side="bottom">
           <button
             type="button"
-            aria-label={collapsed ? "Expand categories" : "Collapse categories"}
-            aria-expanded={!collapsed}
-            onClick={() => setCollapsed((value) => !value)}
+            aria-label="Add category"
+            onClick={() => setEditing("new")}
             className="grid size-6 shrink-0 place-items-center rounded-chrome text-chrome-muted hover:bg-chrome-menu-hover hover:text-chrome-menu-text focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
           >
-            <PanelGlyph collapsed={collapsed} className="size-3.5" />
+            <PlusGlyph className="size-3.5" />
           </button>
         </Tooltip>
       </div>
 
       <div className="scrollbar-none min-h-0 flex-1 overflow-y-auto px-1.5 py-2">
-        {collapsed ? null : <SectionLabel>Downloads</SectionLabel>}
+        <SectionLabel>Downloads</SectionLabel>
         <ul className="flex flex-col gap-px">{viewRows.map(renderRow)}</ul>
 
-        {collapsed ? (
-          <div className="my-2 h-1" />
-        ) : (
-          <SectionLabel className="mt-3">Categories</SectionLabel>
-        )}
+        <SectionLabel className="mt-3">Categories</SectionLabel>
         <ul className="flex flex-col gap-px">{treeRows.map(renderRow)}</ul>
       </div>
 
@@ -382,10 +342,7 @@ export function CategoriesPane() {
         <CategoryContextMenu
           filter={menu.filter}
           isFolder={menu.isFolder}
-          custom={
-            categories.find((category) => category.name === menu.filter)
-              ?.builtin === false
-          }
+          removable={menu.filter !== OTHER_CATEGORY}
           at={menu.at}
           onAddCategory={() => setEditing("new")}
           onEditCategory={(name) => setEditing(name)}

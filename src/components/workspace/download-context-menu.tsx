@@ -309,6 +309,9 @@ function rowsFor(
       icon: (
         <CategoryFolderIcon
           category={sharedCategory ?? "Other"}
+          icon={
+            categories.find((entry) => entry.name === sharedCategory)?.icon
+          }
           className="size-3.5"
         />
       ),
@@ -319,6 +322,7 @@ function rowsFor(
         icon: (
           <CategoryFolderIcon
             category={category.name}
+            icon={category.icon}
             className="size-3.5"
           />
         ),
