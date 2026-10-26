@@ -17,6 +17,7 @@ pnpm tauri dev           # desktop app (the only way to see real window chrome)
 pnpm dev                 # UI only in a browser; IPC calls are no-ops
 pnpm build               # tsc --noEmit + vite build
 pnpm check:palette       # WCAG contrast gate for the colour tokens
+pnpm check:grabber       # the Site Grabber's window helpers
 pnpm site:dev            # Astro docs site (site/)
 cd crates/idm-core && cargo test   # the engine, without a window
 cd src-tauri && cargo test         # the application
@@ -46,10 +47,21 @@ src-tauri/src/
     mod.rs         routes, the versioned contract and its tests
     http.rs        the HTTP/1.1 reader and writer
     dest.rs        safe, unique file names for hand-overs
+    batch.rs       the Download all links batch: offered folders, per-link answer
+  grabber/       the Site Grabber
+    mod.rs         the one run, its commands, and the hand-over to the engine
+    crawl.rs       the walk: scope, limits, robots, redirects, cancellation
+    policy.rs      addresses, private ranges, exclusions, file types, names
+    robots.rs      robots.txt groups, rules and crawl delay
+    extract.rs     the tolerant link scanner
+    window.rs      the grabber window
 browser-extension/
   manifest.json  the Chrome/Edge build
 extension-firefox/
   manifest.json  the Firefox build; MV3 event page, video overlay, popup and settings
+  lib/link-rules.js  what a link is, shared by the reader and the link window
+  content/page-links.js  the time-sliced reader of a page's links
+  links/         the Download all links window (filters, selection, report)
 src/
   App.tsx        screen composition and command routing only
   main.tsx       React root
@@ -59,8 +71,9 @@ src/
   components/
     shell/       title bar, menu bar, toolbar, the popup menu they share
     workspace/   panes, tables, dialogs, the context menus (one file each)
-    windows/     the completion window, and progress/ for the live download
-                 window (status tab, speed limiter tab, connections, meter)
+    windows/     the completion window, progress/ for the live download
+                 window (status tab, speed limiter tab, connections, meter),
+                 and grabber/ for the Site Grabber (form, results, hook)
     ui/          shadcn/ui primitives
 ```
 
@@ -94,8 +107,11 @@ not add a second `onDoubleClick` toggler, it cancels itself out.
 With decorations off the window has square corners, so
 `src-tauri/src/window_style.rs::round_corners` asks the compositor for rounded
 ones (Windows 11 only, and a no-op elsewhere). It is called for the main window
-in `lib.rs`, the download-complete window in `complete.rs` and each progress
-window in `progress.rs`.
+in `lib.rs`, the download-complete window in `complete.rs`, each progress
+window in `progress.rs` and the Site Grabber in `grabber/window.rs`.
+
+A window label must also be in `src-tauri/capabilities/default.json`. The
+grabber is `grabber`; without it, dragging and the close button do nothing.
 
 The frame owns the corners. Small windows must **not** put `rounded-lg` (or any
 other radius) on their root: a second, different radius inside the compositor's
@@ -158,6 +174,35 @@ Theme references:
   hidden — it is the way back — and remove it only when the window is really
   destroyed. The application's own tray icon in `lib.rs` stays a separate
   thing; do not rebuild it for progress windows.
+
+## Site Grabber
+
+The grabber is the only part of the application that reads pages it was not
+handed. Keep these invariants when changing it:
+
+- Every page and every redirect goes through `policy::check_public`, which
+  checks the spelling **and** resolves the host. Do not add a path that
+  requests a URL without it. The loopback allowance in `crawl.rs` is
+  `#[cfg(test)]` only and covers loopback exclusively.
+- The crawl only offers candidates. It never fetches a file; the hand-over in
+  `grabber/mod.rs` calls `actions::start` with `Choice::Rename`, so a grabber
+  download is an ordinary download and a taken name is never replaced.
+- Scope is the start host plus its `www.` twin. Subdomains and other hosts are
+  not crawled. `robots.txt` is fetched per origin, obeyed, and a failure to
+  read it blocks the origin rather than allowing it.
+- The limits are constants in `policy.rs` (depth, pages, page size, file count,
+  interval, redirects, robots size). Do not let the window raise them past
+  those.
+- No cookies, credentials, sign-in, paywall or DRM logic belongs here. A page
+  that asks for a session is reported, not worked around.
+- The window must not tick files by default. Reading a site and downloading a
+  site are separate actions on purpose.
+- The client is built with `redirect(Policy::none())`; redirects are followed
+  by `crawl.rs` so each hop can be checked. Turning on automatic redirects
+  would skip the SSRF checks.
+
+`docs/SITE-GRABBER.md` is the user-facing contract; update it with any rule or
+limit that changes.
 
 ## Skills
 

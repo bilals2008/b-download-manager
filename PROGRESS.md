@@ -117,8 +117,57 @@ half-working screen; the one queue below is the part that exists.
 - [x] Batch redownload asks per file and can apply one answer to the rest
 - [x] Enter starts, Escape cancels and Ctrl+N opens the dialog from anywhere
       in the shell
-- [ ] Batch download, many URLs in one dialog
-- [ ] Add from clipboard, drop target, site grabber
+- [x] Download all links from the browser: a compact selection window with
+      category and type filters, an opt-in for page links, the app's folders,
+      the queue and the connection count; links are sent in chunks of ten and
+      every link is answered on its own (started, queued, already in the list,
+      not downloadable, or refused with the app's sentence)
+- [ ] Batch download, many URLs in one app dialog
+- [ ] Add from clipboard and drop target
+
+## Site Grabber
+
+- [x] **Tasks → Run site grabber** opens a window of its own; the main list
+      stays usable while a crawl runs
+- [x] Start address with its own validation, depth 1–5, page budget, file
+      groups and extra extensions, path exclusions, folder, queue and
+      connections; the form remembers its choices
+- [x] Breadth-first read of the start host and its `www.` twin only, each page
+      once, with depth, page and file caps and a link cap per page
+- [x] Root-relative, absolute and protocol-relative links, plus `src`,
+      `srcset` and `<base href>`; comments, scripts and styles are never read,
+      `rel=nofollow` links are offered but not followed
+- [x] `robots.txt` per origin, with agent groups, wildcards, `$` anchors and a
+      capped `Crawl-delay`; a 5xx, a 429 or a redirect of the file blocks the
+      site instead of allowing it
+- [x] Address policy: http(s) only, no credentials, no single-label or local
+      names, no private, loopback, link-local, CGNAT, documentation,
+      multicast or reserved ranges, no cloud metadata endpoints; IPv4-mapped,
+      compatible and NAT64 IPv6 spellings are recognised
+- [x] Every page and redirect is resolved and checked before the request; a
+      redirect that leaves the site is not followed
+- [x] 300 ms between pages, `robots.txt` delay respected up to 5 s, 20 s
+      timeout, 2 MiB page cap, compressed or non-HTML pages reported
+- [x] Files are offered, never fetched; a private file address is dropped with
+      a log line
+- [x] Live list with text and type filters, select shown and clear, a log of
+      blocked, excluded, repeated and unsupported links; files start unticked
+- [x] Stop notices the cancellation between chunks; closing the window leaves
+      the crawl running and reopening it shows its snapshot
+- [x] Selected files go through `actions::start` in chunks, with the existing
+      queue, categories, duplicate handling and a free name instead of a
+      replace; each file is answered on its own
+- [x] Selected addresses are resolved again at hand-over, so a changed name is
+      refused rather than sent to a private network
+- [x] Rust tests: policy, robots, the link scanner, request limits, and a crawl
+      against a loopback server covering depth, duplicates, exclusions, page
+      limit, in-site and off-site redirects, a metadata redirect, a
+      robots-forbidden page and cancellation
+- [x] `pnpm check:grabber`: the window helpers, preferences and report
+- [x] Limitations documented in `docs/SITE-GRABBER.md`: no JavaScript-rendered
+      links, no charset conversion, no compressed pages, no sitemap, no crawl
+      resume, DNS rebinding remains theoretical
+- [ ] A crawl that can be paused and resumed, and a rendered-page fallback
 
 ## Download engine
 
@@ -254,12 +303,24 @@ half-working screen; the one queue below is the part that exists.
       (a free name asks nothing, an answer that fails is reported instead of
       asked again, one answer covers a batch), and the sentence each engine
       failure becomes
-- [x] `cargo test` in `src-tauri`, 44 tests: the bridge, the completion window,
-      the progress window's payload, label, label parsing, tray id and title,
+- [x] `cargo test` in `src-tauri`, 130 tests: the bridge, the batch hand-over
+      (offered folders, duplicates, categories, request shape), the completion
+      window, the progress window's payload, label, label parsing, tray id and title,
       the destination question (a taken name, a free name beside it, a row
-      restarted from its own file), and the start request the window sends
+      restarted from its own file), the start request the window sends, and the
+      Site Grabber (address policy and private ranges, robots groups and
+      wildcards, the HTML scanner, limits, depth, duplicates, exclusions,
+      redirects on and off the site, a metadata redirect, a robots-forbidden
+      page, and cancellation against a loopback server)
 - [ ] Keyboard-only pass over the whole shell
 - [ ] Screen reader pass over the tree, the list and the listbox
+- [x] `npm run check:grabber`, 75 checks: the address wording, rule and type
+      parsing, preference round-trip and clamping, event folding, snapshot
+      merging, filters, selection, chunking and the report
+- [x] `npm run check:extension`: the manifest, every page reference, the shared
+      tokens, the link rules and the time-sliced page scan, the background
+      against a mocked bridge (hand-over, link scan and batch), the video
+      overlay in a fake page, and the Chrome build's contract
 - [ ] Unit tests for the store: filtering, sorting, queue transitions
 - [ ] Visual check in a real window, done by hand
 
@@ -267,4 +328,5 @@ half-working screen; the one queue below is the part that exists.
 
 - [x] `ANALYSIS.md`, the reverse engineering notes and the interface strings
 - [x] `PROGRESS.md`, this file
+- [x] `docs/SITE-GRABBER.md`, the grabber's scope rules, defaults, tests and limitations
 - [ ] A short note on what the clone is and is not, for the repository front page

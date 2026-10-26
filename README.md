@@ -26,7 +26,7 @@ B Download Manager splits a file across multiple connections, writes each byte r
 
 The engine is a standalone Rust crate with no window toolkit, tested headlessly against local HTTP and FTP servers. The desktop application is a thin Tauri 2 shell around it, with a Windows-style interface: a categories pane, a live download table, dedicated progress and completion windows, and a tray icon.
 
-> **Status:** early development (`0.1.0`). Core downloads, resume, the tray, the progress and completion windows, and both browser extensions work. Scheduling, media splitting and a few other IDM features are not implemented yet. See [`PROGRESS.md`](./PROGRESS.md).
+> **Status:** early development (`0.1.0`). Core downloads, resume, the tray, the progress and completion windows, the Site Grabber and both browser extensions work. Scheduling, media splitting and a few other IDM features are not implemented yet. See [`PROGRESS.md`](./PROGRESS.md).
 
 ## Features
 
@@ -34,7 +34,8 @@ The engine is a standalone Rust crate with no window toolkit, tested headlessly 
 - **Resume, always:** a JSON manifest beside the part files survives pause, stop, a crash or an exit. Ranges that overlap or are out of order are never resumed from.
 - **HTTP, HTTPS and FTP:** range requests with `Accept-Encoding: identity`, and FTP `REST` offsets with one data connection per range.
 - **Proxy and speed control:** HTTP and SOCKS proxies for new downloads, plus a global cap and a per-download cap.
-- **Browser hand-off:** a Firefox extension with an IDM-style video button, live download controls and settings, plus a Chrome/Edge build. Both use a versioned loopback bridge inside the application.
+- **Browser hand-off:** a Firefox extension with an IDM-style video button, a Download all links window that collects a page's files into one reviewed batch, live download controls and settings, plus a Chrome/Edge build. Both use a versioned loopback bridge inside the application.
+- **Site Grabber:** read one site on request, within a depth and page budget, and list the files its pages link to. It obeys `robots.txt`, pauses between requests and refuses private and metadata addresses on every hop; the files you tick go through the ordinary engine. See [`docs/SITE-GRABBER.md`](./docs/SITE-GRABBER.md).
 - **A queue you can watch:** eight categories, a sortable table, search, selection, pause/stop/resume, context menus and properties.
 - **Windows that fit the job:** a completion dialog with *Open file* and *Open folder*, and a progress window with per-connection detail and a speed limiter.
 - **Tray resident:** closing the window hides it; the tray restores it, starts and stops the queue, and exits.
@@ -102,7 +103,7 @@ pnpm tauri icon src/assets/brand/logo.png
 crates/
   idm-core/           headless download engine
   idm-cli/            headless client for the engine
-src-tauri/            Tauri commands, tray, windows and loopback bridge
+src-tauri/            Tauri commands, tray, windows, loopback bridge and the Site Grabber
 src/                  React interface: shell, workspace, windows, settings, ui
 site/                 Astro + Starlight site: landing page and docs (deployed to Vercel)
 extension-firefox/    Firefox extension
@@ -113,7 +114,7 @@ planning/             scope, engine specification, milestones and ADRs
 
 ### Checks
 
-Run the build, the nine project gates and both Rust test suites before opening a pull request:
+Run the build, the ten project gates and both Rust test suites before opening a pull request:
 
 ```bash
 pnpm build
@@ -127,12 +128,13 @@ pnpm check:add-dialog
 pnpm check:recovery
 pnpm check:tooltip
 pnpm check:extension
+pnpm check:grabber
 
 cargo test --manifest-path crates/idm-core/Cargo.toml
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
-The gates cover colour contrast, offered typefaces, the selection model, the Find bar, the progress window, the add dialog, the File Exists and Download Failed windows, tooltip placement, and both browser extensions.
+The gates cover colour contrast, offered typefaces, the selection model, the Find bar, the progress window, the add dialog, the File Exists and Download Failed windows, tooltip placement, both browser extensions, and the Site Grabber's window helpers.
 
 ## How It Works
 
@@ -145,13 +147,17 @@ The gates cover colour contrast, offered typefaces, the selection model, the Fin
 
 The reverse-engineered evidence behind these mechanics is in [`ANALYSIS.md`](./ANALYSIS.md), including an explicit list of what could not be established.
 
+## Site Grabber
+
+**Tasks → Run site grabber** reads one website and lists the files its pages link to. The crawl is breadth-first, stays on the start host (and its `www.` twin), and stops at the depth, page and file limits chosen in the window. It checks `robots.txt`, waits between pages, follows redirects one checked hop at a time, and refuses loopback, private-network and cloud-metadata destinations before each request and again at hand-over. Nothing is downloaded until a file is ticked: the selected files then enter the queue through the same `actions::start` path as every other download. The rules, defaults and limitations are in [`docs/SITE-GRABBER.md`](./docs/SITE-GRABBER.md).
+
 ## Browser Integration
 
 The application runs a versioned JSON API on `127.0.0.1:27500`, reachable only from this machine. Requests must carry `X-BDM-Client: browser-extension`, and any `Origin` must be an extension origin. Neither build needs a native messaging host or a registry entry.
 
 | Browser | Folder | What it adds |
 | --- | --- | --- |
-| Firefox | [`extension-firefox/`](./extension-firefox/README.md) | Right-click hand-off, download takeover, an IDM-style video button with live progress, a compact popup and settings (MV3 event page) |
+| Firefox | [`extension-firefox/`](./extension-firefox/README.md) | Right-click hand-off, download takeover, an IDM-style video button with live progress, a Download all links window, a compact popup and settings (MV3 event page) |
 | Chrome / Edge | [`browser-extension/`](./browser-extension/README.md) | Right-click hand-off and download takeover over the same bridge contract |
 
 To try the Firefox build, start the application, open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on…**, and select `extension-firefox/manifest.json`. A permanent install needs a signed `.xpi`; the extension README covers the AMO and Developer Edition routes.
@@ -162,6 +168,7 @@ To try the Firefox build, start the application, open `about:debugging#/runtime/
 | --- | --- |
 | [`ANALYSIS.md`](./ANALYSIS.md) | The reverse engineering: strings, addresses, pseudo-code, and what could not be established |
 | [`docs/DEVELOPMENT.md`](./docs/DEVELOPMENT.md) | Conventions, module boundaries and the checks a change must pass |
+| [`docs/SITE-GRABBER.md`](./docs/SITE-GRABBER.md) | The grabber's scope rules, defaults, reporting, tests and limitations |
 | [`PROGRESS.md`](./PROGRESS.md) | What works, what is left, and the current gate status |
 | [`planning/`](./planning/) | Scope, engine specification, UI direction, milestones, verification, risks and ADRs |
 
