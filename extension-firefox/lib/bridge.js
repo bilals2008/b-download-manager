@@ -134,6 +134,45 @@ async function bdmBridgeSend(payload) {
   );
 }
 
+/**
+ * What the link window may choose from: the folders, the queue and the
+ * default connection count.
+ *
+ * The folders are the places the application already uses, not a path the
+ * extension typed: the bridge refuses one it did not offer.
+ */
+async function bdmBridgeBatchOptions() {
+  return bdmBridgeRequest("GET", "/v1/batch-options", undefined, 2500);
+}
+
+/**
+ * Hand over one chunk of ticked links.
+ *
+ * The app answers one line per link: started, queued, duplicate, invalid or
+ * refused, with the sentence for the ones that did not start. A large
+ * selection is sent in chunks, so this request stays small.
+ */
+async function bdmBridgeBatch(payload) {
+  const items = Array.isArray(payload?.items) ? payload.items : [];
+  return bdmBridgeRequest(
+    "POST",
+    "/v1/downloads/batch",
+    {
+      items: items.map((item) => ({
+        url: String(item?.url || ""),
+        name: String(item?.name || ""),
+        category: String(item?.category || ""),
+      })),
+      folder: String(payload?.folder || ""),
+      // Zero means "whatever the app offered", which is `null` here.
+      connections: Number(payload?.connections) > 0 ? Number(payload.connections) : null,
+      queue: payload?.queue === "main" ? "main" : "now",
+      referer: String(payload?.referer || ""),
+    },
+    15000,
+  );
+}
+
 /** Pause, resume, stop or show one download in the app. */
 async function bdmBridgeControl(id, action) {
   return bdmBridgeRequest("POST", `/v1/downloads/${id}/${action}`, {}, 4000);

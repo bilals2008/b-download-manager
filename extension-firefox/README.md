@@ -38,6 +38,15 @@ lives in `browser-extension/` and speaks the same versioned loopback API.
   saved, and the ring turns red when it fails. The ring only appears on the
   video the download came from, and it stays while the panel is closed — which
   is the point of it.
+- **Download all links**: the popup's list button and *Download all links on
+  this page…* in the page's right-click menu open a compact window with the
+  files the page links to. Every address is listed once, filtered by category
+  and type; page links stay behind a switch, so a sidebar full of navigation is
+  not offered as downloads. It shows the folders, the queue and the connection
+  count the app offered, and sends the ticked links in chunks of ten. Every
+  link gets its own answer — started, queued, already in the list, not
+  downloadable, or refused with the app's sentence — so one dead link does not
+  lose the rest.
 - **Toolbar badge** shows how many downloadable media the tab offers. It is
   cleared when the tab navigates or the overlay is turned off.
 - **Compact popup**: connection state, active downloads (progress, size,
@@ -77,6 +86,8 @@ form or `<script>` request is therefore refused as well. Requests without an
 | `GET /v1/capture` | `{ capture, ask, types, skipSites }` |
 | `GET /v1/downloads` | `{ downloads, active }` |
 | `POST /v1/downloads` | `{ mode: "direct", id, name, dest }` or `{ mode: "ask" }` |
+| `GET /v1/batch-options` | `{ folders, queues, connections, maxItems }` |
+| `POST /v1/downloads/batch` | one answer per link, and the counts |
 | `POST /v1/downloads/:id/pause` | the download's new state |
 | `POST /v1/downloads/:id/resume` | the download's new state |
 | `POST /v1/downloads/:id/cancel` | the download's new state |
@@ -87,6 +98,29 @@ form or `<script>` request is therefore refused as well. Requests without an
 `http://`, `https://` or `ftp://`, and `mode` is `direct` or `ask`. The server
 sanitises the file name and makes it unique in the download folder, so a
 hand-over cannot escape the folder or overwrite an existing file.
+
+`POST /v1/downloads/batch` takes up to 25 links at a time:
+
+```json
+{
+  "items": [{ "url": "https://example.org/a.zip", "name": "a.zip", "category": "Compressed" }],
+  "folder": "C:\\Users\\me\\Downloads",
+  "connections": 8,
+  "queue": "main",
+  "referer": "https://example.org/page"
+}
+```
+
+`folder` is empty for the app's default, or exactly one of the paths
+`GET /v1/batch-options` offered; a path the app did not offer is refused, so
+the extension cannot write anywhere on the disk. `queue` is `now` or `main`
+(the one queue the app has). `category` is one of the app's built-in names.
+Every item is answered on its own with `started`, `queued`, `skipped`,
+`duplicate`, `invalid` or `refused`, a download id when one was created, the
+file it writes, and the sentence for a link that did not start. A link that is
+already in the list is reported, not added twice. A taken file name becomes
+`name (2).ext`; a batch never replaces a file, and it never opens one progress
+window per link.
 
 `GET /v1/capture` is the app-owned copy of the capture rules. While the app
 answers, its Settings page wins for the hand-over switch, the ask switch, the
@@ -184,9 +218,12 @@ npx web-ext build --source-dir extension-firefox --overwrite-dest
 The content script is declared for `http://*/*` and `https://*/*`, so Firefox
 shows **Access your data for all websites** at install. That broad grant is
 what lets the video button appear without a click. The script reads media
-addresses, the page title and URL as a referrer, and the addresses of the media
-requests the page made; it does not read page text, form values, cookies or
-storage, and it never sends anything to a remote server.
+addresses, the page title and URL as a referrer, the addresses of the media
+requests the page made, and — only when the link window asks — the `href` of
+the page's links. It reads no link text, form values, cookies or storage, and it
+never sends anything to a remote server. The link window is a page of the
+extension (`links/links.html`), opened with the `windows` API, which needs no
+permission.
 Nothing leaves the machine: the only network destination is the loopback
 bridge, and the application downloads the file itself.
 
@@ -202,9 +239,12 @@ npx web-ext lint --source-dir extension-firefox --self-hosted
 ```
 
 `check:extension` parses every script, resolves every file a page loads,
-checks the shared colour tokens, runs the settings, media and page-list helpers
-in a sandbox, exercises the background against a mocked bridge, verifies that
-every icon name exists, and runs the Chrome build's hand-over contract too.
+checks the shared colour tokens, runs the settings, media, link-rule and
+page-list helpers in a sandbox, exercises the background against a mocked
+bridge (including the batch and the link scan), runs the time-sliced link
+reader over a fake page and the link window against a small document, verifies
+that every icon name exists, and checks the Chrome build's hand-over contract
+too.
 
 It also runs the content scripts in a fake page (`scripts/lib/fake-dom.mjs`):
 a YouTube-shaped player whose controls cover the picture, a stream that arrives
@@ -222,12 +262,15 @@ background.js          menus, takeover, badge, message routing
 lib/bridge.js          the versioned loopback contract
 lib/settings.js        defaults, normalisation, the takeover and overlay rules
 lib/media.js           what counts as a downloadable media address
+lib/link-rules.js      what a link is: file, page, stream, category, name, dedupe key
 lib/icons.js           the SVG icons drawn by the popup and the overlay
 content/page-media.js  reads media addresses out of the page
+content/page-links.js  walks the page's links in time slices, one per address
 content/video-registry.js  which videos the page has, and which is under the pointer
 content/overlay.js     the floating button, panel and live progress
 content/overlay-style.js  the shadow-root stylesheet and its token copy
-popup/                 connection, downloads, page media, settings entry
+popup/                 connection, downloads, page media, link window, settings
+links/                 the Download all links window: filters, selection, report
 options/               the settings page
 theme.css              the app's palette, shared by both extension pages
 fonts/                 Inter, the app's interface face
@@ -259,10 +302,33 @@ These are honest boundaries, not unfinished UI:
 - **A type filter matches the URL path.** A URL with no extension but a
   `Content-Disposition` file name is filtered out when the type list is
   non-empty; leave the list empty to take every type.
-- **Batch hand-over is not implemented.** The app's bridge starts one
-  download per request and its add dialog holds one request.
-- **The overlay runs in the top frame only.** Media inside a cross-origin
-  iframe is not listed by the page panel; the browser's own download takeover
+- **A link is classified from its address, not from the server.** The window
+  never fetches a link to ask whether it exists: that would be a request per
+  link, from the browser, to every site a page mentions. A link that needs a
+  sign-in, has expired, or answers `403`/`404` is started by the app and then
+  fails in its download list, where the failure is explained. This is the one
+  kind of report the browser cannot give before the download starts.
+- **Stream manifests are not offered.** `.m3u8`, `.mpd`, `.ism`, `.m4s` and
+  `.ts` are counted in the window's report as unsupported, because the engine
+  would save a playlist or one segment instead of a film.
+- **Page links are opt-in.** An address with no extension, or with an HTML/PHP
+  extension, is kept behind the *Page links* switch, so navigation is not
+  ticked by default. A page you do open is downloaded as the HTML the server
+  answers with.
+- **The window reads at most 400 distinct links, from at most 6000 anchors.**
+  It says so when a page is larger. The scan walks `document.links` in slices
+  of a few milliseconds and yields between them, so a huge page does not freeze
+  the browser, but it does not read the whole of a page that keeps growing.
+- **Only the built-in categories are mirrored.** The window groups links by the
+  app's built-in rules plus images (which the app files under *Other*). A
+  category the user added in the app, with its own file types, is not known to
+  the extension's copy; the app's list still shows the true category of a link
+  started from the window.
+- **A batch uses the app's one queue.** There are no named queues yet, so the
+  window offers *Start now* or *Main queue* — the same queue the toolbar's Start
+  queue button drives.
+- **The overlay and the link window run in the top frame only.** Media or links
+  inside a cross-origin iframe are not read; the browser's own download takeover
   still sees files the browser downloads.
 - **The app must be running.** The extension cannot launch a desktop program
   from a web extension sandbox; it reports the closed state instead.

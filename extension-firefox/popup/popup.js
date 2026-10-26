@@ -5,6 +5,7 @@ const refs = {
   statusText: document.getElementById("status-text"),
   retry: document.getElementById("retry"),
   openApp: document.getElementById("open-app"),
+  allLinks: document.getElementById("all-links"),
   settings: document.getElementById("settings"),
   downloads: document.getElementById("downloads"),
   count: document.getElementById("download-count"),
@@ -461,6 +462,24 @@ refs.openApp.addEventListener("click", async () => {
 refs.settings.addEventListener("click", () => {
   void browser.runtime.openOptionsPage();
   window.close();
+});
+
+refs.allLinks.addEventListener("click", async () => {
+  let tabId;
+  try {
+    const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+    tabId = tabs?.[0]?.id;
+  } catch {
+    return;
+  }
+
+  const answer = await message({ type: "bdm:links-open", tabId });
+  if (answer?.ok) {
+    window.close();
+    return;
+  }
+  setConnection("warn", actionText(answer?.error));
+  schedule(OFFLINE_POLL_MS);
 });
 
 document.addEventListener("visibilitychange", () => {

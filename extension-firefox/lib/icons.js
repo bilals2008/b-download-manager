@@ -34,6 +34,9 @@ const BDM_ICON_SHAPES = {
   refresh: {
     paths: ["M20 11a8 8 0 1 0-2.3 5.7", "M20 5v6h-6"],
   },
+  list: {
+    paths: ["M9 6h11", "M9 12h11", "M9 18h11", "M4 6h.01", "M4 12h.01", "M4 18h.01"],
+  },
 };
 
 /** One icon, tinted and sized by the CSS of its control. */

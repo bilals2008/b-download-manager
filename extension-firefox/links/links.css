@@ -1,0 +1,497 @@
+/* The link window: one list of links, the filters above it and the choices
+   that start the batch below it. The colours are the app's semantic tokens. */
+
+body {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text);
+  background: var(--canvas);
+  font: var(--text-body) / 1.45 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+
+.icon {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ---------------------------------------------------------------- top */
+
+.top {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 10px 10px 6px 12px;
+}
+
+.brand {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+}
+
+.mark {
+  flex: none;
+  border-radius: 5px;
+}
+
+.head-text {
+  min-width: 0;
+}
+
+h1 {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.page {
+  margin: 1px 0 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--text-micro);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.icon-button {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-control);
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.icon-button:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+
+.icon-button:active {
+  background: var(--active);
+}
+
+/* ------------------------------------------------------------- state */
+
+.state {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px 8px;
+  font-size: var(--text-micro);
+}
+
+.dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--text-muted) 14%, transparent);
+}
+
+.state[data-state="ok"] .dot {
+  background: var(--success);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 14%, transparent);
+}
+
+.state[data-state="checking"] .dot,
+.state[data-state="sending"] .dot {
+  background: var(--warning);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning) 14%, transparent);
+  animation: breathe 1.4s ease-in-out infinite;
+}
+
+.state[data-state="warn"] .dot {
+  background: var(--warning);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning) 14%, transparent);
+}
+
+.state[data-state="error"] .dot {
+  background: var(--danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 14%, transparent);
+}
+
+.state-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.state[data-state="error"] .state-text {
+  color: var(--danger);
+}
+
+.text-button {
+  margin: 0;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 5px;
+  color: var(--text-muted);
+  background: transparent;
+  font: inherit;
+  font-size: var(--text-micro);
+  cursor: pointer;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+
+.text-button:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+
+.text-button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* ------------------------------------------------------------ toolbar */
+
+.toolbar {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-2);
+  padding: 0 12px 8px;
+  border-block-end: 1px solid var(--line);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: var(--text-micro);
+  color: var(--text-muted);
+}
+
+.field.narrow {
+  flex: 0 0 auto;
+  width: 92px;
+}
+
+.toolbar .field {
+  flex: 1 1 132px;
+}
+
+select,
+input[type="number"] {
+  min-width: 0;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  color: var(--text);
+  background: var(--surface-raised);
+  font: inherit;
+  font-size: var(--text-small);
+}
+
+select:hover,
+input[type="number"]:hover {
+  border-color: var(--text-muted);
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  color: var(--text-muted);
+  font-size: var(--text-micro);
+  cursor: pointer;
+}
+
+.toggle input,
+.link input {
+  accent-color: var(--accent);
+  margin: 0;
+  cursor: pointer;
+}
+
+.count {
+  color: var(--text-muted);
+  font-size: var(--text-micro);
+  font-variant-numeric: tabular-nums;
+}
+
+.toolbar-actions {
+  display: flex;
+  gap: 2px;
+  margin-inline-start: auto;
+}
+
+/* --------------------------------------------------------------- list */
+
+.list-wrap {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.links {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 4px 6px;
+  overflow-y: auto;
+  list-style: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+.link {
+  border-radius: 7px;
+}
+
+.link:hover {
+  background: var(--hover);
+}
+
+.link[data-checked="true"] {
+  background: color-mix(in srgb, var(--active) 65%, transparent);
+}
+
+.link-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 7px;
+  cursor: pointer;
+}
+
+.badge {
+  flex: none;
+  min-width: 34px;
+  padding: 1px 4px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+
+.link[data-kind="page"] .badge {
+  border-style: dashed;
+}
+
+.link-text {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.link-name {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.link-path {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 10px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.link-type {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.empty {
+  margin: 0;
+  padding: 18px 16px;
+  color: var(--text-muted);
+  font-size: var(--text-small);
+  text-align: center;
+}
+
+.empty[hidden] {
+  display: none;
+}
+
+/* ------------------------------------------------------------- report */
+
+.report {
+  flex: none;
+  max-height: 132px;
+  padding: 0 12px;
+  overflow-y: auto;
+  border-block-start: 1px solid var(--line);
+  font-size: var(--text-micro);
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+.report[hidden] {
+  display: none;
+}
+
+.report summary {
+  padding: 7px 0 4px;
+  color: var(--text);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.report-list {
+  margin: 0;
+  padding: 0 0 8px;
+  list-style: none;
+}
+
+.report-list li {
+  display: flex;
+  gap: 6px;
+  padding: 2px 0;
+  color: var(--text-muted);
+}
+
+.report-list .report-name {
+  flex: 0 1 auto;
+  overflow: hidden;
+  color: var(--text);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.report-list .report-why {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* --------------------------------------------------------------- foot */
+
+.foot {
+  flex: none;
+  padding: 9px 12px 11px;
+  border-block-start: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.choices {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+
+.choices .field:first-child {
+  flex: 1;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-block-start: 9px;
+}
+
+.selection {
+  flex: 1;
+  color: var(--text-muted);
+  font-size: var(--text-micro);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.button {
+  height: 27px;
+  padding: 0 11px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  font: inherit;
+  font-size: var(--text-small);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, opacity 120ms ease;
+}
+
+.button.primary {
+  color: var(--on-primary);
+  background: var(--primary);
+}
+
+.button.primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--primary) 88%, var(--text));
+}
+
+.button.ghost {
+  border-color: var(--line);
+  color: var(--text);
+  background: transparent;
+}
+
+.button.ghost:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.note {
+  margin: 7px 0 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+/* ------------------------------------------------------------- motion */
+
+@keyframes breathe {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icon-button,
+  .text-button,
+  .button {
+    transition: none;
+  }
+
+  .state[data-state="checking"] .dot,
+  .state[data-state="sending"] .dot {
+    animation: none;
+  }
+}

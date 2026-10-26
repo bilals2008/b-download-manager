@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "B Download Manager",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Send downloads and video from Firefox to B Download Manager.",
   "browser_specific_settings": {
     "gecko": {
@@ -15,19 +15,27 @@
   "permissions": ["contextMenus", "downloads", "storage"],
   "host_permissions": ["http://127.0.0.1:27500/*"],
   "background": {
-    "scripts": ["lib/media.js", "lib/settings.js", "lib/bridge.js", "background.js"]
+    "scripts": [
+      "lib/media.js",
+      "lib/link-rules.js",
+      "lib/settings.js",
+      "lib/bridge.js",
+      "background.js"
+    ]
   },
   "content_scripts": [
     {
       "matches": ["http://*/*", "https://*/*"],
       "js": [
         "lib/media.js",
+        "lib/link-rules.js",
         "lib/settings.js",
         "lib/icons.js",
         "content/page-media.js",
         "content/video-registry.js",
         "content/overlay-style.js",
-        "content/overlay.js"
+        "content/overlay.js",
+        "content/page-links.js"
       ],
       "run_at": "document_idle"
     }

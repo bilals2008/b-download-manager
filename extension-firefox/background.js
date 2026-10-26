@@ -37,6 +37,11 @@ async function createMenus() {
     contexts: ["link", "video", "audio", "image"],
   });
   browser.contextMenus.create({
+    id: "bdm-links",
+    title: "Download all links on this page…",
+    contexts: ["page"],
+  });
+  browser.contextMenus.create({
     id: "bdm-separator",
     type: "separator",
     contexts: ["link", "video", "audio", "image", "page"],
@@ -68,6 +73,50 @@ browser.runtime.onStartup.addListener(() => {
  */
 function announce() {
   void bdmBridgePing().catch(() => {});
+}
+
+/* ------------------------------------------------------------ link window */
+
+/**
+ * Open the window that collects the links of a tab.
+ *
+ * The window is an extension page of its own rather than a panel of the
+ * popup: a page can offer hundreds of links, and the popup closes the moment
+ * the user clicks anywhere else. A popup window is preferred because it sits
+ * beside the page it describes; a browser that refuses one gets a tab.
+ */
+async function openLinkWindow(tabId) {
+  if (!Number.isInteger(tabId) || tabId <= 0) {
+    return {
+      ok: false,
+      error: { kind: "refused", message: "This page cannot be read." },
+    };
+  }
+
+  const url = browser.runtime.getURL(`links/links.html?tab=${tabId}`);
+  try {
+    if (browser.windows?.create) {
+      await browser.windows.create({
+        url,
+        type: "popup",
+        width: 520,
+        height: 720,
+      });
+      return { ok: true };
+    }
+  } catch {
+    // A browser that will not open a popup window gets a tab instead.
+  }
+
+  try {
+    await browser.tabs.create({ url });
+    return { ok: true };
+  } catch {
+    return {
+      ok: false,
+      error: { kind: "refused", message: "The link window did not open." },
+    };
+  }
 }
 
 /* --------------------------------------------------------------- statuses */
@@ -153,6 +202,12 @@ browser.contextMenus.onClicked.addListener(async (info) => {
       // A closed app cannot be brought forward; the popup is where the user
       // sees why it is closed.
     }
+    return;
+  }
+
+  if (info.menuItemId === "bdm-links") {
+    const opened = await openLinkWindow(tabId);
+    if (!opened.ok) flash(tabId, "!");
     return;
   }
 
@@ -281,6 +336,93 @@ async function handleMessage(message, sender) {
       try {
         await bdmBridgeFocus();
         return { ok: true };
+      } catch (error) {
+        return bridgeFailure(error);
+      }
+    }
+
+    case "bdm:links-open": {
+      return await openLinkWindow(Number(message.tabId));
+    }
+
+    case "bdm:links-scan": {
+      const tabId = Number(message.tabId);
+      const scanId = String(message.scanId || "");
+      if (!Number.isInteger(tabId) || !scanId) {
+        return {
+          ok: false,
+          error: { kind: "refused", message: "This page cannot be read." },
+        };
+      }
+      try {
+        // The content script answers when its time-sliced scan is done.
+        const answer = await browser.tabs.sendMessage(tabId, {
+          type: "bdm:links-scan",
+          scanId,
+        });
+        if (!answer || answer.ok !== true) {
+          return {
+            ok: false,
+            error: {
+              kind: "unavailable",
+              message:
+                "This page cannot be read. Firefox does not let an extension read it.",
+            },
+          };
+        }
+        return answer;
+      } catch {
+        return {
+          ok: false,
+          error: {
+            kind: "unavailable",
+            message:
+              "This page cannot be read. Reload it, or open a normal web page.",
+          },
+        };
+      }
+    }
+
+    case "bdm:links-progress": {
+      // The content script reports how far its scan got. The window that
+      // asked is an extension page, so the report is passed straight on.
+      browser.runtime
+        .sendMessage({
+          type: "bdm:links-scan-progress",
+          scanId: String(message.scanId || ""),
+          scanned: Number(message.scanned) || 0,
+          total: Number(message.total) || 0,
+          found: Number(message.found) || 0,
+        })
+        .catch(() => {});
+      return { ok: true };
+    }
+
+    case "bdm:batch-options": {
+      try {
+        const data = await bdmBridgeBatchOptions();
+        return { ok: true, ...data };
+      } catch (error) {
+        return bridgeFailure(error);
+      }
+    }
+
+    case "bdm:batch": {
+      const payload = message.payload || {};
+      const items = Array.isArray(payload.items) ? payload.items : [];
+      const valid = items.filter((item) => {
+        const protocol = bdmLinkProtocol(item?.url);
+        return protocol === "http:" || protocol === "https:" || protocol === "ftp:";
+      });
+      if (valid.length === 0) {
+        return {
+          ok: false,
+          error: { kind: "refused", message: "No link in this batch can be downloaded." },
+        };
+      }
+      try {
+        const data = await bdmBridgeBatch({ ...payload, items: valid });
+        return { ok: true, result: data };
       } catch (error) {
         return bridgeFailure(error);
       }

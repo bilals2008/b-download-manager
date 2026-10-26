@@ -29,9 +29,9 @@ assert.equal(
   "the background entry runs last",
 );
 assert.deepEqual(
-  manifest.background.scripts.slice(0, 3),
-  ["lib/media.js", "lib/settings.js", "lib/bridge.js"],
-  "the background gets its media, settings and bridge helpers first",
+  manifest.background.scripts.slice(0, 4),
+  ["lib/media.js", "lib/link-rules.js", "lib/settings.js", "lib/bridge.js"],
+  "the background gets its media, link, settings and bridge helpers first",
 );
 
 assert.deepEqual(
@@ -73,6 +73,19 @@ assert.ok(
   "the video registry is injected",
 );
 assert.ok(
+  contentScript.js.includes("content/page-links.js"),
+  "the page link reader is injected",
+);
+assert.ok(
+  contentScript.js.includes("lib/link-rules.js"),
+  "the link rules reach the content script that classifies links",
+);
+assert.ok(
+  contentScript.js.indexOf("lib/link-rules.js") <
+    contentScript.js.indexOf("content/page-links.js"),
+  "the rules load before the reader that uses them",
+);
+assert.ok(
   contentScript.js.indexOf("content/video-registry.js") <
     contentScript.js.indexOf("content/overlay.js"),
   "the registry loads before the overlay that asks it for a video",
@@ -107,7 +120,11 @@ for (const file of everyFile(rootDir, ".css")) {
 
 /* -------------------------------------------------------------- the pages */
 
-for (const page of [manifest.action.default_popup, manifest.options_ui.page]) {
+for (const page of [
+  manifest.action.default_popup,
+  manifest.options_ui.page,
+  "links/links.html",
+]) {
   const htmlPath = new URL(page, rootUrl);
   const html = readFileSync(htmlPath, "utf8");
 
@@ -125,6 +142,39 @@ for (const page of [manifest.action.default_popup, manifest.options_ui.page]) {
     assert.ok(existsSync(fileURLToPath(target)), `${page} -> ${ref} exists`);
   }
 }
+
+/* ------------------------------------------------ the link window's wiring */
+
+// The window is a page of its own; a control it names but the markup does not
+// have would break it only once a page of links was open.
+const linksHtml = read("links/links.html");
+const linkIds = new Set(
+  [...linksHtml.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1]),
+);
+for (const id of [
+  "send",
+  "folder",
+  "queue",
+  "connections",
+  "category",
+  "extension",
+  "pages",
+  "links",
+  "report",
+  "selection",
+]) {
+  assert.ok(linkIds.has(id), `links.html has #${id}`);
+}
+for (const match of read("links/links.js").matchAll(/getElementById\("([^"]+)"\)/g)) {
+  assert.ok(
+    linkIds.has(match[1]),
+    `links.js asks for #${match[1]}, which links.html does not define`,
+  );
+}
+assert.ok(
+  linksHtml.includes('../lib/link-rules.js') && linksHtml.includes("links.js"),
+  "the window loads the rules and its own script",
+);
 
 /* ----------------------------------------------------------- theme tokens */
 
@@ -223,6 +273,10 @@ function mockBrowser() {
     cancelled: [],
     erased: [],
     fetches: [],
+    windows: [],
+    tabs: [],
+    sentToTab: [],
+    relayed: [],
     openedOptions: 0,
   };
 
@@ -241,8 +295,19 @@ function mockBrowser() {
       onInstalled: { addListener: add("installed") },
       onStartup: { addListener: add("startup") },
       onMessage: { addListener: add("message") },
+      getURL: (file) => `moz-extension://test/${file}`,
+      sendMessage: async (message) => {
+        calls.relayed.push(message);
+        return { ok: true };
+      },
       openOptionsPage: async () => {
         calls.openedOptions += 1;
+      },
+    },
+    windows: {
+      create: async (options) => {
+        calls.windows.push(options);
+        return { id: 1 };
       },
     },
     downloads: {
@@ -258,6 +323,14 @@ function mockBrowser() {
     tabs: {
       onUpdated: { addListener: add("updated") },
       onRemoved: { addListener: add("removed") },
+      create: async (options) => {
+        calls.tabs.push(options);
+        return { id: 2 };
+      },
+      sendMessage: async (tabId, message) => {
+        calls.sentToTab.push({ tabId, message });
+        return tabAnswer;
+      },
     },
     storage: {
       local: {
@@ -276,7 +349,37 @@ let bridgeMode = "online";
 let pingApp = "b-download-manager";
 let listPayload = { downloads: [], active: 0 };
 let capturePolicy = { capture: true, ask: false, types: [], skipSites: [] };
+let tabAnswer = { ok: true, links: [], page: {}, stats: {} };
+let batchOptions = {
+  folders: [
+    { label: "App default", path: "C:\\Users\\me\\Downloads" },
+    { label: "Last used", path: "C:\\Users\\me\\Downloads\\Films" },
+  ],
+  queues: [
+    { id: "now", label: "Start now" },
+    { id: "main", label: "Main queue" },
+  ],
+  connections: 8,
+  maxItems: 25,
+};
+let batchAnswer = {
+  folder: "C:\\Users\\me\\Downloads",
+  queue: "now",
+  connections: 8,
+  counts: { started: 1, queued: 0, skipped: 0, duplicates: 0, invalid: 0, refused: 0 },
+  items: [
+    {
+      url: "https://example.org/a.zip",
+      name: "a.zip",
+      status: "started",
+      id: 42,
+      dest: "C:\\Users\\me\\Downloads\\a.zip",
+      message: "",
+    },
+  ],
+};
 const lastSend = { body: null };
+const lastBatch = { body: null };
 
 async function fakeFetch(url, options = {}) {
   sandbox.calls.fetches.push({ url, options });
@@ -293,6 +396,15 @@ async function fakeFetch(url, options = {}) {
   } else if (pathName === "/v1/downloads" && options.method === "POST") {
     lastSend.body = JSON.parse(options.body);
     data = { mode: "direct", id: 42, name: "a.bin", dest: "C:\\Downloads\\a.bin" };
+  } else if (pathName === "/v1/batch-options") {
+    data = batchOptions;
+  } else if (pathName === "/v1/downloads/batch" && options.method === "POST") {
+    lastBatch.body = JSON.parse(options.body);
+    data = {
+      ...batchAnswer,
+      queue: lastBatch.body.queue,
+      folder: lastBatch.body.folder || batchAnswer.folder,
+    };
   } else if (pathName.startsWith("/v1/downloads/")) {
     data = { id: 42, action: pathName.split("/").pop(), status: null };
   } else {
@@ -403,6 +515,198 @@ assert.ok(
 store.intercept = false;
 assert.equal((await bdmLoadSettings()).intercept, false, "the saved settings are read back");
 delete store.intercept;
+
+/* ------------------------------------------------------------- link-rules.js */
+
+const {
+  bdmLinkClassify,
+  bdmLinkCategory,
+  bdmLinkExtension,
+  bdmLinkKind,
+  bdmLinkKey,
+  bdmLinkAppCategory,
+  bdmLinkSkipLabel,
+} = backgroundContext;
+
+assert.equal(bdmLinkExtension("https://example.org/a.MP4?x=1"), "mp4");
+assert.equal(bdmLinkExtension("https://example.org/get?id=1", "report.pdf"), "pdf");
+assert.equal(bdmLinkExtension("https://example.org/get?id=1"), "");
+assert.equal(bdmLinkExtension("https://example.org/archive.tar.gz"), "gz");
+assert.equal(bdmLinkExtension("https://example.org/.env"), "");
+assert.equal(
+  bdmLinkExtension("https://example.org/My%20Film%2Emp4"),
+  "mp4",
+  "an encoded dot still names the extension",
+);
+
+assert.equal(bdmLinkCategory("zip"), "Compressed");
+assert.equal(bdmLinkCategory("mp4"), "Video");
+assert.equal(bdmLinkCategory("jpg"), "Images");
+assert.equal(bdmLinkCategory("exe"), "Programs");
+assert.equal(bdmLinkCategory("pdf"), "Documents");
+assert.equal(bdmLinkCategory("opus"), "Other", "a type the app has no rule for is Other");
+assert.equal(bdmLinkAppCategory("Images"), "Other", "the app's tree has no Images category");
+assert.equal(bdmLinkAppCategory("Video"), "Video");
+
+assert.equal(bdmLinkKind("zip"), "file");
+assert.equal(bdmLinkKind(""), "page");
+assert.equal(bdmLinkKind("html"), "page");
+assert.equal(bdmLinkKind("m3u8"), "unsupported", "a manifest is not a file");
+assert.equal(bdmLinkKind("ts"), "unsupported");
+
+const zipLink = bdmLinkClassify({ href: "https://example.org/files/a.zip" }, "https://example.org/");
+assert.equal(zipLink.ok, true);
+assert.equal(zipLink.item.category, "Compressed");
+assert.equal(zipLink.item.badge, "ZIP");
+assert.equal(zipLink.item.name, "a.zip");
+
+const namedLink = bdmLinkClassify(
+  { href: "https://example.org/get?id=7", download: "report.docx" },
+  "https://example.org/",
+);
+assert.equal(namedLink.ok, true, "the download name is what makes an extensionless link a file");
+assert.equal(namedLink.item.extension, "docx");
+assert.equal(namedLink.item.name, "report.docx");
+assert.equal(namedLink.item.kind, "file");
+
+const pageLink = bdmLinkClassify({ href: "https://example.org/about" }, "https://example.org/");
+assert.equal(pageLink.ok, true);
+assert.equal(pageLink.item.kind, "page");
+assert.equal(pageLink.item.badge, "PAGE");
+
+assert.equal(
+  bdmLinkClassify({ href: "https://example.org/files/page.html#top" }, "https://example.org/files/page.html").reason,
+  "self",
+  "a link to this page is not a download",
+);
+assert.equal(
+  bdmLinkClassify({ href: "https://example.org/stream.m3u8" }, "https://example.org/").reason,
+  "stream",
+  "a manifest the engine cannot save is reported, not offered",
+);
+assert.equal(
+  bdmLinkClassify({ href: "mailto:someone@example.org" }, "https://example.org/").reason,
+  "scheme",
+);
+assert.equal(
+  bdmLinkClassify({ href: "javascript:alert(1)" }, "https://example.org/").reason,
+  "scheme",
+);
+assert.equal(bdmLinkClassify({ href: "" }, "https://example.org/").reason, "unusable");
+
+assert.equal(
+  bdmLinkKey("https://example.org/a.zip#again"),
+  bdmLinkKey("https://example.org/a.zip"),
+  "a fragment is not a second file",
+);
+assert.notEqual(
+  bdmLinkKey("https://example.org/a.zip?v=1"),
+  bdmLinkKey("https://example.org/a.zip?v=2"),
+  "a different query may be a different file",
+);
+assert.equal(bdmLinkSkipLabel("stream"), "stream manifests the engine cannot save");
+
+/* ------------------------------------------------------- content/page-links.js */
+
+const scanAnchors = [
+  { href: "https://example.org/files/a.zip" },
+  { href: "https://example.org/files/a.zip#again" },
+  { href: "https://example.org/files/b.pdf" },
+  { href: "https://example.org/files/clip.mp4" },
+  { href: "https://example.org/get?id=7", download: "report.docx" },
+  { href: "https://example.org/stream.m3u8" },
+  { href: "mailto:someone@example.org" },
+  { href: "https://example.org/files/page.html#top" },
+  { href: "https://example.org/about" },
+  { href: "https://example.org/files/photo.JPG" },
+];
+
+const scanMessages = [];
+let scanListener;
+const scanContext = vm.createContext({
+  URL,
+  console,
+  performance,
+  setTimeout,
+  clearTimeout,
+  location: {
+    href: "https://example.org/files/page.html",
+    hostname: "example.org",
+  },
+  document: {
+    title: "Files",
+    links: scanAnchors,
+  },
+  browser: {
+    runtime: {
+      sendMessage: async (message) => {
+        scanMessages.push(message);
+        return { ok: true };
+      },
+      onMessage: {
+        addListener: (fn) => {
+          scanListener = fn;
+        },
+      },
+    },
+  },
+});
+vm.runInContext(read("lib/link-rules.js"), scanContext, { filename: "link-rules.js" });
+vm.runInContext(read("content/page-links.js"), scanContext, { filename: "page-links.js" });
+
+const scan = await scanContext.bdmScanPageLinks("scan-1", () => {});
+assert.equal(scan.ok, true);
+assert.equal(scan.stats.scanned, scanAnchors.length);
+assert.equal(scan.stats.files, 5, "five files are offered");
+assert.equal(scan.stats.pages, 1, "the extensionless link is a page");
+assert.equal(scan.stats.duplicates, 1, "the same address with a fragment is listed once");
+assert.equal(scan.stats.skipped.stream, 1);
+assert.equal(scan.stats.skipped.scheme, 1);
+assert.equal(scan.stats.skipped.self, 1);
+assert.equal(scan.stats.truncated, false);
+assert.equal(scan.page.title, "Files");
+assert.equal(scan.page.host, "example.org");
+assert.equal(
+  scan.links.filter((item) => item.url.endsWith("a.zip")).length,
+  1,
+  "a duplicate address is kept once",
+);
+const photo = scan.links.find((item) => item.name === "photo.JPG");
+assert.equal(photo.category, "Images");
+assert.equal(photo.badge, "JPG");
+assert.ok(photo.key, "a link carries the key the window selects it by");
+assert.ok(
+  !scan.links.some((item) => item.url.startsWith("https://example.org/stream")),
+  "a stream manifest is never offered",
+);
+
+// A page with thousands of links is capped, not copied whole. The anchor cap
+// stops the walk; the result cap stops it earlier when every address is new.
+scanContext.document.links = Array.from({ length: 9000 }, (_value, index) => ({
+  href: `https://example.org/files/repeat${index % 2}.zip`,
+}));
+const repeated = await scanContext.bdmScanPageLinks("scan-repeat", () => {});
+assert.equal(repeated.stats.total, 9000);
+assert.equal(repeated.stats.scanned, 6000, "the scan stops at its anchor cap");
+assert.equal(repeated.links.length, 2, "two addresses are kept however often they repeat");
+assert.equal(repeated.stats.truncated, true, "a capped scan says it was capped");
+
+scanContext.document.links = Array.from({ length: 9000 }, (_value, index) => ({
+  href: `https://example.org/files/f${index}.zip`,
+}));
+const bigScan = await scanContext.bdmScanPageLinks("scan-big", () => {});
+assert.equal(bigScan.links.length, 400, "only the first 400 addresses are kept");
+assert.equal(bigScan.stats.scanned, 400, "the scan stops once the window is full");
+assert.equal(bigScan.stats.truncated, true);
+scanContext.document.links = scanAnchors;
+
+const scanAnswer = await scanListener({ type: "bdm:links-scan", scanId: "scan-2" });
+assert.equal(scanAnswer.ok, true);
+assert.ok(
+  scanMessages.some((message) => message.type === "bdm:links-progress"),
+  "the reader reports its progress to the window",
+);
+assert.equal(scanListener({ type: "bdm:media-list" }), undefined, "other messages are left alone");
 
 /* ---------------------------------------------------------------- media.js */
 
@@ -561,6 +865,8 @@ const {
   bdmBridgeControl,
   bdmBridgeFocus,
   bdmBridgeRequest,
+  bdmBridgeBatchOptions,
+  bdmBridgeBatch,
 } = requestContext;
 
 bridgeMode = "online";
@@ -587,6 +893,33 @@ assert.equal(lastSend.body.referer, "");
 
 await bdmBridgeSend({ url: "https://example.org/a.bin", mode: "ask" });
 assert.equal(lastSend.body.mode, "ask");
+
+const options = await bdmBridgeBatchOptions();
+assert.equal(options.folders[0].path, "C:\\Users\\me\\Downloads");
+assert.equal(options.queues[1].id, "main");
+assert.equal(options.maxItems, 25);
+
+batchAnswer = {
+  ...batchAnswer,
+  counts: { started: 0, queued: 1, skipped: 0, duplicates: 0, invalid: 0, refused: 0 },
+};
+const batch = await bdmBridgeBatch({
+  items: [{ url: "https://example.org/a.zip", name: "a.zip", category: "Compressed" }],
+  folder: "C:\\Users\\me\\Downloads",
+  connections: 4,
+  queue: "main",
+  referer: "https://example.org/page",
+});
+assert.equal(batch.queue, "main");
+assert.equal(lastBatch.body.folder, "C:\\Users\\me\\Downloads");
+assert.equal(lastBatch.body.connections, 4);
+assert.equal(lastBatch.body.items[0].category, "Compressed");
+assert.equal(lastBatch.body.referer, "https://example.org/page");
+
+// An empty connection count means the app's own default, not one.
+await bdmBridgeBatch({ items: [], connections: 0, folder: "" });
+assert.equal(lastBatch.body.connections, null, "zero connections asks the app for its default");
+assert.equal(lastBatch.body.queue, "now", "an unknown queue falls back to starting now");
 
 await bdmBridgeControl(42, "pause");
 assert.equal(
@@ -715,6 +1048,121 @@ assert.equal(offlineStatus.ok, false);
 assert.equal(offlineStatus.error.kind, "offline");
 bridgeMode = "online";
 
+/* --------------------------------------------------- the link window */
+
+sandbox.calls.windows.length = 0;
+const openWindow = await onMessage({ type: "bdm:links-open", tabId: 5 }, {});
+assert.equal(openWindow.ok, true);
+assert.equal(sandbox.calls.windows.length, 1, "the window opens once");
+assert.match(
+  sandbox.calls.windows[0].url,
+  /links\/links\.html\?tab=5$/,
+  "the window is told which tab to read",
+);
+assert.equal(sandbox.calls.windows[0].type, "popup", "a compact window, not a tab");
+
+const noTabWindow = await onMessage({ type: "bdm:links-open" }, {});
+assert.equal(noTabWindow.ok, false, "a window without a tab is refused");
+
+// A browser that will not open a popup window gets a tab instead.
+const windowsCreate = sandbox.browser.windows.create;
+sandbox.browser.windows.create = async () => {
+  throw new Error("no popups");
+};
+sandbox.calls.tabs.length = 0;
+const tabWindow = await onMessage({ type: "bdm:links-open", tabId: 6 }, {});
+assert.equal(tabWindow.ok, true, "the window still opens as a tab");
+assert.match(sandbox.calls.tabs[0].url, /\?tab=6$/);
+sandbox.browser.windows.create = windowsCreate;
+
+// The scan is asked of the page itself, through its content script.
+tabAnswer = {
+  ok: true,
+  links: [{ url: "https://example.org/a.zip", key: "https://example.org/a.zip" }],
+  page: { url: "https://example.org/", host: "example.org", title: "Home" },
+  stats: { files: 1, pages: 0 },
+};
+sandbox.calls.sentToTab.length = 0;
+const scanThroughBackground = await onMessage(
+  { type: "bdm:links-scan", tabId: 5, scanId: "scan-9" },
+  {},
+);
+assert.equal(scanThroughBackground.ok, true);
+assert.equal(scanThroughBackground.links.length, 1);
+assert.equal(sandbox.calls.sentToTab[0].tabId, 5);
+assert.equal(sandbox.calls.sentToTab[0].message.type, "bdm:links-scan");
+assert.equal(sandbox.calls.sentToTab[0].message.scanId, "scan-9");
+
+const tabSend = sandbox.browser.tabs.sendMessage;
+sandbox.browser.tabs.sendMessage = async () => {
+  throw new Error("no receiver");
+};
+const noPage = await onMessage({ type: "bdm:links-scan", tabId: 7, scanId: "scan-9" }, {});
+assert.equal(noPage.ok, false);
+assert.equal(noPage.error.kind, "unavailable", "a page Firefox will not read says so");
+sandbox.browser.tabs.sendMessage = tabSend;
+
+const badScan = await onMessage({ type: "bdm:links-scan", scanId: "scan-9" }, {});
+assert.equal(badScan.ok, false);
+
+// The progress of a running scan is passed on to the window.
+sandbox.calls.relayed.length = 0;
+const progressed = await onMessage(
+  { type: "bdm:links-progress", scanId: "scan-9", scanned: 30, total: 90, found: 4 },
+  {},
+);
+assert.equal(progressed.ok, true);
+assert.equal(sandbox.calls.relayed[0].type, "bdm:links-scan-progress");
+assert.equal(sandbox.calls.relayed[0].scanId, "scan-9");
+assert.equal(sandbox.calls.relayed[0].found, 4);
+
+// The batch: the folders the app offers, then the ticked links.
+const batchOptionsAnswer = await onMessage({ type: "bdm:batch-options" }, {});
+assert.equal(batchOptionsAnswer.ok, true);
+assert.equal(batchOptionsAnswer.folders.length, 2);
+assert.equal(batchOptionsAnswer.queues[1].id, "main");
+
+batchAnswer = {
+  ...batchAnswer,
+  counts: { started: 1, queued: 0, skipped: 0, duplicates: 0, invalid: 0, refused: 0 },
+};
+sandbox.calls.fetches.length = 0;
+const batchThroughBackground = await onMessage(
+  {
+    type: "bdm:batch",
+    payload: {
+      items: [
+        { url: "https://example.org/a.zip", name: "a.zip", category: "Compressed" },
+        { url: "javascript:alert(1)", name: "bad" },
+      ],
+      folder: "C:\\Users\\me\\Downloads",
+      connections: 6,
+      queue: "main",
+      referer: "https://example.org/page",
+    },
+  },
+  {},
+);
+assert.equal(batchThroughBackground.ok, true);
+assert.equal(lastBatch.body.items.length, 1, "a non-download address never reaches the app");
+assert.equal(lastBatch.body.items[0].category, "Compressed");
+assert.equal(lastBatch.body.queue, "main");
+assert.equal(lastBatch.body.connections, 6);
+assert.equal(batchThroughBackground.result.counts.started, 1);
+
+const emptyBatch = await onMessage(
+  { type: "bdm:batch", payload: { items: [{ url: "javascript:alert(1)" }] } },
+  {},
+);
+assert.equal(emptyBatch.ok, false, "a batch of nothing valid is refused");
+
+bridgeMode = "offline";
+const offlineBatch = await onMessage({ type: "bdm:batch-options" }, {});
+assert.equal(offlineBatch.ok, false);
+assert.equal(offlineBatch.error.kind, "offline");
+bridgeMode = "online";
+tabAnswer = { ok: true, links: [], page: {}, stats: {} };
+
 const countAnswer = await onMessage({ type: "bdm:media-count", count: 3 }, { tab: { id: 9 } });
 assert.equal(countAnswer.ok, true);
 assert.ok(
@@ -820,6 +1268,7 @@ await install();
 await new Promise((resolve) => setImmediate(resolve));
 assert.ok(sandbox.calls.menus.length >= 4, "the menu holds the hand-over and the app actions");
 assert.ok(sandbox.calls.menus.some((item) => item.id === "bdm-download"));
+assert.ok(sandbox.calls.menus.some((item) => item.id === "bdm-links"));
 assert.ok(sandbox.calls.menus.some((item) => item.id === "bdm-open"));
 assert.ok(sandbox.calls.menus.some((item) => item.id === "bdm-settings"));
 
@@ -848,6 +1297,12 @@ capturePolicy = { ...capturePolicy, skipSites: [] };
 sandbox.calls.openedOptions = 0;
 await onMenu({ menuItemId: "bdm-settings", tab: { id: 3 } });
 assert.equal(sandbox.calls.openedOptions, 1);
+
+// The page menu opens the link window for that tab.
+sandbox.calls.windows.length = 0;
+await onMenu({ menuItemId: "bdm-links", tab: { id: 3 } });
+assert.equal(sandbox.calls.windows.length, 1, "the page menu opens the link window");
+assert.match(sandbox.calls.windows[0].url, /\?tab=3$/);
 
 /* ------------------------------------------------------- chrome build */
 
@@ -984,5 +1439,9 @@ chromeOnline = true;
 // The overlay needs a page rather than a sandbox: scripts/check-overlay.mjs
 // runs the content scripts in a fake one and exercises the button there.
 await import("./check-overlay.mjs");
+
+// The link window is a page of its own: scripts/check-links.mjs runs it
+// against a small document and exercises the list, the filters and a send.
+await import("./check-links.mjs");
 
 console.log("extension: all checks pass");

@@ -12,7 +12,8 @@
 //! not name this application. The Rust side of the contract is tested in this
 //! module.
 
-mod dest;
+pub(crate) mod batch;
+pub(crate) mod dest;
 mod http;
 
 use std::path::{Path, PathBuf};
@@ -176,6 +177,8 @@ async fn route(app: &AppHandle, request: &Request) -> (u16, Value) {
         ("GET", "/v1/capture") => (200, ok(capture_policy(app))),
         ("GET", "/v1/downloads") => (200, ok(downloads(app))),
         ("POST", "/v1/downloads") => add_download(app, &request.body).await,
+        ("GET", "/v1/batch-options") => (200, ok(batch::options(app, &app.state::<AppState>()))),
+        ("POST", "/v1/downloads/batch") => batch::add(app, &app.state::<AppState>(), &request.body),
         ("POST", "/v1/focus") => {
             crate::show_window(app);
             (200, ok(json!({ "focused": true })))
