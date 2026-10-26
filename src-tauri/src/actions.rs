@@ -129,7 +129,10 @@ pub fn start(
         state.next_id(),
         url,
         dest.clone(),
-        options.connections.unwrap_or(DEFAULT_CONNECTIONS).clamp(1, 32),
+        options
+            .connections
+            .unwrap_or(DEFAULT_CONNECTIONS)
+            .clamp(1, 32),
         state.limits().proxy().as_deref(),
         options.referer.as_deref(),
     )
@@ -167,18 +170,11 @@ pub fn start(
 /// `restart` forgets the bytes of the attempt that could not continue, which
 /// is the safe answer when the server does not support ranges. Without it the
 /// engine picks up from the parts and the manifest it still has.
-pub fn retry(
-    app: &AppHandle,
-    state: &AppState,
-    id: u64,
-    restart: bool,
-) -> Result<(), String> {
+pub fn retry(app: &AppHandle, state: &AppState, id: u64, restart: bool) -> Result<(), String> {
     let download = state.get(id).ok_or("unknown download")?;
     match download.status() {
         Status::Failed | Status::Cancelled | Status::Paused => {}
-        Status::Running | Status::Queued => {
-            return Err("the download is still running".to_string())
-        }
+        Status::Running | Status::Queued => return Err("the download is still running".to_string()),
         Status::Completed => return Err("this download has already finished".to_string()),
     }
     if restart {
@@ -200,9 +196,13 @@ pub fn redownload(
     id: u64,
     choice: Choice,
 ) -> Result<Started, Refusal> {
-    let old = state
-        .get(id)
-        .ok_or_else(|| refused("invalid", "unknown download".to_string(), std::path::Path::new("")))?;
+    let old = state.get(id).ok_or_else(|| {
+        refused(
+            "invalid",
+            "unknown download".to_string(),
+            std::path::Path::new(""),
+        )
+    })?;
     if old.is_running() || matches!(old.status(), Status::Running | Status::Queued) {
         // Not a destination question: the row itself is busy, which no answer
         // in the File Exists window can settle.
@@ -419,11 +419,7 @@ fn moved_download(
     moved.set_speed_limit(previous.speed_limit);
     moved.set_allow_replace(replace);
 
-    let old_segments = old
-        .segments
-        .lock()
-        .expect("segments lock poisoned")
-        .clone();
+    let old_segments = old.segments.lock().expect("segments lock poisoned").clone();
     let mut new_segments = Vec::with_capacity(old_segments.len());
     let mut moved_files: Vec<(PathBuf, PathBuf)> = Vec::new();
     for mut segment in old_segments {
@@ -476,12 +472,7 @@ fn moved_download(
 /// The part files and the manifest travel with it, so a server that supports
 /// ranges continues from the bytes already received. The new name is chosen
 /// to be free: a move never replaces a file in the target folder.
-pub fn relocate(
-    app: &AppHandle,
-    state: &AppState,
-    id: u64,
-    folder: PathBuf,
-) -> Result<(), String> {
+pub fn relocate(app: &AppHandle, state: &AppState, id: u64, folder: PathBuf) -> Result<(), String> {
     let old = state.get(id).ok_or("unknown download")?;
     if old.is_running() || matches!(old.status(), Status::Running | Status::Queued) {
         return Err("stop the download before moving it".to_string());
@@ -540,9 +531,7 @@ pub fn queue(app: &AppHandle, state: &AppState, id: u64) -> Result<(), String> {
 fn queue_row(state: &AppState, id: u64) -> Result<(), String> {
     let download = state.get(id).ok_or("unknown download")?;
     match download.status() {
-        Status::Completed => {
-            return Err("a finished download cannot be queued".to_string())
-        }
+        Status::Completed => return Err("a finished download cannot be queued".to_string()),
         // The state the user asked for is the state it is in.
         Status::Queued => return Ok(()),
         _ => {}
@@ -605,10 +594,7 @@ fn delete_file_of(state: &AppState, id: u64) -> Result<(), String> {
         _ => return Err("only a finished file can be deleted".to_string()),
     }
     if !download.dest.is_file() {
-        return Err(format!(
-            "{} is not there any more",
-            download.dest.display()
-        ));
+        return Err(format!("{} is not there any more", download.dest.display()));
     }
     std::fs::remove_file(&download.dest)
         .map_err(|error| format!("the file could not be deleted: {error}"))?;
@@ -727,10 +713,8 @@ mod tests {
     use std::sync::atomic::Ordering;
 
     fn temp_dir(tag: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "my-idm-clone-actions-{tag}-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("my-idm-clone-actions-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("temp dir");
         dir
@@ -786,8 +770,8 @@ mod tests {
         download.set_status(Status::Completed);
         state.insert(download);
 
-        let written =
-            rewrite_destination(&state, 1, &dest, Choice::Ask).expect("its own file is no conflict");
+        let written = rewrite_destination(&state, 1, &dest, Choice::Ask)
+            .expect("its own file is no conflict");
         assert_eq!(written, dest);
         assert_eq!(std::fs::read(&dest).expect("the file"), b"done");
         assert_eq!(state.get(1).expect("the row").dest, dest);
@@ -810,11 +794,17 @@ mod tests {
 
         let refusal = rewrite_destination(&state, 1, &taken, Choice::Ask).expect_err("a question");
         assert_eq!(refusal.kind, "exists");
-        assert_eq!(std::fs::read(&taken).expect("the file that was there"), b"old");
+        assert_eq!(
+            std::fs::read(&taken).expect("the file that was there"),
+            b"old"
+        );
 
         let moved = rewrite_destination(&state, 1, &taken, Choice::Rename).expect("a free name");
         assert_eq!(moved, dir.join("taken").join("film (2).mp4"));
-        assert_eq!(std::fs::read(&taken).expect("the file that was there"), b"old");
+        assert_eq!(
+            std::fs::read(&taken).expect("the file that was there"),
+            b"old"
+        );
         assert_eq!(std::fs::read(&moved).expect("the moved file"), b"new");
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -936,7 +926,10 @@ mod tests {
         state.insert(download);
 
         let error = delete_file_of(&state, 1).expect_err("a running row");
-        assert!(error.contains("stop the download"), "the error was: {error}");
+        assert!(
+            error.contains("stop the download"),
+            "the error was: {error}"
+        );
         assert!(dest.exists(), "the file is left alone");
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -958,7 +951,10 @@ mod tests {
         assert_eq!(state.get(1).expect("the row").status(), Status::Paused);
 
         state.get(1).expect("the row").set_status(Status::Completed);
-        assert!(queue_row(&state, 1).is_err(), "a finished row has nothing to queue");
+        assert!(
+            queue_row(&state, 1).is_err(),
+            "a finished row has nothing to queue"
+        );
         assert!(dequeue_row(&state, 1).is_err(), "it is not in the queue");
         let _ = std::fs::remove_dir_all(&dir);
     }

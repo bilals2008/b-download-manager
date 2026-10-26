@@ -131,8 +131,9 @@ pub fn resolve(
     }
 
     let busy = state.destinations_except(except);
-    dest::validate(dest)
-        .map_err(|message| Refusal::new("invalid", message, dest, &unique_destination(dest, &busy)))?;
+    dest::validate(dest).map_err(|message| {
+        Refusal::new("invalid", message, dest, &unique_destination(dest, &busy))
+    })?;
 
     let active = busy.iter().any(|active| same_path(active, dest));
     let exists = dest.exists();
@@ -191,7 +192,9 @@ pub fn unique_destination(dest: &Path, active: &[PathBuf]) -> PathBuf {
 
     for number in 2..=9999 {
         let suffix = format!(" ({number})");
-        let room = MAX_NAME.saturating_sub(suffix.chars().count() + extension.as_ref().map_or(1, |e| e.chars().count() + 1));
+        let room = MAX_NAME.saturating_sub(
+            suffix.chars().count() + extension.as_ref().map_or(1, |e| e.chars().count() + 1),
+        );
         let short: String = stem.chars().take(room.max(1)).collect();
         let name = match &extension {
             Some(extension) => format!("{short}{suffix}.{extension}"),
@@ -305,7 +308,10 @@ mod tests {
         }
 
         match resolve(&state, &dest, Choice::Replace, None).expect("replace") {
-            Resolved::Start { dest: kept, replace } => {
+            Resolved::Start {
+                dest: kept,
+                replace,
+            } => {
                 assert_eq!(kept, dest, "replace keeps the name the user saw");
                 assert!(replace);
             }

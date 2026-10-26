@@ -430,8 +430,7 @@ impl Download {
 
     /// Record the note alone, leaving the category as it is.
     pub fn set_description(&self, description: Option<String>) {
-        *self.description.lock().expect("description lock poisoned") =
-            clean_meta(description, 500);
+        *self.description.lock().expect("description lock poisoned") = clean_meta(description, 500);
     }
 
     /// The bandwidth cap of this download, in bytes per second. Zero means no

@@ -65,7 +65,9 @@ pub fn validate(dest: &Path) -> Result<(), String> {
         .ok_or("the destination needs a file name")?;
 
     if name.chars().count() > MAX_NAME {
-        return Err(format!("the file name is longer than {MAX_NAME} characters"));
+        return Err(format!(
+            "the file name is longer than {MAX_NAME} characters"
+        ));
     }
     if name == "." || name == ".." {
         return Err("that is not a file name".to_string());
@@ -134,10 +136,8 @@ mod tests {
     use super::*;
 
     fn temp_dir(tag: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "my-idm-clone-dest-{tag}-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("my-idm-clone-dest-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("temp dir");
         dir
@@ -215,8 +215,8 @@ mod tests {
         let dir = temp_dir("file-in-path");
         let file = dir.join("notes.txt");
         std::fs::write(&file, b"x").expect("write");
-        let error = validate(&file.join("sub").join("film.mp4"))
-            .expect_err("a file cannot be a folder");
+        let error =
+            validate(&file.join("sub").join("film.mp4")).expect_err("a file cannot be a folder");
         assert!(error.contains("not a folder"), "the error was: {error}");
         let _ = std::fs::remove_dir_all(&dir);
     }

@@ -1455,7 +1455,15 @@ fn the_category_can_change_without_touching_the_note() {
     assert_eq!(info.description.as_deref(), Some("keep this note"));
 
     download.set_category(Some("x".repeat(60)));
-    assert_eq!(download.info().category.expect("a category").chars().count(), 40);
+    assert_eq!(
+        download
+            .info()
+            .category
+            .expect("a category")
+            .chars()
+            .count(),
+        40
+    );
 
     let _ = std::fs::remove_dir_all(&dir);
 }

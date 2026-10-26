@@ -93,7 +93,10 @@ mod tests {
     #[test]
     fn a_note_or_another_scheme_is_not_a_link() {
         assert_eq!(captured_url("see https://example.org/film.mp4"), None);
-        assert_eq!(captured_url("https://example.org/a\nhttps://example.org/b"), None);
+        assert_eq!(
+            captured_url("https://example.org/a\nhttps://example.org/b"),
+            None
+        );
         assert_eq!(captured_url("javascript:alert(1)"), None);
         assert_eq!(captured_url("file:///C:/Windows/notepad.exe"), None);
         assert_eq!(captured_url(""), None);
