@@ -16,13 +16,20 @@ import {
 
 import { DOWNLOAD_COLUMNS } from "@/components/workspace/download-columns";
 import { DownloadContextMenu } from "@/components/workspace/download-context-menu";
+import { DeleteFileDialog } from "@/components/workspace/delete-file-dialog";
 import { DownloadFailedDialog } from "@/components/workspace/download-failed-dialog";
 import { DownloadPropertiesDialog } from "@/components/workspace/download-properties-dialog";
 import { DownloadRow } from "@/components/workspace/download-row";
 import { FindBar } from "@/components/workspace/find-bar";
 import { SelectionCheckbox } from "@/components/workspace/selection-checkbox";
+import { StatusFilterControl } from "@/components/workspace/status-filter";
 import { useColumnWidths } from "@/components/workspace/use-column-widths";
-import { splitPath, type Download, type SortKey } from "@/lib/downloads";
+import {
+  STATUS_FILTER_LABELS,
+  splitPath,
+  type Download,
+  type SortKey,
+} from "@/lib/downloads";
 import { describeError } from "@/lib/errors";
 import {
   chooseFolder,
@@ -55,6 +62,8 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
     sortBy,
     filter,
     setFilter,
+    statusFilter,
+    setStatusFilter,
     loading,
     error,
     dismissError,
@@ -81,6 +90,10 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
   const [propertiesId, setPropertiesId] = useState<number | null>(null);
   const properties =
     downloads.find((download) => download.id === propertiesId) ?? null;
+  // The finished row whose file the user asked to delete from the disk.
+  const [deleteFileId, setDeleteFileId] = useState<number | null>(null);
+  const deleteTarget =
+    downloads.find((download) => download.id === deleteFileId) ?? null;
   // The row whose failure window is open, and the state of the last recovery
   // command it sent.
   const [failureId, setFailureId] = useState<number | null>(null);
@@ -212,6 +225,10 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
         : filter === "finished"
           ? "Finished"
           : filter;
+  const shownLabel =
+    statusFilter === "all"
+      ? filterLabel
+      : `${filterLabel} · ${STATUS_FILTER_LABELS[statusFilter]}`;
 
   const picked = visible.filter((item) => selected.includes(item.id)).length;
   const allSelected = visible.length > 0 && picked === visible.length;
@@ -255,6 +272,10 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
           }}
         />
       ) : null}
+
+      <div className="flex shrink-0 items-center justify-end border-b border-chrome-line px-3 py-1.5">
+        <StatusFilterControl />
+      </div>
 
       <div
         ref={viewportRef}
@@ -441,7 +462,7 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
                     <h2 className="mt-3 text-sm font-medium text-chrome-menu-text">
                       {downloads.length === 0
                         ? "No downloads yet"
-                        : `Nothing in ${filterLabel}`}
+                        : `Nothing matches ${shownLabel}`}
                     </h2>
                     <p className="mt-1 text-xs text-chrome-muted">
                       {downloads.length === 0
@@ -457,10 +478,13 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
                         <PlusGlyph className="size-3.5" />
                         Add download
                       </button>
-                      {filter !== "all" ? (
+                      {filter !== "all" || statusFilter !== "all" ? (
                         <button
                           type="button"
-                          onClick={() => setFilter("all")}
+                          onClick={() => {
+                            setFilter("all");
+                            setStatusFilter("all");
+                          }}
                           className="rounded-chrome bg-chrome-canvas px-3 py-1.5 text-xs text-chrome-menu-text hover:bg-chrome-menu-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
                         >
                           Show all downloads
@@ -499,6 +523,7 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
           at={menu.at}
           onShowProperties={(item) => setPropertiesId(item.id)}
           onShowFailure={openFailure}
+          onDeleteFile={(item) => setDeleteFileId(item.id)}
           onClose={closeMenu}
         />
       ) : null}
@@ -517,10 +542,23 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
         />
       ) : null}
 
-      <DownloadPropertiesDialog
-        item={properties}
-        onClose={() => setPropertiesId(null)}
-      />
+      {/* Keyed by row, so opening another download starts from its own values
+          instead of the drafts the last window left behind. */}
+      {properties ? (
+        <DownloadPropertiesDialog
+          key={properties.id}
+          item={properties}
+          onClose={() => setPropertiesId(null)}
+        />
+      ) : null}
+
+      {deleteTarget ? (
+        <DeleteFileDialog
+          key={deleteTarget.id}
+          item={deleteTarget}
+          onClose={() => setDeleteFileId(null)}
+        />
+      ) : null}
     </section>
   );
 }
