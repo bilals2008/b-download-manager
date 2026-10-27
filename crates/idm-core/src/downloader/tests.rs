@@ -1041,17 +1041,17 @@ async fn a_server_that_sends_the_wrong_bytes_goes_on_with_one_connection() {
 /// made against a server the reader chooses:
 ///
 /// ```text
-/// IDM_BENCH_URL=https://example.com/big.bin cargo test bench_connections -- --ignored --nocapture
+/// BDM_BENCH_URL=https://example.com/big.bin cargo test bench_connections -- --ignored --nocapture
 /// ```
 ///
-/// The split rule of IDM was not found in the binary (see `ANALYSIS.md`,
-/// section 10.4), so the number of connections is a question for a
-/// measurement.
+/// The split rule of the reference download manager was not found in the
+/// binary (see `ANALYSIS.md`, section 10.4), so the number of connections is
+/// a question for a measurement.
 #[tokio::test]
 #[ignore]
 async fn bench_connections() {
-    let Ok(url) = std::env::var("IDM_BENCH_URL") else {
-        eprintln!("set IDM_BENCH_URL to the file to measure");
+    let Ok(url) = std::env::var("BDM_BENCH_URL") else {
+        eprintln!("set BDM_BENCH_URL to the file to measure");
         return;
     };
     let dir = temp_dir("bench");

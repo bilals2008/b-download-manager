@@ -1,23 +1,24 @@
 //! The check that the bytes of a chunk belong to the chunk.
 //!
-//! IDM keeps the head of the file and compares the head of every chunk with
-//! it. A chunk that starts with the head of the file is a chunk whose range
-//! was not honoured: the server sent the whole file instead of the range
-//! that was asked for. IDM rolls such a chunk back — the bytes it had are
-//! given back and the chunk is fetched again.
+//! The reference download manager keeps the head of the file and compares the
+//! head of every chunk with it. A chunk that starts with the head of the file
+//! is a chunk whose range was not honoured: the server sent the whole file
+//! instead of the range that was asked for. Such a chunk is rolled back — the
+//! bytes it had are given back and the chunk is fetched again.
 //!
 //! Evidence: `FUN_00566f10`, the strings "Strart data for this chunk is
 //! matched with start of the file!!!", "There is real matching" and "no
 //! match, step 4". See `ANALYSIS.md`, section 10.2.
 
-/// How many bytes of the head of the file IDM keeps: `0x80c`.
+/// How many bytes of the head of the file the reference manager keeps:
+/// `0x80c`.
 pub const HEAD_BUFFER: usize = 0x80c;
 
-/// How many bytes IDM counts as a clean match: `0x200`.
+/// How many bytes the reference manager counts as a clean match: `0x200`.
 ///
-/// The comparison in IDM (`FUN_00566730`) runs over the head of the file and
-/// stops at `0x200` bytes; a match that is longer is counted as a mismatch
-/// of its own.
+/// The comparison in the reference binary (`FUN_00566730`) runs over the head
+/// of the file and stops at `0x200` bytes; a match that is longer is counted
+/// as a mismatch of its own.
 pub const HEAD_BYTES: usize = 0x200;
 
 /// What the check found.

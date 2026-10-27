@@ -1,11 +1,13 @@
-//! The download engine — a port of the mechanics observed in `IDMan.exe`.
+//! The download engine — a port of the mechanics observed in the reference
+//! binary.
 //!
 //! What the reverse engineering established (see `ANALYSIS.md` for the
 //! evidence):
 //!
-//! * IDM speaks HTTP over **raw WinSock sockets** (`WS2_32.DLL::socket`,
-//!   `recv`, `send`, `ioctlsocket`), not WinHTTP/WinInet, and it terminates TLS
-//!   itself with OpenSSL. Every request carries a `Range: bytes=<start>-<end>`
+//! * The reference download manager speaks HTTP over **raw WinSock sockets**
+//!   (`WS2_32.DLL::socket`, `recv`, `send`, `ioctlsocket`), not
+//!   WinHTTP/WinInet, and it terminates TLS itself with OpenSSL. Every request
+//!   carries a `Range: bytes=<start>-<end>`
 //!   header and `Accept-Encoding: identity` so that byte offsets stay aligned
 //!   with file offsets.
 //! * The file is split into **chunks** (`ChunksList` / `ChunksListItem`), each
@@ -39,19 +41,21 @@ use crate::segmenter::{self, Segment, SegmentStatus, MIN_SPLIT, UNKNOWN_END};
 use crate::transfer::{FailureKind, Probe, Source, TransferError, RANGE_IGNORED_MESSAGE};
 use crate::verify;
 
-/// IDM's default `MaxConnectionsNumber`, read from
-/// `HKCU\Software\DownloadManager\MCN`. The observed default was 8.
+/// Default `MaxConnectionsNumber` of the reference download manager, read
+/// from `HKCU\Software\DownloadManager\MCN`. The observed default was 8.
 pub const DEFAULT_CONNECTIONS: u32 = 8;
 
-/// IDM reads a single HTTP header line into a 0x200 (512 byte) buffer.
+/// The reference binary reads a single HTTP header line into a 0x200
+/// (512 byte) buffer.
 #[allow(dead_code)]
 pub const HEADER_LINE_BUF: usize = 0x200;
 
-/// IDM's stack copy buffer used when pumping a socket into a file: 0x2da0.
+/// Stack copy buffer of the reference binary used when pumping a socket into
+/// a file: 0x2da0.
 pub const COPY_BUF: usize = 0x2da0;
 
-/// IDM caps the in-memory chunk buffer at 0x600000 (6 MiB) and switches to
-/// memory mapped I/O for larger chunks.
+/// The reference binary caps the in-memory chunk buffer at 0x600000 (6 MiB)
+/// and switches to memory mapped I/O for larger chunks.
 #[allow(dead_code)]
 pub const CHUNK_MEM_LIMIT: u64 = 0x600000;
 
@@ -179,7 +183,8 @@ impl Control {
     }
 }
 
-/// On-disk resume state. IDM stores the equivalent in the registry under
+/// On-disk resume state. The reference download manager stores the
+/// equivalent in the registry under
 /// `HKCU\Software\DownloadManager\<id>\ChList`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Manifest {
@@ -195,11 +200,11 @@ struct Manifest {
 impl Manifest {
     /// Whether the chunk list of this manifest can be trusted.
     ///
-    /// IDM walks its chunk list when it rebuilds it from the registry and
-    /// compares the start of every chunk with the position it has reached. A
-    /// chunk that starts before that position is a "Chunk order violation
-    /// error", and IDM rolls the chunk file back to the size the list says
-    /// it should have.
+    /// The reference binary walks its chunk list when it rebuilds it from the
+    /// registry and compares the start of every chunk with the position it has
+    /// reached. A chunk that starts before that position reports a "Chunk order
+    /// violation error", and the binary rolls the chunk file back to the size
+    /// the list says it should have.
     ///
     /// The same damage reaches a manifest: a crash in the middle of a write
     /// can leave ranges that overlap or that are out of order. A broken list
@@ -250,8 +255,8 @@ pub struct Download {
     /// winding down waits here instead of writing over its range plan.
     driver: AsyncMutex<()>,
     /// The head of the file, kept once it is known. The head of every other
-    /// range is compared with it, the way IDM compares the start of a chunk
-    /// with the start of the file.
+    /// range is compared with it, the way the reference binary compares the
+    /// start of a chunk with the start of the file.
     head: Mutex<Vec<u8>>,
     /// Set when the server was seen to ignore a range request. The download
     /// does not open any more connections after that.
@@ -831,8 +836,8 @@ fn restore(download: &Arc<Download>, probe: &Probe, max_connections: u32) -> Vec
         if can_resume(&manifest, probe) {
             let mut segments = manifest.segments;
             // A crash can leave extra bytes behind. Cut the part file back
-            // to the recorded length, the way IDM truncates the file when
-            // it resumes ("Trucate at %I64d").
+            // to the recorded length, the way the reference binary truncates
+            // the file when it resumes ("Trucate at %I64d").
             for segment in &mut segments {
                 if let Ok(file) = OpenOptions::new().write(true).open(&segment.part) {
                     let _ = file.set_len(segment.downloaded);
@@ -933,9 +938,9 @@ pub fn save_manifest(download: &Download) {
 
 /// Hand the tail of the slowest segment to a new connection.
 ///
-/// This is IDM's "add an optional connection" behaviour: the running
-/// connection keeps the bytes it already wrote, and a fresh connection
-/// continues from the point it reached.
+/// This is the "add an optional connection" behaviour of the reference
+/// download manager: the running connection keeps the bytes it already wrote,
+/// and a fresh connection continues from the point it reached.
 ///
 /// The segment that is chosen is the one that is furthest behind in
 /// *progress*, not the one with the most bytes left. Splitting by progress
@@ -1220,10 +1225,11 @@ const ROLLED_BACK_MESSAGE: &str = "the range was rolled back";
 
 /// Give up on the other connections and fetch the file with one.
 ///
-/// IDM does this when the data of several connections does not match the data
-/// that was downloaded earlier: "IDM started to download the file using one
-/// connection because of data corruption when newly received data in several
-/// connections did not match the same data downloaded earlier."
+/// The reference download manager does this when the data of several
+/// connections does not match the data that was downloaded earlier. Its own
+/// message says that the file was taken over by one connection because of
+/// data corruption, when newly received data in several connections did not
+/// match the same data downloaded earlier.
 fn downgrade_to_one_connection(download: &Arc<Download>, total: Option<u64>) -> Option<Segment> {
     let new_id = download.next_segment_id.fetch_add(1, Ordering::SeqCst);
     let part = segmenter::part_path(&download.dir, &download.stem, new_id);
@@ -1280,7 +1286,7 @@ fn verify_ranges(download: &Arc<Download>) {
 /// A segment that starts with the head of the file holds data that belongs
 /// to the first range: the server sent the whole file instead of the range
 /// that was asked for. The segment is rolled back and fetched again, the way
-/// IDM gives the bytes back and starts the chunk over.
+/// the reference binary gives the bytes back and starts the chunk over.
 fn verify_segment(download: &Arc<Download>, seg_id: u32) -> Result<(), String> {
     let Some((start, _, downloaded)) = download.seg_snapshot(seg_id) else {
         return Ok(());
@@ -1628,7 +1634,7 @@ async fn drive(
         .unwrap_or(download.max_connections);
     let allowed = site_max.min(download.max_connections);
     // The number of connections a file deserves: one per 10 KB that is left,
-    // as IDM counts them.
+    // the way the reference binary counts them.
     let max_connections = if probe.ranges {
         match probe.total {
             Some(total) => segmenter::connections_for(total, allowed),

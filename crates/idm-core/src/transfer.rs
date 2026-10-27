@@ -131,8 +131,8 @@ impl Source {
     /// SOCKS proxies are addresses that reqwest understands.
     ///
     /// `referer` is the page the link was on, when the browser knew it. It is
-    /// a default header of the client, so every range carries it, the way IDM
-    /// sends the page a file was linked from.
+    /// a default header of the client, so every range carries it, the way the
+    /// reference binary sends the page a file was linked from.
     pub fn parse(url: &str, proxy: Option<&str>, referer: Option<&str>) -> Result<Self, String> {
         if let Some(rest) = url.strip_prefix("ftp://") {
             return Self::parse_ftp(rest);

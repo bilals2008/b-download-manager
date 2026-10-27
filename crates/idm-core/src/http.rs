@@ -1,9 +1,10 @@
 //! Everything that speaks HTTP.
 //!
-//! IDM opens raw sockets and terminates TLS itself, but the wire format is
-//! what matters here: every request carries an explicit `Range:` header and
-//! `Accept-Encoding: identity`, so the bytes on the wire line up with the byte
-//! offsets in the file. See `ANALYSIS.md` for the evidence.
+//! The reference download manager opens raw sockets and terminates TLS
+//! itself, but the wire format is what matters here: every request carries an
+//! explicit `Range:` header and `Accept-Encoding: identity`, so the bytes on
+//! the wire line up with the byte offsets in the file. See `ANALYSIS.md` for
+//! the evidence.
 
 use std::time::Duration;
 
@@ -18,11 +19,11 @@ use crate::transfer::{
     ByteStream, FailureKind, Probe, TransferError, CHANGED_MESSAGE, RANGE_IGNORED_MESSAGE,
 };
 
-/// IDM asks for an identity encoding so that the byte offsets on the wire
-/// stay equal to the byte offsets in the file.
+/// The reference binary asks for an identity encoding so that the byte
+/// offsets on the wire stay equal to the byte offsets in the file.
 pub const IDENTITY_ENCODING: &str = "identity";
 
-/// The User-Agent IDM sends, read out of the string table of `IDMan.exe`.
+/// The User-Agent copied from the string table of the reference binary.
 ///
 /// A server that only serves browsers answers `403 Forbidden` to anything
 /// else: the video links of Google are the everyday example, and a download
@@ -33,8 +34,8 @@ pub const USER_AGENT: &str =
 /// Ask the server for the first byte only.
 ///
 /// The answer reveals the total size and proves whether the server honours
-/// `Range` requests. This is the same probe IDM performs before it decides
-/// how many connections it may open.
+/// `Range` requests. This is the same probe the reference download manager
+/// performs before it decides how many connections it may open.
 pub async fn probe(client: &reqwest::Client, url: &str) -> Result<Probe, TransferError> {
     let response = client
         .get(url)
@@ -144,8 +145,9 @@ pub async fn open_range(
     if_range: Option<&str>,
     expected_total: Option<u64>,
 ) -> Result<ByteStream, TransferError> {
-    // IDM always asks for an explicit range and always asks for an identity
-    // encoding so the bytes on the wire line up with the file offsets.
+    // The reference binary always asks for an explicit range and always asks
+    // for an identity encoding so the bytes on the wire line up with the file
+    // offsets.
     let mut request = client
         .get(url)
         .header(RANGE, range_header(from, to))
@@ -179,8 +181,9 @@ pub async fn open_range(
         });
     }
 
-    // Verify the server really served the range we asked for. IDM checks the
-    // `Content-Range` reply in `HTTPConnection::GetRetrRangeReply()`.
+    // Verify the server really served the range we asked for. The reference
+    // binary checks the `Content-Range` reply in
+    // `HTTPConnection::GetRetrRangeReply()`.
     let content_range = response
         .headers()
         .get(CONTENT_RANGE)
@@ -269,9 +272,9 @@ pub fn parse_content_range_total(value: &str) -> Option<u64> {
 
 /// Read the first byte offset out of a `Content-Range` value.
 ///
-/// IDM checks the reply of a range request against the range it asked for
-/// (`HTTPConnection::GetRetrRangeReply()`), so the engine has to be able to
-/// read back what the server actually served.
+/// The reference binary checks the reply of a range request against the range
+/// it asked for (`HTTPConnection::GetRetrRangeReply()`), so the engine has to
+/// be able to read back what the server actually served.
 pub fn parse_content_range_start(value: &str) -> Option<u64> {
     parse_content_range(value).map(|(start, _, _)| start)
 }
@@ -350,8 +353,9 @@ pub fn parse_retry_after(headers: &HeaderMap) -> Option<Duration> {
 
 /// The wait before the next attempt after a failure.
 ///
-/// IDM waits a fixed 400 ms between attempts. An exponential wait with a cap
-/// costs nothing to implement and does not hammer a struggling server.
+/// The reference binary waits a fixed 400 ms between attempts. An exponential
+/// wait with a cap costs nothing to implement and does not hammer a struggling
+/// server.
 pub fn backoff(attempt: u32) -> Duration {
     const BASE_MS: u64 = 400;
     const CAP_MS: u64 = 30_000;

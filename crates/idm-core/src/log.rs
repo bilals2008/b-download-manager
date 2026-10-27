@@ -1,8 +1,8 @@
 //! A diagnostics log.
 //!
-//! IDM keeps a log of what its downloads did. The clone writes one line per
-//! event in the application data directory, so a download that went wrong can
-//! be looked at after the fact.
+//! The reference download manager keeps a log of what its downloads did. The
+//! clone writes one line per event in the application data directory, so a
+//! download that went wrong can be looked at after the fact.
 //!
 //! The log is opened once, when the application starts. Before that, and
 //! when the file cannot be written, the calls do nothing.

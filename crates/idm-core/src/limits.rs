@@ -1,6 +1,6 @@
 //! Limits on how much of the network the engine may use.
 //!
-//! IDM reads a global connection cap from
+//! The reference download manager reads a global connection cap from
 //! `HKCU\Software\DownloadManager\MCN` (`MaxConnectionsNumber`, observed
 //! default 8) and keeps per-site overrides in the same key, as subkeys with
 //! a `number` value. When the cap is hit it tells the user: "Too many open
@@ -35,9 +35,9 @@ impl ConnectionBudget {
 
     /// Take a connection slot, waiting for one to come free.
     ///
-    /// This is what a download uses: IDM tells the user "Too many open
-    /// network connections. Please wait for some downloads to finish." rather
-    /// than failing the download.
+    /// This is what a download uses: the reference download manager says "Too
+    /// many open network connections. Please wait for some downloads to
+    /// finish." rather than failing the download.
     pub async fn acquire(&self) -> Option<OwnedSemaphorePermit> {
         self.permits.clone().acquire_owned().await.ok()
     }
@@ -131,7 +131,7 @@ impl Limits {
     }
 }
 
-/// The global connection cap, the way IDM keeps it in
+/// The global connection cap, the cap the reference download manager keeps in
 /// `HKCU\Software\DownloadManager\MCN`.
 pub const DEFAULT_MAX_CONNECTIONS: u32 = 32;
 

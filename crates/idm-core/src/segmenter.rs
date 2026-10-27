@@ -1,16 +1,18 @@
-//! Segmentation — the Rust analogue of IDM's `ChunksList` / `ChunksListItem`.
+//! Segmentation — the Rust analogue of the `ChunksList` / `ChunksListItem`
+//! structures of the reference download manager.
 //!
-//! Reverse engineering `IDMan.exe` (v6.43.15.2) showed that IDM does **not**
+//! Reverse engineering the reference binary showed that it does **not**
 //! download a file into one stream and then split it. It keeps a *list of
 //! chunks*; every chunk owns a contiguous byte range of the target file and
 //! writes the bytes of that range into its own temporary part file. The list
-//! is persisted so an interrupted download can be resumed — in IDM that is the
-//! registry key `HKCU\Software\DownloadManager\<id>\ChList`, here it is a JSON
-//! manifest written next to the part files.
+//! is persisted so an interrupted download can be resumed — in the reference
+//! manager that is the registry key
+//! `HKCU\Software\DownloadManager\<id>\ChList`, here it is a JSON manifest
+//! written next to the part files.
 //!
 //! Evidence: `ChunksList::CreateNewItem()`, `ChunksList::InitFirst()`,
 //! `ChunksList::JoinFile()`, `ChunksList::FindMaxFreeChunk()` and
-//! `ChunksList::NeedNewConnection()` (assert strings in `IDMan.exe`).
+//! `ChunksList::NeedNewConnection()` (assert strings in the reference binary).
 
 use std::path::{Path, PathBuf};
 
@@ -97,10 +99,10 @@ impl Segment {
     }
 }
 
-/// Target size of one segment. IDM splits a file into a handful of large
-/// ranges rather than into many small ones, so the same rule is used here:
-/// the segment count grows with the file size but stays bounded by the
-/// connection limit.
+/// Target size of one segment. The reference download manager splits a file
+/// into a handful of large ranges rather than into many small ones, so the
+/// same rule is used here: the segment count grows with the file size but
+/// stays bounded by the connection limit.
 pub const SEGMENT_TARGET: u64 = 16 * 1024 * 1024;
 
 /// Smallest remainder worth handing to another connection.
@@ -108,11 +110,11 @@ pub const MIN_SPLIT: u64 = 1024 * 1024;
 
 /// How many bytes one connection should get.
 ///
-/// IDM divides the bytes that are still to download by `0x2800` (10,240) to
-/// find the number of connections a file deserves: `FUN_005bad00` computes
-/// `__alldiv(bytes_left, 0x2800)` and takes the smaller of that and the
-/// number of connections that are allowed. A small file therefore gets fewer
-/// connections than a large one.
+/// The reference binary divides the bytes that are still to download by
+/// `0x2800` (10,240) to find the number of connections a file deserves:
+/// `FUN_005bad00` computes `__alldiv(bytes_left, 0x2800)` and takes the
+/// smaller of that and the number of connections that are allowed. A small
+/// file therefore gets fewer connections than a large one.
 pub const BYTES_PER_CONNECTION: u64 = 0x2800;
 
 /// The number of connections a file of this size deserves.
@@ -176,10 +178,11 @@ pub fn plan_unknown(dir: &Path, stem: &str) -> Vec<Segment> {
 
 /// Split a segment in two and hand the tail to a new connection.
 ///
-/// This mirrors IDM's `ChunksList::AddAlternative()` / "Add alternative
-/// connection (%ld) for connection %ld": the running connection keeps the
-/// bytes it already wrote, and a fresh connection continues from the point it
-/// reached. The original range end is preserved on the new segment.
+/// This mirrors `ChunksList::AddAlternative()` of the reference binary and
+/// its "Add alternative connection (%ld) for connection %ld": the running
+/// connection keeps the bytes it already wrote, and a fresh connection
+/// continues from the point it reached. The original range end is preserved
+/// on the new segment.
 pub fn split(seg: &mut Segment, new_id: u32, dir: &Path, stem: &str) -> Option<Segment> {
     let old_end = seg.end;
     let split_at = if seg.downloaded > 0 {
@@ -245,7 +248,8 @@ mod tests {
 
     #[test]
     fn a_small_file_gets_fewer_connections() {
-        // One connection per 10 KB that is left, as IDM counts them.
+        // One connection per 10 KB that is left, the way the reference binary
+        // counts them.
         assert_eq!(connections_for(1024 * 1024, 8), 8);
         assert_eq!(connections_for(100 * 1024, 8), 8);
         assert_eq!(connections_for(20 * 1024, 8), 2);

@@ -1,6 +1,6 @@
 //! The list of downloads the app knows about, kept on disk.
 //!
-//! IDM keeps the equivalent in the registry, under
+//! The reference download manager keeps the equivalent in the registry, under
 //! `HKCU\Software\DownloadManager\<id>`. The clone keeps a JSON index in the
 //! application data directory, so a download survives a restart of the app:
 //! the part files and the manifest are still on disk, and the index says

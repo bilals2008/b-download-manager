@@ -1,12 +1,13 @@
 //! A small FTP client, enough to drive the chunk list.
 //!
-//! IDM fetches a file over FTP with the same chunk list it uses for HTTP:
-//! every chunk opens its own data connection, asks for the file with `RETR`,
-//! reads the bytes of its range and closes the connection. A chunk that does
-//! not start at the first byte asks the server to start there with `REST`.
+//! The reference download manager fetches a file over FTP with the same chunk
+//! list it uses for HTTP: every chunk opens its own data connection, asks for
+//! the file with `RETR`, reads the bytes of its range and closes the
+//! connection. A chunk that does not start at the first byte asks the server
+//! to start there with `REST`.
 //!
-//! Evidence: `FTPConnection::StartGetChunk`, `InsInChunksList` and
-//! `SendRetr` (assertion strings in `IDMan.exe`). See `ANALYSIS.md`.
+//! Evidence: `FTPConnection::StartGetChunk`, `InsInChunksList` and `SendRetr`
+//! (assertion strings in the reference binary). See `ANALYSIS.md`.
 
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader, ReadHalf, WriteHalf};
 use tokio::net::TcpStream;
