@@ -30,7 +30,12 @@ import {
   probeLink,
   type DestinationInfo,
 } from "@/lib/ipc";
-import { preferredFolder, saveLastFolder } from "@/lib/settings";
+import {
+  loadSettings,
+  preferredFolder,
+  saveLastFolder,
+  saveSettings,
+} from "@/lib/settings";
 import { useDownloads } from "@/state/download-store";
 
 interface AddDownloadDialogProps {
@@ -117,6 +122,27 @@ export function AddDownloadDialog({
   const folderPicked = useRef(false);
   const categoryFolderApplied = useRef(false);
   const baseFolder = useRef("");
+  // The add dialog's first opening says where the files land, because no
+  // save folder has been chosen yet; it is shown from the settings value
+  // read at this moment and retired as soon as it has been seen.
+  const [firstRunNotice, setFirstRunNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const settings = loadSettings();
+    if (!settings.firstRunDone && !preferredFolder()) {
+      setFirstRunNotice(
+        settings.defaultFolder.trim()
+          ? `New downloads go to ${settings.defaultFolder.trim()} until you pick another folder here.`
+          : "No save folder yet: new downloads will go to your Downloads folder. Pick another one here to make it yours.",
+      );
+    }
+    if (!settings.firstRunDone) {
+      saveSettings({ ...settings, firstRunDone: true });
+    }
+  }, [open]);
 
   // Open on a fresh form, whatever the last one left behind. A link the
   // clipboard watch offered is the only thing it carries in.
@@ -128,6 +154,7 @@ export function AddDownloadDialog({
     setHandedOver(null);
     setFolder("");
     folderPicked.current = false;
+    setFirstRunNotice(null);
     categoryFolderApplied.current = false;
     baseFolder.current = "";
     setCategoryOverride(null);
@@ -227,7 +254,7 @@ export function AddDownloadDialog({
             setProbe({
               kind: "failed",
               reason:
-                "The server did not answer in time. You can still start the download.",
+                "The site did not answer in time. You can still start the download.",
             });
             return;
           }
@@ -343,7 +370,7 @@ export function AddDownloadDialog({
 
   async function pickFolder() {
     if (!isDesktop()) {
-      setError("The folder picker is only available in the desktop window.");
+      setError("Folders can only be chosen in the desktop app.");
       return;
     }
     try {
@@ -382,7 +409,7 @@ export function AddDownloadDialog({
       return;
     }
     if (!isDesktop()) {
-      setError("The download engine is only available in the desktop window.");
+      setError("Downloading works only in the desktop app.");
       return;
     }
 
@@ -499,6 +526,17 @@ export function AddDownloadDialog({
         className="flex flex-col gap-3.5"
         noValidate
       >
+        {/* The one first-run sentence: where the files land while no save
+            folder has been chosen. It never returns after this opening. */}
+        {firstRunNotice ? (
+          <p
+            role="status"
+            className="flex items-start gap-1.5 text-chrome-micro text-chrome-menu-text"
+          >
+            <FolderGlyph className="mt-px size-3.5 shrink-0 text-chrome-muted" />
+            <span className="min-w-0 break-words">{firstRunNotice}</span>
+          </p>
+        ) : null}
         <div>
           <label htmlFor="add-url" className={LABEL}>
             URL
