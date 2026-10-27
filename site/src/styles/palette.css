@@ -1,7 +1,6 @@
 /*
-  One palette, two appearances. Components read semantic names only; the
-  application's deep-green canvas and lime action carry over from the desktop
-  UI so the site and the app read as one product.
+  One palette, two appearances. Components read semantic names only. Warm
+  stone neutrals carry both themes; lime is the single accent, used as a fill.
 
   Both surfaces import this file: the landing page through tokens.css, the
   docs through starlight.css. A colour changes here once.
@@ -11,81 +10,81 @@
   color-scheme: light;
 
   /* Surfaces */
-  --page: #f5f6f2;
-  --surface: #edf0e9;
-  --ink: #101713;
-  --ink-soft: #39443e;
-  --muted: #5d6962;
-  --line: #dce2d9;
-  --line-strong: #c7d0c5;
-  --accent: #256b46;
-  --accent-soft: #e4edda;
-  --action-bg: #0d3020;
-  --action-ink: #d9ff7a;
-  --action-hover: #144630;
+  --page: #f6f4f1;
+  --surface: #efece7;
+  --ink: #14100d;
+  --ink-soft: #46403a;
+  --muted: #6b635c;
+  --line: #e2ddd6;
+  --line-strong: #ccc5bb;
+  --accent: #8a4b16;
+  --accent-soft: #ece5da;
+  --action-bg: #cdf25a;
+  --action-ink: #0c0a09;
+  --action-hover: #dcff74;
 
   /* Focus and artwork */
-  --focus: #1d6240;
-  --figure-bg: #0a1511;
-  --figure-border: #d5ddd2;
-  --figure-ink: #dbe7e1;
-  --figure-muted: #93a89c;
-  --figure-line: #1b3328;
-  --figure-soft: #0f211a;
+  --focus: #14100d;
+  --figure-bg: #14100d;
+  --figure-border: #e2ddd6;
+  --figure-ink: #ecebe8;
+  --figure-muted: #948d86;
+  --figure-line: #2a2420;
+  --figure-soft: #1f1a15;
   --figure-accent: #cdf25a;
   --figure-danger: #e06c60;
 
   /* Closing band */
-  --footer-bg: #0a1d14;
-  --footer-ink: #edf4ec;
-  --footer-muted: #a8b8ab;
-  --footer-line: #1e3a2b;
+  --footer-bg: #100c0a;
+  --footer-ink: #f2efec;
+  --footer-muted: #a8a29e;
+  --footer-line: #2a2420;
   --footer-accent: #cdf25a;
   --footer-action: #cdf25a;
-  --footer-action-ink: #08130c;
+  --footer-action-ink: #0c0a09;
 
   /* Depth */
   --shadow-figure:
-    0 40px 90px -52px rgb(10 30 20 / 0.42),
-    0 14px 30px -24px rgb(10 30 20 / 0.24);
+    0 40px 90px -52px rgb(20 16 13 / 0.28),
+    0 14px 30px -24px rgb(20 16 13 / 0.16);
   --shadow-panel:
-    0 36px 80px -48px rgb(10 30 20 / 0.55),
-    0 12px 26px -20px rgb(10 30 20 / 0.3);
+    0 36px 80px -48px rgb(20 16 13 / 0.34),
+    0 12px 26px -20px rgb(20 16 13 / 0.2);
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --page: #08110e;
-  --surface: #0d1a15;
-  --ink: #e9efe9;
-  --ink-soft: #c3cdc6;
-  --muted: #95a39a;
-  --line: #1c2d24;
-  --line-strong: #2c4638;
+  --page: #0c0a09;
+  --surface: #17130f;
+  --ink: #ecebe8;
+  --ink-soft: #c6c1bb;
+  --muted: #9b948d;
+  --line: #2a2420;
+  --line-strong: #3b342d;
   --accent: #c3e96a;
-  --accent-soft: #12241a;
+  --accent-soft: #201a14;
   --action-bg: #cdf25a;
-  --action-ink: #08130c;
+  --action-ink: #0c0a09;
   --action-hover: #ddff79;
 
   --focus: #d3f77a;
-  --figure-bg: #0a1511;
-  --figure-border: #1f3529;
-  --figure-ink: #dbe7e1;
-  --figure-muted: #8ea398;
-  --figure-line: #1b3328;
-  --figure-soft: #0f211a;
+  --figure-bg: #100d0b;
+  --figure-border: #2a2420;
+  --figure-ink: #e6e2dd;
+  --figure-muted: #948d86;
+  --figure-line: #241f1a;
+  --figure-soft: #17130f;
   --figure-accent: #cdf25a;
   --figure-danger: #e06c60;
 
-  --footer-bg: #0b1712;
-  --footer-ink: #e9efe9;
-  --footer-muted: #95a39a;
-  --footer-line: #1c2d24;
+  --footer-bg: #0a0908;
+  --footer-ink: #ecebe8;
+  --footer-muted: #9b948d;
+  --footer-line: #2a2420;
   --footer-accent: #cdf25a;
   --footer-action: #cdf25a;
-  --footer-action-ink: #08130c;
+  --footer-action-ink: #0c0a09;
 
   --shadow-figure:
     0 50px 120px -60px rgb(0 0 0 / 0.85),

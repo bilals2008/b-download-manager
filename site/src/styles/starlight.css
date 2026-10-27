@@ -58,7 +58,7 @@
 
   --sl-color-accent-low: var(--accent-soft);
   --sl-color-accent: var(--accent);
-  --sl-color-accent-high: var(--action-bg);
+  --sl-color-accent-high: var(--ink);
   --sl-color-bg-accent: var(--accent);
 
   --sl-color-hairline: var(--line);

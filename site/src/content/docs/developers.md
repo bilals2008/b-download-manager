@@ -66,8 +66,8 @@ The extension treats `/v1/ping` as the handshake: a different program holding
 the port is reported as a mismatch, not as a connection.
 
 - **Firefox** (`extension-firefox/`): Manifest V3 with an event page, the
-  right-click hand-off, download takeover and an IDM-style video button with
-  live progress. Load it temporarily from `about:debugging#/runtime/this-firefox`;
+  right-click hand-off, download takeover and a download button on each detected
+  video with live progress. Load it temporarily from `about:debugging#/runtime/this-firefox`;
   a permanent install needs a signed `.xpi`.
 - **Chrome and Edge** (`browser-extension/`): the right-click hand-off and
   download takeover, with no video overlay and no live download list. Load it

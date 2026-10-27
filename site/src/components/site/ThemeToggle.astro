@@ -84,7 +84,9 @@ import Icon from "./Icon.astro";
       if (themeColor) {
         themeColor.setAttribute(
           "content",
-          next === "dark" ? "#08110e" : "#f5f6f2",
+          getComputedStyle(document.documentElement)
+            .getPropertyValue("--page")
+            .trim(),
         );
       }
 
