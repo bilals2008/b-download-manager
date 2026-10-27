@@ -18,7 +18,7 @@ lives in `browser-extension/` and speaks the same versioned loopback API.
   cancelled, so a closed application never loses the file. File-type and site
   rules follow the app's Settings while it runs, and the extension's own copy
   while it is closed.
-- **IDM-style video button** on supported HTML5 videos. A 30 px button appears
+- **Download button over videos** on supported HTML5 videos. A 30 px button appears
   at the video's top-right corner while the pointer is over the player — over
   the picture, or over the player's own gradient and controls, which sit above
   it. Clicking it opens a compact panel with the files or streams that video

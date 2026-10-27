@@ -1,5 +1,5 @@
 /*
-  The floating download button IDM puts on a video.
+  The floating download button the reference download manager puts on a video.
 
   One button follows the video the pointer is over; clicking it opens a small
   panel with the files that video offers. The whole thing lives in a closed

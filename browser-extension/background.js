@@ -103,7 +103,7 @@ async function effectiveSettings() {
 function createMenus() {
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({
-      id: "idm-download",
+      id: "bdm-download",
       title: "Download with B Download Manager",
       contexts: ["link", "video", "audio", "image"],
     });
@@ -114,7 +114,7 @@ chrome.runtime.onInstalled.addListener(createMenus);
 chrome.runtime.onStartup.addListener(createMenus);
 
 chrome.contextMenus.onClicked.addListener((info) => {
-  if (info.menuItemId !== "idm-download") return;
+  if (info.menuItemId !== "bdm-download") return;
   const url = info.linkUrl || info.srcUrl;
   if (!url) return;
   // An explicit click is never filtered by the site list.

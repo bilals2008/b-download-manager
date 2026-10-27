@@ -6,8 +6,9 @@
   - the right click menu on a link, a video, an audio element or an image;
   - the floating button the content script draws on a video;
   - a download the browser starts, which the application takes over the way
-    IDM's advanced integration does. The settings decide whether a particular
-    download is taken: the switch, the file types and the sites left alone.
+    the classic Windows download manager's browser integration does. The
+    settings decide whether a particular download is taken: the switch, the
+    file types and the sites left alone.
 
   This page is also the only context that talks to the loopback bridge. The
   popup and the content script send messages, so the connection handling and

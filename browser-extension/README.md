@@ -2,7 +2,7 @@
 
 The small Chromium build of the browser integration. It speaks the same
 loopback API as the Firefox extension in `extension-firefox/`; that one has
-the IDM-style video button and the full popup.
+a download button over videos and the full popup.
 
 The application listens on `127.0.0.1:27500` and starts the server with
 itself, so there is no native messaging host to register.
