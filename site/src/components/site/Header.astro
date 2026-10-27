@@ -22,14 +22,21 @@ import ThemeToggle from "./ThemeToggle.astro";
     <nav class="nav-links" aria-label="Primary">
       <a href="#features" data-spy>Features</a>
       <a href="#download" data-spy>Download</a>
-      <a href="#faq" data-spy>FAQ</a>
       <a href="/getting-started/">Docs</a>
+      <a class="nav-github" href="https://github.com/bilals2008/b-download-manager">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path
+            fill="currentColor"
+            d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"
+          />
+        </svg>
+        GitHub
+      </a>
     </nav>
 
     <div class="nav-actions">
       <ThemeToggle />
       <Button
-        href="#download"
         variant="nav"
         icon="download"
         class="nav-install"
@@ -46,11 +53,19 @@ import ThemeToggle from "./ThemeToggle.astro";
           <nav class="nav-menu-links" aria-label="Mobile">
             <a href="#features">Features</a>
             <a href="#download">Download</a>
-            <a href="#faq">FAQ</a>
-            <a href="/getting-started/">Documentation</a>
+            <a href="/getting-started/">Docs</a>
+            <a class="nav-github" href="https://github.com/bilals2008/b-download-manager">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path
+                  fill="currentColor"
+                  d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"
+                />
+              </svg>
+              GitHub
+            </a>
           </nav>
           <div class="nav-menu-foot">
-            <Button href="#download" variant="nav" icon="download">
+            <Button variant="nav" icon="download">
               Download
             </Button>
           </div>
@@ -157,6 +172,7 @@ import ThemeToggle from "./ThemeToggle.astro";
   .nav-menu-links a {
     display: inline-flex;
     align-items: center;
+    gap: 0.45rem;
     min-height: 2.5rem;
     padding-inline: 0.8rem;
     border-radius: 999px;
@@ -178,6 +194,16 @@ import ThemeToggle from "./ThemeToggle.astro";
   .nav-links a[aria-current="location"] {
     background-color: var(--accent-soft);
     color: var(--accent);
+  }
+
+  .nav-github svg {
+    width: 1rem;
+    height: 1rem;
+    flex: none;
+  }
+
+  .nav-menu-links .nav-github {
+    justify-content: flex-start;
   }
 
   .nav-actions {

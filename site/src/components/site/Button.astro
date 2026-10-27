@@ -4,7 +4,12 @@ import Icon from "./Icon.astro";
 interface Props {
   href?: string;
   variant?: "primary" | "secondary" | "nav";
-  icon?: "arrow-right" | "arrow-down" | "arrow-up-right" | "download";
+  icon?:
+    | "arrow-right"
+    | "arrow-down"
+    | "arrow-up-right"
+    | "download"
+    | "github";
   class?: string;
 }
 
@@ -23,7 +28,10 @@ const {
       {icon && <Icon name={icon} size={16} class="btn-icon" />}
     </a>
   ) : (
-    <span class:list={["btn", `btn--${variant}`, "btn--disabled", className]}>
+    <span
+      class:list={["btn", `btn--${variant}`, "btn--disabled", className]}
+      aria-disabled="true"
+    >
       <span><slot /></span>
       {icon && <Icon name={icon} size={16} class="btn-icon" />}
     </span>
