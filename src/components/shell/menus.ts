@@ -11,11 +11,11 @@ export interface MenuDefinition {
 }
 
 /**
- * The menus of IDM 6.43, read out of the string table of `IDMan.exe`: the
- * top level is Tasks, File, Downloads, View and Help, and the groups below
- * them ("Export", "Arrange files", "Toolbar", "Speed Limiter") are nested
- * menus in the original as well. Registration is left out: this application
- * is not licensed or ordered from anywhere.
+ * The menus of the reference download manager, read out of the string table
+ * of the reference binary: the top level is Tasks, File, Downloads, View and
+ * Help, and the groups below them ("Export", "Arrange files", "Toolbar",
+ * "Speed Limiter") are nested menus in the original as well. Registration is
+ * left out: this application is not licensed or ordered from anywhere.
  *
  * Built rather than written down, because the Font group lists the faces the
  * user can actually pick, imported ones included.
@@ -180,7 +180,7 @@ export function buildMenus(fonts: FontOption[]): MenuDefinition[] {
       "separator",
       { command: "website", label: "B Download Manager Home Page", disabled: true },
       { command: "support", label: "Contact B Download Manager Support", disabled: true },
-      { command: "check-updates", label: "Check for updates...", disabled: true },
+      { command: "check-updates", label: "Check for updates..." },
       "separator",
       { command: "about", label: "About B Download Manager..." },
       { command: "tell-friend", label: "Tell a friend", disabled: true },

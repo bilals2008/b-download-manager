@@ -23,10 +23,10 @@ function stoppable(item: Download): boolean {
 /**
  * Which buttons of the toolbar can do their job right now.
  *
- * The bar itself is fixed, the way IDM's is, but pressing a button that cannot
- * act is worse than not offering it: the row commands follow the selection, and
- * the three list commands follow what the list holds. Everything else is always
- * live, and the two screens that are not built yet stay dim for good.
+ * The bar itself is fixed, but pressing a button that cannot act is worse
+ * than not offering it: the row commands follow the selection, and the three
+ * list commands follow what the list holds. Everything else is always live,
+ * and the two screens that are not built yet stay dim for good.
  */
 export function toolbarState(
   downloads: Download[],

@@ -20,13 +20,13 @@ startAppearanceSync();
 // the page knows the download before it renders: the completion window gets a
 // finished one, the progress window a live one. Every other window is the app.
 const progress = (
-  window as Window & { __IDM_PROGRESS__?: DownloadInfo }
-).__IDM_PROGRESS__;
+  window as Window & { __BDM_PROGRESS__?: DownloadInfo }
+).__BDM_PROGRESS__;
 const completed = (
-  window as Window & { __IDM_COMPLETE__?: DownloadInfo }
-).__IDM_COMPLETE__;
-const grabber = (window as Window & { __IDM_GRABBER__?: boolean })
-  .__IDM_GRABBER__;
+  window as Window & { __BDM_COMPLETE__?: DownloadInfo }
+).__BDM_COMPLETE__;
+const grabber = (window as Window & { __BDM_GRABBER__?: boolean })
+  .__BDM_GRABBER__;
 
 // The two small windows round their own corners. The page behind them has to
 // be the same surface, or the curve shows a sliver of the app canvas outside

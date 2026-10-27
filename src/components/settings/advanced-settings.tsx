@@ -88,7 +88,7 @@ export function AdvancedSettings({ onReset }: AdvancedSettingsProps) {
         <SettingRow
           stacked
           label="Log"
-          hint="What the engine did, including the reason a download failed."
+          hint="What the app did, including the reason a download failed."
         >
           <div className="flex items-center gap-2">
             <Tooltip
@@ -150,7 +150,6 @@ export function AdvancedSettings({ onReset }: AdvancedSettingsProps) {
           <li>A separate temporary download folder.</li>
           <li>A folder for each category.</li>
           <li>Combining separate video and audio streams.</li>
-          <li>Checking for application updates.</li>
         </ul>
       </Section>
     </SettingsPage>

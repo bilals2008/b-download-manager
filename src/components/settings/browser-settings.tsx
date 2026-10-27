@@ -81,8 +81,8 @@ export function BrowserSettings({ settings, onChange }: BrowserSettingsProps) {
         }
       >
         <SettingRow
-          label="Application bridge"
-          hint={`127.0.0.1:${status?.port ?? 27500} · API ${status?.api ?? 1}`}
+          label="Ready to receive from the browser"
+          hint={`On this computer only · port ${status?.port ?? 27500}`}
         >
           <State
             tone={bridge ? "positive" : "negative"}
@@ -97,7 +97,7 @@ export function BrowserSettings({ settings, onChange }: BrowserSettingsProps) {
         </SettingRow>
         <SettingRow
           label="Browser extension"
-          hint="Only a request that carries the extension header is counted."
+          hint="Only the extension itself is counted; nothing else can reach the app."
         >
           <State
             tone="neutral"
@@ -111,7 +111,7 @@ export function BrowserSettings({ settings, onChange }: BrowserSettingsProps) {
         ) : null}
       </Section>
 
-      <Section title="Hand-over">
+      <Section title="From the browser">
         <SettingRow
           label="Take over downloads from the browser"
           hint="While this app is running, these rules replace the extension's own copy."

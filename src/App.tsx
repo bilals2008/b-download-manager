@@ -7,17 +7,21 @@ import { toolbarState } from "@/components/shell/toolbar-state";
 import { useShellShortcuts } from "@/components/shell/use-shell-shortcuts";
 import { AboutDialog } from "@/components/workspace/about-dialog";
 import { AddDownloadDialog } from "@/components/workspace/add-download-dialog";
+import { CloseConfirmDialog } from "@/components/workspace/close-confirm-dialog";
+import { UpdateDialog } from "@/components/workspace/update-dialog";
 import { Workspace } from "@/components/workspace/workspace";
 import { applyFont } from "@/lib/fonts";
 import { openGrabberWindow } from "@/lib/grabber";
 import {
+  hideMainWindow,
   onClipboardLink,
-  onTrayCommand,
+  onCloseRequested,
   quitApp,
   setBrowserConnections,
   setBrowserFolder,
   setBrowserPolicy,
   setClipboardCapture,
+  setCloseToTray,
   setLaunchOnStartup,
   setMaxConnections,
   setMinimizeToTray,
@@ -33,6 +37,7 @@ import {
   saveToolbarSize,
   type ToolbarSize,
 } from "@/lib/settings";
+import { runCheck, type UpdateFound } from "@/lib/updates";
 import { useDownloads } from "@/state/download-store";
 
 export default function App() {
@@ -48,6 +53,13 @@ export default function App() {
   const [clipboardLink, setClipboardLink] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [updateOpen, setUpdateOpen] = useState(false);
+  // The answer a startup check already got, so the window that shows it does
+  // not ask the release server the same question a second time.
+  const [startupUpdate, setStartupUpdate] = useState<UpdateFound | null>(null);
+  // The count of downloads the backend would interrupt if this window exited.
+  // Null when the close button has not asked anything.
+  const [closeRequest, setCloseRequest] = useState<number | null>(null);
   const [toolbarSize, setToolbarSize] = useState<ToolbarSize>(loadToolbarSize);
   // The clipboard listener is subscribed once; the ref carries the current
   // dialog state so a link that arrives mid-edit cannot overwrite the field.
@@ -79,6 +91,9 @@ export default function App() {
       // As above.
     });
     void setMinimizeToTray(settings.minimizeToTray).catch(() => {
+      // As above.
+    });
+    void setCloseToTray(settings.closeToTray).catch(() => {
       // As above.
     });
     void setShowCompleteDialog(settings.showCompleteDialog).catch(() => {
@@ -115,6 +130,18 @@ export default function App() {
     }).catch(() => {
       // The extension falls back to its own rules when the bridge is closed.
     });
+    // The one question the reader agreed to on the About page. Only a newer
+    // release earns a window: an answer that is the current version, or one
+    // that did not arrive at all, is written down and left quietly there.
+    if (settings.updateAutoCheck) {
+      void runCheck().then((outcome) => {
+        saveSettings({ ...loadSettings(), lastUpdateCheck: Date.now() });
+        if (outcome.kind === "found") {
+          setStartupUpdate(outcome.update);
+          setUpdateOpen(true);
+        }
+      });
+    }
   }, []);
 
   // A link that the browser extension handed over opens the add dialog with
@@ -125,21 +152,13 @@ export default function App() {
     }
   }, [downloads.browserRequest]);
 
-  // The tray menu drives the same commands as the menu bar. The listener is
-  // subscribed once; the ref carries the current store, so a state update does
-  // not tear it down and subscribe again.
-  const latest = useRef(downloads);
-  latest.current = downloads;
+  // The close button asks instead of leaving when downloads are active. The
+  // backend has already prevented the native close; this window answers the
+  // question, and nothing is stopped until one of the buttons is pressed.
   useEffect(() => {
     let dispose: (() => void) | undefined;
     let closed = false;
-    void onTrayCommand((command) => {
-      if (command === "start-queue") {
-        latest.current.startQueue();
-      } else if (command === "stop-queue") {
-        latest.current.stopQueue();
-      }
-    }).then((unlisten) => {
+    void onCloseRequested((active) => setCloseRequest(active)).then((unlisten) => {
       if (closed) {
         unlisten();
       } else {
@@ -151,6 +170,20 @@ export default function App() {
       dispose?.();
     };
   }, []);
+
+  function keepRunning() {
+    setCloseRequest(null);
+    void hideMainWindow().catch(() => {
+      // The window stays where it is; the close button can ask again.
+    });
+  }
+
+  function exitAnyway() {
+    setCloseRequest(null);
+    // The backend pauses the running downloads and writes their resumes
+    // before the process ends, so this is not a loss of progress.
+    void quitApp();
+  }
 
   // A copied link opens the add dialog with its address in it. Nothing starts
   // until the reader confirms, and a link that arrives while the dialog is
@@ -221,6 +254,12 @@ export default function App() {
         break;
       case "about":
         setAboutOpen(true);
+        break;
+      case "check-updates":
+        // A request from the menu is a fresh question, whatever a startup
+        // check may have found on the way in.
+        setStartupUpdate(null);
+        setUpdateOpen(true);
         break;
       case "resume":
         downloads.applyToSelection("resume");
@@ -319,6 +358,22 @@ export default function App() {
         onClose={() => setSettingsOpen(false)}
       />
       <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
+      <UpdateDialog
+        open={updateOpen}
+        found={startupUpdate ?? undefined}
+        onClose={() => {
+          setUpdateOpen(false);
+          setStartupUpdate(null);
+        }}
+      />
+      {closeRequest !== null ? (
+        <CloseConfirmDialog
+          active={closeRequest}
+          onKeepRunning={keepRunning}
+          onExit={exitAnyway}
+          onCancel={() => setCloseRequest(null)}
+        />
+      ) : null}
     </div>
   );
 }
