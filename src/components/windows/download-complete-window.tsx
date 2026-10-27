@@ -12,12 +12,13 @@ import { closeWindow, showWindowWhenPainted } from "@/lib/window";
 import type { DownloadInfo } from "@/types";
 
 /**
- * The window IDM opens when a file finishes.
+ * The window that opens when a file finishes.
  *
- * The words are the ones in `IDMan.exe`: "File %s download complete.",
- * "Downloaded %s (%I64d Bytes)" and "File saved as %s", with its "Open folder"
- * button (`ANALYSIS.md`, section 9.4). The download is handed in by the
- * backend through `window.__IDM_COMPLETE__` before this renders.
+ * The wording follows the original product's messages: a completion line
+ * naming the file, the size taken with the raw byte count in parentheses,
+ * and the path the file was saved to, plus an "Open folder" button
+ * (`ANALYSIS.md`, section 9.4). The download is handed in by the backend
+ * through `window.__BDM_COMPLETE__` before this renders.
  */
 export function DownloadCompleteWindow({ info }: { info: DownloadInfo }) {
   const [error, setError] = useState<string | null>(null);

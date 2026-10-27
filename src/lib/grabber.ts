@@ -37,7 +37,7 @@ export const GRABBER_KINDS: readonly KindDefinition[] = [
   { id: "images", label: "Images", hint: "jpg, png, gif, webp, svg" },
   { id: "archives", label: "Archives", hint: "zip, 7z, rar, iso" },
   { id: "programs", label: "Programs", hint: "exe, msi, dmg, apk" },
-  { id: "other", label: "Other", hint: "types no group claims" },
+  { id: "other", label: "Other", hint: "everything else" },
 ];
 
 export const KIND_LABELS: Record<GrabberKind, string> = {
@@ -576,7 +576,7 @@ export function progressLine(snapshot: GrabberSnapshot): string {
         ? "Reading the first page…"
         : `Reading page ${Math.min(snapshot.pagesRead + 1, snapshot.pageLimit)} of ${snapshot.pageLimit}…`;
     case "cancelling":
-      return "Stopping the crawl…";
+      return "Stopping…";
     case "done":
     case "cancelled":
       return snapshot.message || scanSummary(snapshot);

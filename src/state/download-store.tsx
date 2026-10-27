@@ -678,9 +678,9 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
   /**
    * A link the browser extension handed over.
    *
-   * The browser waits while the user confirms it, the way IDM's dialog does:
-   * the address and the name the browser gave the file are put in the add
-   * dialog, which starts the download when the user says so.
+   * The browser waits while the user confirms it: the address and the name
+   * the browser gave the file are put in the add dialog, which starts the
+   * download when the user says so.
    */
   function takeFromBrowser(payload: BridgeDownload) {
     setBrowserRequest({

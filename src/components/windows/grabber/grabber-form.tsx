@@ -160,8 +160,8 @@ export function GrabberForm({
           </div>
         </div>
         <p className="-mt-3 text-chrome-micro text-chrome-muted">
-          The crawl stops at the depth and the page count, whichever comes
-          first. A page is read once.
+          Reading stops at whichever comes first: the depth or the page count.
+          A page is read once.
         </p>
 
         <fieldset>
@@ -178,7 +178,8 @@ export function GrabberForm({
             ))}
           </div>
           <p className="mt-2 text-chrome-micro text-chrome-muted">
-            A stream manifest, a page and a script are never offered as files.
+            Video playlists, web pages and page code are never offered as
+            files.
           </p>
         </fieldset>
 

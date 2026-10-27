@@ -106,7 +106,7 @@ export function useGrabber(): GrabberController {
       await cancelGrabber();
       setSnapshot((current) =>
         current.status === "running"
-          ? { ...current, status: "cancelling", message: "Stopping the crawl…" }
+          ? { ...current, status: "cancelling", message: "Stopping…" }
           : current,
       );
     } catch (failure) {
