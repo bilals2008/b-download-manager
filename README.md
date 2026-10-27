@@ -11,6 +11,7 @@ A multi-connection desktop download manager for HTTP, HTTPS and FTP that resumes
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Version](https://img.shields.io/badge/version-0.1.0-lightgrey?style=flat-square)](#)
+[![License](https://img.shields.io/badge/license-MIT-2ea44f?style=flat-square)](LICENSE)
 
 </div>
 
@@ -50,7 +51,10 @@ Installer and binary land in `src-tauri/target/release/bundle/`.
 
 ## License
 
-No license file has been added yet. Contact the author before reuse or redistribution.
+Released under the [MIT License](LICENSE). Contributions are accepted under the
+same terms; see [CONTRIBUTING.md](CONTRIBUTING.md) and
+[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Please report vulnerabilities
+privately as described in [SECURITY.md](SECURITY.md).
 
 <div align="center">
 
