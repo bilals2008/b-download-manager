@@ -9,6 +9,7 @@ import { DownloadsSettings } from "@/components/settings/downloads-settings";
 import { GeneralSettings } from "@/components/settings/general-settings";
 import { ProxySettings } from "@/components/settings/proxy-settings";
 import { SaveLocationsSettings } from "@/components/settings/save-locations-settings";
+import { ShortcutsSettings } from "@/components/settings/shortcuts-settings";
 import {
   settingsPageLabel,
   type SettingsPageId,
@@ -245,6 +246,8 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
         return <GeneralSettings settings={settings} onChange={update} />;
       case "appearance":
         return <AppearanceSettings settings={settings} onChange={update} />;
+      case "shortcuts":
+        return <ShortcutsSettings />;
       case "downloads":
         return <DownloadsSettings settings={settings} onChange={update} />;
       case "save-locations":

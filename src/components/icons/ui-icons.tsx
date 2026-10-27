@@ -150,6 +150,7 @@ export function SpinnerGlyph({ className }: GlyphProps) {
 export type SettingsGlyphKind =
   | "general"
   | "appearance"
+  | "shortcuts"
   | "file-types"
   | "save-to"
   | "downloads"
@@ -168,6 +169,13 @@ export function SettingsGlyph({
   className,
 }: GlyphProps & { kind: SettingsGlyphKind }) {
   switch (kind) {
+    case "shortcuts":
+      return (
+        <Glyph className={className}>
+          <rect x="1.8" y="4.2" width="12.4" height="7.6" rx="1.6" />
+          <path d="M4.6 6.8h.01M7 6.8h.01M9.4 6.8h.01M11.6 6.8h.01M5.6 9.3h4.8" />
+        </Glyph>
+      );
     case "file-types":
       return (
         <Glyph className={className}>
