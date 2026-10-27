@@ -35,13 +35,13 @@
   --figure-danger: #e06c60;
 
   /* Closing band */
-  --footer-bg: #100c0a;
-  --footer-ink: #f2efec;
-  --footer-muted: #a8a29e;
-  --footer-line: #2a2420;
-  --footer-accent: #cdf25a;
-  --footer-action: #cdf25a;
-  --footer-action-ink: #0c0a09;
+  --footer-bg: var(--surface);
+  --footer-ink: var(--ink);
+  --footer-muted: var(--muted);
+  --footer-line: var(--line);
+  --footer-accent: var(--accent);
+  --footer-action: var(--action-bg);
+  --footer-action-ink: var(--action-ink);
 
   /* Depth */
   --shadow-figure:

@@ -1,0 +1,21 @@
+---
+// The mobile menu's bottom row. Download is the only control the narrow bar
+// cannot fit, so it lives here; the theme toggle now sits in the bar itself.
+import Button from "../site/Button.astro";
+---
+
+<div class="menu-foot">
+  <Button href="/#download" variant="nav" icon="download">Download</Button>
+</div>
+
+<style>
+  .menu-foot {
+    margin-top: 0.5rem;
+    border-top: 1px solid var(--sl-color-gray-6);
+    padding-block: 0.75rem;
+  }
+
+  .menu-foot :global(.btn) {
+    width: 100%;
+  }
+</style>

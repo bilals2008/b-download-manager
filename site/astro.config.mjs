@@ -36,6 +36,9 @@ export default defineConfig({
         },
       ],
       components: {
+        Header: './src/components/docs/Header.astro',
+        MobileMenuFooter: './src/components/docs/MobileMenuFooter.astro',
+        ThemeSelect: './src/components/docs/ThemeToggle.astro',
         TableOfContents: './src/components/docs/TableOfContents.astro',
       },
       sidebar: [

@@ -31,8 +31,7 @@ import Icon from "./Icon.astro";
   }
 
   .theme-toggle:hover {
-    border-color: var(--line);
-    background-color: var(--surface);
+    background-color: var(--line);
     color: var(--ink);
   }
 
@@ -54,43 +53,50 @@ import Icon from "./Icon.astro";
 </style>
 
 <script>
-  const toggle = document.querySelector<HTMLButtonElement>("[data-theme-toggle]");
+  // The docs render this toggle twice (bar and mobile menu), so every instance
+  // stays in sync.
+  const toggles =
+    document.querySelectorAll<HTMLButtonElement>("[data-theme-toggle]");
 
-  if (toggle) {
+  if (toggles.length) {
     const syncLabel = () => {
       const dark = document.documentElement.dataset.theme === "dark";
-      toggle.setAttribute(
-        "aria-label",
-        dark ? "Switch to light theme" : "Switch to dark theme",
-      );
+      for (const toggle of toggles) {
+        toggle.setAttribute(
+          "aria-label",
+          dark ? "Switch to light theme" : "Switch to dark theme",
+        );
+      }
     };
 
     syncLabel();
 
-    toggle.addEventListener("click", () => {
-      const next =
-        document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+    for (const toggle of toggles) {
+      toggle.addEventListener("click", () => {
+        const next =
+          document.documentElement.dataset.theme === "dark" ? "light" : "dark";
 
-      document.documentElement.dataset.theme = next;
+        document.documentElement.dataset.theme = next;
 
-      try {
-        localStorage.setItem("bdm-theme", next);
-        localStorage.setItem("starlight-theme", next);
-      } catch {
-        // A blocked storage API should not stop the theme from switching.
-      }
+        try {
+          localStorage.setItem("bdm-theme", next);
+          localStorage.setItem("starlight-theme", next);
+        } catch {
+          // A blocked storage API should not stop the theme from switching.
+        }
 
-      const themeColor = document.querySelector('meta[name="theme-color"]');
-      if (themeColor) {
-        themeColor.setAttribute(
-          "content",
-          getComputedStyle(document.documentElement)
-            .getPropertyValue("--page")
-            .trim(),
-        );
-      }
+        const themeColor = document.querySelector('meta[name="theme-color"]');
+        if (themeColor) {
+          themeColor.setAttribute(
+            "content",
+            getComputedStyle(document.documentElement)
+              .getPropertyValue("--page")
+              .trim(),
+          );
+        }
 
-      syncLabel();
-    });
+        syncLabel();
+      });
+    }
   }
 </script>

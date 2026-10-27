@@ -1,0 +1,60 @@
+/*
+  The Tailwind bridge. Components read the CSS variables in tokens.css; these
+  aliases make the same tokens available as Tailwind utilities (text-hero,
+  bg-page, text-muted) for any markup that prefers them. One value, two front
+  doors. Only the landing imports this: the docs pipeline has no Tailwind.
+*/
+@theme inline {
+  --font-sans: var(--face-sans);
+  --font-display: var(--face-display);
+  --font-mono: var(--face-mono);
+
+  --color-page: var(--page);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-action: var(--action-bg);
+  --color-action-ink: var(--action-ink);
+  --color-action-hover: var(--action-hover);
+  --color-focus: var(--focus);
+  --color-figure: var(--figure-bg);
+
+  --text-hero: var(--type-hero);
+  --text-hero--line-height: 0.94;
+  --text-hero--letter-spacing: -0.045em;
+
+  --text-section: var(--type-section);
+  --text-section--line-height: 1.02;
+  --text-section--letter-spacing: -0.035em;
+
+  --text-step: var(--type-step);
+  --text-step--line-height: 1.2;
+  --text-step--letter-spacing: -0.02em;
+
+  --text-lede: var(--type-lede);
+  --text-lede--line-height: 1.55;
+
+  --text-body: var(--type-body);
+  --text-body--line-height: 1.65;
+
+  --text-small: var(--type-small);
+  --text-small--line-height: 1.65;
+
+  --text-label: var(--type-label);
+  --text-label--line-height: 1.4;
+
+  --text-caption: var(--type-caption);
+  --text-caption--line-height: 1.6;
+
+  --text-feature: var(--type-feature);
+  --text-feature--line-height: 1.35;
+
+  --text-micro: var(--type-micro);
+  --text-micro--line-height: 1.2;
+  --text-micro--letter-spacing: 0.14em;
+}

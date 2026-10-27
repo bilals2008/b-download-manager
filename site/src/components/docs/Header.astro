@@ -1,0 +1,143 @@
+---
+import Search from "virtual:starlight/components/Search";
+import SiteTitle from "virtual:starlight/components/SiteTitle";
+import ThemeSelect from "virtual:starlight/components/ThemeSelect";
+import Button from "../site/Button.astro";
+import Icon from "../site/Icon.astro";
+
+const repo = "https://github.com/bilals2008/b-download-manager";
+---
+
+<div class="topbar">
+  <div class="brand"><SiteTitle /></div>
+
+  <div class="tools">
+    <div class="search"><Search /></div>
+
+    <div class="theme"><ThemeSelect /></div>
+
+    <a
+      class="repo"
+      href={repo}
+      target="_blank"
+      rel="noreferrer"
+      aria-label="GitHub repository"
+    >
+      <Icon name="github" size={17} strokeWidth={1.4} />
+    </a>
+
+    <span class="download">
+      <Button href="/#download" variant="nav" icon="download">Download</Button>
+    </span>
+  </div>
+</div>
+
+<style>
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    height: 100%;
+    min-width: 0;
+  }
+
+  .brand {
+    display: flex;
+    min-width: 0;
+    overflow: hidden;
+    /* Room for the focus ring inside the clipped box, as Starlight's title
+       wrapper does. */
+    padding: 0.25rem;
+    margin: -0.25rem;
+  }
+
+  .tools {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+
+  /* Mobile: a round outline icon button, same as its neighbours. Wider screens:
+     a compact field on the right of the bar. */
+  .search :global(button[data-open-modal]) {
+    display: grid;
+    place-items: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    padding: 0;
+    border: 1px solid var(--sl-color-hairline);
+    border-radius: 999px;
+    background-color: transparent;
+    color: var(--sl-color-gray-3);
+  }
+
+  .search :global(button[data-open-modal]:hover) {
+    border-color: var(--sl-color-gray-3);
+    background-color: transparent;
+    color: var(--sl-color-white);
+  }
+
+  @media (min-width: 50rem) {
+    .search :global(button[data-open-modal]) {
+      display: flex;
+      justify-content: flex-start;
+      width: 12rem;
+      padding-inline-start: 0.75rem;
+      padding-inline-end: 0.5rem;
+      border-radius: var(--radius-sm);
+      background-color: var(--sl-color-bg);
+      color: var(--sl-color-gray-2);
+    }
+
+    .search :global(button[data-open-modal]:hover) {
+      background-color: var(--sl-color-bg);
+    }
+  }
+
+  /* Outline icon buttons, matching the Download pill's height and radius. */
+  .repo {
+    display: grid;
+    place-items: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border: 1px solid var(--sl-color-hairline);
+    border-radius: 999px;
+    color: var(--sl-color-gray-3);
+    text-decoration: none;
+    transition:
+      color var(--duration-fast) var(--ease-out),
+      border-color var(--duration-fast) var(--ease-out);
+  }
+
+  .repo:hover {
+    border-color: var(--sl-color-gray-3);
+    color: var(--sl-color-white);
+  }
+
+  .repo:focus-visible {
+    outline: 2px solid var(--sl-color-text-accent);
+    outline-offset: 2px;
+  }
+
+  .theme :global(.theme-toggle) {
+    border-color: var(--sl-color-hairline);
+  }
+
+  .theme :global(.theme-toggle:hover) {
+    border-color: var(--sl-color-gray-3);
+  }
+
+  /* Download needs room, so on narrow bars it lives in the mobile menu. */
+  .download {
+    display: none;
+  }
+
+  @media (min-width: 50rem) {
+    .download {
+      display: flex;
+    }
+  }
+</style>

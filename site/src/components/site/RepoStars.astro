@@ -1,0 +1,97 @@
+---
+// Live star count for the GitHub link. Shared by the landing and docs headers,
+// and rendered twice per page (desktop bar and mobile menu), so the script
+// updates every instance from one cached request.
+import Icon from "./Icon.astro";
+---
+
+<span class="repo-stars" data-repo-stars hidden>
+  <Icon name="star" size={13} />
+  <span data-repo-stars-count></span>
+  <span class="label">stars</span>
+</span>
+
+<style>
+  .repo-stars {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+  }
+
+  .repo-stars[hidden] {
+    display: none;
+  }
+
+  .label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+</style>
+
+<script>
+  const REPO = "bilals2008/b-download-manager";
+  const KEY = "bdm-repo-stars";
+  const TTL = 6 * 60 * 60 * 1000;
+
+  const boxes = document.querySelectorAll<HTMLElement>("[data-repo-stars]");
+
+  if (boxes.length) {
+    const show = (stars: number) => {
+      const text =
+        stars >= 1000
+          ? `${(stars / 1000).toFixed(1).replace(/\.0$/, "")}k`
+          : String(stars);
+
+      for (const box of boxes) {
+        const value = box.querySelector<HTMLElement>("[data-repo-stars-count]");
+        if (value) value.textContent = text;
+        box.hidden = false;
+      }
+    };
+
+    type Cached = { stars: number; at: number };
+
+    const readCache = (): Cached | null => {
+      try {
+        const raw = JSON.parse(localStorage.getItem(KEY) ?? "null");
+        return typeof raw?.stars === "number" && typeof raw?.at === "number"
+          ? raw
+          : null;
+      } catch {
+        // A blocked storage API only costs an extra request.
+        return null;
+      }
+    };
+
+    const cached = readCache();
+    const fresh = cached !== null && Date.now() - cached.at < TTL;
+
+    if (cached && fresh) show(cached.stars);
+
+    if (!fresh) {
+      fetch(`https://api.github.com/repos/${REPO}`)
+        .then((response) => (response.ok ? response.json() : null))
+        .then((data) => {
+          if (typeof data?.stargazers_count !== "number") return;
+          show(data.stargazers_count);
+          try {
+            localStorage.setItem(
+              KEY,
+              JSON.stringify({ stars: data.stargazers_count, at: Date.now() }),
+            );
+          } catch {
+            // The count still renders; only the cache write is lost.
+          }
+        })
+        .catch(() => {
+          // Rate limits and offline visitors keep the link without a count.
+        });
+    }
+  }
+</script>

@@ -4,11 +4,20 @@
   so the docs and the site cannot drift apart.
 */
 @import "./fonts.css";
-@import "./palette.css";
+@import "./tokens.css";
 
 :root {
   --sl-font: var(--face-sans);
   --sl-font-mono: var(--face-mono);
+
+  /* Room for 2.25rem controls in the docs bar. */
+  --sl-nav-height: 3.75rem;
+
+  /* A six-item nav does not need 300px. */
+  --sl-sidebar-width: 17rem;
+
+  /* The mobile menu button matches the other bar icons. */
+  --sl-menu-button-size: 2.25rem;
 }
 
 /* Dark is Starlight's default appearance, so it sits on the root. */
@@ -20,6 +29,8 @@
   --sl-color-bg-nav: var(--surface);
   --sl-color-bg-sidebar: var(--page);
   --sl-color-bg-inline-code: var(--accent-soft);
+  --sl-color-black: var(--page);
+  --sl-color-white: var(--ink);
 
   --sl-color-text: var(--ink-soft);
   --sl-color-text-accent: var(--accent);
@@ -32,6 +43,7 @@
 
   --sl-color-hairline: var(--line);
   --sl-color-hairline-light: var(--line-strong);
+  --sl-color-hairline-shade: var(--line);
 
   /* Text steps and the code-block frame, which read the neutral ramp. */
   --sl-color-gray-1: var(--ink);
@@ -51,6 +63,8 @@
   --sl-color-bg-nav: var(--surface);
   --sl-color-bg-sidebar: var(--page);
   --sl-color-bg-inline-code: var(--surface);
+  --sl-color-black: var(--page);
+  --sl-color-white: var(--ink);
 
   --sl-color-text: var(--ink-soft);
   --sl-color-text-accent: var(--accent);
@@ -63,6 +77,7 @@
 
   --sl-color-hairline: var(--line);
   --sl-color-hairline-light: var(--line-strong);
+  --sl-color-hairline-shade: var(--line);
 
   --sl-color-gray-1: var(--ink);
   --sl-color-gray-2: var(--ink-soft);
@@ -88,6 +103,103 @@
 
 .site-title:hover {
   color: var(--sl-color-text-accent);
+}
+
+/* Sidebar: quiet group labels, roomier rows, a soft active state instead of a
+   full accent block. */
+#starlight__sidebar .sidebar-content {
+  padding-top: 1.25rem;
+}
+
+#starlight__sidebar .top-level > li + li {
+  margin-top: 1.25rem;
+}
+
+#starlight__sidebar summary {
+  padding-block: 0.4rem;
+}
+
+#starlight__sidebar summary .large {
+  color: var(--muted);
+  font-family: var(--face-sans);
+  font-size: var(--type-micro);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: color var(--duration-fast) var(--ease-out);
+}
+
+#starlight__sidebar summary:hover .large {
+  color: var(--ink-soft);
+}
+
+#starlight__sidebar summary svg {
+  width: 0.85rem;
+  height: 0.85rem;
+  color: var(--muted);
+}
+
+#starlight__sidebar ul ul li {
+  border-inline-start-color: var(--line);
+}
+
+#starlight__sidebar ul a {
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--radius-xs);
+  color: var(--muted);
+  font-size: var(--type-label);
+  line-height: 1.35;
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+}
+
+#starlight__sidebar ul a:hover,
+#starlight__sidebar ul a:focus-visible {
+  background-color: var(--surface);
+  color: var(--ink);
+}
+
+#starlight__sidebar ul a[aria-current="page"] {
+  background-color: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+#starlight__sidebar ul a[aria-current="page"]:hover,
+#starlight__sidebar ul a[aria-current="page"]:focus-visible {
+  background-color: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* On this page: the same micro heading as the sidebar groups, so the right
+   rail reads as one system. */
+starlight-toc h2 {
+  margin-bottom: 0.65rem;
+  color: var(--muted);
+  font-family: var(--face-sans);
+  font-size: var(--type-micro);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+starlight-toc a {
+  padding-block: 0.3rem;
+  border-radius: var(--radius-xs);
+  color: var(--muted);
+  font-size: var(--type-caption);
+  line-height: 1.35;
+  transition: color var(--duration-fast) var(--ease-out);
+}
+
+starlight-toc a:hover {
+  color: var(--ink);
+}
+
+starlight-toc a[aria-current="true"] {
+  color: var(--accent);
+  font-weight: 500;
 }
 
 /* Previous and Next as one-line rows; Starlight's cards are oversized. */
@@ -116,4 +228,29 @@
   background-color: var(--sl-color-bg-inline-code);
   font-family: var(--sl-font-mono);
   font-size: 0.85em;
+}
+
+/* The mobile menu button joins the bar's outline icon set instead of being a
+   filled white disc. */
+.sl-menu-button {
+  display: grid;
+  place-items: center;
+  width: var(--sl-menu-button-size);
+  height: var(--sl-menu-button-size);
+  padding: 0;
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 50%;
+  background-color: transparent;
+  color: var(--sl-color-gray-3);
+  box-shadow: none;
+}
+
+.sl-menu-button:hover {
+  border-color: var(--sl-color-gray-3);
+  color: var(--sl-color-white);
+}
+
+.sl-menu-button:has(~ :popover-open) {
+  background-color: transparent;
+  color: var(--sl-color-white);
 }
