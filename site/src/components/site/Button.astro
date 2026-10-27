@@ -2,7 +2,7 @@
 import Icon from "./Icon.astro";
 
 interface Props {
-  href: string;
+  href?: string;
   variant?: "primary" | "secondary" | "nav";
   icon?: "arrow-right" | "arrow-down" | "arrow-up-right" | "download";
   class?: string;
@@ -16,10 +16,19 @@ const {
 } = Astro.props;
 ---
 
-<a href={href} class:list={["btn", `btn--${variant}`, className]}>
-  <span><slot /></span>
-  {icon && <Icon name={icon} size={16} class="btn-icon" />}
-</a>
+{
+  href ? (
+    <a href={href} class:list={["btn", `btn--${variant}`, className]}>
+      <span><slot /></span>
+      {icon && <Icon name={icon} size={16} class="btn-icon" />}
+    </a>
+  ) : (
+    <span class:list={["btn", `btn--${variant}`, "btn--disabled", className]}>
+      <span><slot /></span>
+      {icon && <Icon name={icon} size={16} class="btn-icon" />}
+    </span>
+  )
+}
 
 <style>
   .btn {
@@ -88,6 +97,19 @@ const {
 
   .btn--nav:hover {
     background-color: var(--action-hover);
+  }
+
+  .btn--disabled {
+    cursor: default;
+    opacity: 0.55;
+  }
+
+  .btn--disabled:hover {
+    transform: none;
+  }
+
+  .btn--disabled:hover :global(svg) {
+    transform: none;
   }
 
   .btn--nav :global(svg) {

@@ -1,0 +1,126 @@
+---
+const browsers = [
+  {
+    name: "Chrome",
+    logo: "https://thesvg.org/icons/google-chrome/default.svg",
+  },
+  {
+    name: "Firefox",
+    logo: "https://thesvg.org/icons/firefox/default.svg",
+  },
+  {
+    name: "Edge",
+    logo: "https://thesvg.org/icons/microsoft-edge/default.svg",
+  },
+  {
+    name: "Brave",
+    logo: "https://thesvg.org/icons/brave/default.svg",
+  },
+] as const;
+---
+
+<section id="extensions" class="extensions" aria-labelledby="extensions-title">
+  <div class="container-page">
+    <div class="extensions-head">
+      <p class="eyebrow">Browser Extension</p>
+      <h2 id="extensions-title" class="extensions-title">
+        Hand off links from your browser.
+      </h2>
+      <p class="extensions-copy">
+        Chrome and Firefox extensions are coming soon.
+      </p>
+    </div>
+
+    <ul class="browser-list" aria-label="Browser extensions">
+      {
+        browsers.map((browser) => (
+          <li class="browser">
+            <img
+              src={browser.logo}
+              width="22"
+              height="22"
+              alt=""
+              loading="lazy"
+            />
+            <span class="browser-name">{browser.name}</span>
+            <span class="browser-status">Coming Soon</span>
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+</section>
+
+<style>
+  .extensions {
+    padding-block: var(--section-space);
+  }
+
+  .extensions-head {
+    max-width: 40rem;
+  }
+
+  .extensions-title {
+    margin-top: 1rem;
+    color: var(--ink);
+    font-family: var(--face-display);
+    font-size: var(--type-section);
+    font-weight: 500;
+    letter-spacing: -0.035em;
+    line-height: 1.02;
+    text-wrap: balance;
+  }
+
+  .extensions-copy {
+    margin-top: 1rem;
+    color: var(--muted);
+    font-size: var(--type-body);
+    line-height: 1.65;
+  }
+
+  .browser-list {
+    display: grid;
+    gap: 0.75rem;
+    margin-top: 2rem;
+  }
+
+  .browser {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    padding: 1rem 1.15rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background-color: var(--surface);
+  }
+
+  .browser img {
+    flex: none;
+    display: block;
+  }
+
+  .browser-name {
+    flex: 1;
+    color: var(--ink);
+    font-size: var(--type-small);
+    font-weight: 500;
+  }
+
+  .browser-status {
+    padding: 0.3rem 0.6rem;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    color: var(--muted);
+    font-size: var(--type-micro);
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    text-transform: uppercase;
+  }
+
+  @media (min-width: 40rem) {
+    .browser-list {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+</style>
