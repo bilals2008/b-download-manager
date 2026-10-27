@@ -5,25 +5,25 @@ mod complete;
 mod conflict;
 mod dest;
 mod grabber;
+mod lifecycle;
+mod prefs;
 mod progress;
 mod state;
+mod tray;
+mod updater;
 mod window_style;
 
 use std::path::PathBuf;
 
-use tauri::menu::{Menu, MenuItem};
-use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
 
 use idm_core::downloader::{DownloadInfo, Status};
 use idm_core::session::Index;
 use idm_core::transfer::Source;
+use prefs::DesktopPreferences;
 use state::{AppState, BrowserPolicy};
 
 use actions::UPDATE_EVENT;
-
-/// Event carrying a command from the tray to the UI.
-const TRAY_EVENT: &str = "tray://command";
 
 /// Everything the add dialog sends to start a download.
 ///
@@ -237,6 +237,7 @@ fn remove_download(app: AppHandle, state: State<'_, AppState>, id: u64) -> Resul
     // The progress window of a row that is gone has nothing to show.
     progress::close(&app, id);
     complete::close(&app, id);
+    tray::refresh(&app);
     Ok(())
 }
 
@@ -351,10 +352,11 @@ fn site_connections(state: State<'_, AppState>, host: String) -> Option<u32> {
 /// Leave the application for good, the way the Exit item of the menu does.
 ///
 /// Closing the window only hides it into the tray, so the menu needs a way
-/// out.
+/// out. The one shutdown path pauses the running transfers and writes their
+/// resumes before the process ends.
 #[tauri::command]
 fn quit_app(app: AppHandle) {
-    app.exit(0);
+    lifecycle::shutdown(&app);
 }
 
 /// How many connections the whole application may have open at once.
@@ -364,10 +366,29 @@ fn set_max_connections(state: State<'_, AppState>, max: u32) -> u32 {
     max
 }
 
-/// Whether closing the window hides it into the tray.
+/// The choices the tray and the close button follow.
+#[tauri::command]
+fn desktop_preferences(state: State<'_, AppState>) -> DesktopPreferences {
+    state.preferences()
+}
+
+/// Whether the minimize button hides the window into the tray.
 #[tauri::command]
 fn set_minimize_to_tray(state: State<'_, AppState>, on: bool) -> bool {
-    state.set_minimize_to_tray(on);
+    let mut preferences = state.preferences();
+    preferences.minimize_to_tray = on;
+    state.set_preferences(preferences);
+    state.save_preferences();
+    on
+}
+
+/// Whether closing the window keeps the application in the tray.
+#[tauri::command]
+fn set_close_to_tray(state: State<'_, AppState>, on: bool) -> bool {
+    let mut preferences = state.preferences();
+    preferences.close_to_tray = on;
+    state.set_preferences(preferences);
+    state.save_preferences();
     on
 }
 
@@ -793,6 +814,28 @@ fn open_path(path: String) -> Result<(), String> {
     open_in_os(&target)
 }
 
+/// Whether an address is a web page rather than something else on the machine.
+///
+/// The only links this window offers go to a website; a `file:` or a `javascript:`
+/// address would be handed to whatever program owns it.
+fn is_web_address(url: &str) -> bool {
+    !url.chars().any(|c| c.is_control())
+        && (url.starts_with("http://") || url.starts_with("https://"))
+}
+
+/// Open a web address in the browser the system uses.
+///
+/// The window is a webview, not a tab: an anchor here would replace the page
+/// it is on, so the address goes to the shell instead.
+#[tauri::command]
+fn open_url(url: String) -> Result<(), String> {
+    let address = url.trim();
+    if !is_web_address(address) {
+        return Err("only a web address can be opened here".to_string());
+    }
+    open_in_browser(address)
+}
+
 /// Hand the path to the shell of the system.
 #[cfg(target_os = "windows")]
 fn open_in_os(target: &std::path::Path) -> Result<(), String> {
@@ -831,68 +874,28 @@ fn open_in_os(target: &std::path::Path) -> Result<(), String> {
         .map_err(|error| format!("the system could not open it: {error}"))
 }
 
-/// The tray icon: the window comes back from it, the queue is started and
-/// stopped from it, and it is the way out of the application.
+/// Hand a web address to the browser the system uses.
 ///
-/// Each progress window owns a tray icon of its own (`progress.rs`); this one
-/// is the application itself.
-fn build_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    let show = MenuItem::with_id(app, "show", "Show B Download Manager", true, None::<&str>)?;
-    let start = MenuItem::with_id(app, "start-queue", "Start queue", true, None::<&str>)?;
-    let stop = MenuItem::with_id(app, "stop-queue", "Stop queue", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Exit", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show, &start, &stop, &quit])?;
+/// The three forms differ only in the program and, on Windows, in the handler
+/// `rundll32` is asked to load. The address arrives as one argument of one
+/// process, never through a shell, so it cannot carry a second command.
+fn open_in_browser(address: &str) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        let mut command = std::process::Command::new("rundll32");
+        command.arg("url.dll,FileProtocolHandler");
+        command
+    };
+    #[cfg(target_os = "macos")]
+    let mut command = std::process::Command::new("open");
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    let mut command = std::process::Command::new("xdg-open");
 
-    let mut builder = TrayIconBuilder::with_id("main-tray")
-        .menu(&menu)
-        .show_menu_on_left_click(false)
-        .tooltip("B Download Manager");
-
-    if let Some(icon) = app.default_window_icon() {
-        builder = builder.icon(icon.clone());
-    }
-
-    builder
-        .on_menu_event(|app, event| match event.id.as_ref() {
-            "show" => show_window(app),
-            "start-queue" => {
-                let _ = app.emit(TRAY_EVENT, "start-queue");
-            }
-            "stop-queue" => {
-                let _ = app.emit(TRAY_EVENT, "stop-queue");
-            }
-            "quit" => {
-                let state = app.state::<AppState>();
-                state.save_manifests();
-                state.save_index();
-                app.exit(0);
-            }
-            // The menu of a progress window's own tray icon. Tauri's menu
-            // listener is global, so this is the one place those items are
-            // routed from; `handle_menu` ignores an id it does not own.
-            id => progress::handle_menu(app, id),
-        })
-        .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click {
-                button: MouseButton::Left,
-                button_state: MouseButtonState::Up,
-                ..
-            } = event
-            {
-                show_window(tray.app_handle());
-            }
-        })
-        .build(app)?;
-    Ok(())
-}
-
-/// Bring the window back from the tray.
-pub(crate) fn show_window(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.unminimize();
-        let _ = window.show();
-        let _ = window.set_focus();
-    }
+    command
+        .arg(address)
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("the browser could not be opened: {error}"))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -904,6 +907,7 @@ pub fn run() {
             None,
         ))
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(AppState::default())
         .manage(grabber::Grabber::default())
         .setup(|app| {
@@ -918,7 +922,24 @@ pub fn run() {
             idm_core::log::open(dir.join("idm-clone.log"));
             state.set_index(Index::new(dir.join("downloads.json")));
             state.restore_downloads();
-            build_tray(app.handle())?;
+            // The tray and the close button follow a file of their own: they
+            // are consulted before a page has loaded, and a webview that has
+            // not painted yet must not decide whether closing exits.
+            state.set_preferences_path(dir.join(prefs::FILE_NAME));
+            match tray::install(app.handle()) {
+                Ok(()) => {
+                    state.set_tray_available(true);
+                    // A restored download is already active when the window
+                    // opens; the tooltip must say so before the next report.
+                    tray::refresh(app.handle());
+                }
+                Err(error) => {
+                    // Without an icon there is no way back from a hidden
+                    // window, so the close and minimize choices fall back to
+                    // closing and minimizing.
+                    idm_core::log::write("warn", &format!("the tray icon did not open: {error}"));
+                }
+            }
             if let Some(window) = app.get_webview_window("main") {
                 window_style::round_corners(&window);
             }
@@ -929,17 +950,28 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| match event {
-            // Closing the window hides it into the tray, the way IDM does.
-            // The tray menu is the way out. Only the main window is kept;
-            // the smaller windows of the application really close.
+            // A close is never the end of the main webview: it either hides,
+            // asks, or takes the one shutdown path. The smaller windows of
+            // the application really close.
             WindowEvent::CloseRequested { api, .. } => {
                 if window.label() != "main" {
                     return;
                 }
-                let state = window.app_handle().state::<AppState>();
-                if state.minimize_to_tray() {
-                    api.prevent_close();
-                    let _ = window.hide();
+                api.prevent_close();
+                lifecycle::close_requested(window);
+            }
+            // The taskbar and an OS shortcut can minimize a window without
+            // the title-bar button; hide it here too when that is configured.
+            WindowEvent::Resized(_) => {
+                if window.label() == "main"
+                    && window.is_minimized().unwrap_or(false)
+                    && window
+                        .app_handle()
+                        .state::<AppState>()
+                        .preferences()
+                        .minimize_to_tray
+                {
+                    lifecycle::minimize_to_tray(window);
                 }
             }
             // A progress window that really closed takes its own tray icon
@@ -976,7 +1008,11 @@ pub fn run() {
             set_site_connections,
             site_connections,
             set_max_connections,
+            desktop_preferences,
             set_minimize_to_tray,
+            set_close_to_tray,
+            lifecycle::minimize_window,
+            lifecycle::hide_main_window,
             set_show_complete_dialog,
             set_show_progress_on_start,
             set_browser_connections,
@@ -1000,20 +1036,21 @@ pub fn run() {
             show_ready,
             set_window_background,
             open_path,
+            open_url,
+            updater::check_update,
+            updater::install_update,
         ])
         .build(tauri::generate_context!())
         .expect("error while building B Download Manager")
         .run(|app, event| {
-            // When the application closes, the resume state of the running
-            // downloads is written to disk, so nothing that was fetched is
-            // lost.
+            // The operating system can end the process without a close
+            // request (logoff, shutdown). The deliberate paths use
+            // `lifecycle::shutdown`; this is the last chance for the rest.
             if matches!(
                 event,
                 tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
             ) {
-                let state = app.state::<AppState>();
-                state.save_manifests();
-                state.save_index();
+                lifecycle::save_on_exit(app);
             }
         });
 }
@@ -1025,6 +1062,20 @@ mod tests {
     #[test]
     fn an_empty_path_is_refused() {
         assert!(open_path("   ".to_string()).is_err());
+    }
+
+    #[test]
+    fn only_a_web_address_is_opened_in_the_browser() {
+        // Each of these is refused before anything is spawned, so the test
+        // never opens a window of its own.
+        assert!(!is_web_address(""));
+        assert!(!is_web_address("ftp://example.org/file"));
+        assert!(!is_web_address("file:///C:/Windows/system.ini"));
+        assert!(!is_web_address("javascript:alert(1)"));
+        assert!(!is_web_address("https://example.org\0"));
+        assert!(is_web_address("https://example.org/"));
+        assert!(is_web_address("http://localhost:1420"));
+        assert!(open_url("mailto:someone@example.org".to_string()).is_err());
     }
 
     #[test]
