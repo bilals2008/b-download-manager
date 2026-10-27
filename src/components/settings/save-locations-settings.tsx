@@ -66,7 +66,7 @@ export function SaveLocationsSettings({
 
   async function browse() {
     if (!isDesktop()) {
-      setBrowseError("The folder picker is only available in the desktop app.");
+      setBrowseError("Folders can only be chosen in the desktop app.");
       return;
     }
     try {
@@ -91,19 +91,19 @@ export function SaveLocationsSettings({
       ? status.error
       : status
         ? `${status.path}${status.freeBytes === null ? "" : ` · ${formatSize(status.freeBytes)} free`}`
-        : "The folder could not be checked in this window.";
+        : "The folder could not be checked.";
 
   return (
     <SettingsPage
       title="Save locations"
-      description="Where a new download is saved, and what is remembered between them."
+      description="Where files are saved."
     >
       <Section title="Default folder">
         <SettingRow
           stacked
           label="Save new downloads to"
           htmlFor="save-to-folder"
-          hint="Empty uses the Downloads folder of Windows."
+          hint="Blank uses the Windows Downloads folder."
         >
           <div className="flex items-start gap-2">
             <div className="min-w-0 flex-1">
@@ -111,7 +111,7 @@ export function SaveLocationsSettings({
                 id="save-to-folder"
                 mono
                 value={settings.defaultFolder}
-                placeholder="The Downloads folder of Windows"
+                placeholder="Windows Downloads folder"
                 invalid={Boolean(status?.exists && !status.writable)}
                 onChange={(value) => {
                   setForgotten(false);
@@ -141,18 +141,18 @@ export function SaveLocationsSettings({
 
       <Section title="Remembering">
         <SettingRow
-          label="Open a new download on the folder of the last one"
-          hint="Only a download that really started replaces the remembered folder."
+          label="Start a new download in the last folder used"
+          hint="The last folder you really downloaded to."
         >
           <Switch
-            label="Open a new download on the folder of the last one"
+            label="Start a new download in the last folder used"
             checked={settings.rememberLastFolder}
             onChange={(checked) => onChange("rememberLastFolder", checked)}
           />
         </SettingRow>
         <SettingRow
           label="Forget the remembered folder"
-          hint="The default above is used again. No download or saved file is touched."
+          hint="Starts using the default again."
         >
           <SettingsButton onClick={forget} disabled={forgotten}>
             {forgotten ? "Forgotten" : "Forget"}

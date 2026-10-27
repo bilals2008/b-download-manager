@@ -15,52 +15,52 @@ export const FONT_OPTIONS: FontOption[] = [
   {
     value: "inter",
     label: "Inter",
-    note: "Neutral screen face.",
+    note: "Clean and even.",
   },
   {
     value: "googlesans",
     label: "Google Sans",
-    note: "Google's own face: geometric and even. The default.",
+    note: "Google's own font. The default.",
   },
   {
     value: "geist",
     label: "Geist",
-    note: "Geometric, slightly tighter.",
+    note: "Modern and close together.",
   },
   {
     value: "dmsans",
     label: "DM Sans",
-    note: "Round and friendly, large x-height.",
+    note: "Round and friendly.",
   },
   {
     value: "jakarta",
     label: "Plus Jakarta Sans",
-    note: "Contemporary, slightly condensed.",
+    note: "Modern and narrow.",
   },
   {
     value: "instrument",
     label: "Instrument Sans",
-    note: "Humanist, a little warm.",
+    note: "Warm and easy to read.",
   },
   {
     value: "bricolage",
     label: "Bricolage Grotesque",
-    note: "Expressive, with a little character in the letterforms.",
+    note: "Has a personality of its own.",
   },
   {
     value: "plex",
     label: "IBM Plex Sans",
-    note: "Humanist, clearest figures.",
+    note: "The clearest numbers.",
   },
   {
     value: "jetbrains",
     label: "JetBrains Mono",
-    note: "Monospaced: columns line up, text runs wide.",
+    note: "Typewriter style: lines run wide.",
   },
   {
     value: "system",
     label: "System (Segoe UI)",
-    note: "Segoe UI, the Windows face.",
+    note: "The font Windows uses.",
   },
 ];
 

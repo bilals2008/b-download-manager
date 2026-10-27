@@ -4,6 +4,7 @@ import {
   SettingsPage,
 } from "@/components/settings/settings-page";
 import { Switch } from "@/components/ui/switch";
+import { APP_NAME } from "@/lib/brand";
 import type { Settings } from "@/lib/settings";
 
 interface GeneralSettingsProps {
@@ -19,15 +20,15 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
   return (
     <SettingsPage
       title="General"
-      description="Startup, the clipboard and the tray."
+      description="Startup, clipboard and tray."
     >
       <Section title="Startup">
         <SettingRow
-          label="Launch B Download Manager on startup"
-          hint="The entry is made in your Windows account and can be removed here."
+          label={`Launch ${APP_NAME} on startup`}
+          hint="Adds an entry to Windows startup."
         >
           <Switch
-            label="Launch B Download Manager on startup"
+            label={`Launch ${APP_NAME} on startup`}
             checked={settings.launchOnStartup}
             onChange={(checked) => onChange("launchOnStartup", checked)}
           />
@@ -37,7 +38,7 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
       <Section title="Clipboard">
         <SettingRow
           label="Watch the clipboard for download links"
-          hint="A copied address opens the Add URL dialog. Nothing downloads until you press Download."
+          hint="Opens the Add URL dialog first."
         >
           <Switch
             label="Watch the clipboard for download links"
@@ -50,7 +51,7 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
       <Section title="The tray">
         <SettingRow
           label="Minimize the window to the tray"
-          hint="The minimize button hides the window; the tray icon brings it back."
+          hint="The tray icon brings the window back."
         >
           <Switch
             label="Minimize the window to the tray"
@@ -60,7 +61,7 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
         </SettingRow>
         <SettingRow
           label="Keep running in the tray when the window is closed"
-          hint="Closing hides the window and downloads carry on. With this off, closing with active downloads asks first."
+          hint="Downloads carry on after the window closes."
         >
           <Switch
             label="Keep running in the tray when the window is closed"

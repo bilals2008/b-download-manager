@@ -84,14 +84,14 @@ export function ProxySettings({ settings, onChange }: ProxySettingsProps) {
   return (
     <SettingsPage
       title="Proxy"
-      description="The proxy new downloads go through."
+      description="The proxy new downloads use."
     >
       <Section title="Proxy address">
         <SettingRow
           stacked
           label="Proxy address"
           htmlFor="proxy-address"
-          hint="For example socks5://127.0.0.1:1080. Empty connects directly."
+          hint="e.g. socks5://127.0.0.1:1080. Blank means direct."
         >
           <TextInput
             id="proxy-address"
@@ -120,12 +120,11 @@ export function ProxySettings({ settings, onChange }: ProxySettingsProps) {
               (checking
                 ? "Checking the address…"
                 : draft.trim()
-                  ? "The address is usable."
-                  : "No proxy: downloads connect directly.")}
+                  ? "The address works."
+                  : "No proxy. Downloads go straight to the site.")}
           </p>
           <p className="mt-1 text-chrome-micro text-chrome-muted">
-            Proxy authentication is not supported. A user name or password in
-            the address is refused.
+            A user name or password in the address does not work.
           </p>
         </SettingRow>
       </Section>

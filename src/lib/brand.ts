@@ -15,4 +15,5 @@ export const APP_TAGLINE =
 export const AUTHOR = {
   name: "Muhammad Bilal Hassan",
   site: "https://mbilalhassan.vercel.app/",
+  github: "https://github.com/bilals2008",
 } as const;

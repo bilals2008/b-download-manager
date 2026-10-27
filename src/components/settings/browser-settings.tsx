@@ -37,7 +37,7 @@ export function BrowserSettings({ settings, onChange }: BrowserSettingsProps) {
   useEffect(() => {
     let active = true;
     if (!isDesktop()) {
-      setProblem("The browser bridge can only be checked in the desktop app.");
+      setProblem("This can only be checked in the desktop app.");
       return;
     }
     setChecking(true);
@@ -70,7 +70,7 @@ export function BrowserSettings({ settings, onChange }: BrowserSettingsProps) {
   return (
     <SettingsPage
       title="Browser integration"
-      description="How the browser extension hands downloads over, and the rules it follows."
+      description="Downloads from the browser."
     >
       <Section
         title="Status"
@@ -82,7 +82,7 @@ export function BrowserSettings({ settings, onChange }: BrowserSettingsProps) {
       >
         <SettingRow
           label="Ready to receive from the browser"
-          hint={`On this computer only · port ${status?.port ?? 27500}`}
+          hint={`This computer only · port ${status?.port ?? 27500}`}
         >
           <State
             tone={bridge ? "positive" : "negative"}
@@ -90,14 +90,14 @@ export function BrowserSettings({ settings, onChange }: BrowserSettingsProps) {
               checking && !status
                 ? "Checking…"
                 : bridge
-                  ? "Listening"
-                  : "Not listening"
+                  ? "Ready"
+                  : "Not ready"
             }
           />
         </SettingRow>
         <SettingRow
           label="Browser extension"
-          hint="Only the extension itself is counted; nothing else can reach the app."
+          hint="Only the extension can reach the app."
         >
           <State
             tone="neutral"
@@ -114,7 +114,7 @@ export function BrowserSettings({ settings, onChange }: BrowserSettingsProps) {
       <Section title="From the browser">
         <SettingRow
           label="Take over downloads from the browser"
-          hint="While this app is running, these rules replace the extension's own copy."
+          hint="These rules win while the app is running."
         >
           <Switch
             label="Take over downloads from the browser"
@@ -124,7 +124,7 @@ export function BrowserSettings({ settings, onChange }: BrowserSettingsProps) {
         </SettingRow>
         <SettingRow
           label="Ask before saving"
-          hint="The Add URL dialog opens with the link; nothing starts until you confirm."
+          hint="The link waits for you to press Download."
         >
           <Switch
             label="Ask before saving"
@@ -140,7 +140,7 @@ export function BrowserSettings({ settings, onChange }: BrowserSettingsProps) {
           stacked
           label="Take over only these types"
           htmlFor="capture-types"
-          hint="Leave the list empty to take over every file type."
+          hint="Blank takes every type."
         >
           <RuleList
             id="capture-types"
@@ -162,7 +162,7 @@ export function BrowserSettings({ settings, onChange }: BrowserSettingsProps) {
           stacked
           label="Leave these sites to the browser"
           htmlFor="capture-sites"
-          hint="A subdomain follows its domain. A link you pick from the menu still goes to the app."
+          hint="Covers the site and anything under it."
         >
           <RuleList
             id="capture-sites"
@@ -180,8 +180,7 @@ export function BrowserSettings({ settings, onChange }: BrowserSettingsProps) {
 
       <p className="text-chrome-micro leading-4 text-chrome-muted">
         The extension keeps its own copy of these rules for when this app is
-        closed. Its settings page is the fallback, not a second source while the
-        app is running.
+        closed.
       </p>
     </SettingsPage>
   );
@@ -215,23 +214,23 @@ function State({
 /** What the recorded contact means, in one line, without claiming a link. */
 function contactLabel(lastContactMs: number | null): string {
   if (lastContactMs === null) {
-    return "No request since the app started.";
+    return "Nothing received since the app started.";
   }
   const seconds = Math.max(0, Math.round((Date.now() - lastContactMs) / 1000));
   if (seconds < 10) {
-    return "A request just now.";
+    return "A link just now.";
   }
   if (seconds < 120) {
-    return `Last request ${seconds} seconds ago.`;
+    return `Last link ${seconds} seconds ago.`;
   }
   const minutes = Math.round(seconds / 60);
   if (minutes < 120) {
-    return `Last request ${minutes} minutes ago.`;
+    return `Last link ${minutes} minutes ago.`;
   }
   const hours = Math.round(minutes / 60);
   if (hours < 48) {
-    return `Last request ${hours} hours ago.`;
+    return `Last link ${hours} hours ago.`;
   }
   const days = Math.round(hours / 24);
-  return `Last request ${days} days ago.`;
+  return `Last link ${days} days ago.`;
 }

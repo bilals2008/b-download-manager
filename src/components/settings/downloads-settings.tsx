@@ -26,13 +26,13 @@ export function DownloadsSettings({ settings, onChange }: DownloadsSettingsProps
   return (
     <SettingsPage
       title="Downloads"
-      description="How a new download runs and what is shown while it does."
+      description="New downloads and their windows."
     >
       <Section title="Connections">
         <SettingRow
           label="Default number of connections"
           htmlFor="download-connections"
-          hint="Used for a new download. One connection per 10 KB of the file, up to this number."
+          hint="For new downloads. Up to this many parts."
         >
           <NumberInput
             id="download-connections"
@@ -47,12 +47,12 @@ export function DownloadsSettings({ settings, onChange }: DownloadsSettingsProps
 
       <Section title="Existing files">
         <SettingRow
-          label="When a file of the same name is already there"
-          hint="A new download follows this answer. Ask opens the File Exists dialog."
+          label="When the file already exists"
+          hint="What happens when the file is already there."
         >
           <div className="w-52">
             <ListBox
-              label="When a file of the same name is already there"
+              label="When the file already exists"
               value={settings.duplicatePolicy}
               onChange={(value) =>
                 onChange("duplicatePolicy", value as DuplicatePolicy)
@@ -66,7 +66,7 @@ export function DownloadsSettings({ settings, onChange }: DownloadsSettingsProps
       <Section title="While a download runs">
         <SettingRow
           label="Open the progress window when a download starts"
-          hint="Applies to a download started here and to one handed over by the browser."
+          hint="Opens for every new download."
         >
           <Switch
             label="Open the progress window when a download starts"
@@ -79,7 +79,7 @@ export function DownloadsSettings({ settings, onChange }: DownloadsSettingsProps
       <Section title="When a download finishes">
         <SettingRow
           label="Show the download complete dialog"
-          hint="A small window with the file and the folder when a download finishes."
+          hint="Names the file and where it went."
         >
           <Switch
             label="Show the download complete dialog"

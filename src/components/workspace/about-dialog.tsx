@@ -1,4 +1,4 @@
-import { AuthorLink } from "@/components/shell/author-link";
+import { AuthorAvatar } from "@/components/shell/author-avatar";
 import { AppMark } from "@/components/shell/app-mark";
 import { Dialog } from "@/components/ui/dialog";
 import { DialogAction } from "@/components/ui/dialog-action";
@@ -32,15 +32,17 @@ export function AboutDialog({ open, onClose }: AboutDialogProps) {
       }
     >
       <div className="flex flex-col gap-2 text-xs text-chrome-menu-text">
-        <div className="flex items-center gap-3">
-          <AppMark className="size-10" />
-          <p className="text-sm text-chrome-title-text">
-            {APP_NAME}
-            {version ? ` ${version}` : ""}
-          </p>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <AppMark className="size-10" />
+            <p className="text-sm text-chrome-title-text">
+              {APP_NAME}
+              {version ? ` ${version}` : ""}
+            </p>
+          </div>
+          <AuthorAvatar />
         </div>
         <p>{APP_TAGLINE}</p>
-        <AuthorLink className="self-stretch" />
       </div>
     </Dialog>
   );

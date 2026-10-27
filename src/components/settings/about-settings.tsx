@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { AuthorLink } from "@/components/shell/author-link";
+import { AuthorAvatar } from "@/components/shell/author-avatar";
 import { AppMark } from "@/components/shell/app-mark";
 import { SettingsButton } from "@/components/settings/settings-button";
 import {
@@ -77,14 +77,17 @@ export function AboutSettings({ settings, onChange }: AboutSettingsProps) {
   return (
     <SettingsPage title="About" description="This build and how it updates.">
       <Section title="Application">
-        <div className="flex items-center gap-3 py-2">
-          <AppMark className="size-9" />
-          <div className="min-w-0">
-            <p className="text-sm text-chrome-title-text">{APP_NAME}</p>
-            <p className="text-chrome-micro leading-4 text-chrome-muted">
-              {APP_TAGLINE}
-            </p>
+        <div className="flex items-center justify-between gap-4 py-2">
+          <div className="flex min-w-0 items-center gap-3">
+            <AppMark className="size-9" />
+            <div className="min-w-0">
+              <p className="text-sm text-chrome-title-text">{APP_NAME}</p>
+              <p className="text-chrome-micro leading-4 text-chrome-muted">
+                {APP_TAGLINE}
+              </p>
+            </div>
           </div>
+          <AuthorAvatar />
         </div>
         <SettingRow label="Version">
           <span className="font-mono text-chrome-micro text-chrome-menu-text">
@@ -127,10 +130,6 @@ export function AboutSettings({ settings, onChange }: AboutSettingsProps) {
           />
         </div>
       </Section>
-
-      {/* The signature belongs at the corner, small: it is who wrote the code,
-          not something the reader configures. */}
-      <AuthorLink className="self-stretch" />
     </SettingsPage>
   );
 }

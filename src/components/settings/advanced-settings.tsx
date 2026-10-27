@@ -28,7 +28,7 @@ export function AdvancedSettings({ onReset }: AdvancedSettingsProps) {
   useEffect(() => {
     let active = true;
     if (!isDesktop()) {
-      setProblem("The application folders are only available in the desktop app.");
+      setProblem("Folders can only be opened in the desktop app.");
       return;
     }
     appPaths()
@@ -59,13 +59,13 @@ export function AdvancedSettings({ onReset }: AdvancedSettingsProps) {
   return (
     <SettingsPage
       title="Advanced"
-      description="Application data, a full reset, and what is planned next."
+      description="Data, reset and plans."
     >
       <Section title="Application data">
         <SettingRow
           stacked
           label="Data folder"
-          hint="The saved download list and the resume state of unfinished files."
+          hint="The download list and unfinished files."
         >
           <div className="flex items-center gap-2">
             <Tooltip
@@ -88,16 +88,16 @@ export function AdvancedSettings({ onReset }: AdvancedSettingsProps) {
         <SettingRow
           stacked
           label="Log"
-          hint="What the app did, including the reason a download failed."
+          hint="What happened, including failures."
         >
           <div className="flex items-center gap-2">
             <Tooltip
-              content={paths?.logPath ?? "Reading the log path…"}
+              content={paths?.logPath ?? "Reading the log…"}
               side="top"
               className="block min-w-0 flex-1"
             >
               <p className="truncate font-mono text-chrome-micro text-chrome-menu-text">
-                {paths?.logPath ?? "Reading the log path…"}
+                {paths?.logPath ?? "Reading the log…"}
               </p>
             </Tooltip>
             <SettingsButton
@@ -117,8 +117,8 @@ export function AdvancedSettings({ onReset }: AdvancedSettingsProps) {
 
       <Section title="Reset">
         <p className="pb-2 text-xs leading-5 text-chrome-menu-text">
-          Restores every preference on these pages and forgets the last download
-          folder. Downloads in the list and files already saved are kept.
+          Restores every setting on these pages, including the last folder used.
+          Downloads and saved files are kept.
         </p>
         {armed ? (
           <div className="flex flex-wrap items-center gap-2">
@@ -138,18 +138,17 @@ export function AdvancedSettings({ onReset }: AdvancedSettingsProps) {
 
       <Section title="Planned">
         <p className="pb-1.5 text-xs leading-5 text-chrome-menu-text">
-          Coming soon. These are planned rather than simulated, so no control
-          on these pages pretends they work today.
+          Not built yet.
         </p>
         <ul className="list-disc pl-4 text-chrome-micro leading-5 text-chrome-muted marker:text-chrome-muted">
-          <li>Sounds for a start, a finish and a failure, and custom sound files.</li>
-          <li>Scanning a finished file with an antivirus program.</li>
-          <li>The scheduler and named queues.</li>
+          <li>Sounds for a start, a finish and a failure.</li>
+          <li>A virus scan of a finished file.</li>
+          <li>A schedule and named queues.</li>
           <li>Saved logins for sites that ask before they hand over a file.</li>
-          <li>Proxy authentication.</li>
-          <li>A separate temporary download folder.</li>
+          <li>A password for the proxy.</li>
+          <li>A separate folder for unfinished downloads.</li>
           <li>A folder for each category.</li>
-          <li>Combining separate video and audio streams.</li>
+          <li>Joining separate video and audio streams.</li>
         </ul>
       </Section>
     </SettingsPage>

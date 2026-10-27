@@ -25,13 +25,10 @@ export function AppearanceSettings({
   return (
     <SettingsPage
       title="Appearance"
-      description="The theme, the face and the weight of every window."
+      description="Theme, font and weight."
     >
       <Section title="Theme">
-        <SettingRow
-          label="Theme"
-          hint="Auto follows the appearance of Windows. Every window changes at once."
-        >
+        <SettingRow label="Theme" hint="Auto follows Windows.">
           <Segmented
             label="Theme"
             value={settings.theme}
@@ -78,7 +75,7 @@ const THEMES: { value: ThemePreference; label: string }[] = [
   { value: "dark", label: "Dark" },
 ];
 
-const WEIGHT_HINT = "One step heavier or lighter, everywhere.";
+const WEIGHT_HINT = "Every window at once.";
 
 /**
  * A row of exclusive choices. A fieldset of radios, so arrows move between
