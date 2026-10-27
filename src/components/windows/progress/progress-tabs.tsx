@@ -9,7 +9,7 @@ interface Tab {
   label: string;
 }
 
-/** The two pages of the window, in the order IDM puts them. */
+/** The two pages of the window, the status one first. */
 const TABS: readonly Tab[] = [
   { id: "status", label: "Download status" },
   { id: "speed", label: "Speed limiter" },

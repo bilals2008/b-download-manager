@@ -111,10 +111,9 @@ export function progressControls(
       canOpen: false,
       canClose: false,
       primaryLabel: "Pause",
-      primaryHint:
-        "Hold the connections back; the bytes that are already on disk stay.",
+      primaryHint: "Hold the connections back; what has already arrived is kept.",
       cancelHint:
-        "Stop this download and close this window. The bytes already received stay on disk.",
+        "Stop this download and close this window. What has already arrived is kept.",
     };
   }
 
@@ -132,14 +131,14 @@ export function progressControls(
     canClose: false,
     primaryLabel: restart ? "Restart" : "Resume",
     primaryHint: restart
-      ? "Start the file again from the first byte; the server does not support resuming."
+      ? "Start the file again from the beginning; this site does not allow carrying on."
       : info.resumable === false
-        ? "Continue the transfer that is still open. If it was stopped, the file starts again from the first byte."
-        : "Continue from the bytes that are already on disk.",
+        ? "Carry on with the transfer that is still open. If it was stopped, the file starts again from the beginning."
+        : "Carry on from the part of the file that is already here.",
     cancelHint:
       info.status === "cancelled"
         ? "This download is already stopped."
-        : "Stop this download and close this window. The bytes already received stay on disk.",
+        : "Stop this download and close this window. What has already arrived is kept.",
   };
 }
 
@@ -156,8 +155,7 @@ export interface ProgressChunk {
 }
 
 /**
- * The ranges of a download laid out along the file, one block per connection,
- * the way IDM draws them.
+ * The ranges of a download laid out along the file, one block per connection.
  *
  * Null when the ranges cannot be placed: no plan yet, a file whose size the
  * server did not tell, or a range without a length. The meter then keeps the

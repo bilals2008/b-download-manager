@@ -72,8 +72,8 @@ export function ConnectionDetails({
       <div className="scrollbar-none min-h-0 flex-1 overflow-y-auto">
         <table className="w-full table-fixed border-separate border-spacing-0 text-chrome-micro">
           <caption className="sr-only">
-            Connections of this download, with the bytes each one has received
-            and what it is doing
+            Each connection of this download, how much it has brought in and
+            what it is doing
           </caption>
           <thead>
             {/* The header stays put while the connections scroll under it, so
@@ -108,7 +108,7 @@ export function ConnectionDetails({
                 >
                   {joined
                     ? "The file is complete; its parts were joined and cleaned up."
-                    : "The engine has not opened a connection yet."}
+                    : "No connection has been opened yet."}
                 </td>
               </tr>
             ) : (
@@ -121,7 +121,7 @@ export function ConnectionDetails({
                     <Tooltip
                       content={
                         segment.size === null
-                          ? `Connection ${index + 1}: ${formatSize(segment.downloaded)} received; the server did not tell the file size`
+                          ? `Connection ${index + 1}: ${formatSize(segment.downloaded)} received; the site did not say how big the file is`
                           : `Connection ${index + 1}: ${formatSize(segment.downloaded)} of ${segmentSize(segment)}`
                       }
                       side="top"

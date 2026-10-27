@@ -62,8 +62,9 @@ interface DownloadStatusTabProps {
 }
 
 /**
- * The Download status page: the state of the transfer, the numbers IDM lists,
- * the three controls, and the connections the Hide details control folds.
+ * The Download status page: the state of the transfer, the figures the engine
+ * reports, the three controls, and the connections the Hide details control
+ * folds.
  *
  * The controls come from `progressControls`, so which of them can act is a
  * property of the download, not a guess made by three separate conditions in

@@ -32,7 +32,7 @@ import type { DownloadInfo, DownloadStatus } from "@/types";
  * list calls, so the window and the row cannot disagree. Closing the window
  * leaves the download running; only Cancel stops it.
  *
- * The download is handed in by the backend through `window.__IDM_PROGRESS__`
+ * The download is handed in by the backend through `window.__BDM_PROGRESS__`
  * before this renders.
  */
 export function DownloadProgressWindow({ initial }: { initial: DownloadInfo }) {

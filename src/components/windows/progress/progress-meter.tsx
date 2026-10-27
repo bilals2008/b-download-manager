@@ -13,7 +13,7 @@ interface ProgressMeterProps {
   /** The server did not tell the size of the file. */
   unknown: boolean;
   status: DownloadStatus;
-  /** The ranges of the download, drawn one block each, the way IDM does. */
+  /** The ranges of the download, drawn one block each. */
   segments: DownloadSegment[];
   /** The size of the file, so each range can be placed along it. */
   total: number;
