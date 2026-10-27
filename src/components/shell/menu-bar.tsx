@@ -11,7 +11,7 @@ interface MenuBarProps {
   onCommand: (command: ShellCommand) => void;
   /** Menu items whose text depends on the state of the app. */
   menuLabels?: Partial<Record<ShellCommand, string>>;
-  /** Which radio rows are picked, the way IDM ticks the toolbar size. */
+  /** Which radio rows are picked, like the toolbar size. */
   menuChecks?: Partial<Record<ShellCommand, boolean>>;
 }
 

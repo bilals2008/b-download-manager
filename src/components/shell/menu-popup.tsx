@@ -16,7 +16,7 @@ export interface MenuItem<T extends string = string> {
   danger?: boolean;
   /** A radio row: the menu shows which one is picked. */
   radio?: boolean;
-  /** A nested menu, the way IDM groups "Export", "Arrange files" and friends. */
+  /** A nested menu, for groups like "Export" and "Arrange files". */
   submenu?: MenuRow<T>[];
 }
 
