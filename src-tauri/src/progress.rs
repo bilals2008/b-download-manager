@@ -158,10 +158,7 @@ pub fn handle_menu(app: &AppHandle, id: &str) {
 /// this title. Naming the file there keeps two progress windows apart, and the
 /// tray icon of the window is named after the same file.
 fn window_title(info: &DownloadInfo) -> String {
-    let name = std::path::Path::new(&info.dest)
-        .file_name()
-        .map(|name| name.to_string_lossy().to_string())
-        .unwrap_or_default();
+    let name = crate::dest::last_segment(&info.dest).unwrap_or_default();
     if name.is_empty() {
         "Download progress".to_string()
     } else {
@@ -190,11 +187,7 @@ fn close_window(app: &AppHandle, id: u64) {
 /// The window title names the file for the task switcher; the tooltip adds
 /// the one thing the icon cannot show: how far along it is.
 fn tray_tip(info: &DownloadInfo) -> String {
-    let name = std::path::Path::new(&info.dest)
-        .file_name()
-        .map(|name| name.to_string_lossy().to_string())
-        .filter(|name| !name.is_empty())
-        .unwrap_or_else(|| "Download".to_string());
+    let name = crate::dest::last_segment(&info.dest).unwrap_or_else(|| "Download".to_string());
     let state = match info.status {
         idm_core::downloader::Status::Running if info.total > 0 => {
             format!(

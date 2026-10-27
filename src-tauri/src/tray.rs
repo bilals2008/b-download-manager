@@ -72,7 +72,7 @@ pub fn activity(rows: impl IntoIterator<Item = DownloadInfo>) -> Activity {
                     out.total = out.total.saturating_add(info.total);
                 }
                 if out.first_name.is_none() {
-                    out.first_name = file_name(&info.dest);
+                    out.first_name = crate::dest::last_segment(&info.dest);
                 }
             }
             Status::Queued => out.queued += 1,
@@ -135,13 +135,6 @@ pub fn tooltip_text(activity: &Activity) -> String {
 
 fn count(number: usize, one: &str, many: &str) -> String {
     format!("{number} {}", if number == 1 { one } else { many })
-}
-
-fn file_name(dest: &str) -> Option<String> {
-    std::path::Path::new(dest)
-        .file_name()
-        .map(|name| name.to_string_lossy().to_string())
-        .filter(|name| !name.is_empty())
 }
 
 /// The last line written to the icon, so an unchanged tooltip is not sent to

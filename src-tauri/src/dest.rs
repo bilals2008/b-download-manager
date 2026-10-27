@@ -99,6 +99,17 @@ pub fn folder_of(dest: &Path) -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."))
 }
 
+/// The last part of a stored destination, for the task switcher and the tray.
+///
+/// A destination is a Windows path even when the tests run elsewhere, so both
+/// separators split it rather than only the one the host happens to use.
+pub fn last_segment(dest: &str) -> Option<String> {
+    dest.rsplit(['/', '\\'])
+        .next()
+        .filter(|name| !name.is_empty())
+        .map(str::to_string)
+}
+
 /// Look at a destination: the folder it goes into, and the file already there.
 pub fn inspect(dest: &Path) -> Result<Destination, String> {
     validate(dest)?;
@@ -134,6 +145,17 @@ fn check_folder(folder: &Path) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_last_segment_splits_both_separators() {
+        assert_eq!(
+            last_segment(r"C:\Downloads\a.bin").as_deref(),
+            Some("a.bin")
+        );
+        assert_eq!(last_segment("/home/u/a.bin").as_deref(), Some("a.bin"));
+        assert_eq!(last_segment("a.bin").as_deref(), Some("a.bin"));
+        assert_eq!(last_segment(""), None);
+    }
 
     fn temp_dir(tag: &str) -> PathBuf {
         let dir =
