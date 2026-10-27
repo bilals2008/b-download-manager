@@ -11,8 +11,10 @@ export interface Settings {
   launchOnStartup: boolean;
   /** Watch the clipboard for links and offer them to the add dialog. */
   clipboardCapture: boolean;
-  /** Whether closing the window hides it into the tray. */
+  /** Whether the minimize button hides the window into the tray. */
   minimizeToTray: boolean;
+  /** Whether closing the window keeps the application in the tray. */
+  closeToTray: boolean;
   /** Whether a finished download gets its own window. */
   showCompleteDialog: boolean;
   /** Whether a new download opens its progress window. */
@@ -47,6 +49,23 @@ export interface Settings {
   captureTypes: string[];
   /** Hosts the extension leaves to the browser. */
   skipSites: string[];
+  /**
+   * Whether the application asks the release endpoint for a newer version
+   * when it starts. Off by default: a check reaches the network, so it is the
+   * reader's call, not something done on their first open.
+   */
+  updateAutoCheck: boolean;
+  /**
+   * When a version check last finished, as the clock reads it. Null means no
+   * check has run on this machine since the field existed.
+   */
+  lastUpdateCheck: number | null;
+  /**
+   * Whether the add dialog has been opened at least once. The first of
+   * those openings says where files will land when no save folder has been
+   * chosen yet; after that the sentence has done its work.
+   */
+  firstRunDone: boolean;
 }
 
 export type DuplicatePolicy = "ask" | "rename" | "replace" | "skip";
@@ -61,7 +80,8 @@ export const DUPLICATE_POLICIES: { value: DuplicatePolicy; label: string }[] = [
 export const DEFAULT_SETTINGS: Settings = {
   launchOnStartup: false,
   clipboardCapture: false,
-  minimizeToTray: true,
+  minimizeToTray: false,
+  closeToTray: true,
   showCompleteDialog: true,
   showProgressOnStart: false,
   theme: "auto",
@@ -79,6 +99,9 @@ export const DEFAULT_SETTINGS: Settings = {
   captureAsk: false,
   captureTypes: [],
   skipSites: [],
+  updateAutoCheck: false,
+  lastUpdateCheck: null,
+  firstRunDone: false,
 };
 
 const STORAGE_KEY = "idm-clone.settings.v1";
@@ -113,10 +136,23 @@ export function loadSettings(): Settings {
       return DEFAULT_SETTINGS;
     }
     const value = parsed as Partial<Record<keyof Settings, unknown>>;
+    const migrated =
+      value.closeToTray === undefined && typeof value.minimizeToTray === "boolean";
     return {
       launchOnStartup: boolean(value.launchOnStartup, DEFAULT_SETTINGS.launchOnStartup),
       clipboardCapture: boolean(value.clipboardCapture, DEFAULT_SETTINGS.clipboardCapture),
-      minimizeToTray: boolean(value.minimizeToTray, DEFAULT_SETTINGS.minimizeToTray),
+      // An older build had one switch, `minimizeToTray`, meaning what
+      // `closeToTray` means now. Its value moves there once, and the new
+      // minimize choice starts off unless the newer key is present.
+      minimizeToTray: migrated
+        ? false
+        : boolean(value.minimizeToTray, DEFAULT_SETTINGS.minimizeToTray),
+      closeToTray: boolean(
+        value.closeToTray,
+        migrated
+          ? boolean(value.minimizeToTray, DEFAULT_SETTINGS.closeToTray)
+          : DEFAULT_SETTINGS.closeToTray,
+      ),
       showCompleteDialog: boolean(
         value.showCompleteDialog,
         DEFAULT_SETTINGS.showCompleteDialog,
@@ -171,6 +207,15 @@ export function loadSettings(): Settings {
         cleanCaptureType,
       ),
       skipSites: entries(value.skipSites, DEFAULT_SETTINGS.skipSites, cleanSite),
+      updateAutoCheck: boolean(
+        value.updateAutoCheck,
+        DEFAULT_SETTINGS.updateAutoCheck,
+      ),
+      lastUpdateCheck: stamp(
+        value.lastUpdateCheck,
+        DEFAULT_SETTINGS.lastUpdateCheck,
+      ),
+      firstRunDone: boolean(value.firstRunDone, DEFAULT_SETTINGS.firstRunDone),
     };
   } catch {
     return DEFAULT_SETTINGS;
@@ -258,7 +303,7 @@ export function preferredFolder(): string {
   return settings.defaultFolder.trim();
 }
 
-/** The size of the toolbar buttons, the way IDM keeps it in the View menu. */
+/** The size of the toolbar buttons, a View menu setting. */
 export type ToolbarSize = "large" | "small";
 
 /** How the appearance is chosen. */
@@ -346,7 +391,21 @@ function number(value: unknown, fallback: number, min: number, max: number): num
   return Math.min(max, Math.max(min, Math.round(value)));
 }
 
-function duplicate(value: unknown, fallback: DuplicatePolicy): DuplicatePolicy {
+/**
+ * A moment the clock can read back. Anything else — a junk number, a date from
+ * before the epoch — means no check has run, which is what null says.
+ */
+function stamp(value: unknown, fallback: number | null): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return fallback;
+  }
+  return Math.round(value);
+}
+
+function duplicate(
+  value: unknown,
+  fallback: DuplicatePolicy,
+): DuplicatePolicy {
   return value === "ask" ||
     value === "rename" ||
     value === "replace" ||

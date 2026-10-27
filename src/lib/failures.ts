@@ -36,7 +36,7 @@ export interface FailureExplanation {
 const UNKNOWN: FailureExplanation = {
   kind: "unknown",
   headline: "The download could not finish.",
-  hint: "Retry continues from the bytes already received.",
+  hint: "Retrying picks up where it stopped.",
   retryable: true,
 };
 
@@ -61,7 +61,7 @@ export function explainFailure(error: string | null): FailureExplanation {
   if (text.includes("not enough space") || text.includes("disk is full")) {
     return {
       kind: "full",
-      headline: "There is not enough space on the disk.",
+      headline: "There is not enough space left.",
       hint: "Free some space, or choose another location.",
       retryable: true,
     };
@@ -77,7 +77,7 @@ export function explainFailure(error: string | null): FailureExplanation {
   ) {
     return {
       kind: "permission",
-      headline: "The system did not allow writing the file.",
+      headline: "The app could not write to that folder.",
       hint: "Choose another location, or close the program that is using it.",
       retryable: true,
     };
@@ -102,7 +102,7 @@ export function explainFailure(error: string | null): FailureExplanation {
   ) {
     return {
       kind: "missing",
-      headline: "The file is no longer on the server.",
+      headline: "The file is no longer at that address.",
       hint: "Open the page it came from and copy a fresh link.",
       retryable: true,
     };
@@ -116,7 +116,7 @@ export function explainFailure(error: string | null): FailureExplanation {
   ) {
     return {
       kind: "refused",
-      headline: "The server refused the download.",
+      headline: "The site refused the download.",
       hint: "The link may have expired. Open the page again and copy a fresh one.",
       retryable: true,
     };
@@ -125,8 +125,8 @@ export function explainFailure(error: string | null): FailureExplanation {
   if (text.includes("server is busy") || text.includes("(429)")) {
     return {
       kind: "busy",
-      headline: "The server is busy.",
-      hint: "Wait a moment, then retry. The bytes received so far are kept.",
+      headline: "The site is busy.",
+      hint: "Wait a moment and try again. What has arrived so far is kept.",
       retryable: true,
     };
   }
@@ -134,8 +134,8 @@ export function explainFailure(error: string | null): FailureExplanation {
   if (/\(5\d\d\)/.test(text) || text.includes("the server had a problem")) {
     return {
       kind: "server",
-      headline: "The server had a problem.",
-      hint: "Retry in a moment; the file is still on the server.",
+      headline: "The site had a problem.",
+      hint: "Try again in a moment; the file is still there.",
       retryable: true,
     };
   }
@@ -150,8 +150,8 @@ export function explainFailure(error: string | null): FailureExplanation {
   ) {
     return {
       kind: "size",
-      headline: "The server sent less than it promised.",
-      hint: "Start over to fetch the file again.",
+      headline: "The download came up short.",
+      hint: "Start it again to fetch the whole file.",
       retryable: true,
     };
   }
@@ -191,7 +191,7 @@ export function explainFailure(error: string | null): FailureExplanation {
     return {
       kind: "network",
       headline: "The connection dropped.",
-      hint: "Check the connection, then retry. The bytes received so far are kept.",
+      hint: "Check your connection and try again. What has arrived so far is kept.",
       retryable: true,
     };
   }
@@ -209,21 +209,21 @@ export function receivedSummary(item: {
     return "The file is complete.";
   }
   if (item.downloaded <= 0) {
-    return "No bytes were received.";
+    return "Nothing has arrived yet.";
   }
   if (item.size > 0) {
     return `${Math.min(100, Math.floor((item.downloaded / item.size) * 100))}% received`;
   }
-  return "Received data, but the server did not say how much there is.";
+  return "Part of the file arrived, but the site did not say how big it is.";
 }
 
 /** What Retry will do, in one line. */
 export function resumeSummary(resumable: boolean | null): string {
   if (resumable === true) {
-    return "Retry continues from the bytes already on disk.";
+    return "Retrying picks up from what is already downloaded.";
   }
   if (resumable === false) {
-    return "Retry starts over from the beginning.";
+    return "Retrying starts the file over from the beginning.";
   }
-  return "The engine decides whether the bytes already received can continue.";
+  return "The app works out whether it can pick up where it stopped.";
 }

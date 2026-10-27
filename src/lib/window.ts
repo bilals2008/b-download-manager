@@ -13,6 +13,14 @@ export async function windowAction(action: WindowAction): Promise<void> {
   if (!runningInTauri()) {
     return;
   }
+  // Minimizing has a meaning the window itself cannot know: the user may
+  // have asked the window to disappear into the tray, and only the backend
+  // holds that choice and the tray icon it depends on.
+  if (action === "minimize") {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("minimize_window");
+    return;
+  }
   const { getCurrentWindow } = await import("@tauri-apps/api/window");
   const current = getCurrentWindow();
   await current[action]();

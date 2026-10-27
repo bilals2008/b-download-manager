@@ -10,11 +10,13 @@ export function onDownloadUpdate(
   return listen<DownloadInfo>("download://update", (event) => handler(event.payload));
 }
 
-/** The commands the tray menu sends to the window. */
-export function onTrayCommand(
-  handler: (command: string) => void,
+/** The close button is asking, because downloads are still active. */
+export function onCloseRequested(
+  handler: (active: number) => void,
 ): Promise<UnlistenFn> {
-  return listen<string>("tray://command", (event) => handler(event.payload));
+  return listen<{ active: number }>("app://close-requested", (event) =>
+    handler(event.payload.active),
+  );
 }
 
 /** A link the browser extension handed over. */
@@ -305,9 +307,30 @@ export function setMaxConnections(max: number): Promise<number> {
   return invoke<number>("set_max_connections", { max });
 }
 
-/** Whether closing the window hides it into the tray. */
+/** The choices the tray and the close button follow, as saved on disk. */
+export interface DesktopPreferences {
+  minimizeToTray: boolean;
+  closeToTray: boolean;
+}
+
+/** Whether the minimize button hides the window into the tray. */
 export function setMinimizeToTray(on: boolean): Promise<boolean> {
   return invoke<boolean>("set_minimize_to_tray", { on });
+}
+
+/** Whether closing the window keeps the application in the tray. */
+export function setCloseToTray(on: boolean): Promise<boolean> {
+  return invoke<boolean>("set_close_to_tray", { on });
+}
+
+/** Read back what the backend saved, for a window that has no storage. */
+export function desktopPreferences(): Promise<DesktopPreferences> {
+  return invoke<DesktopPreferences>("desktop_preferences");
+}
+
+/** Hide the main window without changing the state of its downloads. */
+export function hideMainWindow(): Promise<void> {
+  return invoke<void>("hide_main_window");
 }
 
 /** Whether a finished download gets its own window. */

@@ -2,8 +2,8 @@
  * Download domain model.
  *
  * The category definitions live in `categories.ts`; the names, the tree groups
- * and the column set come out of the string tables in `IDMan.exe` (see
- * `ANALYSIS.md`): the categories are General, Video, Music, Documents, Programs,
+ * and the column set come out of the string tables of the reference binary
+ * (see `ANALYSIS.md`): the categories are General, Video, Music, Documents, Programs,
  * Games, Compressed and Other, and the categories pane is a tree with the
  * groups "All Downloads", "Unfinished" and "Finished" above them.
  */
@@ -150,8 +150,8 @@ export function resumableLabel(value: boolean | null): string {
     return "Not known yet";
   }
   return value
-    ? "Yes, a stopped download continues from its bytes"
-    : "No, a retry starts from the first byte";
+    ? "Yes, it picks up where it stopped"
+    : "No, it starts the file over";
 }
 
 export function progressOf(download: Download): number {
@@ -167,7 +167,7 @@ export function progressOf(download: Download): number {
   return Math.min(100, (download.downloaded / download.size) * 100);
 }
 
-/** "1.2 GB" style size, matching how IDM labels the Size column. */
+/** "1.2 GB" style size, the label the Size column shows. */
 export function formatSize(bytes: number): string {
   if (bytes <= 0) {
     return "0 B";
@@ -354,28 +354,28 @@ export function probeWarning(message: string): string {
     return "The link could not be checked. The download may still work.";
   }
   if (/cannot reach the server/i.test(text)) {
-    return "The server could not be reached. Check the address and your connection.";
+    return "The site could not be reached. Check the address and your connection.";
   }
   if (/\b407\b/.test(text)) {
     return "The proxy asks for a sign-in, so it refused the check.";
   }
   if (/sign in|\(401\)/i.test(text)) {
-    return "The server asks for a sign-in. The download may fail without one.";
+    return "The site wants you to sign in first. The download may fail without that.";
   }
   if (/\(403\)|refused the request/i.test(text)) {
-    return "The server refused the check. The link may have expired, or the site may only answer a browser.";
+    return "The site refused the check. The link may have expired, or the site may only answer a browser.";
   }
   if (/not on the server|gone for good|\(404\)|\(410\)/i.test(text)) {
-    return "The file is not on the server any more.";
+    return "The file is no longer at that address.";
   }
   if (/\(429\)|server is busy/i.test(text)) {
-    return "The server is busy. Try again in a moment.";
+    return "The site is busy. Try again in a moment.";
   }
   if (/redirect/i.test(text)) {
-    return "The address redirected too many times.";
+    return "The address kept pointing elsewhere and never reached the file.";
   }
   if (/server had a problem/i.test(text)) {
-    return "The server had a problem. Try again later.";
+    return "The site had a problem. Try again later.";
   }
   return `The link could not be checked: ${text}`;
 }

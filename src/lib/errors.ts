@@ -1,11 +1,12 @@
-/** Messages from the Tauri engine, in words a user can act on. */
+/** Whether this page is the desktop application rather than a browser tab. */
 export function isDesktop(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
+/** A failure in words a reader can act on. */
 export function describeError(error: unknown): string {
   if (!isDesktop()) {
-    return "The download engine is only available in the desktop window.";
+    return "Downloading works only in the desktop app.";
   }
   if (typeof error === "string") {
     return error;
@@ -21,5 +22,5 @@ export function describeError(error: unknown): string {
       return message;
     }
   }
-  return "The download engine did not answer.";
+  return "The app did not answer.";
 }
