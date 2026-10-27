@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { AdvancedSettings } from "@/components/settings/advanced-settings";
+import { AboutSettings } from "@/components/settings/about-settings";
 import { AppearanceSettings } from "@/components/settings/appearance-settings";
 import { BrowserSettings } from "@/components/settings/browser-settings";
 import { ConnectionsSettings } from "@/components/settings/connections-settings";
@@ -22,6 +23,7 @@ import {
   setBrowserFolder,
   setBrowserPolicy,
   setClipboardCapture,
+  setCloseToTray,
   setLaunchOnStartup,
   setMaxConnections,
   setMinimizeToTray,
@@ -54,6 +56,7 @@ const ENGINE_KEYS: readonly (keyof Settings)[] = [
   "speedLimitBytes",
   "maxConnections",
   "minimizeToTray",
+  "closeToTray",
   "showCompleteDialog",
   "showProgressOnStart",
   "clipboardCapture",
@@ -156,6 +159,18 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
     if (!ENGINE_KEYS.includes(key)) {
       return;
     }
+    // A close choice has to be on disk before the next click on the close
+    // button, which can arrive well inside the typing delay. It is one small
+    // write, so it does not wait for the rest of the settings.
+    if (key === "minimizeToTray" || key === "closeToTray") {
+      const push =
+        key === "minimizeToTray"
+          ? setMinimizeToTray(Boolean(value))
+          : setCloseToTray(Boolean(value));
+      void push.catch((failure: unknown) =>
+        setError(describeError(failure)),
+      );
+    }
     scheduleEngine(next);
   }
 
@@ -242,6 +257,8 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
         return <ProxySettings settings={settings} onChange={update} />;
       case "advanced":
         return <AdvancedSettings onReset={resetAll} />;
+      case "about":
+        return <AboutSettings settings={settings} onChange={update} />;
     }
   }
 
@@ -303,6 +320,7 @@ async function applyEngine(next: Settings): Promise<void> {
     setSpeedLimit(next.speedLimitEnabled ? next.speedLimitBytes : 0),
     setMaxConnections(next.maxConnections),
     setMinimizeToTray(next.minimizeToTray),
+    setCloseToTray(next.closeToTray),
     setShowCompleteDialog(next.showCompleteDialog),
     setShowProgressOnStart(next.showProgressOnStart),
     setClipboardCapture(next.clipboardCapture),

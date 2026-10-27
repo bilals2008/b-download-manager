@@ -49,13 +49,23 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
 
       <Section title="The tray">
         <SettingRow
-          label="Keep the application in the tray when the window is closed"
-          hint="Closing the window hides it; the tray icon brings it back."
+          label="Minimize the window to the tray"
+          hint="The minimize button hides the window; the tray icon brings it back."
         >
           <Switch
-            label="Keep the application in the tray when the window is closed"
+            label="Minimize the window to the tray"
             checked={settings.minimizeToTray}
             onChange={(checked) => onChange("minimizeToTray", checked)}
+          />
+        </SettingRow>
+        <SettingRow
+          label="Keep running in the tray when the window is closed"
+          hint="Closing hides the window and downloads carry on. With this off, closing with active downloads asks first."
+        >
+          <Switch
+            label="Keep running in the tray when the window is closed"
+            checked={settings.closeToTray}
+            onChange={(checked) => onChange("closeToTray", checked)}
           />
         </SettingRow>
       </Section>

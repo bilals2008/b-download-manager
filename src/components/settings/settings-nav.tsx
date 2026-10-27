@@ -15,7 +15,8 @@ export type SettingsPageId =
   | "browser"
   | "connections"
   | "proxy"
-  | "advanced";
+  | "advanced"
+  | "about";
 
 /**
  * The pages, grouped the way the window reads: what the application is, what a
@@ -50,7 +51,10 @@ export const SETTINGS_GROUPS: readonly {
   },
   {
     label: "Application",
-    pages: [{ id: "advanced", label: "Advanced", glyph: "advanced" }],
+    pages: [
+      { id: "advanced", label: "Advanced", glyph: "advanced" },
+      { id: "about", label: "About", glyph: "about" },
+    ],
   },
 ];
 
