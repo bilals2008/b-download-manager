@@ -231,10 +231,11 @@ starlight-toc a[aria-current="true"] {
 }
 
 /* The mobile menu button joins the bar's outline icon set instead of being a
-   filled white disc. */
+   filled white disc. Centred with flex, not `display: grid`: an unlayered
+   display rule would beat Starlight's `md:sl-hidden` and leak onto desktop. */
 .sl-menu-button {
-  display: grid;
-  place-items: center;
+  align-items: center;
+  justify-content: center;
   width: var(--sl-menu-button-size);
   height: var(--sl-menu-button-size);
   padding: 0;
