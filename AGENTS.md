@@ -36,4 +36,6 @@ donot use broswer tools to verify user will review manually
 - Tailwind CSS v4 theme variables: https://tailwindcss.com/docs/theme
 - Radix Colors: https://www.radix-ui.com/colors
 - Tauri v2 docs: https://v2.tauri.app/
+- Release, installer and update notes: `docs/RELEASES.md`
+- Tauri updater config: https://v2.tauri.app/plugin/updater/
 - Skill registry: https://skills.sh/

@@ -50,6 +50,8 @@ is(loadSettings(), DEFAULT_SETTINGS, "an empty store gives the defaults");
 is(DEFAULT_SETTINGS.defaultConnections, 8, "a download starts with 8 connections");
 is(DEFAULT_SETTINGS.maxConnections, MAX_CONNECTIONS, "the cap matches the engine");
 is(DEFAULT_SETTINGS.duplicatePolicy, "ask", "an existing file asks by default");
+is(DEFAULT_SETTINGS.closeToTray, true, "closing keeps the app in the tray by default");
+is(DEFAULT_SETTINGS.minimizeToTray, false, "minimizing is a normal minimize by default");
 is(DEFAULT_SETTINGS.browserCapture, true, "browser capture is on by default");
 is(DEFAULT_SETTINGS.captureAsk, false, "a hand-over starts without asking");
 is(DEFAULT_SETTINGS.captureTypes, [], "every type is captured by default");
@@ -62,6 +64,8 @@ const saved = {
   ...DEFAULT_SETTINGS,
   launchOnStartup: true,
   clipboardCapture: true,
+  minimizeToTray: true,
+  closeToTray: false,
   showProgressOnStart: true,
   theme: "dark",
   uiFont: "plex",
@@ -89,7 +93,29 @@ store.set(STORAGE_KEY, "{not json");
 is(loadSettings(), DEFAULT_SETTINGS, "broken JSON falls back to the defaults");
 store.set(STORAGE_KEY, "null");
 is(loadSettings(), DEFAULT_SETTINGS, "a null document falls back");
-store.set(STORAGE_KEY, JSON.stringify({ theme: 7, captureTypes: "mp4" }));
+// An older build had one tray switch; its value becomes the close choice.
+store.set(STORAGE_KEY, JSON.stringify({ minimizeToTray: false }));
+const migrated = loadSettings();
+is(migrated.closeToTray, false, "the old close choice moves to closeToTray");
+is(migrated.minimizeToTray, false, "the new minimize choice starts off");
+
+store.set(STORAGE_KEY, JSON.stringify({ minimizeToTray: true }));
+const migratedOn = loadSettings();
+is(migratedOn.closeToTray, true, "an old on close choice stays on");
+is(migratedOn.minimizeToTray, false, "and does not turn on the new minimize");
+
+store.set(
+  STORAGE_KEY,
+  JSON.stringify({ closeToTray: false, minimizeToTray: true }),
+);
+const both = loadSettings();
+is(both.closeToTray, false, "the new close choice is read");
+is(both.minimizeToTray, true, "the new minimize choice is read");
+
+store.set(
+  STORAGE_KEY,
+  JSON.stringify({ theme: 7, captureTypes: "mp4" }),
+);
 const partial = loadSettings();
 is(partial.theme, DEFAULT_SETTINGS.theme, "a bad theme falls back");
 is(partial.captureTypes, DEFAULT_SETTINGS.captureTypes, "a non-array list falls back");

@@ -53,9 +53,9 @@ for (const status of ["downloading", "queued", "paused", "stopped", "error"]) {
 is(canDeleteFile({ status: "completed" }), true, "a finished file can be deleted");
 
 // The resume line explains both answers, and does not pretend to know before
-// the server has answered.
-is(resumableLabel(true), "Yes, a stopped download continues from its bytes");
-is(resumableLabel(false), "No, a retry starts from the first byte");
+// the site has answered.
+is(resumableLabel(true), "Yes, it picks up where it stopped");
+is(resumableLabel(false), "No, it starts the file over");
 is(resumableLabel(null), "Not known yet");
 checks += 3;
 

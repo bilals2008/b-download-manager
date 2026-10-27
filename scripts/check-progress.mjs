@@ -96,8 +96,8 @@ assert.equal(pausedControls.canCancel, true);
 const restartControls = progressControls({ status: "failed", resumable: false });
 assert.equal(restartControls.primaryLabel, "Restart");
 assert.ok(
-  restartControls.primaryHint.includes("first byte"),
-  "a server that ignores ranges is a restart, not a resume",
+  restartControls.primaryHint.includes("from the beginning"),
+  "a site that ignores ranges is a restart, not a resume",
 );
 
 // A paused transfer can still be open, so its control is a resume even when

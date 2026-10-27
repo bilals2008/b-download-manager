@@ -98,7 +98,7 @@ is(sameAddress("not a url", "not a url"), true, "a broken address still compares
 // A refused check is advice in one line: the download is still allowed.
 is(
   probeWarning("the server asked us to sign in (401)"),
-  "The server asks for a sign-in. The download may fail without one.",
+  "The site wants you to sign in first. The download may fail without that.",
   "authentication",
 );
 is(
@@ -110,32 +110,32 @@ is(
   probeWarning(
     "the server refused the request (403); the link may have expired, or the site only answers a browser",
   ),
-  "The server refused the check. The link may have expired, or the site may only answer a browser.",
+  "The site refused the check. The link may have expired, or the site may only answer a browser.",
   "a refusal",
 );
 is(
   probeWarning("the file is not on the server any more (404)"),
-  "The file is not on the server any more.",
+  "The file is no longer at that address.",
   "a missing file",
 );
 is(
   probeWarning("cannot reach the server: error sending request"),
-  "The server could not be reached. Check the address and your connection.",
+  "The site could not be reached. Check the address and your connection.",
   "an unreachable server",
 );
 is(
   probeWarning("error following redirect"),
-  "The address redirected too many times.",
+  "The address kept pointing elsewhere and never reached the file.",
   "a redirect loop",
 );
 is(
   probeWarning("the server is busy (429) and asked us to come back later"),
-  "The server is busy. Try again in a moment.",
+  "The site is busy. Try again in a moment.",
   "a busy server",
 );
 is(
   probeWarning("the server had a problem (500)"),
-  "The server had a problem. Try again later.",
+  "The site had a problem. Try again later.",
   "a failing server",
 );
 is(

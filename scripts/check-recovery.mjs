@@ -140,7 +140,7 @@ is(explainFailure(null).kind, "unknown", "a failure without a sentence");
 is(explainFailure(null).headline, "The download could not finish.", "fallback headline");
 
 // The state row: what arrived, and whether a retry continues from it.
-is(receivedSummary({ downloaded: 0, size: 100, status: "error" }), "No bytes were received.");
+is(receivedSummary({ downloaded: 0, size: 100, status: "error" }), "Nothing has arrived yet.");
 is(
   receivedSummary({ downloaded: 25, size: 100, status: "error" }),
   "25% received",
@@ -148,7 +148,7 @@ is(
 );
 is(
   receivedSummary({ downloaded: 25, size: 0, status: "error" }),
-  "Received data, but the server did not say how much there is.",
+  "Part of the file arrived, but the site did not say how big it is.",
   "an unknown size",
 );
 is(
@@ -156,9 +156,9 @@ is(
   "The file is complete.",
   "a finished file",
 );
-matches(resumeSummary(true), /bytes already on disk/, "a resumable retry");
+matches(resumeSummary(true), /already downloaded/, "a resumable retry");
 matches(resumeSummary(false), /beginning/, "a retry that starts over");
-matches(resumeSummary(null), /engine decides/, "a retry the engine decides");
+matches(resumeSummary(null), /works out/, "a retry the app works out");
 
 // The dismissal is a real error type, so a start can tell it apart from a
 // refusal the window still has to read.

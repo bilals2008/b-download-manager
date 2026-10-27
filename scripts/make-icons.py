@@ -1,7 +1,7 @@
 """Draw the application mark as the icons of the app and of the tray.
 
 The mark is the one the title bar draws: an amber arrow into a green tray.
-The real IDM icon is a trademarked asset, so the clone draws its own.
+The reference product's icon is a trademarked asset, so the clone draws its own.
 
     python scripts/make-icons.py
 

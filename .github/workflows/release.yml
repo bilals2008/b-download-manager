@@ -1,0 +1,83 @@
+name: Release
+
+# Publishing is automatic and starts with one command on your machine:
+#
+#   pnpm release:patch   (or :minor / :major)
+#
+# That script bumps the version in every recorded file, generates the
+# CHANGELOG.md section from the conventional commits the release carries,
+# commits, tags vX.Y.Z and pushes both. This workflow fires on that tag and
+# is the whole rest of the pipeline: it builds the signed Windows installer,
+# creates the GitHub release with the changelog section as its body, and
+# uploads the update payload (the .exe plus .sig) and latest.json.
+#
+# The published release is what the in-app updater answers from: the app
+# reads releases/latest/download/latest.json, verifies every package against
+# the public key baked into the build, and never runs an update the key did
+# not sign. Only stable v tags release; -rc / -beta tags are ignored.
+#
+# The tag is published as-is (not a draft): the bump command is the deliberate
+# human action in the flow. To review before shipping instead, set
+# releaseDraft: true below — latest.json only ever resolves to published,
+# non-draft releases, so a draft cannot reach installed copies.
+#
+# Required repository secrets (Settings -> Secrets -> Actions):
+#   TAURI_SIGNING_PRIVATE_KEY           contents of ~/.tauri/bdownload.key
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  an empty string (the key has no password)
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          pnpm-version: 12
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Read this version's notes from CHANGELOG.md
+        id: notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          body="$(node scripts/release-notes.mjs "${GITHUB_REF_NAME#v}")"
+          {
+            echo 'body<<EOF'
+            echo "$body"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build the installer, sign it, and publish the release
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "B Download Manager ${{ github.ref_name }}"
+          releaseBody: ${{ steps.notes.outputs.body }}
+          releaseDraft: false
+          prerelease: false
+          args: "--bundles nsis"

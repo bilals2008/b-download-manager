@@ -11,3 +11,6 @@ release
 src-tauri/target
 src-tauri/gen
 crates/*/target
+
+# Misdirected build logs (a `>` with a mangled Windows path)
+C:*
