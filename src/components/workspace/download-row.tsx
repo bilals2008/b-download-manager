@@ -34,10 +34,10 @@ interface DownloadRowProps {
 }
 
 /**
- * One download, the way IDM shows it: the name, the size, the progress as a
- * percentage, the speed, the time left and the status. The folder is not
- * repeated under the name; it is there when the row is opened, in its menu
- * and in the categories pane. Nothing opens under the row, so the list stays
+ * One download as a row: the name, the size, the progress as a percentage,
+ * the speed, the time left and the status. The folder is not repeated under
+ * the name; it is there when the row is opened, in its menu and in the
+ * categories pane. Nothing opens under the row, so the list stays
  * a list.
  */
 export function DownloadRow({

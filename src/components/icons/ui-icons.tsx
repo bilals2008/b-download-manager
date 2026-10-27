@@ -160,7 +160,8 @@ export type SettingsGlyphKind =
   | "sounds"
   | "planned"
   | "browser"
-  | "advanced";
+  | "advanced"
+  | "about";
 
 export function SettingsGlyph({
   kind,
@@ -249,6 +250,14 @@ export function SettingsGlyph({
         <Glyph className={className}>
           <circle cx="8" cy="8" r="2.2" />
           <path d="M8 1.8v1.9M8 12.3v1.9M1.8 8h1.9M12.3 8h1.9M3.6 3.6l1.4 1.4M11 11l1.4 1.4M12.4 3.6 11 5M5 11l-1.4 1.4" />
+        </Glyph>
+      );
+    case "about":
+      return (
+        <Glyph className={className}>
+          <circle cx="8" cy="8" r="5.8" />
+          <path d="M8 7.6v3" />
+          <path d="M8 4.9h.01" />
         </Glyph>
       );
     default:

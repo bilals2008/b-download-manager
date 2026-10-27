@@ -60,7 +60,7 @@ export function CategoryEditorDialog({
 
   async function pickFolder() {
     if (!isDesktop()) {
-      setProblem("The folder picker is only available in the desktop window.");
+      setProblem("Folders can only be chosen in the desktop app.");
       return;
     }
     try {

@@ -57,7 +57,7 @@ interface DownloadContextMenuProps {
 }
 
 /**
- * The menu of a download row, the way IDM opens it on a right click.
+ * The menu of a download row, opened on a right click.
  *
  * The commands work on the selection, and a right click puts the row under
  * the pointer into the selection first, so the menu always acts on what the
@@ -195,7 +195,7 @@ export function DownloadContextMenu({
   );
 }
 
-/** The entries of the menu, in the order IDM lists them. */
+/** The entries of the menu, in the order they appear. */
 function rowsFor(
   items: Download[],
   categories: CategoryDefinition[],

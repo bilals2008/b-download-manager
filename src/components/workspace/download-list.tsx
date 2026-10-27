@@ -125,7 +125,7 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
     }
   }
 
-  /** Open the window that shows this download in flight, the way IDM does. */
+  /** Open the window that shows this download in flight. */
   function openProgress(item: Download) {
     openProgressWindow(item.id).catch((failure: unknown) => {
       reportError(describeError(failure));
@@ -451,7 +451,7 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
                     className="flex items-center justify-center gap-2 text-xs text-chrome-muted"
                   >
                     <SpinnerGlyph className="size-4 motion-safe:animate-spin" />
-                    Reading downloads from the engine…
+                    Loading your downloads…
                   </p>
                 </td>
               </tr>

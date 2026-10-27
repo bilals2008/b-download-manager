@@ -6,7 +6,7 @@ import { StatusBar } from "@/components/workspace/status-bar";
 import { useDownloads } from "@/state/download-store";
 
 interface WorkspaceProps {
-  /** The View menu hides the categories pane in IDM, so it is app state. */
+  /** The View menu can hide the categories pane, so it is app state. */
   categoriesVisible: boolean;
   /** Opens the "Add new download" dialog from the empty state. */
   onAddDownload: () => void;

@@ -12,7 +12,7 @@ export interface DownloadColumn {
 }
 
 /**
- * The six IDM columns, with a sensible starting width. Widths are shares of the
+ * The six columns, with a sensible starting width. Widths are shares of the
  * table width so the table keeps filling the window at every size.
  */
 export const DOWNLOAD_COLUMNS: DownloadColumn[] = [

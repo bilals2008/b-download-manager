@@ -37,7 +37,7 @@ interface DownloadPropertiesDialogProps {
 }
 
 /**
- * The properties of one download, the way IDM shows them.
+ * The properties of one download.
  *
  * The category and the note are metadata, so they can be saved while the
  * download runs. The name and the folder move the file itself, which a task
@@ -85,7 +85,7 @@ export function DownloadPropertiesDialog({
 
   async function pickFolder() {
     if (!isDesktop()) {
-      setError("The folder picker is only available in the desktop window.");
+      setError("Folders can only be chosen in the desktop app.");
       return;
     }
     try {

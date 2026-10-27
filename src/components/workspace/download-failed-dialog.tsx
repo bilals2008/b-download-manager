@@ -197,7 +197,7 @@ export function DownloadFailedDialog({
               !detailsOpen && "hidden",
             )}
           >
-            {item.error?.trim() || "The engine did not report a reason."}
+            {item.error?.trim() || "No reason was reported."}
           </pre>
         </div>
       </div>
