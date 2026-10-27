@@ -19,7 +19,7 @@ use tauri::{AppHandle, Manager};
 
 use crate::actions::{self, StartOptions};
 use crate::bridge::dest;
-use crate::bridge::{is_download_url, is_web_url};
+use crate::bridge::{error_body, is_download_url, is_web_url, ok};
 use crate::conflict::Choice;
 use crate::state::AppState;
 
@@ -160,7 +160,7 @@ pub struct BatchItem {
 /// What became of one link.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct ItemResult {
+pub(crate) struct ItemResult {
     url: String,
     name: String,
     /// `started`, `queued`, `skipped`, `duplicate`, `invalid` or `refused`.
@@ -182,7 +182,7 @@ pub fn add(app: &AppHandle, state: &AppState, body: &[u8]) -> (u16, Value) {
         Err(error) => {
             return (
                 400,
-                super::error_body(
+                error_body(
                     "bad_request",
                     format!("the body could not be read: {error}"),
                 ),
@@ -191,20 +191,21 @@ pub fn add(app: &AppHandle, state: &AppState, body: &[u8]) -> (u16, Value) {
     };
 
     if request.items.is_empty() {
-        return (
-            400,
-            super::error_body("bad_request", "the batch holds no links"),
-        );
+        return (400, error_body("bad_request", "the batch holds no links"));
     }
     if request.items.len() > MAX_ITEMS {
         return (
             400,
-            super::error_body(
+            error_body(
                 "bad_request",
                 format!("a batch holds at most {MAX_ITEMS} links"),
             ),
         );
     }
+    // The batch is a real download workflow, so it honours the same
+    // concurrency cap a normal start does. The bridge keeps that cap current
+    // before it admits the batch.
+    let _ = state.browser_connections();
 
     let queue = match request.queue.trim() {
         "" | "now" => false,
@@ -212,7 +213,7 @@ pub fn add(app: &AppHandle, state: &AppState, body: &[u8]) -> (u16, Value) {
         other => {
             return (
                 400,
-                super::error_body(
+                error_body(
                     "bad_request",
                     format!("{other} is not a queue this build has"),
                 ),
@@ -228,7 +229,7 @@ pub fn add(app: &AppHandle, state: &AppState, body: &[u8]) -> (u16, Value) {
     let Some(folder) = pick_folder(&offered, &request.folder) else {
         return (
             400,
-            super::error_body(
+            error_body(
                 "bad_request",
                 "that folder is not one the application offered",
             ),
@@ -353,7 +354,7 @@ pub fn add(app: &AppHandle, state: &AppState, body: &[u8]) -> (u16, Value) {
     });
 
     if count("started") + count("queued") > 0 {
-        crate::show_window(app);
+        crate::tray::show_window(app);
     }
     idm_core::log::write(
         "info",
@@ -366,7 +367,7 @@ pub fn add(app: &AppHandle, state: &AppState, body: &[u8]) -> (u16, Value) {
 
     (
         200,
-        super::ok(json!({
+        ok(json!({
             "folder": folder.to_string_lossy(),
             "queue": if queue { "main" } else { "now" },
             "connections": connections,

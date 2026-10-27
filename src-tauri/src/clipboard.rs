@@ -1,7 +1,8 @@
 //! Clipboard links.
 //!
-//! IDM watches the clipboard and offers a copied address as a download. The
-//! application does the same, but never starts anything on its own: the link
+//! The reference download manager watches the clipboard and offers a copied
+//! address as a download. The application does the same, but never starts
+//! anything on its own: the link
 //! opens the add dialog, where it can be checked and saved.
 //!
 //! The webview cannot read the clipboard while it is hidden, and the setting
@@ -34,6 +35,11 @@ pub fn start(app: AppHandle) {
             tokio::time::sleep(POLL).await;
 
             let state = app.state::<AppState>();
+            // A genuine exit sets the flag before the process ends; this loop
+            // must not read the clipboard on the way out.
+            if state.shutting_down() {
+                return;
+            }
             if !state.clipboard_capture() {
                 // Forget the last value, so a link that is already there when
                 // the watch is turned on is offered once instead of being

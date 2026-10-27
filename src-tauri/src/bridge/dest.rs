@@ -70,7 +70,8 @@ pub fn name_from_url(url: &str) -> Option<String> {
 /// A destination in `folder` that no file takes yet.
 ///
 /// The second download of the same name becomes `name (1).ext`, which is what
-/// the browser and IDM both do, so the user can tell the two apart on disk.
+/// the browser and the reference download manager both do, so the user can
+/// tell the two apart on disk.
 pub fn unique(folder: &Path, name: &str) -> PathBuf {
     let name = sanitize(name).unwrap_or_else(|| "download".to_string());
     let candidate = folder.join(&name);

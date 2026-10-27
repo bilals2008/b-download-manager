@@ -9,6 +9,8 @@ use idm_core::downloader::{Download, DownloadInfo, Status};
 use idm_core::limits::Limits;
 use idm_core::session::{Index, KnownDownload};
 
+use crate::prefs::{self, DesktopPreferences};
+
 /// The capture rules the browser extension follows while the application is
 /// running. The extension keeps its own copy for when the app is closed.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -52,8 +54,17 @@ pub struct AppState {
     /// The last time the extension reached the bridge, in seconds since the
     /// Unix epoch. Zero means it has not reached it yet.
     last_extension_contact: AtomicU64,
-    /// Whether closing the window hides it into the tray.
-    minimize_to_tray: AtomicBool,
+    /// What the minimize and close buttons mean, and where that choice is
+    /// kept. The file is loaded before the tray is built, so an early close
+    /// already follows the user's choice.
+    preferences: Mutex<DesktopPreferences>,
+    preferences_path: Mutex<Option<PathBuf>>,
+    /// Whether the main tray icon exists. Without it, hiding the window would
+    /// strand the application with no way back.
+    tray_available: AtomicBool,
+    /// Set by the first genuine exit, so shutdown work happens once even when
+    /// several exit paths meet.
+    shutting_down: AtomicBool,
     /// Whether the window of a finished download is shown.
     show_complete_dialog: AtomicBool,
     /// Whether a new download opens its progress window.
@@ -77,7 +88,10 @@ impl Default for AppState {
             browser_connections: AtomicU32::new(8),
             bridge_running: AtomicBool::new(false),
             last_extension_contact: AtomicU64::new(0),
-            minimize_to_tray: AtomicBool::new(true),
+            preferences: Mutex::new(DesktopPreferences::default()),
+            preferences_path: Mutex::new(None),
+            tray_available: AtomicBool::new(false),
+            shutting_down: AtomicBool::new(false),
             show_complete_dialog: AtomicBool::new(true),
             show_progress_on_start: AtomicBool::new(false),
             clipboard_capture: AtomicBool::new(false),
@@ -255,14 +269,63 @@ impl AppState {
         self.clipboard_capture.store(on, Ordering::SeqCst);
     }
 
-    /// Whether closing the window hides it into the tray.
-    pub fn minimize_to_tray(&self) -> bool {
-        self.minimize_to_tray.load(Ordering::SeqCst)
+    /// The choices the tray and the close button follow.
+    pub fn preferences(&self) -> DesktopPreferences {
+        *self.preferences.lock().expect("preferences lock poisoned")
     }
 
-    /// Choose whether closing the window hides it into the tray.
-    pub fn set_minimize_to_tray(&self, on: bool) {
-        self.minimize_to_tray.store(on, Ordering::SeqCst);
+    /// Replace the choices. The caller saves them when the change is worth a
+    /// write; a whole object keeps the two choices from drifting apart.
+    pub fn set_preferences(&self, value: DesktopPreferences) {
+        *self.preferences.lock().expect("preferences lock poisoned") = value;
+    }
+
+    /// Point the state at the preferences file and read it.
+    ///
+    /// Called once during setup, before the tray is built. A file that cannot
+    /// be read leaves the defaults in place, so the application still opens.
+    pub fn set_preferences_path(&self, path: PathBuf) {
+        let value = prefs::load(&path);
+        *self.preferences.lock().expect("preferences lock poisoned") = value;
+        *self
+            .preferences_path
+            .lock()
+            .expect("preferences path lock poisoned") = Some(path);
+    }
+
+    /// Write the choices to the file, when one has been chosen. A failure is
+    /// logged rather than refused: the setting still applies for this run.
+    pub fn save_preferences(&self) {
+        let value = self.preferences();
+        let path = self
+            .preferences_path
+            .lock()
+            .expect("preferences path lock poisoned")
+            .clone();
+        let Some(path) = path else { return };
+        if let Err(error) = prefs::save(&path, &value) {
+            idm_core::log::write("warn", &error);
+        }
+    }
+
+    /// Whether the tray icon exists, so hiding the window is reversible.
+    pub fn tray_available(&self) -> bool {
+        self.tray_available.load(Ordering::SeqCst)
+    }
+
+    pub fn set_tray_available(&self, on: bool) {
+        self.tray_available.store(on, Ordering::SeqCst);
+    }
+
+    /// Take the one shutdown. `true` means this caller owns it.
+    pub fn begin_shutdown(&self) -> bool {
+        !self.shutting_down.swap(true, Ordering::SeqCst)
+    }
+
+    /// Whether the application is on its way out. Background loops check this
+    /// before doing more work.
+    pub fn shutting_down(&self) -> bool {
+        self.shutting_down.load(Ordering::SeqCst)
     }
 
     /// Whether a finished download gets its own window.

@@ -17,10 +17,12 @@ pub(crate) mod dest;
 mod http;
 
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager};
+use tokio::sync::watch;
 
 use idm_core::downloader::Status;
 use idm_core::log;
@@ -49,8 +51,18 @@ const CLIENT_VALUE: &str = "browser-extension";
 /// The event the window listens to for a hand-over that asks the user first.
 const DOWNLOAD_EVENT: &str = "bridge://download";
 
-/// Start the server. It runs until the application ends.
+/// The shutdown signal of the one listener. The bridge starts once, with the
+/// application; a genuine exit closes the port instead of leaving tasks to be
+/// killed by the process teardown.
+static STOP: OnceLock<watch::Sender<bool>> = OnceLock::new();
+
+/// Start the server. It runs until [`stop`] is called or the application ends.
 pub fn start(app: AppHandle) {
+    let (sender, mut stop) = watch::channel(false);
+    if STOP.set(sender).is_err() {
+        log::write("warn", "the browser bridge was started twice");
+    }
+
     tauri::async_runtime::spawn(async move {
         let listener = match tokio::net::TcpListener::bind(("127.0.0.1", PORT)).await {
             Ok(listener) => listener,
@@ -69,15 +81,31 @@ pub fn start(app: AppHandle) {
         );
 
         loop {
-            let Ok((stream, _)) = listener.accept().await else {
-                continue;
-            };
-            let app = app.clone();
-            tauri::async_runtime::spawn(async move {
-                let _ = serve(app, stream).await;
-            });
+            tokio::select! {
+                _ = stop.changed() => break,
+                accepted = listener.accept() => {
+                    let Ok((stream, _)) = accepted else {
+                        continue;
+                    };
+                    let app = app.clone();
+                    tauri::async_runtime::spawn(async move {
+                        let _ = serve(app, stream).await;
+                    });
+                }
+            }
         }
+
+        app.state::<AppState>().set_bridge_running(false);
+        log::write("info", "the browser bridge stopped");
     });
+}
+
+/// Close the bridge to new requests. Called once, on the way out.
+pub fn stop(state: &AppState) {
+    if let Some(sender) = STOP.get() {
+        let _ = sender.send(true);
+    }
+    state.set_bridge_running(false);
 }
 
 /// Read one request, answer it, and close the connection.
@@ -180,7 +208,7 @@ async fn route(app: &AppHandle, request: &Request) -> (u16, Value) {
         ("GET", "/v1/batch-options") => (200, ok(batch::options(app, &app.state::<AppState>()))),
         ("POST", "/v1/downloads/batch") => batch::add(app, &app.state::<AppState>(), &request.body),
         ("POST", "/v1/focus") => {
-            crate::show_window(app);
+            crate::tray::show_window(app);
             (200, ok(json!({ "focused": true })))
         }
         ("POST", _) => match control_route(path) {
@@ -279,7 +307,7 @@ async fn add_download(app: &AppHandle, body: &[u8]) -> (u16, Value) {
 
     match request.mode {
         Mode::Ask => {
-            crate::show_window(app);
+            crate::tray::show_window(app);
             let _ = app.emit(
                 DOWNLOAD_EVENT,
                 json!({ "url": url, "name": name, "referer": referer }),

@@ -44,8 +44,14 @@ struct AppReporter(AppHandle);
 impl Reporter for AppReporter {
     fn report(&self, info: &DownloadInfo) {
         let _ = self.0.emit(UPDATE_EVENT, info.clone());
+        // The tray follows the same reports as the window, so its tooltip is
+        // current whether or not a window is watching. Both calls only write
+        // when the line they would show has changed.
+        crate::progress::refresh_tray(&self.0, info);
+        crate::tray::refresh(&self.0);
 
-        // A finished file gets the window IDM opens for it, unless the user
+        // A finished file gets the window the reference manager opens for it,
+        // unless the user
         // turned that window off in Options. The window is built on the main
         // thread, the one the window toolkit runs on.
         if info.status == Status::Completed && self.0.state::<AppState>().show_complete_dialog() {
@@ -69,6 +75,17 @@ fn refused(kind: &str, message: String, dest: &std::path::Path) -> Refusal {
         path: dest.to_string_lossy().to_string(),
         suggested: dest.to_string_lossy().to_string(),
     }
+}
+
+/// Tell every window and tray icon what one download is doing.
+///
+/// The engine reports on its own while bytes arrive; this is the same news
+/// for the changes the commands make, so a pause or a queue move is reflected
+/// in a progress window's tray tooltip without waiting for the next report.
+fn announce(app: &AppHandle, download: &Download) {
+    let info = download.info();
+    let _ = app.emit(UPDATE_EVENT, info.clone());
+    crate::progress::refresh_tray(app, &info);
 }
 
 /// Hand a download to a task of its own.
@@ -148,7 +165,8 @@ pub fn start(
     // is there at once, in the state the queue expects, and no task is
     // spawned: the queue starts it the same way a paused one is started.
     if options.queue {
-        let _ = app.emit(UPDATE_EVENT, download.info());
+        announce(app, &download);
+        crate::tray::refresh(app);
         return Ok(Started {
             id: Some(id),
             dest: dest.to_string_lossy().to_string(),
@@ -252,7 +270,7 @@ pub fn redownload(
     crate::complete::close(app, id);
     // The new row takes the place of the old one at once, instead of waiting
     // for the first bytes of the transfer.
-    let _ = app.emit(UPDATE_EVENT, fresh.info());
+    announce(app, &fresh);
     spawn_run(app, state, fresh);
 
     Ok(Started {
@@ -275,7 +293,7 @@ pub fn set_category(
 ) -> Result<(), String> {
     let download = state.get(id).ok_or("unknown download")?;
     download.set_category(category);
-    let _ = app.emit(UPDATE_EVENT, download.info());
+    announce(app, &download);
     state.save_index();
     Ok(())
 }
@@ -293,7 +311,7 @@ pub fn set_meta(
 ) -> Result<(), String> {
     let download = state.get(id).ok_or("unknown download")?;
     download.set_meta(category, description);
-    let _ = app.emit(UPDATE_EVENT, download.info());
+    announce(app, &download);
     state.save_index();
     Ok(())
 }
@@ -313,7 +331,7 @@ pub fn set_destination(
 ) -> Result<String, Refusal> {
     let target = rewrite_destination(state, id, &dest, choice)?;
     if let Some(download) = state.get(id) {
-        let _ = app.emit(UPDATE_EVENT, download.info());
+        announce(app, &download);
     }
     Ok(target.to_string_lossy().to_string())
 }
@@ -523,8 +541,9 @@ pub fn relocate(app: &AppHandle, state: &AppState, id: u64, folder: PathBuf) -> 
 pub fn queue(app: &AppHandle, state: &AppState, id: u64) -> Result<(), String> {
     queue_row(state, id)?;
     if let Some(download) = state.get(id) {
-        let _ = app.emit(UPDATE_EVENT, download.info());
+        announce(app, &download);
     }
+    crate::tray::refresh(app);
     Ok(())
 }
 
@@ -555,8 +574,9 @@ fn queue_row(state: &AppState, id: u64) -> Result<(), String> {
 pub fn dequeue(app: &AppHandle, state: &AppState, id: u64) -> Result<(), String> {
     dequeue_row(state, id)?;
     if let Some(download) = state.get(id) {
-        let _ = app.emit(UPDATE_EVENT, download.info());
+        announce(app, &download);
     }
+    crate::tray::refresh(app);
     Ok(())
 }
 
@@ -581,6 +601,7 @@ pub fn delete_file(app: &AppHandle, state: &AppState, id: u64) -> Result<(), Str
     // to show.
     crate::progress::close(app, id);
     crate::complete::close(app, id);
+    crate::tray::refresh(app);
     Ok(())
 }
 
@@ -634,8 +655,9 @@ pub fn pause(app: &AppHandle, state: &AppState, id: u64) -> Result<(), String> {
     // The pause is a good moment to make the resume state exact: the bytes
     // that arrived since the last periodic write are recorded now.
     download.save_manifest();
-    let _ = app.emit(UPDATE_EVENT, download.info());
+    announce(app, &download);
     state.save_index();
+    crate::tray::refresh(app);
     Ok(())
 }
 
@@ -664,7 +686,7 @@ pub fn resume(app: &AppHandle, state: &AppState, id: u64) -> Result<(), String> 
     // while the run it just asked for is on its way.
     if info.status != Status::Running {
         download.set_status(Status::Running);
-        let _ = app.emit(UPDATE_EVENT, download.info());
+        announce(app, &download);
     }
     if restarting {
         let limits = state.limits().clone();
@@ -679,6 +701,7 @@ pub fn resume(app: &AppHandle, state: &AppState, id: u64) -> Result<(), String> 
     }
 
     state.save_index();
+    crate::tray::refresh(app);
     Ok(())
 }
 
@@ -700,8 +723,9 @@ pub fn cancel(app: &AppHandle, state: &AppState, id: u64) -> Result<(), String> 
     // The ranges hold the bytes they received; record them before the task
     // winds down, so a resume continues from the right place.
     download.save_manifest();
-    let _ = app.emit(UPDATE_EVENT, download.info());
+    announce(app, &download);
     state.save_index();
+    crate::tray::refresh(app);
     Ok(())
 }
 

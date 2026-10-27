@@ -35,7 +35,7 @@ pub fn show(app: &AppHandle) -> Result<(), String> {
         .decorations(false)
         .center()
         .visible(false)
-        .initialization_script("window.__IDM_GRABBER__ = true;")
+        .initialization_script("window.__BDM_GRABBER__ = true;")
         .build()
         .map(|window| crate::window_style::round_corners(&window))
         .map_err(|error| error.to_string())

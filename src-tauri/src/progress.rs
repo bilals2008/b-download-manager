@@ -1,9 +1,10 @@
 //! The "Download progress" window.
 //!
-//! IDM opens a window of its own for a download in flight: the status, the
-//! sizes, the transfer rate, the time left, the resume capability, the
-//! connections, and the pause, cancel and details controls. The clone gives
-//! every download that window, built from the same state the list reads.
+//! The reference download manager opens a window of its own for a download in
+//! flight: the status, the sizes, the transfer rate, the time left, the resume
+//! capability, the connections, and the pause, cancel and details controls.
+//! The clone gives every download that window, built from the same state the
+//! list reads.
 //!
 //! Like the completion window it is a webview with its own title bar, so the
 //! main window stays usable. The download rides in as an initialization
@@ -57,6 +58,10 @@ const FOLD_STEPS: u64 = 12;
 /// the travel of every other window, leaving it at a half-open height. Each
 /// window cancels only its own earlier travel.
 static FOLDS: OnceLock<Mutex<HashMap<String, u64>>> = OnceLock::new();
+
+/// The last tooltip of each progress icon. Progress reports arrive several
+/// times a second; the shell only hears about a line that changed.
+static TIPS: OnceLock<Mutex<HashMap<u64, String>>> = OnceLock::new();
 
 fn folds() -> &'static Mutex<HashMap<String, u64>> {
     FOLDS.get_or_init(Default::default)
@@ -181,9 +186,53 @@ fn close_window(app: &AppHandle, id: u64) {
 }
 
 /// What the tray icon says when the pointer rests on it.
+///
+/// The window title names the file for the task switcher; the tooltip adds
+/// the one thing the icon cannot show: how far along it is.
 fn tray_tip(info: &DownloadInfo) -> String {
+    let name = std::path::Path::new(&info.dest)
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| "Download".to_string());
+    let state = match info.status {
+        idm_core::downloader::Status::Running if info.total > 0 => {
+            format!(
+                "{}%",
+                (info.downloaded.saturating_mul(100) / info.total).min(100)
+            )
+        }
+        idm_core::downloader::Status::Running => "downloading".to_string(),
+        idm_core::downloader::Status::Queued => "queued".to_string(),
+        idm_core::downloader::Status::Paused => "paused".to_string(),
+        idm_core::downloader::Status::Completed => "complete".to_string(),
+        idm_core::downloader::Status::Failed => "failed".to_string(),
+        idm_core::downloader::Status::Cancelled => "stopped".to_string(),
+    };
     // Windows keeps about 120 characters of a tray tooltip.
-    window_title(info).chars().take(120).collect()
+    format!("{name} — {state}").chars().take(120).collect()
+}
+
+/// Keep the progress window's tray icon as current as the window itself.
+///
+/// Driven by the same state report that updates the window, so a hidden
+/// progress window still has an honest tooltip without a timer.
+pub fn refresh_tray(app: &AppHandle, info: &DownloadInfo) {
+    let Some(tray) = app.tray_by_id(&tray_id(info.id)) else {
+        return;
+    };
+    let text = tray_tip(info);
+    {
+        let mut tips = TIPS
+            .get_or_init(Default::default)
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if tips.get(&info.id) == Some(&text) {
+            return;
+        }
+        tips.insert(info.id, text.clone());
+    }
+    let _ = tray.set_tooltip(Some(&text));
 }
 
 /// Give a progress window its own tray icon.
@@ -249,12 +298,16 @@ fn add_tray(app: &AppHandle, info: &DownloadInfo) -> tauri::Result<()> {
 pub fn remove_tray(app: &AppHandle, id: u64) {
     // Dropping the icon that comes back removes it from the notification area.
     let _ = app.remove_tray_by_id(&tray_id(id));
+    TIPS.get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .remove(&id);
 }
 
 /// The script that hands the download to the page before it renders.
 fn payload(info: &DownloadInfo) -> String {
     let json = serde_json::to_string(info).unwrap_or_else(|_| "null".to_string());
-    format!("window.__IDM_PROGRESS__ = {json};")
+    format!("window.__BDM_PROGRESS__ = {json};")
 }
 
 /// Show the progress window of a download, or bring it to the front when it
@@ -269,6 +322,10 @@ pub fn show(app: &AppHandle, info: &DownloadInfo) {
         // one now rather than staying without a way back from the tray.
         if let Err(error) = add_tray(app, info) {
             log::write("warn", &format!("the tray icon did not open: {error}"));
+        } else {
+            // A window reopened after its download moved on may have an icon
+            // from before the move; it is named and described again here.
+            refresh_tray(app, info);
         }
         return;
     }
@@ -451,9 +508,34 @@ mod tests {
     #[test]
     fn the_payload_is_the_state_of_the_download() {
         let script = payload(&sample_info());
-        assert!(script.starts_with("window.__IDM_PROGRESS__ = {"));
+        assert!(script.starts_with("window.__BDM_PROGRESS__ = {"));
         assert!(script.contains("\"dest\":\"C:\\\\Downloads\\\\a.bin\""));
         assert!(script.contains("\"resumable\":true"));
+    }
+
+    #[test]
+    fn a_progress_tooltip_names_the_file_and_the_progress() {
+        assert_eq!(tray_tip(&sample_info()), "a.bin — 25%");
+
+        let mut unknown = sample_info();
+        unknown.total = 0;
+        assert_eq!(tray_tip(&unknown), "a.bin — downloading");
+
+        let mut paused = sample_info();
+        paused.status = idm_core::downloader::Status::Paused;
+        assert_eq!(tray_tip(&paused), "a.bin — paused");
+
+        let mut done = sample_info();
+        done.status = idm_core::downloader::Status::Completed;
+        done.downloaded = done.total;
+        assert_eq!(tray_tip(&done), "a.bin — complete");
+    }
+
+    #[test]
+    fn a_progress_tooltip_without_a_name_still_reads() {
+        let mut info = sample_info();
+        info.dest = String::new();
+        assert_eq!(tray_tip(&info), "Download — 25%");
     }
 
     #[test]

@@ -1,8 +1,9 @@
 //! The "Download complete" window.
 //!
-//! IDM opens a window of its own when a file finishes, rather than a box
-//! inside the list. The strings of `IDMan.exe` call it "Download complete" and
-//! give its body as "File %s download complete.\n\nDownloaded %s (%I64d
+//! The reference download manager opens a window of its own when a file
+//! finishes, rather than a box inside the list. The strings of the reference
+//! binary call it "Download complete" and give its body as "File %s download
+//! complete.\n\nDownloaded %s (%I64d
 //! Bytes)\nFile saved as %s"; the option that turns it on is "Show download
 //! complete dialog" (`ANALYSIS.md`, section 9.4).
 //!
@@ -25,7 +26,7 @@ pub fn label(id: u64) -> String {
 /// The script that hands the finished download to the page.
 fn payload(info: &DownloadInfo) -> String {
     let json = serde_json::to_string(info).unwrap_or_else(|_| "null".to_string());
-    format!("window.__IDM_COMPLETE__ = {json};")
+    format!("window.__BDM_COMPLETE__ = {json};")
 }
 
 /// Show the window for a download that just finished.
@@ -92,7 +93,7 @@ mod tests {
             description: None,
         };
         let script = payload(&info);
-        assert!(script.starts_with("window.__IDM_COMPLETE__ = {"));
+        assert!(script.starts_with("window.__BDM_COMPLETE__ = {"));
         assert!(script.contains("\"dest\":\"C:\\\\Downloads\\\\a.bin\""));
     }
 }
