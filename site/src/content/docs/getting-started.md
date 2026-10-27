@@ -35,5 +35,5 @@ You can close the window and it keeps downloading. When a file finishes, a small
 ## Next
 
 - [Using the app](/usage/): every button, in plain words.
-- [Getting the app](/installation/): the browser button, and where the installer is.
+- [Getting the app](/installation/): where the installer will come from, and when the browser extension arrives.
 - [Troubleshooting](/troubleshooting/): when something does not move.

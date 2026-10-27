@@ -7,7 +7,7 @@ import ThemeToggle from "./ThemeToggle.astro";
 
 <header class="nav" data-nav>
   <div class="nav-inner">
-    <a class="brand" href="/" aria-label="B Download Manager home">
+    <a class="brand" href="/" aria-label="B Download Manager (Beta) home">
       <img
         src="/images/app-icon.png"
         alt=""
@@ -16,6 +16,7 @@ import ThemeToggle from "./ThemeToggle.astro";
         class="brand-mark"
       />
       <span class="brand-name">B Download Manager</span>
+      <span class="beta-badge" aria-hidden="true">Beta</span>
     </a>
 
     <nav class="nav-links" aria-label="Primary">
@@ -128,6 +129,21 @@ import ThemeToggle from "./ThemeToggle.astro";
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .beta-badge {
+    flex: none;
+    padding: 0.12rem 0.42rem;
+    border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+    border-radius: 999px;
+    background-color: color-mix(in srgb, var(--accent) 9%, transparent);
+    color: var(--accent);
+    font-family: var(--face-sans);
+    font-size: var(--type-micro);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    line-height: 1.5;
+    text-transform: uppercase;
   }
 
   .nav-links {

@@ -25,7 +25,7 @@ Yes. Every download keeps a note of how far it got, so after a reboot it resumes
 
 ## Can it download videos from streaming sites?
 
-No. It saves files that have a direct link. Video sites usually hide the video behind a player, and putting those streams back together is not something this app does. If a page offers a direct video or sound file, the browser add-on will list it for you.
+No. It saves files that have a direct link. Video sites usually hide the video behind a player, and putting those streams back together is not something this app does. If a page does offer a direct video or sound file, right-click it and copy the link, then add that link to the app.
 
 ## Can I limit how fast it goes?
 
@@ -41,7 +41,7 @@ Not yet. **Downloads → Scheduler and queues** says it is coming soon rather th
 
 ## Does it collect anything about me?
 
-No account, no analytics, no update check. The only things it reaches out to are the files you ask it to download, plus a small connection to the browser add-on that stays on your own computer.
+No account, no analytics, no update check. The only things it reaches out to are the files you ask it to download, plus the browser hand-off, which stays on your own computer.
 
 ## Where are my downloads kept?
 

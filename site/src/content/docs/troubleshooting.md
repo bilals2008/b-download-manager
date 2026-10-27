@@ -5,8 +5,9 @@ description: What to try when a download, the browser button or the window does 
 
 ## The browser button does nothing
 
+- **Is the extension installed?** It is not in any browser's store yet, so a normal install has no button to click. [Getting the app](/installation/) says when that changes.
 - **Is the app running?** The add-on cannot start B Download Manager, and without it the button has nothing to send the file to.
-- **Did Firefox restart?** Firefox forgets a temporary add-on when it closes. Load it again the way [Getting the app](/installation/) describes.
+- **Did Firefox restart?** Firefox forgets an add-on loaded by hand when it closes. Load it again the way [Building from source](/developers/#browser-extensions) describes.
 - **Chrome or Edge:** click the add-on's button. Its popup says whether it can see the app.
 - **Right-click a link, not empty page space.** Pictures, videos and sound files work too. A page that only shows a player, like most video sites, is not a link to a file.
 
@@ -50,7 +51,7 @@ File types, Browser capture, Sites Logins, Dial Up / VPN and Sounds are not buil
 
 ## Asking for help
 
-Send four things and most problems can be answered without a second round of questions:
+The app is public work in progress, so a problem is worth reporting: [open an issue](https://github.com/bilals2008/b-download-manager/issues/new) with four things and most problems can be answered without a second round of questions:
 
 1. The version, from **Help → About B Download Manager…**
 2. Your version of Windows (or macOS, or Linux).

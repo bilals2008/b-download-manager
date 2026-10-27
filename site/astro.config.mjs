@@ -3,8 +3,16 @@ import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import tailwindcss from '@tailwindcss/vite';
 
-// TODO: add `site: 'https://<your-domain>'` once the Vercel domain is known.
+// The feed and the sitemap need an absolute origin. Vercel supplies one on every
+// deploy; anywhere else, set SITE_URL.
+const site =
+  process.env.SITE_URL ||
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : 'http://localhost:4321');
+
 export default defineConfig({
+  site,
   vite: {
     plugins: [tailwindcss()],
   },
@@ -16,6 +24,20 @@ export default defineConfig({
         src: './public/images/app-icon.png',
       },
       customCss: ['./src/styles/starlight.css'],
+      head: [
+        {
+          tag: 'link',
+          attrs: {
+            rel: 'alternate',
+            type: 'application/rss+xml',
+            title: 'B Download Manager documentation',
+            href: '/rss.xml',
+          },
+        },
+      ],
+      components: {
+        TableOfContents: './src/components/docs/TableOfContents.astro',
+      },
       sidebar: [
         {
           label: 'Documentation',
