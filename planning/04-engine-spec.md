@@ -37,7 +37,7 @@ count = clamp(ceil(total / SEGMENT_TARGET), 1, max_connections)
 with the remainder spread over the first segments, so the ranges are
 contiguous and cover the file exactly.
 
-**Open question:** IDM's own rule is unknown. See
+**Open question:** the reference product's own rule is unknown. See
 [02-rea-plan.md](./02-rea-plan.md) Priority 1. Until it is known, the
 alternative is to **measure**: sweep the connection count against a
 range-capable server and pick the split that maximises throughput.
@@ -56,7 +56,7 @@ Accept-Encoding: identity
 
 `Accept-Encoding: identity` is not optional. With a compressed encoding the
 bytes on the wire no longer line up with the byte offsets in the file, and
-every range is wrong. IDM sends it too (`0x6cf870`).
+every range is wrong. The reference binary sends it too (`0x6cf870`).
 
 The response is validated before a single byte is written:
 
@@ -80,7 +80,7 @@ write(part, bytes)
 received += bytes.len()
 ```
 
-This is IDM's model: the chunk writer `FUN_0055db20` calls
+This is the reference product's model: the chunk writer `FUN_0055db20` calls
 `SetFilePointer(handle, offset, NULL, FILE_BEGIN)` before every write, so a
 chunk file is a sparse, randomly addressed container.
 
@@ -98,17 +98,18 @@ underneath it stops at the right byte.
 
 **Goal:** use the whole link, and survive a slow connection.
 
-Two mechanisms, both observed in IDM.
+Two mechanisms, both observed in the reference binary.
 
 **Reassignment.** A connection that dies does not lose its range; another
-connection picks it up. IDM: *"The file chunk %d is reassigned to
-connection %d."* The implementation simply lets the failed task retry the
-same range, which has the same effect.
+connection picks it up. The reference binary: *"The file chunk %d is
+reassigned to connection %d."* The implementation simply lets the failed task
+retry the same range, which has the same effect.
 
 **Growth.** When the slowest live connection lags, split its remaining range
-and start another connection. IDM: *"Add alternative connection (%ld) for
-connection %ld"*. The split point is the parent's current position, so the
-parent keeps what it has and the new connection continues from there.
+and start another connection. The reference product: *"Add alternative
+connection (%ld) for connection %ld"*. The split point is the parent's current
+position, so the parent keeps what it has and the new connection continues
+from there.
 
 ```
 if connections < max_connections:
@@ -158,8 +159,8 @@ On start:
 3. drop any segment whose part file is missing;
 4. if the manifest does not match, start fresh.
 
-IDM does the same thing, with the manifest in the registry and the same
-truncation: *"Dwnl %I64d, Trucate at %I64d"*.
+The reference product does the same thing, with the manifest in the registry
+and the same truncation: *"Dwnl %I64d, Trucate at %I64d"*.
 
 **Current implementation:** `restore()`. Done.
 
@@ -169,12 +170,13 @@ truncation: *"Dwnl %I64d, Trucate at %I64d"*.
 
 This is the weakest part of the current implementation and it is important.
 
-IDM compares the head of a chunk against the head of the file
+The reference binary compares the head of a chunk against the head of the file
 (*"Strart data for this chunk is matched with start of the file!!!"*), checks
 the chunk order (*"Chunk order violation error, cInf.ID %ld, startPos
-%I64d"*), and on a mismatch drops to a single connection
-(*"IDM started to download the file using one connection because of data
-corruption…"*).
+%I64d"*), and on a mismatch drops to a single connection — its own
+data-corruption message says it began the file with one connection because
+the data received in several connections did not match the same data
+downloaded earlier.
 
 The rules to implement:
 

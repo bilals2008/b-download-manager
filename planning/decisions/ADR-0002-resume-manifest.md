@@ -11,7 +11,7 @@ the download — what was being fetched, which byte ranges existed, how many
 bytes of each landed, where the parts are on disk — has to outlive the
 process.
 
-IDM keeps this in the registry:
+The reference product keeps this in the registry:
 `HKCU\Software\DownloadManager\<id>\ChList`, one 16-byte value per chunk
 named `"<n>a"`, plus `LocalFileName` for the target path.
 
@@ -19,8 +19,8 @@ named `"<n>a"`, plus `LocalFileName` for the target path.
 
 **A. A JSON file next to the part files.** *(chosen)*
 
-**B. The Windows registry, like IDM.** A key per download under
-`HKCU\Software\DownloadManager\<id>`, one value per chunk.
+**B. The Windows registry, like the reference product.** A key per download
+under `HKCU\Software\DownloadManager\<id>`, one value per chunk.
 
 **C. A SQLite database in the app data directory.**
 
@@ -43,13 +43,13 @@ next to the part files.
 
 ## Rationale
 
-**Why not the registry (B).** IDM's choice makes sense for IDM: it is a
-Windows application that must interoperate with its own browser extensions,
-its tray agent and its scheduler, all of which are separate processes that
-read the same keys. We have none of that. The registry also means a
-registry-specific implementation on a platform we might want to run on
-elsewhere, and a corrupt registry key is a much worse failure mode than a
-corrupt file we wrote ourselves.
+**Why not the registry (B).** The publisher's choice makes sense for the
+reference product: it is a Windows application that must interoperate with
+its own browser extensions, its tray agent and its scheduler, all of which
+are separate processes that read the same keys. We have none of that. The
+registry also means a registry-specific implementation on a platform we
+might want to run on elsewhere, and a corrupt registry key is a much worse
+failure mode than a corrupt file we wrote ourselves.
 
 The one thing the registry gives that a file does not is a *stable id* that
 is independent of the file system. We get that from the destination path
@@ -93,7 +93,7 @@ throws away the work.
 
 **Neutral.**
 
-- The manifest is *ours*, not IDM's. We are not reading IDM's `ChList`, and
-  we do not intend to. If that ever changes, it needs its own decision
-  record and a careful look at the licence question in
+- The manifest is *ours*, not the reference product's. We are not reading
+  its `ChList`, and we do not intend to. If that ever changes, it needs its
+  own decision record and a careful look at the licence question in
   [../08-risks-and-open-questions.md](../08-risks-and-open-questions.md) R1.

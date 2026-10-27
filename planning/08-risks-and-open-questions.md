@@ -5,40 +5,40 @@
 These are things we do not know. Each one is a decision waiting on an
 answer, not a task waiting to be done.
 
-### About IDM
+### About the reference product
 
 | Question | Why it matters | Where to look |
 |---|---|---|
-| How does IDM choose the number of connections and the boundaries? | It drives throughput more than anything else we could copy | `FUN_0058fdf0`, Priority 1 in the RE plan |
+| How does the reference product choose the number of connections and the boundaries? | It drives throughput more than anything else we could copy | `FUN_0058fdf0`, Priority 1 in the RE plan |
 | What exactly triggers "add an optional connection"? | Our scheduler currently uses a different rule | `FUN_00564650`, `HTTPSession::GetSlowestConnection` |
-| How does IDM verify a chunk against the file head? | We do not verify at all yet | `FUN_005634de` |
-| What is the 16-byte `ChList` registry record? | Only matters if we ever want to read an existing IDM download | `FUN_005634de` |
+| How does the reference binary verify a chunk against the file head? | We do not verify at all yet | `FUN_005634de` |
+| What is the 16-byte `ChList` registry record? | Only matters if we ever want to read an existing download of the reference product | `FUN_005634de` |
 | Where does the chunk size come from? | `FUN_005b1330` is only `ntohl`; the producer was not found | trace the callers of `FUN_005b2ae0` |
-| How does IDM handle `multipart/x-byteranges`? | A server may answer a range with a multipart body | `0x6cf0ac` |
+| How does the product handle `multipart/x-byteranges`? | A server may answer a range with a multipart body | `0x6cf0ac` |
 
 ### About the product
 
 | Question | Why it matters |
 |---|---|
 | Is a 16 MiB segment target right? | It was a guess. A sweep against a real server would settle it. |
-| Is growing on "most bytes remaining" the right rule? | It is not the same as IDM's rule, and it is probably wrong. Growth should trigger on a *lagging* connection, not a large one. |
+| Is growing on "most bytes remaining" the right rule? | It is not the same as the reference product's rule, and it is probably wrong. Growth should trigger on a *lagging* connection, not a large one. |
 | What should happen when a server does not support ranges but the file is huge? | Today: one connection, very slow. Maybe: a different strategy. |
 | Should the manifest be a file or a database? | A file is portable and diffable; a database is queryable. A file, until there are hundreds of downloads. |
-| Is the per-download connection limit the right knob to expose? | IDM exposes per-site limits too. |
+| Is the per-download connection limit the right knob to expose? | The reference product exposes per-site limits too. |
 | Should the UI show a live speed, or just progress? | A live speed is useful but noisy. Undecided. |
 
 ## Risks
 
 ### R1 — The licence
 
-IDM's terms of use prohibit reverse engineering. This project reads the
-binary to learn behaviour and reimplements it; it ships no IDM code, no IDM
-strings, no IDM assets.
+The publisher's terms of use prohibit reverse engineering. This project reads
+the binary to learn behaviour and reimplements it; it ships none of that
+product's code, strings or assets.
 
 **Mitigation:** keep the line bright. `ANALYSIS.md` is a behavioural
 specification. Nothing from the binary is copied into the source. If the
-project ever needed to interoperate with IDM's on-disk format, that is a
-different and much more sensitive conversation.
+project ever needed to interoperate with the reference product's on-disk
+format, that is a different and much more sensitive conversation.
 
 **Severity:** high if ignored, none if the line is held.
 
@@ -73,12 +73,12 @@ starting, not after. That is a M3 item.
 
 **Severity:** medium.
 
-### R5 — Reqwest does not give us the control IDM has
+### R5 — Reqwest does not give us the control the reference product has
 
-IDM writes its own HTTP over raw sockets. `reqwest` does TLS, HTTP/2,
-redirects and header parsing for us — and takes away the ability to do
-things IDM does, such as sending a `Connection` header, or controlling
-exactly what goes on the wire.
+The reference binary writes its own HTTP over raw sockets. `reqwest` does
+TLS, HTTP/2, redirects and header parsing for us — and takes away the ability
+to do things the product does, such as sending a `Connection` header, or
+controlling exactly what goes on the wire.
 
 **Mitigation:** the port is deliberately thin. If a specific behaviour turns
 out to be unreachable through `reqwest`, the fix is a `transport` module
@@ -115,9 +115,9 @@ grows on a slow connection.
 ### R8 — Unbounded resource use
 
 Each connection holds a socket and a file handle. A user who sets 32
-connections on ten downloads gets 320 sockets. IDM has a global cap
-(*"Too many open network connections. Please wait for some downloads to
-finish."*).
+connections on ten downloads gets 320 sockets. The reference product has a
+global cap (*"Too many open network connections. Please wait for some
+downloads to finish."*).
 
 **Mitigation:** the global limit in the target architecture, implemented in
 M4.
@@ -126,7 +126,7 @@ M4.
 
 ## Deliberately not tracked
 
-- Performance of IDM itself. We do not have a legitimate way to benchmark
-  it, and a number we cannot produce should not be quoted.
-- IDM's UI. The direction here is ours.
+- Performance of the reference product itself. We do not have a legitimate
+  way to benchmark it, and a number we cannot produce should not be quoted.
+- The reference product's UI. The direction here is ours.
 - The Grabber, the scheduler, the browser integration, until M5 says so.

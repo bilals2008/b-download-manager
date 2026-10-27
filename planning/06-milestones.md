@@ -76,9 +76,9 @@ failed download with a clear message, and never a corrupt file.
 
 **Why:** throughput is the product.
 
-- [x] Measure the actual split rule: the rule IDM uses is one connection
-      per `0x2800` bytes (`FUN_005bad00`), and `bench_connections` measures
-      what a server really gives
+- [x] Measure the actual split rule: the rule the reference product uses is
+      one connection per `0x2800` bytes (`FUN_005bad00`), and
+      `bench_connections` measures what a server really gives
 - [x] Fix `maybe_grow()` to compare progress *ratios*, not remaining bytes
 - [x] A global connection limit across all downloads
 - [x] Per-site connection overrides
@@ -104,8 +104,8 @@ number is written down in the README.
       then)
 - [ ] A first-run flow that explains the connection setting in one sentence
 
-**Done when:** a person who has never seen IDM can start a download, pause
-it, and find it again tomorrow.
+**Done when:** a person who has never seen the reference product can start a
+download, pause it, and find it again tomorrow.
 
 ---
 
@@ -113,11 +113,13 @@ it, and find it again tomorrow.
 
 Each is independently valuable and independently shippable.
 
-- [x] FTP, using the same chunk list (IDM's `FTPConnection::StartGetChunk`)
+- [x] FTP, using the same chunk list (the reference product's
+      `FTPConnection::StartGetChunk`)
 - [x] HTTP proxy and SOCKS5
-- [ ] Resume metadata for servers that do not support ranges (IDM's
+- [ ] Resume metadata for servers that do not support ranges (the product's
       "multipart/x-byteranges" and friends)
-- [ ] Media: HLS, MPEG-DASH, and the MPEG-TS segmenting IDM does
+- [ ] Media: HLS, MPEG-DASH, and the MPEG-TS segmenting the reference product
+      does
 - [ ] RTMP, if it is ever wanted
 
 ---

@@ -1,7 +1,7 @@
-# IDMan.exe — reverse engineering notes
+# Reference download manager — reverse engineering notes
 
-Target: `C:\Program Files (x86)\Internet Download Manager\IDMan.exe`
-IDM 6.43.15.2 · PE32 (x86) · 6,201,712 bytes
+Target: the reference product's 32-bit (x86) main binary
+The studied build · PE32 (x86) · 6,201,712 bytes
 SHA-256 `e3fc655a335e17a6fdd09a9b315291d0c8863180f0d801e5dd7433c9e56afbd8`
 
 Analysed with REA (Ghidra 12.1.4, headless). 19,603 procedures, 7,261 strings.
@@ -13,10 +13,10 @@ the shipped binary. Where the analysis stopped, that is written down.
 
 ## 1. The architecture that fell out of the strings
 
-IDM's own assertion strings name its classes and methods. That string corpus
-is the map:
+The reference product's own assertion strings name its classes and methods.
+That string corpus is the map:
 
-| Area | Names recovered from `IDMan.exe` |
+| Area | Names recovered from the studied binary |
 |---|---|
 | File pieces | `ChunksList`, `ChunksListItem` |
 | Transport | `Connection`, `HTTPConnection`, `FTPConnection`, `ProxyConnection`, `CFTPProxyConnection`, `CInetConnector`, `CSocks` |
@@ -42,8 +42,8 @@ socket  EXTERNAL:0x20a      recv   EXTERNAL:0x212      send   EXTERNAL:0x20f
 ioctlsocket EXTERNAL:0x20b   closesocket EXTERNAL:0x209
 ```
 
-HTTPS is terminated by IDM itself with OpenSSL — the install directory ships
-`libssl.dll` / `libcrypto.dll`, and the code has
+HTTPS is terminated by the reference binary itself with OpenSSL — its install
+directory ships `libssl.dll` / `libcrypto.dll`, and the code has
 `HTTPConnection::SendHTTPSGet()` and `HTTPConnection::RecvHTTPSData()`. The
 socket read path even branches on the protocol:
 
@@ -106,8 +106,8 @@ stop matching the byte offsets in the file, and every range would be wrong.
 
 `Content-Range:` lives at `0x6cf014`, and there are parsers for
 `multipart/x-byteranges` (`0x6cf0ac`) and `multipart/byteranges`
-(`0x6cf0c4`) — IDM understands a server that answers a range request with a
-multipart body.
+(`0x6cf0c4`) — the reference product understands a server that answers a
+range request with a multipart body.
 
 `HTTPConnection::GetRetrRangeReply()` (`0x6cf35c`) is the function that
 validates the range reply. Three routines read the `Content-Range` header:
@@ -223,7 +223,7 @@ Two mechanisms, both visible in the strings:
 "The file chunk of connection %d is reassigned to connection %d." (FUN_00574510)
 ```
 
-**Growth** — IDM adds connections on the fly:
+**Growth** — the reference product adds connections on the fly:
 
 ```
 "Add alternative connection (%ld) for connection %ld"      (FUN_00564650)
@@ -249,17 +249,18 @@ Scheduling is driven by the slowest connection:
 
 ### 3.6 Integrity checks
 
-IDM does not trust the server blindly:
+The reference binary does not trust the server blindly:
 
 ```
 "Strart data for this chunk is matched with start of the file!!! s2"
 "Strart data for this chunk is matched with start of the file!!! s3"
 "Chunk order violation error, cInf.ID %ld, startPos %I64d"
 "Try rollback, set chunksize to %I64d"
-"IDM started to download the file using one connection because of data
- corruption when newly received data in several connections did not match
- the same data downloaded earlier."
 ```
+
+Its own data-corruption message says that the product began the download with
+one connection because the newly received data in several connections did not
+match the same data downloaded earlier.
 
 The first group compares the head of a chunk against the head of the file; a
 mismatch rolls the download back to a single connection.
@@ -349,8 +350,8 @@ if (LVar2 != 0) {
 ```
 
 Per-site overrides live in the same key as subkeys with a `number` value.
-IDM also warns the user about the abuse risk of high connection counts, and
-enforces a global cap:
+The reference product also warns the user about the abuse risk of high
+connection counts, and enforces a global cap:
 
 ```
 "Too many open network connections. Please wait for some downloads to finish."
@@ -362,8 +363,9 @@ enforces a global cap:
 
 This is inference, clearly separated from what was observed.
 
-1. **One connection first, then a fan-out.** IDM starts a single connection,
-   measures its throughput, and then adds *optional* connections that claim
+1. **One connection first, then a fan-out.** The reference product starts a
+   single connection, measures its throughput, and then adds *optional*
+   connections that claim
    the tail of the range the first connection is on. It compares the slowest
    connection (`GetSlowestConnection`) against the others and grows the
    connection count while the server and the link keep up.
@@ -381,12 +383,14 @@ This is inference, clearly separated from what was observed.
 4. **A last line of defence against a lying server.** The chunk-head
    comparison ("Strart data for this chunk is matched with start of the
    file!!!") and the "Chunk order violation" check exist because a range
-   request can come back with the wrong bytes. When that happens IDM rolls
-   back to one connection rather than producing a corrupt file.
+   request can come back with the wrong bytes. When that happens the
+   reference product rolls back to one connection rather than producing a
+   corrupt file.
 
 5. **Small buffers, many of them.** The 512-byte header line buffer and the
-   11,680-byte copy buffer are small by modern standards. IDM's throughput
-   comes from having many connections in flight, not from one big buffer.
+   11,680-byte copy buffer are small by modern standards. The product's
+   throughput comes from having many connections in flight, not from one big
+   buffer.
 
 6. **TLS is a plugin, not a different client.** The `protocol == 5` branch
    inside the read loop means the same range/offset logic drives both plain
@@ -486,7 +490,8 @@ middle of a write. The engine now checks the manifest before it resumes
 from it: the ranges have to be contiguous, in order, and no range may hold
 more bytes than its length. A manifest that fails the check is not resumed
 from — the download starts over. The part files are still cut back to the
-recorded length, the way IDM truncates the file when it resumes.
+recorded length, the way the reference binary truncates the file when it
+resumes.
 
 ### 10.2 The chunk check (`FUN_00566f10`)
 
@@ -607,8 +612,9 @@ the **RTMP stream**, not the size of a range in an HTTP download. The
 initial split arithmetic of the HTTP downloader is not behind that setter,
 and it was not found elsewhere either.
 
-**What this changes.** The clone does not pretend to know IDM's split rule.
-It splits the file into equal ranges, one per connection, and it adds
+**What this changes.** The clone does not pretend to know the reference
+product's split rule. It splits the file into equal ranges, one per
+connection, and it adds
 connections while the slowest range lags behind. The number of connections
 that is fastest is a question for a measurement, not for the binary; the
 headless client `crates/idm-cli` measures it.
@@ -653,12 +659,12 @@ bytes apart in the session (`iVar5 * 15000`).
 the file, at least one and at most the number that is allowed. A 20 KB file
 is fetched with two connections, a 100 KB file with eight.
 
-### 10.6 One difference from IDM, on purpose
-IDM writes every chunk into its own file at the **absolute** offset of the
-chunk, so a chunk file is a sparse container with a hole in front of it
-("The chunk's byte range and its offset inside the part file are the same
-coordinate system"). The clone writes each range into its own part file
-**from the first byte of that range**, and the part files are joined in
+### 10.6 One difference from the reference product, on purpose
+The reference binary writes every chunk into its own file at the **absolute**
+offset of the chunk, so a chunk file is a sparse container with a hole in
+front of it ("The chunk's byte range and its offset inside the part file are
+the same coordinate system"). The clone writes each range into its own part
+file **from the first byte of that range**, and the part files are joined in
 order.
 
 The reason is the size on the disk: with the absolute layout, the part files
@@ -709,12 +715,12 @@ waits and asks again — the same rule the other requests follow. The test
 | `0x2da0` copy buffer | `COPY_BUF` in `downloader.rs` |
 | `0x600000` chunk memory ceiling | `CHUNK_MEM_LIMIT` (documented constant) |
 | `MaxConnectionsNumber` = 8 | `DEFAULT_CONNECTIONS` |
-| Chunked transfer decoding | handled by `reqwest`; IDM's decoder is documented in this file |
+| Chunked transfer decoding | handled by `reqwest`; the reference product's decoder is documented in this file |
 | The 16 byte chunk record (`ID`, `startPos`, `nextID`) | the manifest in `downloader.rs`; the layout is in section 10.1 |
 | "Chunk order violation error" | `Manifest::is_consistent()` — a list that is out of order is not resumed from |
 | "Try rollback, set chunksize to %I64d" | the part file is cut back to the recorded length |
 | "Strart data for this chunk is matched with start of the file!!!" | `verify.rs` → `verify::check()` |
-| "IDM started to download the file using one connection because of data corruption" | `downloader.rs` → `downgrade_to_one_connection()` |
+| The product's data-corruption message: it began the file with one connection | `downloader.rs` → `downgrade_to_one_connection()` |
 | `0x80c` head of the file, `0x200` clean match | `verify::HEAD_BUFFER` and `verify::HEAD_BYTES` |
 | "Too many open network connections." | `limits.rs` → `ConnectionBudget` |
 | `HKCU\Software\DownloadManager\MCN` per site overrides | `limits.rs` → `SiteLimits` |
@@ -728,17 +734,19 @@ waits and asks again — the same rule the other requests follow. The test
 
 ## 9. The interface strings
 
-The window furniture of IDM 6.43 was read out of the same string tables: the
-UTF-16 resource strings for the menus and the ASCII strings for the toolbar
-tooltips and the categories.
+The window furniture of the studied 32-bit build was read out of the same
+string tables: the UTF-16 resource strings for the menus and the ASCII
+strings for the toolbar tooltips and the categories. In the quotations below,
+any label that carried the product's own name is written generically ("the
+product"); the menu order and the other access keys are the recovered ones.
 
 ### 9.1 The main menu, in the order the resource stores it
 
 ```
 &Tasks      &Add new download | Add &batch download | Add batch download from &clipboard
             Run site &grabber | Show &drop target
-            E&xport -> To IDM export &file | To &text file
-            &Import -> &From IDM export file | From &text file
+            E&xport -> To the product's export &file | To &text file
+            &Import -> &From the product's export file | From &text file
             &Exit
 &File       &Stop Download | &Remove | &Download Now | R&edownload
 &Downloads  &Pause All | &Stop All | &Delete All Completed
@@ -753,13 +761,13 @@ tooltips and the categories.
                            | By R&eferer | By Parent &Web Page
             &Toolbar -> &Customize... | &Large Buttons | &Small Buttons
                      | Look for &new toolbars | Neon
-            &IDM tray icon -> 3&D style | C&lassic style | Do&n't show
+            &Tray icon -> 3&D style | C&lassic style | Do&n't show
                             | C&ustomize URL List... | Dark Mode support
             Font -> Choose Font... | Reset to default Font
             &Language -> &English
 &Help       H&elp contents | &Tutorials | &Scheduler and queues | &Grabber Help
-            | Tip of the &Day... | IDM &Home Page | &Contact IDM Support
-            | Check for &updates... | &About IDM | Tell a &friend
+            | Tip of the &Day... | The product's &Home Page | &Contact Support
+            | Check for &updates... | &About the product | Tell a &friend
 &Registration &Order online | R&egistration
 ```
 
@@ -781,11 +789,11 @@ Browsers/System integration, File types, Proxy, Passwords and others
 Scheduler and download queues
 Start main download queue, or choose a queue to start from drop-down list
 Stop main download queue, or choose a queue to stop from drop-down list
-Write a letter to your friend about IDM!
+Write a letter to your friend about the product!
 ```
 
 The last two confirm that Start queue and Stop queue are dropdown buttons in
-IDM, not plain buttons.
+the reference product, not plain buttons.
 
 ### 9.3 The categories
 
@@ -808,10 +816,10 @@ Show categories
 Hide categories
 ```
 
-`Hide &categories` is the item in the View menu, and `CIDMMainDlgTree` /
-`CIDMFoldersTree` are the classes that own it. The clone follows that: the
-categories pane is a tree with those three groups and the eight categories,
-and View > Hide categories takes it off the screen.
+`Hide &categories` is the item in the View menu, and the two window classes
+behind the main dialog's tree and its folder tree own it. The clone follows
+that: the categories pane is a tree with those three groups and the eight
+categories, and View > Hide categories takes it off the screen.
 
 ### 9.4 The download complete window
 
@@ -828,7 +836,8 @@ that describe it are in the same table:
 The first is the title, the second is the body with the file name, the
 formatted size, the byte count and the save path, and the third is the option
 that turns the window on. `CompleteDlg.htm` is the name of the page the
-dialog shows, which is why IDM's window carries more text than a message box.
+dialog shows, which is why the reference product's window carries more text
+than a message box.
 
 The "Open folder" button is in the same block (`0x6be2e0` has no buttons of
 its own, but `Open folder` is one of the strings around it), and
@@ -855,8 +864,8 @@ from the browser, and it survives a restart with the rest of the index entry.
 A third run of the same tools (REA command line, Ghidra 12.1.4 headless, the
 same binary and the same digest) added three things the earlier passes had
 left open: the name the client gives itself on the wire, the full corpus of
-IDM's own method names, and the function that starts the optional
-connections.
+the reference product's own method names, and the function that starts the
+optional connections.
 
 ### 11.1 The User-Agent
 
@@ -869,10 +878,11 @@ A8   Referer:
 A8   User-Agent for manually added downloads:
 ```
 
-The first is the name IDM sends on a normal request; the second is the older
-IE name it keeps for the servers that want it. The clone sent its own name
-(`my-idm-clone/0.1.0`), and a server that only serves browsers answered
-`403 Forbidden` — the video links of Google are the everyday case.
+The first is the name the reference binary sends on a normal request; the
+second is the older IE name it keeps for the servers that want it. The clone
+sent its own name (`my-idm-clone/0.1.0`), and a server that only serves
+browsers answered `403 Forbidden` — the video links of Google are the
+everyday case.
 
 **What this changes.** `http::USER_AGENT` now carries the string that was read
 out of the binary, and every request goes out with it. The test
@@ -880,8 +890,8 @@ out of the binary, and every request goes out with it. The test
 
 ### 11.2 The names of the methods
 
-IDM names its own methods in the strings it uses for error reporting. The
-pattern is always the same:
+The reference product names its own methods in the strings it uses for error
+reporting. The pattern is always the same:
 
 ```
 Unknown error during <Class>::<Method>()
@@ -923,7 +933,7 @@ menus the clone now has:
 CDownloaderDlg::OnRclickUrllist()     the right click on a row
 CDownloaderDlg::CreateTreePopupMenu() the right click on a category
 CDownloaderDlg::OnProperties()        the properties of a row
-CIDMListCtrl::OnBegindrag()           the drag handles of the queue
+the list control class::OnBegindrag() the drag handles of the queue
 ```
 
 ### 11.3 The optional connections
@@ -968,9 +978,9 @@ allowance second.
 
 ### 11.4 The progress is a percentage
 
-IDM writes the progress of a download as a plain number with a percent sign
-(`%d %%`), and the string table also holds the window furniture that shows
-it. The clone shows the same number in its Progress column.
+The reference binary writes the progress of a download as a plain number with
+a percent sign (`%d %%`), and the string table also holds the window furniture
+that shows it. The clone shows the same number in its Progress column.
 
 ### 11.5 The hand-over of a tail (the hypothesis, confirmed)
 
@@ -1010,9 +1020,9 @@ clone does the same thing in `segmenter::split()` — the parent keeps
 `[split_at, end)`.
 
 The one difference is the layout on the disk, and it is the one that was
-chosen on purpose (section 10.6): IDM moves the *start* of the parent's
-range forward and writes at absolute offsets, the clone shortens the
-*end* of the parent's range and keeps one part file per range.
+chosen on purpose (section 10.6): the reference product moves the *start* of
+the parent's range forward and writes at absolute offsets, the clone shortens
+the *end* of the parent's range and keeps one part file per range.
 
 ### 11.6 The next lead: the scope table of `InitFirst`
 

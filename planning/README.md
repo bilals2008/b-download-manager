@@ -1,8 +1,9 @@
 # Planning
 
 Everything needed to take this from "a working core" to "a complete
-alternative", and to keep reverse engineering IDM in a state where the next
-person can pick it up without re-deriving everything.
+alternative", and to keep reverse engineering the reference download manager
+in a state where the next person can pick it up without re-deriving
+everything.
 
 ## Read in this order
 
@@ -21,8 +22,9 @@ person can pick it up without re-deriving everything.
 ## Where the evidence lives
 
 - [`../ANALYSIS.md`](../ANALYSIS.md) — the reverse engineering report for
-  `IDMan.exe` 6.43.15.2: every string, address and pseudo-code fragment the
-  design is based on, plus an explicit list of what could not be established.
+  the studied 32-bit binary: every string, address and pseudo-code fragment
+  the design is based on, plus an explicit list of what could not be
+  established.
 - [`../src-tauri/src/`](../src-tauri/src/) — the current implementation.
 
 ## Current state
@@ -45,9 +47,9 @@ person can pick it up without re-deriving everything.
 1. **Never state a number that was not measured.** A contrast ratio, a
    throughput figure, a test count — run the thing and report what it printed.
 2. **No binary is copied.** Everything here is reimplemented from observed
-   behaviour. IDM's licence forbids reverse engineering; this project treats
-   the binary as a *behavioural specification* and ships no IDM code, no IDM
-   strings and no IDM assets.
+   behaviour. The reference product's publisher forbids reverse engineering;
+   this project treats the binary as a *behavioural specification* and ships
+   none of that product's code, strings or assets.
 3. **Static analysis is not runtime evidence.** Unless a claim was observed
    running, it is labelled as inference.
 4. **One theme, one source of truth.** Colour lives in `src/index.css` and is

@@ -7,11 +7,11 @@
 
 ## Context
 
-IDM implements HTTP itself over raw WinSock sockets, and terminates TLS
-with OpenSSL. The import table has `socket`, `recv`, `send`, `ioctlsocket`
-and `closesocket` from `WS2_32.DLL`, and there is no WinHTTP and no WinInet
-anywhere. The install directory ships `libssl.dll` and `libcrypto.dll`, and
-the read path branches on the protocol:
+The reference product implements HTTP itself over raw WinSock sockets, and
+terminates TLS with OpenSSL. The import table has `socket`, `recv`, `send`,
+`ioctlsocket` and `closesocket` from `WS2_32.DLL`, and there is no WinHTTP
+and no WinInet anywhere. Its install directory ships `libssl.dll` and
+`libcrypto.dll`, and the read path branches on the protocol:
 
 ```c
 if (*(int *)(*(int *)(in_ECX + 200) + 0x24) == 5) {   // 5 == TLS
@@ -21,7 +21,7 @@ if (*(int *)(*(int *)(in_ECX + 200) + 0x24) == 5) {   // 5 == TLS
 }
 ```
 
-So IDM owns the whole stack. We could do the same.
+So the reference download manager owns the whole stack. We could do the same.
 
 ## Options considered
 
@@ -57,12 +57,13 @@ rebalancing, assembly — are entirely transport-agnostic.
 **Why the trait at all.** The trait is what keeps the decision reversible.
 Three specific things `reqwest` may not be able to do:
 
-1. **Send a `Connection` header.** IDM sends `Connection: Keep-Alive\r\n`.
-   HTTP/1.1 makes keep-alive the default, so this is cosmetic, but hyper may
-   refuse to let it through. The current implementation omits the header for
-   exactly this reason and says so in a comment.
-2. **Control the wire format exactly.** IDM's header order and spacing are
-   fixed and hand-written. Some servers are picky.
+1. **Send a `Connection` header.** The reference product writes
+   `Connection: Keep-Alive\r\n` on the wire. HTTP/1.1 makes keep-alive the
+   default, so this is cosmetic, but hyper may refuse to let it through. The
+   current implementation omits the header for exactly this reason and says so
+   in a comment.
+2. **Control the wire format exactly.** The reference product's header order
+   and spacing are fixed and hand-written. Some servers are picky.
 3. **Speak a protocol `reqwest` does not know.** RTMP, SOCKS, FTP. These are
    all in M6.
 
@@ -74,7 +75,7 @@ engine. The trait costs about forty lines and removes that risk.
 work that is invisible in the finished product and large in the effort. It
 also means owning TLS configuration, proxy support, certificate validation
 and every HTTP/1.1 parsing edge case, none of which differentiates us from
-IDM. If a specific behaviour turns out to be unreachable through `reqwest`,
+the product being imitated. If a specific behaviour turns out to be unreachable through `reqwest`,
 that is the moment to write a second implementation — behind the trait, as
 planned.
 
@@ -98,5 +99,5 @@ planned.
 
 **Neutral.**
 
-- TLS is `rustls`, not OpenSSL, and is a static dependency. IDM ships
-  OpenSSL as separate DLLs; we do not.
+- TLS is `rustls`, not OpenSSL, and is a static dependency. The reference
+  product ships OpenSSL as separate DLLs; we do not.

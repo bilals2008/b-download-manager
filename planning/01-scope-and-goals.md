@@ -2,17 +2,19 @@
 
 ## The goal
 
-A download manager that behaves like IDM in the ways users actually notice:
+A download manager that behaves like the reference product in the ways users
+actually notice:
 
 - a large file is pulled by several connections at once, not one;
 - pausing, resuming and restarting a download keep the bytes already fetched;
 - a download survives a crash, a reboot and a network drop;
 - a server that misbehaves is detected instead of producing a corrupt file.
 
-It does not have to look like IDM, and it does not have to implement every
-protocol IDM does. The bar is: **on a well-behaved HTTP server, it downloads a
-large file at least as fast as a single-connection client, and it can always
-resume.**
+It does not have to look like the reference product, and it does not have to
+implement every protocol the reference product does. The bar is: **on a
+well-behaved HTTP
+server, it downloads a large file at least as fast as a single-connection
+client, and it can always resume.**
 
 ## In scope
 
@@ -28,26 +30,27 @@ resume.**
 | Server integrity verification | a lying server must not produce a corrupt file |
 | Retry with backoff | transient failures are normal |
 | Disk space checks | a failed download at 99% is a bad experience |
-| Speed limiting and a queue | IDM has both; they are the difference between a toy and a tool |
+| Speed limiting and a queue | the reference product has both; they are the difference between a toy and a tool |
 
 ## Deliberately out of scope
 
 | Not doing | Why |
 |---|---|
-| Copying any IDM code, strings or assets | licence and ethics; also the point of the exercise is the reimplementation |
+| Copying any code, strings or assets of the reference product | licence and ethics; also the point of the exercise is the reimplementation |
 | Browser integration (extension, native messaging) | large surface, and it is about *capture*, not *downloading* |
 | A grabber / site scraper | a different product |
-| RTMP, MMS, FTP, SOCKS, proxy chains | IDM supports them; they are each a project of their own. They are listed as post-MVP in the milestone plan, not dropped. |
+| RTMP, MMS, FTP, SOCKS, proxy chains | the reference product supports them; they are each a project of their own. They are listed as post-MVP in the milestone plan, not dropped. |
 | DRM circumvention | out of bounds |
 
 ## Non-goals that are easy to get wrong
 
-- **Not** "match IDM's UI". Match IDM's *mechanics*; the visual language is
-  ours (see [05-ui-design-direction.md](./05-ui-design-direction.md)).
+- **Not** "match the reference product's UI". Match its *mechanics*; the
+  visual language is ours (see
+  [05-ui-design-direction.md](./05-ui-design-direction.md)).
 - **Not** "open a socket per file". Connection count is per download, capped
   globally, and the two limits are separate.
-- **Not** "assume the server honours Range". IDM does not assume it either,
-  and neither do we.
+- **Not** "assume the server honours Range". The reference product does not
+  assume it either, and neither do we.
 
 ## Success criteria
 

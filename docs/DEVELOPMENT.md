@@ -4,7 +4,8 @@ Reference material moved out of `AGENTS.md`. Read this before larger changes.
 
 ## What this is
 
-A multi-connection download manager modelled on IDM 6.43: a Tauri v2 (Rust)
+A multi-connection download manager modelled on the classic Windows download
+manager: a Tauri v2 (Rust)
 backend in `src-tauri/` and a React 19 + TypeScript + Tailwind CSS v4 +
 shadcn/ui frontend in `src/`. The reverse-engineering evidence behind the
 engine is in `ANALYSIS.md`; the plans and ADRs are in `planning/`.
@@ -223,7 +224,7 @@ Do **not** install a second copy or a near-duplicate of any of them.
 | `security-and-hardening` | untrusted URLs, file paths, IPC boundaries | https://skills.sh/addyosmani/agent-skills/security-and-hardening |
 | `project-structure-enforcer` | keeping files small and modular (local) | `~/.agents/skills/project-structure-enforcer` |
 | `spec-driven-development` | planning engine milestones | https://skills.sh/addyosmani/agent-skills/spec-driven-development |
-| `reverse-engineer-anything` | IDM analysis work (local) | `~/.agents/skills/reverse-engineer-anything` |
+| `reverse-engineer-anything` | reverse-engineering analysis work (local) | `~/.agents/skills/reverse-engineer-anything` |
 | `code-review` | reviewing a branch before merge | https://skills.sh/mattpocock/skills/code-review |
 | `debugging-and-error-recovery` | failing tests and broken downloads | https://skills.sh/addyosmani/agent-skills/debugging-and-error-recovery |
 | `performance-optimization` | large-file throughput and UI jank | https://skills.sh/addyosmani/agent-skills/performance-optimization |

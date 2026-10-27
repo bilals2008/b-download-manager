@@ -26,7 +26,7 @@ B Download Manager splits a file across multiple connections, writes each byte r
 
 The engine is a standalone Rust crate with no window toolkit, tested headlessly against local HTTP and FTP servers. The desktop application is a thin Tauri 2 shell around it, with a Windows-style interface: a categories pane, a live download table, dedicated progress and completion windows, and a tray icon.
 
-> **Status:** early development (`0.1.0`). Core downloads, resume, the tray, the progress and completion windows, the Site Grabber and both browser extensions work. Scheduling, media splitting and a few other IDM features are not implemented yet. See [`PROGRESS.md`](./PROGRESS.md).
+> **Status:** early development (`0.1.0`). Core downloads, resume, the tray, the progress and completion windows, the Site Grabber and both browser extensions work. Scheduling, media splitting and a few other features are not implemented yet. See [`PROGRESS.md`](./PROGRESS.md).
 
 ## Features
 
@@ -34,7 +34,7 @@ The engine is a standalone Rust crate with no window toolkit, tested headlessly 
 - **Resume, always:** a JSON manifest beside the part files survives pause, stop, a crash or an exit. Ranges that overlap or are out of order are never resumed from.
 - **HTTP, HTTPS and FTP:** range requests with `Accept-Encoding: identity`, and FTP `REST` offsets with one data connection per range.
 - **Proxy and speed control:** HTTP and SOCKS proxies for new downloads, plus a global cap and a per-download cap.
-- **Browser hand-off:** a Firefox extension with an IDM-style video button, a Download all links window that collects a page's files into one reviewed batch, live download controls and settings, plus a Chrome/Edge build. Both use a versioned loopback bridge inside the application.
+- **Browser hand-off:** a Firefox extension with a download button over videos, a Download all links window that collects a page's files into one reviewed batch, live download controls and settings, plus a Chrome/Edge build. Both use a versioned loopback bridge inside the application.
 - **Site Grabber:** read one site on request, within a depth and page budget, and list the files its pages link to. It obeys `robots.txt`, pauses between requests and refuses private and metadata addresses on every hop; the files you tick go through the ordinary engine. See [`docs/SITE-GRABBER.md`](./docs/SITE-GRABBER.md).
 - **A queue you can watch:** eight categories, a sortable table, search, selection, pause/stop/resume, context menus and properties.
 - **Windows that fit the job:** a completion dialog with *Open file* and *Open folder*, and a progress window with per-connection detail and a speed limiter.
@@ -139,7 +139,7 @@ The gates cover colour contrast, offered typefaces, the selection model, the Fin
 ## How It Works
 
 1. **Probe.** A one-byte range request (`Range: bytes=0-0`) reveals the size and proves the server honours ranges. A `200` answer means the file is fetched on one connection. Over FTP the size comes from `SIZE`.
-2. **Segment.** The file is split into contiguous ranges targeting 16 MiB each, one per connection. The number of connections comes from IDM's rule of one per 10 KB remaining, capped by the user's connection limit.
+2. **Segment.** The file is split into contiguous ranges targeting 16 MiB each, one per connection. The number of connections is one per 10 KB remaining, capped by the user's connection limit.
 3. **Download.** Each connection requests its own range and writes to its own part file. Over FTP each range opens a data connection and uses `REST` followed by `RETR`. Requests identify themselves like a browser so servers that only serve browsers do not answer `403`.
 4. **Verify.** The head of the file is compared with the head of every other range. A range holding the head of the file was not honoured, so its bytes are given back and the file is fetched on a single connection.
 5. **Reassemble.** When the last range lands, the parts are joined in order and renamed onto the destination.
@@ -157,7 +157,7 @@ The application runs a versioned JSON API on `127.0.0.1:27500`, reachable only f
 
 | Browser | Folder | What it adds |
 | --- | --- | --- |
-| Firefox | [`extension-firefox/`](./extension-firefox/README.md) | Right-click hand-off, download takeover, an IDM-style video button with live progress, a Download all links window, a compact popup and settings (MV3 event page) |
+| Firefox | [`extension-firefox/`](./extension-firefox/README.md) | Right-click hand-off, download takeover, a download button over videos with live progress, a Download all links window, a compact popup and settings (MV3 event page) |
 | Chrome / Edge | [`browser-extension/`](./browser-extension/README.md) | Right-click hand-off and download takeover over the same bridge contract |
 
 To try the Firefox build, start the application, open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on…**, and select `extension-firefox/manifest.json`. A permanent install needs a signed `.xpi`; the extension README covers the AMO and Developer Edition routes.

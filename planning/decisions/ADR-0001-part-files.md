@@ -10,7 +10,8 @@ A multi-connection download has to answer three questions at once: which
 bytes of the target file each connection owns, where those bytes are written
 while they are in flight, and how to resume if the process dies.
 
-IDM answers them with a chunk list. `ChunksList::CreateNewItem()` allocates
+The reference product answers them with a chunk list.
+`ChunksList::CreateNewItem()` allocates
 a `ChunksListItem`, names a file from a directory plus a counter
 (`L"%s%ld"`), and opens it with `GENERIC_READ | GENERIC_WRITE` and
 `FILE_SHARE_READ`. The chunk writer `FUN_0055db20` then seeks to an absolute
@@ -37,7 +38,7 @@ It also means a partially written file looks like a complete one.
 simplest possible thing.
 
 Rejected: it caps the file size at the free memory, and it loses everything
-on a crash. IDM is explicit that this is not what it does.
+on a crash. The studied binary is explicit that this is not what it does.
 
 **D. Write into the destination file directly, at the right offset, from the
 start.** No parts, no assembly step.
@@ -46,8 +47,8 @@ Rejected for the general case: the destination path is often not writable
 until the download is complete (a file being downloaded is usually open in
 another program, on a network share, or in a folder that is being synced),
 and a partial file at the destination is indistinguishable from a finished
-one. IDM avoids this too: it assembles into a temporary file and renames it
-into place, which is atomic from the user's point of view.
+one. The reference product avoids this too: it assembles into a temporary
+file and renames it into place, which is atomic from the user's point of view.
 
 ## Decision
 
@@ -65,9 +66,9 @@ crash that left extra bytes cannot corrupt the result.
 
 - A connection can be stopped at any byte and resumed at the same byte.
 - A second connection can take over the tail of a range, because both write
-  into the same coordinate system. This is what makes IDM's "add an
-  alternative connection" possible, and it is why the split point is the
-  parent's current position.
+  into the same coordinate system. This is what makes the reference product's
+  "add an alternative connection" possible, and it is why the split point is
+  the parent's current position.
 - The resume state is derivable from the manifest plus the part files. There
   is no hidden state in the engine.
 - The assembly step is a plain sequential copy, which is fast and easy to
@@ -86,5 +87,5 @@ crash that left extra bytes cannot corrupt the result.
 **Neutral.**
 
 - Part file names are an implementation detail. The current scheme is
-  `<destination stem>.part<N>`, which is close to IDM's own
+  `<destination stem>.part<N>`, which is close to the reference product's own
   `<folder><counter>` naming, but the exact name is ours to choose.

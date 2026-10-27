@@ -1,4 +1,4 @@
-# IDM clone — work in progress
+# B Download Manager — work in progress
 
 Everything the rebuild still owes, in the order it makes sense to build it.
 Done items stay in the list as a record of what is already standing.
@@ -6,7 +6,7 @@ Done items stay in the list as a record of what is already standing.
 ## Shell (title bar, menu bar, toolbar)
 
 - [x] Title bar with app mark, window text and the three window buttons
-- [x] Menu bar with IDM's real menus, nested submenus, Alt+key access, hover switching
+- [x] Menu bar with the reference download manager's real menus, nested submenus, Alt+key access, hover switching
 - [x] Toolbar with 11 hand-drawn SVG icons, roving tabindex, tooltips
 - [x] Toolbar and menu items that have no screen yet are greyed out instead of dead
 - [x] Toolbar button size setting (Large / Small Buttons) actually changes the icons
@@ -15,15 +15,15 @@ Done items stay in the list as a record of what is already standing.
 
 ## Categories pane (the sidebar)
 
-- [x] Tree with the IDM groups All Downloads / Unfinished / Finished
-- [x] The eight IDM categories: General, Video, Music, Documents, Programs, Games, Compressed, Other
+- [x] Tree with the groups All Downloads / Unfinished / Finished
+- [x] The eight categories: General, Video, Music, Documents, Programs, Games, Compressed, Other
 - [x] Live count per entry, counts follow the download state
 - [x] Click an entry filters the list, selection survives a filter change
 - [x] Arrow keys, Home and End walk the tree, roving tabindex
 - [x] View > Hide categories takes the pane off the screen
-- [ ] Add, rename and delete a custom category (IDM: Add category, Editing category properties)
+- [ ] Add, rename and delete a custom category (reference: Add category, Editing category properties)
 - [ ] Per-category default folder, file type rules and site rules
-- [ ] Persist the tree state, IDM stores it under `Software\DownloadManager\FoldersTree`
+- [ ] Persist the tree state, the reference download manager stores it under `Software\DownloadManager\FoldersTree`
 - [x] Right-click menu on a category: Select all downloads works; the entries
       that need editable categories stay greyed out until they exist
 
@@ -37,8 +37,8 @@ Done items stay in the list as a record of what is already standing.
 - [x] Row selection, Ctrl+click to add to the selection
 - [x] Progress as a percentage, transfer rate, time left, status with a dot and
       a word; the row stays one line and opens nothing under it
-- [x] The error of a failed download shows under its name, the way IDM shows
-      it in the row, and opens the Download Failed window
+- [x] The error of a failed download shows under its name in the row, and
+      opens the Download Failed window
 - [x] Download Failed window: the failure as a headline, one hint, the file
       and its folder, how much arrived and whether it can be resumed
 - [x] The engine's raw sentence waits behind Technical details
@@ -52,9 +52,9 @@ Done items stay in the list as a record of what is already standing.
 - [x] Delete key on a selection, Shift+click for a range
 - [x] Arrow keys, Home and End walk the list, Shift+arrow extends the range
 - [ ] Inline edit of file name and save path
-- [x] Context menu on a row with the IDM entries: Resume, Pause, Stop,
+- [x] Context menu on a row with the entries: Resume, Pause, Stop,
       Redownload, Remove, Open file, Open containing folder, Properties
-- [ ] Column chooser and drag to reorder (IDM: Customize URL List, Columns)
+- [ ] Column chooser and drag to reorder (reference: Customize URL List, Columns)
 - [ ] Show file description, referer and parent web page columns
 - [ ] Group the list by category or by date
 
@@ -69,7 +69,7 @@ Done items stay in the list as a record of what is already standing.
 - [ ] Move item up, move item down, remove item from download queue
 - [x] Find (Ctrl+F) and Find next (F3) over the list, by name or address;
       the match is selected and scrolled into view
-- [ ] Import and export of an IDM export file or a text file
+- [ ] Import and export of a download-manager export file or a text file
 
 ## Queue and scheduler
 
@@ -80,11 +80,11 @@ half-working screen; the one queue below is the part that exists.
 - [x] One queue, driven by the two toolbar buttons
 - [x] The Scheduler is marked "coming soon" in the menu and the toolbar
       tooltip, instead of looking like a control that is merely greyed out
-- [ ] Named queues, pick one from the dropdown like IDM does
+- [ ] Named queues, pick one from the dropdown
 - [ ] Queue order and the drag handles
 - [ ] Scheduler windows and schedule files (`s_%s.dt`, `q_%s.dt`)
 - [x] Speed limiter: on, off, settings and options — the engine has the global and the per download cap
-- [ ] Download limits per schedule, the warning IDM shows when a limit is hit
+- [ ] Download limits per schedule, and the warning shown when a limit is hit
 - [x] A cap on the connections of the whole application, and a cap per site
 
 ## Adding downloads
@@ -171,14 +171,14 @@ half-working screen; the one queue below is the part that exists.
 
 ## Download engine
 
-- [x] Multi-connection range downloader with the chunk list IDM keeps
-- [x] Resume from the `.idm.json` manifest, truncate to the recorded length
+- [x] Multi-connection range downloader with the chunk list it keeps
+- [x] Resume from the JSON manifest, truncate to the recorded length
 - [x] HTTPS and HTTP through the Tauri backend
-- [x] The requests name themselves like a browser, the way IDM does; a server
+- [x] The requests name themselves like a browser; a server
       that only serves browsers answered `403 Forbidden` before that
 - [x] FTP: every range opens its own data connection and asks for the file with `RETR`
 - [x] A proxy: HTTP or SOCKS, for the whole application
-- [x] Connection count per download, IDM's default of 8
+- [x] Connection count per download, with a default of 8
 - [x] Crash-safe chunk list: the manifest is written to a temporary file and renamed
 - [ ] File integrity check, chunk head comparison against the server
 - [x] The chunk head check: a range that holds the head of the file is given back and fetched again, and the download goes on with one connection
@@ -223,7 +223,7 @@ half-working screen; the one queue below is the part that exists.
 - [x] A cap below one read's worth of bytes paces that read in pieces instead
       of waiting for a bucket that can never hold it
 - [x] A file that starts on one range adds connections as that range falls
-      behind, the way IDM's alternative connections do, so a file of a few
+      behind, so a file of a few
       megabytes shows several live connections instead of one
 - [x] A file whose size the server never told can be paused and resumed: the
       dropped response is no longer mistaken for the end of the file, which
@@ -256,7 +256,7 @@ half-working screen; the one queue below is the part that exists.
 
 ## Dialogs and window furniture
 
-- [x] About IDM box
+- [x] About box
 - [x] Options dialog shell, with the General page (startup preferences, browser capture list)
 - [x] Remaining Options pages: Save to, Downloads, Connection and Proxy / Socks
       work and reach the engine; File types, Sites Logins, Dial Up / VPN and
@@ -264,7 +264,7 @@ half-working screen; the one queue below is the part that exists.
 - [x] Browser extension that hands a link to the application: the right click
       menu on a link, and taking over the downloads the browser starts; the
       link opens the add dialog with its address and name filled in
-- [x] Download complete window of its own, in IDM's words ("File ... download
+- [x] Download complete window of its own, in the reference download manager's words ("File ... download
       complete."), with Open file, Open folder and Close
 - [x] "Show download complete dialog" switch on the Downloads page: the engine
       reads it before it opens the window, and the saved value is pushed at
@@ -280,7 +280,7 @@ half-working screen; the one queue below is the part that exists.
 - [x] Tray icon with the mark of the application, and "keep the application in
       the tray when the window is closed": the tray menu brings the window
       back, starts and stops the queue, and is the way out
-- [ ] Tray icon in the three styles IDM offers, and the tray only mode
+- [ ] Tray icon in the three styles the reference download manager offers, and the tray only mode
 - [ ] Font picker and language list
 - [ ] Single instance behaviour and a tray-only mode
 

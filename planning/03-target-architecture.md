@@ -71,11 +71,12 @@ pub enum SegmentKind {
 }
 ```
 
-`SegmentKind` exists because IDM has it (`ChunksListItem` field `+0x18`, value
-1 for primary and 2 for alternative, observed in `FUN_00564650`). It is how
-IDM represents "this connection is racing another one over the same bytes",
-and it is the mechanism behind the strings *"The file chunk %d is reassigned
-to connection %d."*
+`SegmentKind` exists because the reference product has it (`ChunksListItem`
+field `+0x18`, value 1 for primary and 2 for alternative, observed in
+`FUN_00564650`). It is how that binary represents "this connection is racing
+that binary represents "this connection is racing another one over the same
+bytes", and it is the mechanism behind the strings *"The file chunk %d is
+reassigned to connection %d."*
 
 ## The scheduler
 
@@ -95,8 +96,8 @@ The tick does three things, in this order:
 1. **Reap.** A connection that failed permanently hands its range back. A
    connection that finished hands its range to another one, or is retired.
 2. **Grow.** If the slowest live connection is far behind the others, split
-   its remaining range and start another connection — IDM's *"Add alternative
-   connection (%ld) for connection %ld"*.
+   its remaining range and start another connection — the reference product's
+   *"Add alternative connection (%ld) for connection %ld"*.
 3. **Save.** Write the manifest, so a crash costs at most one tick of work.
 
 ## The transport boundary
@@ -117,8 +118,9 @@ pub trait Transport: Send + Sync {
 - fail if `Content-Range` starts somewhere other than `from`;
 - treat `416` as "this range is already complete", not as an error.
 
-Those four rules are the whole of the observed IDM contract, and they are what
-`fetch_range` in `src-tauri/src/downloader.rs` already implements.
+Those four rules are the whole of the contract observed in the reference
+binary, and they are what `fetch_range` in `src-tauri/src/downloader.rs`
+already implements.
 
 ## The manifest
 
@@ -159,12 +161,12 @@ Two separate limits, both configurable:
 
 | Limit | Scope | Default |
 |---|---|---|
-| Connections per download | one download | 8 (IDM's observed `MaxConnectionsNumber` default) |
+| Connections per download | one download | 8 (the `MaxConnectionsNumber` default observed in the reference binary) |
 | Connections in total | the whole app | 32 |
 
-IDM has both: *"Too many open network connections. Please wait for some
-downloads to finish."* is in the binary, and so is the per-site override
-mechanism under `HKCU\Software\DownloadManager\MCN`.
+The reference product has both: *"Too many open network connections. Please
+wait for some downloads to finish."* is in the binary, and so is the per-site
+override mechanism under `HKCU\Software\DownloadManager\MCN`.
 
 ## Error handling
 

@@ -17,18 +17,21 @@ this file says what is left to do.
       not change
 - [x] The free space of the destination volume, before and during
 - [x] A file whose size the server does not tell
-- [x] The connection count: one per 10 KB of the file, the way IDM counts it
+- [x] The connection count: one per 10 KB of the file, the way the reference
+      product counts it
 - [x] A global connection budget, per site caps, and a speed limit
 - [x] The engine in its own crate, and a headless client for it
 - [x] A diagnostics log, and the resume state written when the app closes
-- [ ] **Media splitting**: HLS, MPEG-DASH, MPEG-TS. IDM cuts a stream into
-      parts (`CMp4DashReader`, `CTSAVMixer`, `CSidxParser`); the clone can
-      only fetch whole files today. The whole area is M6.
-- [ ] **The file signature check.** IDM has `CSignVerifier` for the case
-      where a server lies about the *content* of the first range — the head
-      check only catches a range that was not honoured.
+- [ ] **Media splitting**: HLS, MPEG-DASH, MPEG-TS. The reference product
+      cuts a stream into parts (`CMp4DashReader`, `CTSAVMixer`, `CSidxParser`);
+      the clone can only fetch whole files today. The whole area is M6.
+- [ ] **The file signature check.** The reference product has
+      `CSignVerifier` for the case where a server lies about the *content* of
+      the first range — the head check only catches a range that was not
+      honoured.
 - [ ] **`multipart/byteranges`**: a server that answers a range request with
-      a multipart body. IDM understands it (`Content-Range` at `0x6cf014`).
+      a multipart body. The studied binary understands it (`Content-Range`
+      at `0x6cf014`).
 - [ ] **RTMP**: the one-byte handshake and the `pheader` framing
       (`FUN_005b6cb0`).
 - [ ] **A queue inside the engine**, with priorities and a start time. The
@@ -43,8 +46,9 @@ this file says what is left to do.
 - [x] HTTP and HTTPS
 - [x] FTP: one data connection per range, `REST` for the offset
 - [x] A proxy: HTTP or SOCKS, for the whole application
-- [ ] **The addresses that must not go through the proxy.** IDM keeps a list
-      of them; the clone sends everything through the proxy.
+- [ ] **The addresses that must not go through the proxy.** The reference
+      product keeps a list of them; the clone sends everything through the
+      proxy.
 - [ ] **FTP over a proxy**, and FTPS (implicit TLS).
 
 ## The product around the engine
@@ -52,9 +56,9 @@ this file says what is left to do.
 - [x] The window: title bar, menu bar, toolbar, the categories pane, the
       download list
 - [x] The list of downloads survives a restart
-- [ ] **The tray icon**, in the three styles IDM offers, and the tray only
-      mode. The icon itself is there, with the mark of the application, and
-      closing the window keeps the application in the tray.
+- [ ] **The tray icon**, in the three styles the reference product offers,
+      and the tray only mode. The icon itself is there, with the mark of the
+      application, and closing the window keeps the application in the tray.
 - [ ] **The browser integration**: the detection, the keys, the context menu.
       The extension in `browser-extension/` hands a link to the application
       today (a right click menu, and taking over the downloads the browser
@@ -69,7 +73,8 @@ this file says what is left to do.
       (Resume, Pause, Stop, Redownload, Remove, Open file, Open containing
       folder; Properties is greyed out); the menu of a category only has
       "Select all downloads" until the categories themselves can be edited.
-- [ ] **The export and import** of an IDM export file or a text file
+- [ ] **The export and import** of an export file in the reference product's
+      own format, or of a text file
 - [ ] **A first run** that explains the connection setting in one sentence
 
 ## Quality

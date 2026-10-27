@@ -1,6 +1,6 @@
 # Reverse engineering plan
 
-The target is `IDMan.exe` 6.43.15.2, SHA-256
+The target is the reference product's 32-bit (x86) main binary, SHA-256
 `e3fc655a335e17a6fdd09a9b315291d0c8863180f0d801e5dd7433c9e56afbd8`.
 
 Current results are in [`../ANALYSIS.md`](../ANALYSIS.md). This file is the
@@ -16,14 +16,16 @@ step should produce.
   inside it rather than editing the file.
 - Every conclusion is labelled **observed** (a string, address, API call or
   instruction) or **inferred** (a structural reading of observed data).
-- IDM's licence forbids reverse engineering. This work reads the binary to
-  learn *behaviour*; nothing from it is copied into the product.
+- The reference product's publisher forbids reverse engineering. This work
+  reads the binary to learn *behaviour*; nothing from it is copied into the
+  clone.
 
 ## Priority 1 — the initial split arithmetic (highest value)
 
-**Why:** we know IDM sends `Range: bytes=start-end`, and we know it has a
-chunk list. We do **not** know how it decides *N* connections and where the
-boundaries fall. That decision drives throughput more than anything else.
+**Why:** we know the reference binary sends `Range: bytes=start-end`, and we
+know it has a chunk list. We do **not** know how it decides *N* connections
+and where the boundaries fall. That decision drives throughput more than
+anything else.
 
 **Where:**
 
@@ -76,8 +78,8 @@ on the table's owning function, or `procedure_callers` on
 
 ## Priority 3 — the scheduler
 
-**Why:** we know IDM compares the slowest connection and adds "optional"
-connections. We do not know the trigger condition or the cap.
+**Why:** we know the reference product compares the slowest connection and
+adds "optional" connections. We do not know the trigger condition or the cap.
 
 **Where:**
 
@@ -97,9 +99,9 @@ parent's range at the parent's current position. Confirm or refute it.
 
 ## Priority 4 — the integrity and rollback path
 
-**Why:** IDM compares a chunk's head against the file head and, on a
-mismatch, drops to one connection. We currently only detect a server that
-ignores the range entirely (`200` instead of `206`).
+**Why:** the reference binary compares a chunk's head against the file head
+and, on a mismatch, drops to one connection. We currently only detect a
+server that ignores the range entirely (`200` instead of `206`).
 
 **Where:**
 
@@ -107,9 +109,9 @@ ignores the range entirely (`200` instead of `206`).
   and `"Chunk order violation error, cInf.ID %ld, startPos %I64d"`, and
   `"Strart data for this chunk is matched with start of the file!!! s2"` /
   `"s3"`
-- The string `"IDM started to download the file using one connection because
-  of data corruption when newly received data in several connections did not
-  match the same data downloaded earlier."` (`0x6b0d50`)
+- The product's own data-corruption message (`0x6b0d50`): it started to
+  download the file using one connection because the newly received data in
+  several connections did not match the same data downloaded earlier.
 - `CSignVerifier`, `CSignVerifier_2`, `CSignVerifier_3` (RTTI) — a *different*
   verification mechanism; check whether it is about file signatures rather
   than chunk consistency.
@@ -120,8 +122,8 @@ compared, and what state the download is put into on failure.
 ## Priority 5 — the chunk list on disk and in the registry
 
 **Why:** the resume format is a compatibility question. If we ever want a
-user's existing IDM download to resume in our client, the chunk list layout
-matters.
+user's existing download from the reference product to resume in our client,
+the chunk list layout matters.
 
 **Where:**
 
@@ -135,9 +137,9 @@ matters.
 **Evidence to produce:** the 16-byte record layout, the meaning of the
 trailing fields, and the file naming scheme in full.
 
-**Caution:** this is the one area where reading IDM's on-disk format could
-cross from "learning behaviour" into "reading their data". Stay on the
-format, not on any user's content.
+**Caution:** this is the one area where reading the reference product's
+on-disk format could cross from "learning behaviour" into "reading its users'
+data". Stay on the format, not on any user's content.
 
 ## Priority 6 — protocols beyond HTTP
 
@@ -155,18 +157,19 @@ Each is self-contained and can be deferred:
 
 ## Priority 7 — optional, only if it changes the design
 
-- `CProgressItem` and how IDM computes displayed speed and ETA.
+- `CProgressItem` and how the reference product computes displayed speed and
+  ETA.
 - `CDownloadLimits` and the scheduler, for the queue feature.
 - The "Grabber" subsystem, which is out of scope for the product.
 
 ## Runtime observation, if it is ever needed
 
-Static analysis cannot answer "what does IDM actually send on the wire".
-If a question genuinely requires it:
+Static analysis cannot answer "what does the reference binary actually send
+on the wire". If a question genuinely requires it:
 
 - it must be answered against a **server you control**, or a capture of your
   own traffic;
-- no IDM traffic is captured from third parties;
+- no traffic of the reference product is captured from third parties;
 - the capture tooling is `REA`'s `inspect_web_network_capture` (retained HAR
   or mitmproxy) and the browser/Electron observation tools;
 - the result is recorded as **runtime evidence** and clearly separated from
