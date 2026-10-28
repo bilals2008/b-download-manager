@@ -87,7 +87,6 @@ deleted.
 
 ## What is not built yet
 
-An installer on a release page, the scheduler, media splitting for HLS and
-DASH streams, batch adding, and the File types, Browser capture, Sites Logins,
-Dial Up / VPN and Sounds settings pages. `PROGRESS.md` in the repository keeps
-the authoritative list.
+The scheduler, media splitting for HLS and DASH streams, batch adding, and the
+File types, Browser capture, Sites Logins, Dial Up / VPN and Sounds settings
+pages. `PROGRESS.md` in the repository keeps the authoritative list.

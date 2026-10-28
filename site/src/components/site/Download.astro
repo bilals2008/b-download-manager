@@ -1,28 +1,29 @@
 ---
 import Button from "./Button.astro";
 import PlatformIcon from "./PlatformIcon.astro";
+import { RELEASES_URL } from "../../lib/releases";
 
 const platforms = [
   {
     id: "windows",
     name: "Windows 10 and 11",
     meta: "WebView2 runtime",
-    status: "Tuned target",
+    status: "Installer",
     tuned: true,
   },
   {
     id: "apple",
     name: "macOS 11 or later",
-    meta: "Universal build",
-    status: "Builds from source",
-    tuned: false,
+    meta: "Apple silicon · Intel",
+    status: "Universal dmg",
+    tuned: true,
   },
   {
     id: "linux",
     name: "Major distributions",
-    meta: "WebKitGTK",
-    status: "Builds from source",
-    tuned: false,
+    meta: "AppImage · deb",
+    status: "AppImage or deb",
+    tuned: true,
   },
 ] as const;
 ---
@@ -32,15 +33,21 @@ const platforms = [
     <div class="download-band reveal">
       <p class="eyebrow">Get the app</p>
       <h2 id="download-title" class="download-title">
-        The source is the release.
+        Install it, or build it.
       </h2>
       <p class="download-copy">
-        Version 0.1.0 has no packaged installer. Build it once with Node.js,
-        Rust and pnpm, and later updates are a pull and a rebuild.
+        Version 0.1.0 ships a Windows installer, Linux AppImage and deb
+        packages, and a universal macOS dmg, all published on GitHub Releases.
       </p>
       <div class="download-action">
-        <Button variant="primary" icon="download">
-          Coming Soon
+        <Button
+          href={RELEASES_URL}
+          variant="primary"
+          icon="download"
+          data-download
+          data-download-label
+        >
+          Download
         </Button>
       </div>
       <p class="download-meta">

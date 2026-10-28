@@ -9,7 +9,7 @@ There is nothing to buy, no account to create, and no ads. It is a personal proj
 
 ## Does it need to be installed?
 
-Not yet — there is no public installer. If you have it, someone built a copy for you. See [Getting the app](/installation/).
+Yes. Every release has an installer for Windows, macOS and Linux. See [Getting the app](/installation/) for the file for your system.
 
 ## Which computers does it run on?
 

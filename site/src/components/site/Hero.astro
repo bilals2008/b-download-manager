@@ -2,6 +2,7 @@
 import Button from "./Button.astro";
 import PlatformIcon from "./PlatformIcon.astro";
 import PreviewPlaceholder from "./PreviewPlaceholder.astro";
+import { RELEASES_URL } from "../../lib/releases";
 
 const platforms = [
   { name: "windows", label: "Windows" },
@@ -29,8 +30,14 @@ const platforms = [
       </p>
 
       <div class="hero-actions">
-        <Button variant="primary" icon="download">
-          Coming Soon
+        <Button
+          href={RELEASES_URL}
+          variant="primary"
+          icon="download"
+          data-download
+          data-download-label
+        >
+          Download
         </Button>
         <Button href="#features" variant="secondary" icon="arrow-down">
           See what it does

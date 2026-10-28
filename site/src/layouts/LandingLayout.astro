@@ -117,5 +117,40 @@ const { title, description } = Astro.props;
         items.forEach((item) => observer.observe(item));
       }
     </script>
+
+    <script>
+      import {
+        detectPlatform,
+        latestAssets,
+        pickAsset,
+        platformNames,
+      } from "../lib/releases";
+
+      const platform = detectPlatform();
+
+      // Every button already points at the releases page. Every desktop
+      // platform has a build, so each is narrowed to its own file.
+      if (platform !== "other") {
+        const assets = await latestAssets();
+        const asset = assets && pickAsset(assets, platform);
+
+        if (asset) {
+          for (const link of document.querySelectorAll<HTMLAnchorElement>(
+            "[data-download]",
+          )) {
+            link.href = asset.url;
+          }
+
+          for (const button of document.querySelectorAll<HTMLElement>(
+            "[data-download-label]",
+          )) {
+            const label = button.querySelector("span");
+            if (label) {
+              label.textContent = `Download for ${platformNames[platform]}`;
+            }
+          }
+        }
+      }
+    </script>
   </body>
 </html>

@@ -5,9 +5,19 @@ description: Where B Download Manager comes from, and when the browser extension
 
 ## Is there an installer yet?
 
-Not yet. B Download Manager is at version 0.1.0 and has not been released for download. If you are already using it, someone built a copy for you or gave you one.
+Yes. Every release is published on
+[GitHub Releases](https://github.com/bilals2008/b-download-manager/releases/latest),
+with the files for each platform attached to it:
 
-When a version you can simply install exists, the download and the steps for Windows, macOS and Linux will be on this page.
+- **Windows 10 and 11** — the `-setup.exe` installer. It installs per user, so
+  there is no admin prompt, and an update replaces it in place.
+- **Linux** — the `.AppImage` runs on any distribution; the `.deb` is for
+  Debian and Ubuntu.
+- **macOS 11 or later** — one universal `.dmg` for Apple silicon and Intel. It
+  is not signed by Apple yet, so the first launch needs right-click → **Open**.
+
+The download button on the home page picks the file for the system you are on.
+Phones and tablets get the releases page, because there is no build for them.
 
 ## Browser extension
 

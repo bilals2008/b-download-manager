@@ -2,6 +2,7 @@
 import Button from "./Button.astro";
 import RepoStars from "./RepoStars.astro";
 import ThemeToggle from "./ThemeToggle.astro";
+import { RELEASES_URL } from "../../lib/releases";
 ---
 
 <div class="nav-sentinel" data-nav-sentinel aria-hidden="true"></div>
@@ -39,9 +40,11 @@ import ThemeToggle from "./ThemeToggle.astro";
     <div class="nav-actions">
       <ThemeToggle />
       <Button
+        href={RELEASES_URL}
         variant="nav"
         icon="download"
         class="nav-install"
+        data-download
       >
         Download
       </Button>
@@ -68,7 +71,7 @@ import ThemeToggle from "./ThemeToggle.astro";
             </a>
           </nav>
           <div class="nav-menu-foot">
-            <Button variant="nav" icon="download">
+            <Button href={RELEASES_URL} variant="nav" icon="download" data-download>
               Download
             </Button>
           </div>

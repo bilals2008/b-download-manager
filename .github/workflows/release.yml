@@ -7,10 +7,10 @@ name: Release
 # That script bumps the version in every recorded file, generates the
 # CHANGELOG.md section from the conventional commits the release carries,
 # commits, tags vX.Y.Z and pushes both. This workflow fires on that tag and
-# is the whole rest of the pipeline: it builds the signed Windows installer
-# and the Linux deb + AppImage, creates the GitHub release with the changelog
-# section as its body, and uploads the update payloads (installers plus .sig)
-# and latest.json.
+# is the whole rest of the pipeline: it builds the signed Windows installer,
+# the Linux deb + AppImage and the universal macOS dmg, creates the GitHub
+# release with the changelog section as its body, and uploads the update
+# payloads (installers plus .sig) and latest.json.
 #
 # The jobs run one at a time (max-parallel: 1) because each one merges its
 # platform entry into the same latest.json asset; running them in parallel
@@ -50,9 +50,12 @@ jobs:
       matrix:
         include:
           - platform: windows-latest
-            bundles: nsis
+            args: --bundles nsis
           - platform: ubuntu-22.04
-            bundles: deb,appimage
+            args: --bundles deb,appimage
+          # One universal binary, so Intel and Apple Silicon both get a build.
+          - platform: macos-latest
+            args: --target universal-apple-darwin --bundles dmg
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v7
@@ -65,6 +68,10 @@ jobs:
           cache: "pnpm"
 
       - uses: dtolnay/rust-toolchain@stable
+
+      - name: Add the macOS build targets
+        if: matrix.platform == 'macos-latest'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
       - uses: swatinem/rust-cache@v2
         with:
@@ -102,4 +109,4 @@ jobs:
           releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: false
           prerelease: false
-          args: "--bundles ${{ matrix.bundles }}"
+          args: ${{ matrix.args }}

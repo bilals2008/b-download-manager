@@ -1,8 +1,8 @@
 # Release, installer and update notes
 
-How this application ships on Windows and Linux, and what was verified before
-the first release. The in-app update path and the release pipeline are wired
-together; changing one without the other is the main way this can break.
+How this application ships on Windows, Linux and macOS, and what was verified
+before the first release. The in-app update path and the release pipeline are
+wired together; changing one without the other is the main way this can break.
 
 ## Versioning — one source of truth
 
@@ -24,11 +24,11 @@ It bumps, generates the `CHANGELOG.md` section from the conventional commits
 since the last tag (`feat:` Added, `fix:` Fixed, `perf:` Performance, `!` or
 `BREAKING CHANGE:` first under Breaking changes), commits, tags `vX.Y.Z` and
 pushes both. The pushed tag starts `.github/workflows/release.yml`, which
-builds the signed Windows NSIS installer and the Linux `deb` + AppImage,
-uploads them with their `.sig` files, merges both platforms into
-`latest.json` and publishes the GitHub release with the changelog section as
-its body and its notes. The two platform jobs run one after the other so the
-shared `latest.json` is not overwritten.
+builds the signed Windows NSIS installer, the Linux `deb` + AppImage and the
+universal macOS dmg, uploads them with their `.sig` files, merges all three
+platforms into `latest.json` and publishes the GitHub release with the
+changelog section as its body and its notes. The platform jobs run one after
+the other so the shared `latest.json` is not overwritten.
 
 Check the words of a generated section before pushing a release you care
 about: `git show` the bump commit and amend it, or edit `CHANGELOG.md` and
@@ -85,6 +85,14 @@ with it — old installs would otherwise stop seeing updates.
 - The AppImage is the artifact the in-app updater uses on Linux; `latest.json`
   carries its signature under the `linux-x86_64` keys.
 - Building on Ubuntu 22.04 keeps the AppImage usable on older glibc systems.
+
+## Installer behaviour on macOS
+
+- One universal `.dmg` covers Apple silicon and Intel; the same binary is
+  published under both `darwin-aarch64` and `darwin-x86_64` in `latest.json`.
+- The build is not signed with an Apple Developer ID and not notarised, so the
+  first launch needs right-click → **Open**. Signing is the next step before a
+  1.0; it needs a paid Apple Developer account.
 
 ## Verified / not verified
 

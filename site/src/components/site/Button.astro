@@ -11,6 +11,8 @@ interface Props {
     | "download"
     | "github";
   class?: string;
+  /** Passed straight through, so a caller can tag the link for the download script. */
+  [dataAttribute: `data-${string}`]: string | boolean | undefined;
 }
 
 const {
@@ -18,12 +20,13 @@ const {
   variant = "primary",
   icon,
   class: className = "",
+  ...dataAttributes
 } = Astro.props;
 ---
 
 {
   href ? (
-    <a href={href} class:list={["btn", `btn--${variant}`, className]}>
+    <a href={href} class:list={["btn", `btn--${variant}`, className]} {...dataAttributes}>
       <span><slot /></span>
       {icon && <Icon name={icon} size={16} class="btn-icon" />}
     </a>
@@ -31,6 +34,7 @@ const {
     <span
       class:list={["btn", `btn--${variant}`, "btn--disabled", className]}
       aria-disabled="true"
+      {...dataAttributes}
     >
       <span><slot /></span>
       {icon && <Icon name={icon} size={16} class="btn-icon" />}
