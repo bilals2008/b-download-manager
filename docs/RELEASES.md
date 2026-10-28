@@ -111,8 +111,8 @@ Needs a second machine (a clean Windows install without the dev app):
   the old list.
 - An update published from a *different* key is refused (the security gate
   itself).
-- The GitHub repository `bilals2008/b-download-manager` does not exist yet, so
-  the tag-triggered workflow, the published `latest.json`, and a real
-  "Check for updates" round trip have never run end to end. Until the remote
-  and the two signing secrets are in place, the in-app check returns a plain
-  "cannot reach the release feed" message by design.
+- The tag-triggered workflow ran end to end for v0.1.0: it published the
+  Windows NSIS installer and the Linux `deb` + AppImage, each with its `.sig`,
+  and a `latest.json` carrying the Windows and Linux platform entries.
+- A real "Check for updates" round trip from an installed copy to a higher
+  published version still needs a second machine.
