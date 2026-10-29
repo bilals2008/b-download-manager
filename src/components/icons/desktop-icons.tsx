@@ -1,5 +1,30 @@
 import { useId, type ReactNode } from "react";
 
+import androidIcon from "@/assets/file-icons/material/android.svg?url";
+import audioIcon from "@/assets/file-icons/material/audio.svg?url";
+import discIcon from "@/assets/file-icons/material/disc.svg?url";
+import dllIcon from "@/assets/file-icons/material/dll.svg?url";
+import documentIcon from "@/assets/file-icons/material/document.svg?url";
+import exeIcon from "@/assets/file-icons/material/exe.svg?url";
+import fileIcon from "@/assets/file-icons/material/file.svg?url";
+import fontIcon from "@/assets/file-icons/material/font.svg?url";
+import imageIcon from "@/assets/file-icons/material/image.svg?url";
+import javascriptIcon from "@/assets/file-icons/material/javascript.svg?url";
+import jsonIcon from "@/assets/file-icons/material/json.svg?url";
+import pdfIcon from "@/assets/file-icons/material/pdf.svg?url";
+import powerpointIcon from "@/assets/file-icons/material/powerpoint.svg?url";
+import pythonIcon from "@/assets/file-icons/material/python.svg?url";
+import rustIcon from "@/assets/file-icons/material/rust.svg?url";
+import settingsIcon from "@/assets/file-icons/material/settings.svg?url";
+import tableIcon from "@/assets/file-icons/material/table.svg?url";
+import tomlIcon from "@/assets/file-icons/material/toml.svg?url";
+import typescriptIcon from "@/assets/file-icons/material/typescript.svg?url";
+import videoIcon from "@/assets/file-icons/material/video.svg?url";
+import wordIcon from "@/assets/file-icons/material/word.svg?url";
+import xmlIcon from "@/assets/file-icons/material/xml.svg?url";
+import yamlIcon from "@/assets/file-icons/material/yaml.svg?url";
+import zipIcon from "@/assets/file-icons/material/zip.svg?url";
+
 import {
   CATEGORY_PALETTES,
   categoryPaint,
@@ -8,7 +33,6 @@ import {
   type CategoryIcon,
   type CategoryPaint,
   type CategoryPalette,
-  type CategoryPaletteId,
 } from "@/lib/category-icons";
 import type { CategoryName, DownloadStatus } from "@/lib/downloads";
 import { fileKind, type FileKind } from "@/lib/file-icons";
@@ -17,10 +41,9 @@ import { fileKind, type FileKind } from "@/lib/file-icons";
  * The desktop artwork: file icons, folder icons, status marks and the
  * empty-state illustration.
  *
- * A known file type is drawn the way a desktop draws one: a light page with a
- * folded corner and a coloured band carrying a white mark. A type we do not
- * know keeps the flat category glyph. Colours come from the tokens, so the
- * light and dark appearances follow the theme without a second copy.
+ * Known filename types use the matching bundled Material Icon Theme SVG;
+ * unknown names get its generic file mark. Category icons remain available
+ * for category controls that do not identify a specific file.
  */
 
 /** A paint stop is either a theme variable name or a colour already. */
@@ -178,200 +201,6 @@ const GLYPHS: Record<
   ),
 };
 
-/*
-  The page every file icon is drawn on, on the same 24-unit grid. The band
-  covers the lower half and takes the colour of the family, so a column of rows
-  is read by shape first and hue second.
-*/
-const PAGE_BODY =
-  "M6.2 2.6h7.9l4.7 4.7v12.9a1.4 1.4 0 0 1-1.4 1.4H6.2a1.4 1.4 0 0 1-1.4-1.4V4a1.4 1.4 0 0 1 1.4-1.4z";
-const PAGE_FOLD = "M14.1 2.6v3.4a1.3 1.3 0 0 0 1.3 1.3h3.4";
-const PAGE_BAND =
-  "M4.8 12.4h14v7.8a1.4 1.4 0 0 1-1.4 1.4H6.2a1.4 1.4 0 0 1-1.4-1.4z";
-
-/** Which icon palette a family's band wears. */
-const FILE_PALETTE: Record<FileKind, CategoryPaletteId> = {
-  video: "red",
-  audio: "purple",
-  archive: "amber",
-  program: "green",
-  pdf: "red",
-  document: "silver",
-  spreadsheet: "green",
-  slide: "amber",
-  image: "blue",
-  code: "blue",
-  font: "purple",
-};
-
-/** The mark in the band of a file icon. */
-const FILE_GLYPHS: Record<FileKind, (palette: CategoryPalette) => ReactNode> = {
-  video: () => <path d="M10.2 13.9 16 16.9l-5.8 3.1z" />,
-  audio: () => (
-    <g>
-      <ellipse
-        cx="9.3"
-        cy="18.6"
-        rx="1.9"
-        ry="1.5"
-        transform="rotate(-16 9.3 18.6)"
-      />
-      <rect x="10.6" y="12.9" width="1.4" height="5.9" rx=".4" />
-      <path d="M10.6 12.9h4.6v2.3h-4.6z" />
-    </g>
-  ),
-  archive: (palette) => (
-    <g>
-      <path d="M6.8 13.8h10.4v2.2H6.8z" />
-      <path d="M7.8 16h8.4v3.7a1 1 0 0 1-1 1H8.8a1 1 0 0 1-1-1z" />
-      <rect
-        x="10.6"
-        y="17.2"
-        width="2.8"
-        height="2"
-        rx=".5"
-        fill={cssColor(palette.base)}
-      />
-    </g>
-  ),
-  program: () => (
-    <g>
-      <rect x="8.1" y="13.6" width="3.4" height="3.2" rx=".7" />
-      <rect x="12.5" y="13.6" width="3.4" height="3.2" rx=".7" />
-      <rect x="8.1" y="17.5" width="3.4" height="3.2" rx=".7" />
-      <rect x="12.5" y="17.5" width="3.4" height="3.2" rx=".7" />
-    </g>
-  ),
-  pdf: (palette) => (
-    <g>
-      <path d="M9.4 13.4h3.5l2.4 2.4v3.6a1 1 0 0 1-1 1H9.4a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z" />
-      <path
-        d="M10 16.7h3.3M10 18.3h3.3M10 19.9h2.2"
-        fill="none"
-        stroke={cssColor(palette.base)}
-        strokeWidth=".9"
-        strokeLinecap="round"
-      />
-    </g>
-  ),
-  document: () => (
-    <path
-      d="M8 9.6h7.2M8 12.6h7.2M8 15.6h7.2M8 18.6h4.4"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-    />
-  ),
-  spreadsheet: (palette) => (
-    <g>
-      <rect x="7.2" y="13.5" width="9.6" height="6.6" rx=".7" />
-      <path
-        d="M12 13.5v6.6M7.2 16.8h9.6"
-        fill="none"
-        stroke={cssColor(palette.base)}
-        strokeWidth="1.1"
-      />
-    </g>
-  ),
-  slide: () => (
-    <g>
-      <rect x="7.4" y="17.2" width="2.4" height="3" rx=".5" />
-      <rect x="10.8" y="15.1" width="2.4" height="5.1" rx=".5" />
-      <rect x="14.2" y="13.5" width="2.4" height="6.7" rx=".5" />
-    </g>
-  ),
-  image: (palette) => (
-    <g>
-      <rect x="7" y="13.5" width="10" height="6.8" rx="1" />
-      <circle cx="9.8" cy="15.9" r=".9" fill={cssColor(palette.base)} />
-      <path
-        d="m8 20.3 2.4-2.9 1.8 2 1.4-1.6 2.4 2.5z"
-        fill={cssColor(palette.base)}
-      />
-    </g>
-  ),
-  code: () => (
-    <g
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="m10.1 14.4-2.6 2.6 2.6 2.6" />
-      <path d="m13.9 14.4 2.6 2.6-2.6 2.6" />
-      <path d="m13 13.6-2 6.8" strokeWidth="1.4" />
-    </g>
-  ),
-  font: () => (
-    <text
-      x="12"
-      y="20.4"
-      textAnchor="middle"
-      fontFamily="Segoe UI, Arial, sans-serif"
-      fontSize="7.4"
-      fontWeight="700"
-    >
-      A
-    </text>
-  ),
-};
-
-/** A file drawn as a page with a folded corner and the family's band. */
-function FilePageIcon({
-  kind,
-  className,
-}: {
-  kind: FileKind;
-  className?: string;
-}) {
-  const ids = useArtIds("file");
-  const palette = CATEGORY_PALETTES[FILE_PALETTE[kind]];
-  // A plain text file has no band: the page itself carries the rules.
-  const plain = kind === "document";
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className={className}
-      aria-hidden="true"
-      focusable="false"
-    >
-      <defs>
-        <linearGradient id={ids.front} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" style={{ stopColor: cssColor(palette.base) }} />
-          <stop offset="1" style={{ stopColor: cssColor(palette.deep) }} />
-        </linearGradient>
-      </defs>
-      <path
-        d={PAGE_BODY}
-        fill={cssColor("--file-paper")}
-        stroke={cssColor("--file-paper-edge")}
-        strokeOpacity=".85"
-        strokeWidth=".8"
-      />
-      <path
-        d={PAGE_FOLD}
-        fill="none"
-        stroke={cssColor("--file-paper-edge")}
-        strokeWidth=".8"
-        strokeLinejoin="round"
-      />
-      {plain ? null : <path d={PAGE_BAND} fill={`url(#${ids.front})`} />}
-      <g
-        fill="currentColor"
-        style={{
-          color: plain
-            ? cssColor("--file-paper-edge")
-            : cssColor("--file-mark"),
-        }}
-      >
-        {FILE_GLYPHS[kind](palette)}
-      </g>
-    </svg>
-  );
-}
-
 /** The saved icon of a category, or the one its name has always had. */
 function artFor(category: CategoryName, icon?: CategoryIcon): CategoryIcon {
   return icon ?? defaultCategoryIcon(category);
@@ -408,6 +237,7 @@ export function FileTypeIcon({
   category,
   icon,
   name,
+  mimeType,
   className,
 }: {
   category: CategoryName;
@@ -415,12 +245,34 @@ export function FileTypeIcon({
   icon?: CategoryIcon;
   /** The file name, whose extension picks the drawing. */
   name?: string;
+  /** Optional MIME type used when the filename has no recognized extension. */
+  mimeType?: string | null;
   className?: string;
 }) {
-  // A saved category icon is the user's choice and wins over the extension.
-  const kind = icon || !name ? null : fileKind(name);
+  // A saved category icon is the user's choice outside filename-driven rows.
+  const kind = icon || name === undefined ? null : fileKind(name, mimeType);
   if (kind) {
-    return <FilePageIcon kind={kind} className={className} />;
+    const source = fileIconSource(name ?? "", kind);
+    return (
+      <img
+        src={source}
+        className={className}
+        alt=""
+        aria-hidden="true"
+        draggable={false}
+      />
+    );
+  }
+  if (name !== undefined && !icon) {
+    return (
+      <img
+        src={fileIcon}
+        className={className}
+        alt=""
+        aria-hidden="true"
+        draggable={false}
+      />
+    );
   }
   const art = artFor(category, icon);
   const colors = categoryPaint(art);
@@ -443,6 +295,113 @@ export function FileTypeIcon({
       </g>
     </svg>
   );
+}
+
+const MATERIAL_KIND_ICONS: Record<FileKind, string> = {
+  video: videoIcon,
+  audio: audioIcon,
+  archive: zipIcon,
+  application: exeIcon,
+  system: dllIcon,
+  pdf: pdfIcon,
+  document: documentIcon,
+  spreadsheet: tableIcon,
+  slide: powerpointIcon,
+  image: imageIcon,
+  code: fileIcon,
+  font: fontIcon,
+  json: jsonIcon,
+  xml: xmlIcon,
+  config: settingsIcon,
+  csv: tableIcon,
+  torrent: fileIcon,
+  disk: discIcon,
+};
+
+const MATERIAL_EXTENSION_ICONS: Record<string, string> = {
+  aac: audioIcon,
+  aiff: audioIcon,
+  apk: androidIcon,
+  app: exeIcon,
+  appimage: exeIcon,
+  appx: exeIcon,
+  avi: videoIcon,
+  bat: exeIcon,
+  bin: dllIcon,
+  cfg: settingsIcon,
+  cjs: javascriptIcon,
+  cmd: exeIcon,
+  conf: settingsIcon,
+  csv: tableIcon,
+  dll: dllIcon,
+  doc: wordIcon,
+  docx: wordIcon,
+  exe: exeIcon,
+  flac: audioIcon,
+  ini: settingsIcon,
+  iso: discIcon,
+  js: javascriptIcon,
+  json: jsonIcon,
+  json5: jsonIcon,
+  jsonc: jsonIcon,
+  jsonl: jsonIcon,
+  mkv: videoIcon,
+  mov: videoIcon,
+  mp3: audioIcon,
+  mp4: videoIcon,
+  m4a: audioIcon,
+  m4v: videoIcon,
+  msi: exeIcon,
+  msix: exeIcon,
+  ndjson: jsonIcon,
+  ogg: audioIcon,
+  opus: audioIcon,
+  ppt: powerpointIcon,
+  pptx: powerpointIcon,
+  py: pythonIcon,
+  rs: rustIcon,
+  so: dllIcon,
+  sys: dllIcon,
+  toml: tomlIcon,
+  ts: typescriptIcon,
+  tsv: tableIcon,
+  wav: audioIcon,
+  webm: videoIcon,
+  wma: audioIcon,
+  wmv: videoIcon,
+  xml: xmlIcon,
+  xsl: xmlIcon,
+  xslt: xmlIcon,
+  yaml: yamlIcon,
+  yml: yamlIcon,
+  zip: zipIcon,
+};
+
+function fileIconSource(name: string, kind: FileKind): string {
+  const basename = name.trim().split(/[\\/]/).pop() ?? "";
+  const match = /\.([a-z0-9]+)$/i.exec(basename);
+  const specificIcon = match
+    ? MATERIAL_EXTENSION_ICONS[match[1].toLowerCase()]
+    : undefined;
+  if (specificIcon) {
+    return specificIcon;
+  }
+  if (kind === "disk") {
+    return discIcon;
+  }
+  if (kind === "config") {
+    return settingsIcon;
+  }
+  if (kind === "json") {
+    return jsonIcon;
+  }
+  if (kind === "xml") {
+    return xmlIcon;
+  }
+  if (kind === "csv" || kind === "spreadsheet") {
+    return tableIcon;
+  }
+  return MATERIAL_KIND_ICONS[kind];
 }
 
 const CLOSED_FACE =
@@ -505,9 +464,9 @@ export function CategoryFolderIcon({
         fill={colors.ink}
         opacity=".96"
         stroke={cssColor(colors.deep)}
-        strokeWidth="1.1"
+        strokeWidth=".8"
         strokeLinejoin="round"
-        transform="translate(12 14.9) scale(.62) translate(-12 -12)"
+        transform="translate(12 14) scale(.82) translate(-12 -12)"
       >
         {GLYPHS[art.glyph](colors)}
       </g>
