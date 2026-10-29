@@ -10,6 +10,18 @@ edit one before its release ships if a bullet needs better words.
 
 ---
 
+## [0.1.3] - 30 October 2026
+
+### Added
+
+- **settings:** Pick the save folder for each category and turn the browser's video download button on or off
+- **engine:** Unfinished parts now stay in the list until you remove them, and each category saves to its own folder
+- **icons:** Known file types draw with the bundled Material Icon Theme artwork
+- **ui:** Release notes read as plain lines instead of commit subjects
+- Removing a download now clears its parts from disk and closes the windows it left open
+
+---
+
 ## [0.1.2] - 29 October 2026
 
 ### Added

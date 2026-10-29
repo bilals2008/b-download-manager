@@ -2130,7 +2130,7 @@ dependencies = [
 
 [[package]]
 name = "my-idm-clone"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "futures-util",
  "idm-core",
