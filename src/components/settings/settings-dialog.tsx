@@ -11,6 +11,7 @@ import { ProxySettings } from "@/components/settings/proxy-settings";
 import { SaveLocationsSettings } from "@/components/settings/save-locations-settings";
 import { ShortcutsSettings } from "@/components/settings/shortcuts-settings";
 import { TipsSettings } from "@/components/settings/tips-settings";
+import { VideoDownloadButtonSettings } from "@/components/settings/video-download-button-settings";
 import {
   settingsPageLabel,
   type SettingsPageId,
@@ -21,6 +22,7 @@ import { broadcastSettings } from "@/lib/app-events";
 import { describeError } from "@/lib/errors";
 import { applyFont, applyWeight } from "@/lib/fonts";
 import {
+  pushDownloadFolders,
   setBrowserConnections,
   setBrowserFolder,
   setBrowserPolicy,
@@ -33,6 +35,7 @@ import {
   setShowCompleteDialog,
   setShowProgressOnStart,
   setSpeedLimit,
+  setVideoButtonSettings,
 } from "@/lib/ipc";
 import {
   clearLastFolder,
@@ -64,6 +67,7 @@ const ENGINE_KEYS: readonly (keyof Settings)[] = [
   "showProgressOnStart",
   "clipboardCapture",
   "defaultFolder",
+  "unfinishedFolder",
   "defaultConnections",
   "browserCapture",
   "captureAsk",
@@ -100,6 +104,13 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
     const saved = loadSettings();
     latest.current = saved;
     setSettings(saved);
+    // The bridge serves the button appearance to the extension, so push what
+    // is saved so open tabs pick it up without reloading.
+    void setVideoButtonSettings({
+      style: saved.videoButtonStyle,
+      label: saved.videoButtonLabel,
+      hover: saved.videoButtonHover,
+    }).catch(() => {});
     setError(null);
     setNotice(null);
   }, [open]);
@@ -158,6 +169,22 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
     if (key === "launchOnStartup") {
       void applyStartup(next.launchOnStartup);
       return;
+    }
+    // The bridge serves the button appearance to the extension. Push it at
+    // once so an open tab picks up a change without reloading; the setting
+    // was already saved above.
+    if (
+      key === "videoButtonStyle" ||
+      key === "videoButtonLabel" ||
+      key === "videoButtonHover"
+    ) {
+      void setVideoButtonSettings({
+        style: next.videoButtonStyle,
+        label: next.videoButtonLabel,
+        hover: next.videoButtonHover,
+      }).catch((failure: unknown) =>
+        setError(describeError(failure)),
+      );
     }
     if (!ENGINE_KEYS.includes(key)) {
       return;
@@ -259,6 +286,8 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
         return <SaveLocationsSettings settings={settings} onChange={update} />;
       case "browser":
         return <BrowserSettings settings={settings} onChange={update} />;
+      case "video-download-button":
+        return <VideoDownloadButtonSettings settings={settings} onChange={update} />;
       case "connections":
         return <ConnectionsSettings settings={settings} onChange={update} />;
       case "proxy":
@@ -333,6 +362,9 @@ async function applyEngine(next: Settings): Promise<void> {
     setShowProgressOnStart(next.showProgressOnStart),
     setClipboardCapture(next.clipboardCapture),
     setBrowserFolder(next.defaultFolder),
+    // The unfinished folder and the category folders decide where a start
+    // writes, so the engine needs them before the next download begins.
+    pushDownloadFolders(next.unfinishedFolder),
     setBrowserConnections(next.defaultConnections),
     setBrowserPolicy({
       capture: next.browserCapture,

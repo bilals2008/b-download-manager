@@ -3,8 +3,9 @@
  *
  * Every value here is stored on this machine and is read back when the
  * application starts. The ones the engine owns — the proxy, the bandwidth
- * cap, the number of connections — are pushed to the engine as well, so a
- * change takes effect at once.
+ * cap, the number of connections, where unfinished files wait and where each
+ * category saves — are pushed to the engine as well, so a change takes effect
+ * at once.
  */
 export interface Settings {
   /** Register the application in the operating system's startup entry. */
@@ -29,6 +30,11 @@ export interface Settings {
   uiWeight: UiWeight;
   /** Where a new download is saved when the user does not say. */
   defaultFolder: string;
+  /**
+   * Where the parts and the resume state of an unfinished download wait.
+   * Blank uses a folder inside the application's own data folder.
+   */
+  unfinishedFolder: string;
   /** Open on the folder of the last download instead of the default. */
   rememberLastFolder: boolean;
   /** Connections one download gets by default. */
@@ -51,6 +57,12 @@ export interface Settings {
   captureTypes: string[];
   /** Hosts the extension leaves to the browser. */
   skipSites: string[];
+  /** Icon only, text only, or icon + text on the floating video button. */
+  videoButtonStyle: "icon" | "text" | "both";
+  /** The label on the floating video button, when it shows text. */
+  videoButtonLabel: string;
+  /** Only show the floating video button while the pointer is on the video. */
+  videoButtonHover: boolean;
   /**
    * Whether the application asks the release endpoint for a newer version
    * when it starts. Off by default: a check reaches the network, so it is the
@@ -91,6 +103,7 @@ export const DEFAULT_SETTINGS: Settings = {
   uiFont: "googlesans",
   uiWeight: "medium",
   defaultFolder: "",
+  unfinishedFolder: "",
   rememberLastFolder: true,
   defaultConnections: 8,
   maxConnections: 32,
@@ -102,6 +115,9 @@ export const DEFAULT_SETTINGS: Settings = {
   captureAsk: false,
   captureTypes: [],
   skipSites: [],
+  videoButtonStyle: "icon",
+  videoButtonLabel: "Download",
+  videoButtonHover: false,
   updateAutoCheck: false,
   lastUpdateCheck: null,
   firstRunDone: false,
@@ -172,6 +188,10 @@ export function loadSettings(): Settings {
       uiFont: font(value.uiFont, DEFAULT_SETTINGS.uiFont),
       uiWeight: weight(value.uiWeight, DEFAULT_SETTINGS.uiWeight),
       defaultFolder: text(value.defaultFolder, DEFAULT_SETTINGS.defaultFolder),
+      unfinishedFolder: text(
+        value.unfinishedFolder,
+        DEFAULT_SETTINGS.unfinishedFolder,
+      ),
       rememberLastFolder: boolean(
         value.rememberLastFolder,
         DEFAULT_SETTINGS.rememberLastFolder,
@@ -214,6 +234,9 @@ export function loadSettings(): Settings {
         cleanCaptureType,
       ),
       skipSites: entries(value.skipSites, DEFAULT_SETTINGS.skipSites, cleanSite),
+      videoButtonStyle: videoButtonStyle(value.videoButtonStyle),
+      videoButtonLabel: text(value.videoButtonLabel, DEFAULT_SETTINGS.videoButtonLabel),
+      videoButtonHover: boolean(value.videoButtonHover, DEFAULT_SETTINGS.videoButtonHover),
       updateAutoCheck: boolean(
         value.updateAutoCheck,
         DEFAULT_SETTINGS.updateAutoCheck,
@@ -419,6 +442,12 @@ function duplicate(
     value === "skip"
     ? value
     : fallback;
+}
+
+function videoButtonStyle(value: unknown): "icon" | "text" | "both" {
+  return value === "icon" || value === "text" || value === "both"
+    ? value
+    : DEFAULT_SETTINGS.videoButtonStyle;
 }
 
 function entries(

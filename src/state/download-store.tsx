@@ -50,6 +50,7 @@ import {
   onBridgeDownload,
   onDownloadUpdate,
   pauseDownload,
+  pushDownloadFolders,
   queueDownload,
   redownloadDownload,
   removeDownload,
@@ -695,6 +696,16 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
     categoriesRef.current = next;
     setCategories(next);
     saveCategories(next);
+    // The engine routes a new download to a category's folder, and it has no
+    // preference file of its own to read the change from.
+    if (isDesktop()) {
+      void pushDownloadFolders(loadSettings().unfinishedFolder, next).catch(
+        () => {
+          // The engine keeps the folders it had; the next change or the next
+          // start pushes them again.
+        },
+      );
+    }
   }
 
   function addCategory(draft: CategoryDraft): string | null {

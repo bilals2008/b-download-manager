@@ -146,8 +146,6 @@ export function AdvancedSettings({ onReset }: AdvancedSettingsProps) {
           <li>A schedule and named queues.</li>
           <li>Saved logins for sites that ask before they hand over a file.</li>
           <li>A password for the proxy.</li>
-          <li>A separate folder for unfinished downloads.</li>
-          <li>A folder for each category.</li>
           <li>Joining separate video and audio streams.</li>
         </ul>
       </Section>

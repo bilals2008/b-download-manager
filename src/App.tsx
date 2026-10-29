@@ -21,6 +21,7 @@ import {
   onCloseRequested,
   openUrl,
   quitApp,
+  pushDownloadFolders,
   setBrowserConnections,
   setBrowserFolder,
   setBrowserPolicy,
@@ -111,6 +112,12 @@ export default function App() {
     });
     void setBrowserFolder(settings.defaultFolder).catch(() => {
       // As above; the browser hand-over falls back to the Downloads folder.
+    });
+    // The parts of a download are placed the moment it starts, so the
+    // unfinished folder and the folder each category saves to are pushed
+    // before anything can be added — including from the browser extension.
+    void pushDownloadFolders(settings.unfinishedFolder).catch(() => {
+      // As above; the engine keeps the folder it started with.
     });
     void setBrowserConnections(settings.defaultConnections).catch(() => {
       // As above; a hand-over falls back to the engine default.

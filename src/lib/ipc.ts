@@ -2,6 +2,12 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 
+import {
+  loadCategories,
+  OTHER_CATEGORY,
+  type CategoryDefinition,
+} from "@/lib/categories";
+
 import type { DownloadInfo } from "@/types";
 
 export function onDownloadUpdate(
@@ -391,6 +397,141 @@ export function setBrowserPolicy(
   policy: BrowserPolicyInput,
 ): Promise<BrowserPolicyInput> {
   return invoke<BrowserPolicyInput>("set_browser_policy", { policy });
+}
+
+/** The appearance of the floating video download button the extension draws. */
+export interface VideoButtonSettings {
+  style: "icon" | "text" | "both";
+  label: string;
+  hover: boolean;
+}
+
+/** The video button appearance the extension applies to its overlay. */
+export function getVideoButtonSettings(): Promise<VideoButtonSettings> {
+  return invoke<VideoButtonSettings>("video_button_settings");
+}
+
+/** Store the video button appearance so the bridge can serve it to the extension. */
+export function setVideoButtonSettings(settings: VideoButtonSettings): Promise<void> {
+  return invoke<void>("set_video_button_settings", { settings });
+}
+
+/** One downloadable format of a video, as the extractor reports it. */
+export interface VideoFormat {
+  /** The extractor's format id: the itag on YouTube, e.g. "137". */
+  formatId: string;
+  /** A human label: "1080p", "720p", or "" for an audio stream. */
+  resolution: string;
+  /** Pixel height, when the stream has a picture. */
+  height: number | null;
+  /** Pixel width, when the stream has a picture. */
+  width: number | null;
+  /** Frames per second, when known. */
+  fps: number | null;
+  /** The video codec ("avc1", "vp9"), or null for an audio stream. */
+  vcodec: string | null;
+  /** The audio codec ("opus", "mp4a"), or null for a video-only stream. */
+  acodec: string | null;
+  /** The container the stream belongs in: "mp4", "webm", "m4a", ... */
+  ext: string;
+  /** The size in bytes, when the extractor knows it. */
+  filesize: number | null;
+  /** "video-only", "audio-only" or "muxed". */
+  kind: "video-only" | "audio-only" | "muxed";
+  /** The direct stream address, freshly resolved by the extractor. */
+  url: string | null;
+}
+
+/** What ffprobe found in a media file. */
+export interface MediaInfo {
+  hasVideo: boolean;
+  hasAudio: boolean;
+  /** Duration in seconds, when the file has one. */
+  duration: number | null;
+  width: number | null;
+  height: number | null;
+  videoCodec: string | null;
+  audioCodec: string | null;
+  /** The container format, e.g. "mov,mp4,m4a,3gp,3g2,mj2". */
+  container: string | null;
+}
+
+/** Enumerate the downloadable formats of a video page. */
+export function extractFormats(url: string): Promise<VideoFormat[]> {
+  return invoke<VideoFormat[]>("extract_formats", { url });
+}
+
+/** Download a video and an audio stream and mux them into one playable file. */
+export function muxStreams(
+  videoUrl: string,
+  audioUrl: string,
+  dest: string,
+  container: string,
+): Promise<void> {
+  return invoke<void>("mux_streams", { videoUrl, audioUrl, dest, container });
+}
+
+/** Verify a media file is playable, returning what its streams hold. */
+export function probeMedia(file: string): Promise<MediaInfo> {
+  return invoke<MediaInfo>("probe_media", { file });
+}
+
+/** Whether ffmpeg and ffprobe are both bundled and able to run. */
+export function ffmpegAvailable(): Promise<boolean> {
+  return invoke<boolean>("ffmpeg_available");
+}
+
+/** One category and the folder its downloads save to. */
+export interface CategoryFolderRule {
+  name: string;
+  /** Lower-case extensions without the dot. */
+  extensions: string[];
+  /** An absolute folder, or empty to keep the default save folder. */
+  folder: string;
+  /** Whether the category came with the application rather than the reader. */
+  builtin: boolean;
+  /** Whether a type nobody claims lands here, as it does in the add dialog. */
+  fallback: boolean;
+}
+
+/**
+ * Give the engine the unfinished folder and the folder each category saves
+ * to. The unfinished folder may be blank: the engine then uses a folder of
+ * its own. The answer is the unfinished folder it will really use.
+ */
+export function setDownloadFolders(
+  unfinishedFolder: string,
+  categories: CategoryFolderRule[],
+): Promise<string> {
+  return invoke<string>("set_download_folders", {
+    unfinishedFolder,
+    categories,
+  });
+}
+
+/**
+ * Hand the engine where unfinished files wait and where each category saves.
+ *
+ * The engine has to know both without a window: a hand-over from the browser
+ * reads neither, and the parts of a download are placed the moment it starts.
+ * The categories are the saved ones when none are given. The answer is the
+ * unfinished folder the engine will really use.
+ */
+export async function pushDownloadFolders(
+  unfinishedFolder: string,
+  categories?: readonly CategoryDefinition[],
+): Promise<string> {
+  const known = categories ?? loadCategories();
+  return setDownloadFolders(
+    unfinishedFolder.trim(),
+    known.map((category) => ({
+      name: category.name,
+      extensions: [...category.extensions],
+      folder: category.folder.trim(),
+      builtin: category.builtin,
+      fallback: category.name === OTHER_CATEGORY,
+    })),
+  );
 }
 
 /** What the application can verify about the browser bridge. */

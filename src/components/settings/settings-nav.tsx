@@ -15,6 +15,7 @@ export type SettingsPageId =
   | "downloads"
   | "save-locations"
   | "browser"
+  | "video-download-button"
   | "connections"
   | "proxy"
   | "advanced"
@@ -44,6 +45,7 @@ export const SETTINGS_GROUPS: readonly {
       { id: "downloads", label: "Downloads", glyph: "downloads" },
       { id: "save-locations", label: "Save locations", glyph: "save-to" },
       { id: "browser", label: "Browser integration", glyph: "browser" },
+      { id: "video-download-button", label: "Video download button", glyph: "downloads" },
     ],
   },
   {
