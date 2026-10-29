@@ -9,6 +9,8 @@ type Feature = {
   title: string;
   body: string;
   bullets: string[];
+  image: string;
+  imageAlt: string;
 };
 
 const features: Feature[] = [
@@ -22,6 +24,9 @@ const features: Feature[] = [
       "Per-site and global caps",
       "Ranges sized at 16 MiB",
     ],
+    image: "/images/screens/preview-connections.webp",
+    imageAlt:
+      "Progress window connection list showing 32 connections split across ranges of one file",
   },
   {
     icon: "resume",
@@ -33,6 +38,9 @@ const features: Feature[] = [
       "Overlaps and out-of-order ranges rejected",
       "FTP REST offsets for the same job",
     ],
+    image: "/images/screens/preview-resume.webp",
+    imageAlt:
+      "Progress window after a restart, showing the bytes already on disk and a Resume button",
   },
   {
     icon: "globe",
@@ -44,6 +52,9 @@ const features: Feature[] = [
       "FTP data connection per range",
       "One-connection fallback",
     ],
+    image: "/images/screens/dialog-add-url.webp",
+    imageAlt:
+      "Add URL window showing a link, its probed size and resumable state, category and save folder",
   },
   {
     icon: "gauge",
@@ -55,28 +66,9 @@ const features: Feature[] = [
       "KB/s or MB/s",
       "Applied per connection",
     ],
-  },
-  {
-    icon: "browser",
-    kicker: "Browser hand-off",
-    title: "Send links from the browser.",
-    body: "Firefox, Chrome and Edge extensions pass a link to the app over a versioned loopback bridge. No native messaging host and no registry entry.",
-    bullets: [
-      "Right-click hand-off",
-      "Firefox video button",
-      "Chrome and Edge build",
-    ],
-  },
-  {
-    icon: "tray",
-    kicker: "Tray",
-    title: "Close the window, keep the queue.",
-    body: "The tray restores the window, starts or stops the queue, and is the way out. Closing the window hides it; nothing stops downloading.",
-    bullets: [
-      "Queue keeps running",
-      "Start and stop from the tray",
-      "Quit from the tray",
-    ],
+    image: "/images/screens/preview-limits.webp",
+    imageAlt:
+      "Speed limiter tab with a per-download cap, its unit and the application-wide limit",
   },
 ];
 ---
@@ -132,7 +124,7 @@ const features: Feature[] = [
             </div>
 
             <div class="feature-visual">
-              <PreviewPlaceholder />
+              <PreviewPlaceholder src={feature.image} alt={feature.imageAlt} />
             </div>
           </article>
         ))

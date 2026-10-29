@@ -3,16 +3,27 @@ import Icon from "./Icon.astro";
 
 interface Props {
   class?: string;
+  /** Screenshot to show instead of the empty placeholder mark. */
+  src?: string;
+  alt?: string;
 }
 
-const { class: className } = Astro.props;
+const { class: className, src, alt = "" } = Astro.props;
 ---
 
-<div class:list={["preview-placeholder", className]} aria-hidden="true">
-  <span class="preview-placeholder-mark">
-    <Icon name="image" size={22} />
-  </span>
-</div>
+{
+  src ? (
+    <div class:list={["preview-shot", className]}>
+      <img src={src} alt={alt} loading="lazy" decoding="async" />
+    </div>
+  ) : (
+    <div class:list={["preview-placeholder", className]} aria-hidden="true">
+      <span class="preview-placeholder-mark">
+        <Icon name="image" size={22} />
+      </span>
+    </div>
+  )
+}
 
 <style>
   .preview-placeholder {
@@ -36,6 +47,21 @@ const { class: className } = Astro.props;
     border-radius: 0.8rem;
     background-color: var(--figure-soft);
     color: var(--figure-muted);
+  }
+
+  .preview-shot {
+    width: 100%;
+    max-width: 70rem;
+    margin-inline: auto;
+    overflow: hidden;
+    border: 1px solid var(--figure-border);
+    background-color: var(--figure-bg);
+  }
+
+  .preview-shot img {
+    display: block;
+    width: 100%;
+    height: auto;
   }
 
   @media (min-width: 56rem) {
