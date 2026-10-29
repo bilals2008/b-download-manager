@@ -46,11 +46,11 @@ guard(/^\d+\.\d+\.\d+$/.test(next), `not a plain x.y.z version: ${next || "(empt
 guard(next !== current, `v${current} is already the current version`);
 guard(kind !== "major" || Number(current.split(".")[0]) >= 1, "pre-1.0 releases bump minor, not major");
 
-guard(git("status --porcelain") === "", "the worktree has uncommitted changes; commit or stash them first");
-const remotes = git("remote");
+guard(git(["status", "--porcelain"]) === "", "the worktree has uncommitted changes; commit or stash them first");
+const remotes = git(["remote"]);
 guard(/\borigin\b/.test(remotes), "no origin remote; create the GitHub repo and `git remote add origin …` first");
 
-const tags = git("tag").split(/\r?\n/).filter(Boolean);
+const tags = git(["tag"]).split(/\r?\n/).filter(Boolean);
 guard(!tags.includes(`v${next}`), `tag v${next} already exists`);
 
 // The commits this release carries: everything since the highest tag, or all
@@ -105,7 +105,7 @@ if (!existsSync(changelogPath)) {
 git(["add", "package.json", "src-tauri/tauri.conf.json", "src-tauri/Cargo.toml", "src-tauri/Cargo.lock", "CHANGELOG.md"]);
 git(["commit", "-m", `chore: release v${next} [skip ci]`]);
 git(["tag", `v${next}`]);
-git(["push", "origin", `HEAD:${git("rev-parse --abbrev-ref HEAD")}`]);
+git(["push", "origin", `HEAD:${git(["rev-parse", "--abbrev-ref", "HEAD"])}`]);
 git(["push", "origin", `v${next}`]);
 
 console.log(`v${next} tagged and pushed — watch the Release workflow build it.`);
