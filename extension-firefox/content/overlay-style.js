@@ -82,12 +82,13 @@ const BDM_OVERLAY_STYLE = `
     position: absolute;
     left: 0;
     top: 0;
-    display: grid;
-    place-items: center;
-    width: 30px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 30px;
     height: 30px;
     margin: 0;
-    padding: 0;
+    padding: 0 8px;
     border: 1px solid var(--bdm-line);
     border-radius: 9px;
     color: var(--bdm-text);
@@ -107,6 +108,32 @@ const BDM_OVERLAY_STYLE = `
       border-color 120ms ease;
   }
 
+  .fab .glyph {
+    display: grid;
+    place-items: center;
+    width: 15px;
+    height: 15px;
+    flex: none;
+  }
+
+  .fab .label-text {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--bdm-text);
+    white-space: nowrap;
+    flex: none;
+  }
+
+  .fab[data-style="icon"] .label-text { display: none; }
+  .fab[data-style="text"] .glyph { display: none; }
+
+  .fab .glyph svg {
+    width: 15px;
+    height: 15px;
+    color: var(--bdm-progress);
+    transition: transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
   :host([data-visible="true"]) .fab {
     opacity: 1;
     visibility: visible;
@@ -123,20 +150,6 @@ const BDM_OVERLAY_STYLE = `
   .fab:focus-visible {
     outline: 2px solid var(--bdm-focus);
     outline-offset: 2px;
-  }
-
-  .fab .glyph {
-    display: grid;
-    place-items: center;
-    width: 15px;
-    height: 15px;
-  }
-
-  .fab .glyph svg {
-    width: 15px;
-    height: 15px;
-    color: var(--bdm-progress);
-    transition: transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
   }
 
   .fab:hover .glyph svg { transform: translateY(1px); }

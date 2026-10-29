@@ -125,19 +125,62 @@ chrome.contextMenus.onClicked.addListener((info) => {
     });
 });
 
-/* The browser started a download. Hand it over before the browser copy is
-   stopped: if the application is closed, the file stays in the browser. */
+/* The browser started a download. Freeze it first, then hand it over, and
+   only then stop the browser copy.
+
+   The freeze matters: deciding round-trips to the bridge — the capture policy
+   and the hand-over itself — and while that is in flight the download keeps
+   writing into the browser's own downloads folder. Without it a small or fast
+   file finishes as a browser download before the cancel lands. If the
+   application is closed, or does not take the link, the browser copy is let go
+   again instead of being lost. */
+
+async function freezeDownload(id) {
+  const hold = async () => {
+    try {
+      await chrome.downloads.pause(id);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  if (await hold()) return true;
+  // A pause asked before the transfer has begun is refused; one short retry
+  // covers that window. A download that is already over fails twice, and the
+  // hand-over goes on regardless — the app still takes the link.
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  return hold();
+}
+
+async function thawDownload(id) {
+  await chrome.downloads.resume(id).catch(() => {
+    // The copy is already running, or already finished; the browser owns it.
+  });
+}
+
 chrome.downloads.onCreated.addListener(async (item) => {
   if (!item || handedOver.has(item.id)) return;
   if (!/^https?:\/\//i.test(item.url)) return;
 
+  const frozen = await freezeDownload(item.id);
+  const leaveToBrowser = async () => {
+    if (frozen) await thawDownload(item.id);
+  };
+
   const settings = await effectiveSettings();
-  if (!settings.capture) return;
+  if (!settings.capture) {
+    await leaveToBrowser();
+    return;
+  }
   if (settings.types.length && !settings.types.includes(extensionOf(item.url))) {
+    await leaveToBrowser();
     return;
   }
   const host = hostOf(item.referrer || "") || hostOf(item.url);
-  if (skipped(host, settings.skipSites)) return;
+  if (skipped(host, settings.skipSites)) {
+    await leaveToBrowser();
+    return;
+  }
 
   handedOver.add(item.id);
   setTimeout(() => handedOver.delete(item.id), 30000);
@@ -146,6 +189,7 @@ chrome.downloads.onCreated.addListener(async (item) => {
     await handOver(item.url, item.referrer || "", fileNameOf(item.url), settings.ask);
   } catch {
     // The app did not take it; the browser download goes on untouched.
+    await leaveToBrowser();
     return;
   }
 

@@ -186,35 +186,38 @@ async function startPage(options = {}) {
   await page.dom.settle();
 
   assert.equal(page.open(), true, "the button opens the panel");
-  assert.equal(page.rows().length, 2, "the panel lists both streams of the video");
+  assert.equal(page.rows().length, 2, "the panel lists the mux and the sound");
   assert.equal(
     page.rows()[0].querySelector(".tag").textContent,
-    "MP4",
-    "the first row is the picture stream",
+    "MUX",
+    "the first row is the muxed picture-and-sound download",
   );
   assert.match(
     page.rows()[0].querySelector(".name").textContent,
-    /1080p video only/,
-    "the row names the quality",
+    /1080p video \+ audio/,
+    "the row names the quality and its sound",
   );
   assert.equal(page.rows()[1].querySelector(".tag").textContent, "AUDIO");
 
-  // Hand the first stream over.
+  // Hand the mux over: both streams go to the app to be joined into one file.
   const action = page.rows()[0].querySelector(".row-action");
   page.dom.fire(action, "click");
   await page.dom.settle();
 
-  const sent = page.dom.calls.find((message) => message.type === "bdm:send");
-  assert.ok(sent, "a row click hands the address to the background");
-  assert.equal(sent.mode, "ask", "a media hand-over opens the app's dialog");
-  assert.equal(sent.payload.url, wholeFile(RANGED_1080), "the whole file is sent, not a range");
-  assert.match(sent.payload.name, /1080p/, "the file name carries the quality");
-  assert.equal(sent.payload.referer, "https://www.youtube.com/watch?v=abc");
-  assert.equal(page.status(), "Confirm it in the app", "the panel says what happens next");
+  const sent = page.dom.calls.find((message) => message.type === "bdm:mux");
+  assert.ok(sent, "a mux row hands the two streams to the background");
+  assert.equal(
+    sent.payload.videoUrl,
+    wholeFile(RANGED_1080),
+    "the whole video file is sent, not a range",
+  );
+  assert.equal(sent.payload.audioUrl, AUDIO_140, "the sound is sent with the picture");
+  assert.equal(sent.payload.container, "mp4", "the container follows the picture's mime");
+  assert.equal(page.status(), "Saved by B Download Manager", "the panel says the mux was saved");
   assert.equal(
     page.rows()[0].querySelector(".row-action").getAttribute("aria-label"),
-    "Sent to B Download Manager",
-    "the row shows it was handed over",
+    "Saved by B Download Manager",
+    "the row shows it was muxed",
   );
 
   // Leaving the player hides the button.
@@ -475,7 +478,7 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 {
   const page = await startPage({
     url: "https://www.youtube.com/watch?v=abc",
-    seed: [RANGED_1080, AUDIO_140],
+    seed: [RANGED_1080],
   });
   const { controls } = youTubePlayer(page.dom);
   await page.dom.settle();

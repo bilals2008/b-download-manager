@@ -233,17 +233,57 @@ browser.contextMenus.onClicked.addListener(async (info) => {
 });
 
 /*
-  The browser started a download. Hand it over before the browser copy is
-  stopped: if the application is closed, or does not take the link, the file
-  stays in the downloads of the browser instead of being lost.
+  The browser started a download. Freeze it first, then hand it over, and only
+  then stop the browser copy.
+
+  The freeze matters: deciding takes a round trip to the bridge — the capture
+  policy and the hand-over itself — and while that is in flight the download
+  keeps writing into the browser's own downloads folder. Without it a small or
+  fast file finishes as a browser download before the cancel lands, which is
+  the one outcome the hand-over must never produce.
+
+  If the application is closed, or does not take the link, the browser copy is
+  let go again instead of being lost: it is only ever cancelled once the app
+  has answered for the file.
 */
+
+/** Hold a fresh browser copy back. True when the download is frozen. */
+async function freezeDownload(id) {
+  const hold = async () => {
+    try {
+      await browser.downloads.pause(id);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  if (await hold()) return true;
+  // A pause asked before the transfer has begun is refused; one short retry
+  // covers that window. A download that is already over fails twice, and the
+  // hand-over goes on regardless — the app still takes the link.
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  return hold();
+}
+
+/** Let a frozen browser copy run again, because the app did not take it. */
+async function thawDownload(id) {
+  await browser.downloads.resume(id).catch(() => {
+    // The copy is already running, or already finished; the browser owns it.
+  });
+}
+
 browser.downloads.onCreated.addListener(async (item) => {
   if (!item || handedOver.has(item.id)) return;
   handedOver.add(item.id);
   setTimeout(() => handedOver.delete(item.id), 30000);
 
+  const frozen = await freezeDownload(item.id);
+
   const settings = await bdmEffectiveSettings();
-  if (!bdmShouldIntercept(settings, item.url, item.referrer || "")) return;
+  if (!bdmShouldIntercept(settings, item.url, item.referrer || "")) {
+    if (frozen) await thawDownload(item.id);
+    return;
+  }
 
   const name = bdmFileNameOfPath(item.filename) || bdmNameFromUrl(item.url);
 
@@ -256,6 +296,7 @@ browser.downloads.onCreated.addListener(async (item) => {
     });
   } catch {
     // The app did not take it. The browser download goes on untouched.
+    if (frozen) await thawDownload(item.id);
     return;
   }
 
@@ -433,6 +474,68 @@ async function handleMessage(message, sender) {
       const count = Math.max(0, Math.min(99, Number(message.count) || 0));
       if (sender.tab?.id !== undefined) setBadge(sender.tab.id, count);
       return { ok: true };
+    }
+
+    case "bdm:video-button-settings": {
+      try {
+        const data = await bdmBridgeRequest("GET", "/v1/video-button-settings", undefined, 2500);
+        return {
+          ok: true,
+          style: String(data?.style || "icon"),
+          label: String(data?.label || "Download"),
+          hover: Boolean(data?.hover),
+        };
+      } catch {
+        return { ok: true, style: "icon", label: "Download", hover: false };
+      }
+    }
+
+    case "bdm:media-tools": {
+      try {
+        const data = await bdmBridgeMediaTools();
+        return {
+          ok: true,
+          ffmpeg: Boolean(data?.ffmpeg),
+          ffprobe: Boolean(data?.ffprobe),
+          ytdlp: Boolean(data?.ytdlp),
+        };
+      } catch (error) {
+        return bridgeFailure(error);
+      }
+    }
+
+    case "bdm:extract-formats": {
+      const url = String(message.url || "");
+      if (!bdmIsHttpUrl(url)) {
+        return { ok: false, error: { kind: "refused", message: "This page has no video to download." } };
+      }
+      try {
+        const data = await bdmBridgeExtractFormats(url);
+        return { ok: true, formats: Array.isArray(data?.formats) ? data.formats : [] };
+      } catch (error) {
+        return bridgeFailure(error);
+      }
+    }
+
+    case "bdm:mux": {
+      const payload = message.payload || {};
+      if (!bdmIsHttpUrl(payload.videoUrl)) {
+        return { ok: false, error: { kind: "refused", message: "The video stream is not a download." } };
+      }
+      if (payload.audioUrl && !bdmIsHttpUrl(payload.audioUrl)) {
+        return { ok: false, error: { kind: "refused", message: "The audio stream is not a download." } };
+      }
+      try {
+        const data = await bdmBridgeMux({
+          videoUrl: payload.videoUrl,
+          audioUrl: payload.audioUrl || "",
+          container: payload.container || "mp4",
+          name: payload.name || "",
+        });
+        return { ok: true, result: data };
+      } catch (error) {
+        return bridgeFailure(error);
+      }
     }
 
     case "bdm:open-settings": {

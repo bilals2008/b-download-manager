@@ -272,6 +272,8 @@ function mockBrowser() {
     badges: [],
     cancelled: [],
     erased: [],
+    paused: [],
+    resumed: [],
     fetches: [],
     windows: [],
     tabs: [],
@@ -314,6 +316,20 @@ function mockBrowser() {
       onCreated: { addListener: add("created") },
       cancel: async (id) => calls.cancelled.push(id),
       erase: async (query) => calls.erased.push(query),
+      pause: async (id) => {
+        calls.paused.push(id);
+        const left = downloadBehaviour.refusedPause.get(id) || 0;
+        if (left > 0) {
+          downloadBehaviour.refusedPause.set(id, left - 1);
+          throw new Error("Download is not in progress");
+        }
+      },
+      resume: async (id) => {
+        calls.resumed.push(id);
+        if (downloadBehaviour.failedResume.has(id)) {
+          throw new Error("Download is paused");
+        }
+      },
     },
     action: {
       setBadgeBackgroundColor: async () => {},
@@ -345,6 +361,11 @@ function mockBrowser() {
 }
 
 const sandbox = mockBrowser();
+// How the mocked downloads API behaves for specific ids: how many pauses a
+// download still refuses (a transfer that has not begun yet), and which
+// resumes fail. The hand-over freezes a fresh download and thaws it again
+// when the app does not take it, so the tests need to drive both answers.
+const downloadBehaviour = { refusedPause: new Map(), failedResume: new Set() };
 let bridgeMode = "online";
 let pingApp = "b-download-manager";
 let listPayload = { downloads: [], active: 0 };
@@ -1170,27 +1191,33 @@ assert.ok(
   "the media count lands on the toolbar badge",
 );
 
-// A download the browser starts is handed over before the browser copy is
-// cancelled; a failure leaves the browser copy alone. While the app runs, its
-// policy wins over the extension's local copy.
+// A download the browser starts is frozen at once, so it cannot finish in the
+// browser's own downloads folder while the hand-over round-trips, and it is
+// only cancelled once the app has answered for the file. A refusal thaws the
+// browser copy again. While the app runs, its policy wins over the extension's
+// local copy.
 const onCreated = sandbox.listeners.get("created")[0];
 assert.ok(onCreated, "the background watches browser downloads");
 
 store.intercept = false;
 sandbox.calls.cancelled.length = 0;
 sandbox.calls.erased.length = 0;
+sandbox.calls.paused.length = 0;
+sandbox.calls.resumed.length = 0;
 await onCreated({
   id: 7,
   url: "https://example.org/movie.mp4",
   filename: "C:\\Users\\me\\Downloads\\movie.mp4",
   referrer: "https://example.org/",
 });
+assert.deepEqual([...sandbox.calls.paused], [7], "the browser copy is frozen before anything is decided");
 assert.deepEqual([...sandbox.calls.cancelled], [7], "the browser copy is cancelled");
 assert.deepEqual(
   sandbox.calls.erased.map((query) => query.id),
   [7],
   "the browser copy is erased",
 );
+assert.deepEqual([...sandbox.calls.resumed], [], "a taken download is not thawed");
 assert.equal(
   sandbox.calls.cancelled.length,
   1,
@@ -1201,6 +1228,8 @@ delete store.intercept;
 bridgeMode = "offline";
 sandbox.calls.cancelled.length = 0;
 sandbox.calls.erased.length = 0;
+sandbox.calls.paused.length = 0;
+sandbox.calls.resumed.length = 0;
 await onCreated({
   id: 8,
   url: "https://example.org/other.mp4",
@@ -1209,12 +1238,33 @@ await onCreated({
 });
 assert.deepEqual([...sandbox.calls.cancelled], [], "a closed app never loses the browser download");
 assert.deepEqual([...sandbox.calls.erased], []);
+assert.deepEqual([...sandbox.calls.paused], [8]);
+assert.deepEqual([...sandbox.calls.resumed], [8], "a download the closed app did not take runs again");
 bridgeMode = "online";
+
+// A pause asked before the transfer has begun is refused; the freeze retries
+// once and the hand-over goes on from a frozen copy.
+downloadBehaviour.refusedPause.set(13, 1);
+sandbox.calls.cancelled.length = 0;
+sandbox.calls.paused.length = 0;
+sandbox.calls.resumed.length = 0;
+await onCreated({
+  id: 13,
+  url: "https://example.org/retry.mp4",
+  filename: "C:\\Users\\me\\Downloads\\retry.mp4",
+  referrer: "https://example.org/",
+});
+assert.deepEqual([...sandbox.calls.paused], [13, 13], "the refused pause is retried once");
+assert.deepEqual([...sandbox.calls.cancelled], [13], "the retried freeze still hands over");
+assert.deepEqual([...sandbox.calls.resumed], []);
+downloadBehaviour.refusedPause.clear();
 
 // The local copy still applies when the app is not running.
 store.intercept = false;
 bridgeMode = "offline";
 sandbox.calls.fetches.length = 0;
+sandbox.calls.paused.length = 0;
+sandbox.calls.resumed.length = 0;
 await onCreated({
   id: 12,
   url: "https://example.org/other.mp4",
@@ -1222,12 +1272,15 @@ await onCreated({
   referrer: "https://example.org/",
 });
 assert.equal(sentDownloads().length, 0, "a closed app falls back to the local switch");
+assert.deepEqual([...sandbox.calls.resumed], [12], "a download the rules leave alone runs again");
 bridgeMode = "online";
 delete store.intercept;
 
 capturePolicy = { ...capturePolicy, types: ["mp4"] };
 sandbox.calls.fetches.length = 0;
 sandbox.calls.cancelled.length = 0;
+sandbox.calls.paused.length = 0;
+sandbox.calls.resumed.length = 0;
 await onCreated({
   id: 9,
   url: "https://example.org/setup.exe",
@@ -1236,10 +1289,13 @@ await onCreated({
 });
 assert.equal(sentDownloads().length, 0, "a type off the app's list stays in the browser");
 assert.deepEqual([...sandbox.calls.cancelled], []);
+assert.deepEqual([...sandbox.calls.resumed], [9], "the frozen copy is thawed, not stopped");
 capturePolicy = { ...capturePolicy, types: [] };
 
 capturePolicy = { ...capturePolicy, skipSites: ["example.org"] };
 sandbox.calls.fetches.length = 0;
+sandbox.calls.paused.length = 0;
+sandbox.calls.resumed.length = 0;
 await onCreated({
   id: 10,
   url: "https://example.org/movie.mp4",
@@ -1247,10 +1303,13 @@ await onCreated({
   referrer: "https://example.org/",
 });
 assert.equal(sentDownloads().length, 0, "a skipped site keeps its download");
+assert.deepEqual([...sandbox.calls.resumed], [10]);
 capturePolicy = { ...capturePolicy, skipSites: [] };
 
 capturePolicy = { ...capturePolicy, capture: false };
 sandbox.calls.fetches.length = 0;
+sandbox.calls.paused.length = 0;
+sandbox.calls.resumed.length = 0;
 await onCreated({
   id: 11,
   url: "https://example.org/movie.mp4",
@@ -1258,6 +1317,7 @@ await onCreated({
   referrer: "https://example.org/",
 });
 assert.equal(sentDownloads().length, 0, "the app's switch turns interception off");
+assert.deepEqual([...sandbox.calls.resumed], [11]);
 capturePolicy = { ...capturePolicy, capture: true };
 
 // The menus are built on install and startup, from an empty slate.
@@ -1343,6 +1403,8 @@ const chromeBrowser = {
     onCreated: { addListener: (fn) => chromeListeners.set("created", fn) },
     cancel: async (id) => chromeCalls.push(["cancel", id]),
     erase: async (query) => chromeCalls.push(["erase", query]),
+    pause: async (id) => chromeCalls.push(["pause", id]),
+    resume: async (id) => chromeCalls.push(["resume", id]),
   },
   storage: {
     local: { get: async (defaults) => ({ ...defaults, ...chromeStore }) },
@@ -1380,17 +1442,17 @@ await chromeCreated({
 });
 assert.deepEqual(
   chromeCalls.map((call) => call[0]),
-  ["fetch", "fetch", "cancel", "erase"],
-  "chrome: the hand-over happens before the browser copy is cancelled",
+  ["pause", "fetch", "fetch", "cancel", "erase"],
+  "chrome: the copy is frozen first and the hand-over happens before it is cancelled",
 );
-assert.equal(new URL(chromeCalls[0][1]).pathname, "/v1/capture");
+assert.equal(new URL(chromeCalls[1][1]).pathname, "/v1/capture");
 assert.equal(
-  new URL(chromeCalls[1][1]).pathname,
+  new URL(chromeCalls[2][1]).pathname,
   "/v1/downloads",
   "chrome: the app's capture rules are read first",
 );
-assert.equal(chromeCalls[1][2].headers["X-BDM-Client"], "browser-extension");
-assert.equal(JSON.parse(chromeCalls[1][2].body).mode, "direct");
+assert.equal(chromeCalls[2][2].headers["X-BDM-Client"], "browser-extension");
+assert.equal(JSON.parse(chromeCalls[2][2].body).mode, "direct");
 
 chromeOnline = false;
 chromeCalls.length = 0;
@@ -1401,8 +1463,8 @@ await chromeCreated({
 });
 assert.deepEqual(
   chromeCalls.map((call) => call[0]),
-  ["fetch", "fetch"],
-  "chrome: a closed app leaves the browser download alone",
+  ["pause", "fetch", "fetch", "resume"],
+  "chrome: a closed app leaves the browser download alone, thawed again",
 );
 chromeOnline = true;
 
@@ -1415,8 +1477,8 @@ await chromeCreated({
 });
 assert.deepEqual(
   chromeCalls.map((call) => call[0]),
-  ["fetch"],
-  "chrome: the app's switch turns capture off",
+  ["pause", "fetch", "resume"],
+  "chrome: the app's switch turns capture off and the copy runs again",
 );
 chromePolicy = { ...chromePolicy, capture: true };
 
@@ -1430,7 +1492,7 @@ await chromeCreated({
 });
 assert.deepEqual(
   chromeCalls.map((call) => call[0]),
-  ["fetch"],
+  ["pause", "fetch", "resume"],
   "chrome: the local switch applies while the app is closed",
 );
 delete chromeStore.takeover;

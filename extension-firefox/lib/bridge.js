@@ -32,7 +32,8 @@ class BdmBridgeError extends Error {
 /** One request. `body` is a JSON value, or undefined for a GET. */
 async function bdmBridgeRequest(method, path, body, timeout = 4000) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeout);
+  // A timeout of 0 means "wait as long as it takes", for the mux download.
+  const timer = timeout > 0 ? setTimeout(() => controller.abort(), timeout) : 0;
 
   try {
     const response = await fetch(`${BDM_BRIDGE.base}${path}`, {
@@ -84,7 +85,7 @@ async function bdmBridgeRequest(method, path, body, timeout = 4000) {
     }
     throw new BdmBridgeError("The app is not running.", { kind: "offline" });
   } finally {
-    clearTimeout(timer);
+    if (timer) clearTimeout(timer);
   }
 }
 
@@ -176,6 +177,45 @@ async function bdmBridgeBatch(payload) {
 /** Pause, resume, stop or show one download in the app. */
 async function bdmBridgeControl(id, action) {
   return bdmBridgeRequest("POST", `/v1/downloads/${id}/${action}`, {}, 4000);
+}
+
+/** Which bundled media tools the app can run. */
+async function bdmBridgeMediaTools() {
+  return bdmBridgeRequest("GET", "/v1/media/tools", undefined, 4000);
+}
+
+/**
+ * The formats of a video page, as the extractor reports them.
+ *
+ * The address is the page the user is watching; the app runs yt-dlp against it
+ * and answers with the complete list (resolution, fps, codec, container, size,
+ * audio/video) and a fresh direct address for each. A page the extractor
+ * cannot read is answered with an error rather than a guess.
+ */
+async function bdmBridgeExtractFormats(url) {
+  const encoded = encodeURIComponent(url);
+  return bdmBridgeRequest("GET", `/v1/extract-formats?url=${encoded}`, undefined, 30000);
+}
+
+/**
+ * Download and mux a video and an audio stream the user picked.
+ *
+ * The streams are the fresh addresses the extractor returned. The mux runs to
+ * completion before the app answers, so a successful answer means the file is
+ * already on disk and has been probed as playable.
+ */
+async function bdmBridgeMux(payload) {
+  return bdmBridgeRequest(
+    "POST",
+    "/v1/downloads/mux",
+    {
+      videoUrl: payload.videoUrl,
+      audioUrl: payload.audioUrl || "",
+      container: payload.container || "mp4",
+      name: payload.name || "",
+    },
+    0,
+  );
 }
 
 /** Bring the application window to the front. */

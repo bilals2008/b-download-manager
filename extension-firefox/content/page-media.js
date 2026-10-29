@@ -98,6 +98,53 @@ function bdmCapturedSources() {
   return captured.map((entry) => entry.url);
 }
 
+/**
+ * The captured streams that belong together: a picture and its sound, matched
+ * by the video id the page put in both addresses (YouTube's `id`). This is the
+ * same thing IDM and the other managers do — they pair the two streams the
+ * browser already fetched and mux them, instead of asking the site's API.
+ *
+ * A stream that already carries both tracks is not a pair, and neither is a
+ * stream the page cannot tie to a video id.
+ */
+function bdmCapturedPairs() {
+  const groups = new Map();
+  for (const url of bdmCapturedSources()) {
+    let id = "";
+    try {
+      id = new URL(url).searchParams.get("id") || "";
+    } catch {
+      // A malformed address only stands for itself.
+    }
+    if (!id) continue;
+    const kind = bdmMediaKind(url);
+    if (kind !== "video" && kind !== "audio") continue;
+
+    let group = groups.get(id);
+    if (!group) {
+      group = { video: null, audio: null };
+      groups.set(id, group);
+    }
+    if (kind === "video" && !group.video) group.video = url;
+    if (kind === "audio" && !group.audio) group.audio = url;
+  }
+
+  const pairs = [];
+  for (const group of groups.values()) {
+    if (!group.video || !group.audio) continue;
+    const quality = BDM_ITAG_QUALITIES[Number(bdmItagOf(group.video))] || "video";
+    const ext = bdmMediaExtension(group.video);
+    pairs.push({
+      videoUrl: group.video,
+      audioUrl: group.audio,
+      container: ext,
+      label: `${quality} video + audio`,
+      file: `${bdmPageName()} ${quality.toLowerCase()}.${ext}`,
+    });
+  }
+  return pairs;
+}
+
 function bdmRememberMediaRequest(url) {
   if (!bdmIsCapturedMedia(url)) return false;
   const key = bdmMediaKey(url);
