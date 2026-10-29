@@ -63,6 +63,8 @@ export function renderSection(version, date, commits) {
   }
 
   const recognised = new Set(GROUPS.flatMap((group) => group.types));
+  // Housekeeping (`chore: release vX.Y.Z`) never belongs in the reader's notes.
+  recognised.add("chore");
   const left = commits.filter(
     (commit) =>
       !commit.breaking &&
