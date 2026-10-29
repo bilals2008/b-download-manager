@@ -103,7 +103,9 @@ if (!existsSync(changelogPath)) {
 }
 
 git(["add", "package.json", "src-tauri/tauri.conf.json", "src-tauri/Cargo.toml", "src-tauri/Cargo.lock", "CHANGELOG.md"]);
-git(["commit", "-m", `chore: release v${next} [skip ci]`]);
+// No `[skip ci]`: a tag push whose commit says that starts no workflow, so the
+// Release build would never run.
+git(["commit", "-m", `chore: release v${next}`]);
 git(["tag", `v${next}`]);
 git(["push", "origin", `HEAD:${git(["rev-parse", "--abbrev-ref", "HEAD"])}`]);
 git(["push", "origin", `v${next}`]);

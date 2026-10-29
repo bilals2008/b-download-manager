@@ -34,6 +34,10 @@ on:
   push:
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+"
+  # A tag push whose commit says [skip ci] starts no workflow at all, so a
+  # release that missed its build is re-run from the tag:
+  #   gh workflow run release.yml --ref vX.Y.Z
+  workflow_dispatch:
 
 permissions:
   contents: write
