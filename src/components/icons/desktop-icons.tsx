@@ -8,24 +8,26 @@ import {
   type CategoryIcon,
   type CategoryPaint,
   type CategoryPalette,
+  type CategoryPaletteId,
 } from "@/lib/category-icons";
 import type { CategoryName, DownloadStatus } from "@/lib/downloads";
+import { fileKind, type FileKind } from "@/lib/file-icons";
 
 /**
- * The desktop artwork: file-type badges, folder icons, status marks and the
+ * The desktop artwork: file icons, folder icons, status marks and the
  * empty-state illustration.
  *
- * The style is the one the toolbar already uses, shrunk down: a coloured plate
- * with a two-stop gloss, a deep hairline, and a white glyph. Plate colours come
- * from the icon tokens, so the light and dark appearances follow the theme
- * without a second copy of the drawings.
+ * A known file type is drawn the way a desktop draws one: a light page with a
+ * folded corner and a coloured band carrying a white mark. A type we do not
+ * know keeps the flat category glyph. Colours come from the tokens, so the
+ * light and dark appearances follow the theme without a second copy.
  */
 
 /** A paint stop is either a theme variable name or a colour already. */
 const cssColor = (value: string) =>
   value.startsWith("--") ? `var(${value})` : value;
 
-/** The white mark on a plate, drawn on the 24-unit grid. */
+/** The mark of a file type, drawn on the 24-unit grid. */
 const GLYPHS: Record<
   CategoryGlyphId,
   (colors: CategoryPaint) => ReactNode
@@ -93,13 +95,15 @@ const GLYPHS: Record<
   ),
   archive: (colors) => (
     <g>
-      <path d="M7.2 6.8h9.6v10.2H7.2z" />
-      <path
-        d="M7.4 9.5h9.2M7.4 12.2h9.2M7.4 14.9h9.2"
-        fill="none"
-        stroke={cssColor(colors.deep)}
-        strokeWidth="1"
-        strokeLinecap="round"
+      <path d="M5.6 5.6h12.8v3.1H5.6z" />
+      <path d="M6.6 9.9h10.8v8.5H6.6z" />
+      <rect
+        x="10.3"
+        y="11.6"
+        width="3.4"
+        height="2.8"
+        rx=".7"
+        fill={cssColor(colors.deep)}
       />
     </g>
   ),
@@ -120,17 +124,17 @@ const GLYPHS: Record<
       />
     </g>
   ),
-  code: () => (
+  code: (colors) => (
     <g
       fill="none"
-      stroke="#fff"
-      strokeWidth="1.7"
+      stroke={cssColor(colors.base)}
+      strokeWidth="1.9"
       strokeLinecap="round"
       strokeLinejoin="round"
     >
       <path d="m9.4 8.2-3.5 3.8 3.5 3.8" />
       <path d="m14.6 8.2 3.5 3.8-3.5 3.8" />
-      <path d="M12.9 7.4 11.1 16.6" strokeWidth="1.4" />
+      <path d="M12.9 7.4 11.1 16.6" strokeWidth="1.5" />
     </g>
   ),
   book: (colors) => (
@@ -174,42 +178,209 @@ const GLYPHS: Record<
   ),
 };
 
+/*
+  The page every file icon is drawn on, on the same 24-unit grid. The band
+  covers the lower half and takes the colour of the family, so a column of rows
+  is read by shape first and hue second.
+*/
+const PAGE_BODY =
+  "M6.2 2.6h7.9l4.7 4.7v12.9a1.4 1.4 0 0 1-1.4 1.4H6.2a1.4 1.4 0 0 1-1.4-1.4V4a1.4 1.4 0 0 1 1.4-1.4z";
+const PAGE_FOLD = "M14.1 2.6v3.4a1.3 1.3 0 0 0 1.3 1.3h3.4";
+const PAGE_BAND =
+  "M4.8 12.4h14v7.8a1.4 1.4 0 0 1-1.4 1.4H6.2a1.4 1.4 0 0 1-1.4-1.4z";
+
+/** Which icon palette a family's band wears. */
+const FILE_PALETTE: Record<FileKind, CategoryPaletteId> = {
+  video: "red",
+  audio: "purple",
+  archive: "amber",
+  program: "green",
+  pdf: "red",
+  document: "silver",
+  spreadsheet: "green",
+  slide: "amber",
+  image: "blue",
+  code: "blue",
+  font: "purple",
+};
+
+/** The mark in the band of a file icon. */
+const FILE_GLYPHS: Record<FileKind, (palette: CategoryPalette) => ReactNode> = {
+  video: () => <path d="M10.2 13.9 16 16.9l-5.8 3.1z" />,
+  audio: () => (
+    <g>
+      <ellipse
+        cx="9.3"
+        cy="18.6"
+        rx="1.9"
+        ry="1.5"
+        transform="rotate(-16 9.3 18.6)"
+      />
+      <rect x="10.6" y="12.9" width="1.4" height="5.9" rx=".4" />
+      <path d="M10.6 12.9h4.6v2.3h-4.6z" />
+    </g>
+  ),
+  archive: (palette) => (
+    <g>
+      <path d="M6.8 13.8h10.4v2.2H6.8z" />
+      <path d="M7.8 16h8.4v3.7a1 1 0 0 1-1 1H8.8a1 1 0 0 1-1-1z" />
+      <rect
+        x="10.6"
+        y="17.2"
+        width="2.8"
+        height="2"
+        rx=".5"
+        fill={cssColor(palette.base)}
+      />
+    </g>
+  ),
+  program: () => (
+    <g>
+      <rect x="8.1" y="13.6" width="3.4" height="3.2" rx=".7" />
+      <rect x="12.5" y="13.6" width="3.4" height="3.2" rx=".7" />
+      <rect x="8.1" y="17.5" width="3.4" height="3.2" rx=".7" />
+      <rect x="12.5" y="17.5" width="3.4" height="3.2" rx=".7" />
+    </g>
+  ),
+  pdf: (palette) => (
+    <g>
+      <path d="M9.4 13.4h3.5l2.4 2.4v3.6a1 1 0 0 1-1 1H9.4a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z" />
+      <path
+        d="M10 16.7h3.3M10 18.3h3.3M10 19.9h2.2"
+        fill="none"
+        stroke={cssColor(palette.base)}
+        strokeWidth=".9"
+        strokeLinecap="round"
+      />
+    </g>
+  ),
+  document: () => (
+    <path
+      d="M8 9.6h7.2M8 12.6h7.2M8 15.6h7.2M8 18.6h4.4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+    />
+  ),
+  spreadsheet: (palette) => (
+    <g>
+      <rect x="7.2" y="13.5" width="9.6" height="6.6" rx=".7" />
+      <path
+        d="M12 13.5v6.6M7.2 16.8h9.6"
+        fill="none"
+        stroke={cssColor(palette.base)}
+        strokeWidth="1.1"
+      />
+    </g>
+  ),
+  slide: () => (
+    <g>
+      <rect x="7.4" y="17.2" width="2.4" height="3" rx=".5" />
+      <rect x="10.8" y="15.1" width="2.4" height="5.1" rx=".5" />
+      <rect x="14.2" y="13.5" width="2.4" height="6.7" rx=".5" />
+    </g>
+  ),
+  image: (palette) => (
+    <g>
+      <rect x="7" y="13.5" width="10" height="6.8" rx="1" />
+      <circle cx="9.8" cy="15.9" r=".9" fill={cssColor(palette.base)} />
+      <path
+        d="m8 20.3 2.4-2.9 1.8 2 1.4-1.6 2.4 2.5z"
+        fill={cssColor(palette.base)}
+      />
+    </g>
+  ),
+  code: () => (
+    <g
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="m10.1 14.4-2.6 2.6 2.6 2.6" />
+      <path d="m13.9 14.4 2.6 2.6-2.6 2.6" />
+      <path d="m13 13.6-2 6.8" strokeWidth="1.4" />
+    </g>
+  ),
+  font: () => (
+    <text
+      x="12"
+      y="20.4"
+      textAnchor="middle"
+      fontFamily="Segoe UI, Arial, sans-serif"
+      fontSize="7.4"
+      fontWeight="700"
+    >
+      A
+    </text>
+  ),
+};
+
+/** A file drawn as a page with a folded corner and the family's band. */
+function FilePageIcon({
+  kind,
+  className,
+}: {
+  kind: FileKind;
+  className?: string;
+}) {
+  const ids = useArtIds("file");
+  const palette = CATEGORY_PALETTES[FILE_PALETTE[kind]];
+  // A plain text file has no band: the page itself carries the rules.
+  const plain = kind === "document";
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      aria-hidden="true"
+      focusable="false"
+    >
+      <defs>
+        <linearGradient id={ids.front} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" style={{ stopColor: cssColor(palette.base) }} />
+          <stop offset="1" style={{ stopColor: cssColor(palette.deep) }} />
+        </linearGradient>
+      </defs>
+      <path
+        d={PAGE_BODY}
+        fill={cssColor("--file-paper")}
+        stroke={cssColor("--file-paper-edge")}
+        strokeOpacity=".85"
+        strokeWidth=".8"
+      />
+      <path
+        d={PAGE_FOLD}
+        fill="none"
+        stroke={cssColor("--file-paper-edge")}
+        strokeWidth=".8"
+        strokeLinejoin="round"
+      />
+      {plain ? null : <path d={PAGE_BAND} fill={`url(#${ids.front})`} />}
+      <g
+        fill="currentColor"
+        style={{
+          color: plain
+            ? cssColor("--file-paper-edge")
+            : cssColor("--file-mark"),
+        }}
+      >
+        {FILE_GLYPHS[kind](palette)}
+      </g>
+    </svg>
+  );
+}
+
 /** The saved icon of a category, or the one its name has always had. */
 function artFor(category: CategoryName, icon?: CategoryIcon): CategoryIcon {
   return icon ?? defaultCategoryIcon(category);
 }
 
-/** One gradient per drawing instance, so the gloss never leaks between rows. */function useArtIds(prefix: string): { front: string; back: string } {
+/** One gradient per drawing instance, so the gloss never leaks between rows. */
+function useArtIds(prefix: string): { front: string; back: string } {
   const id = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   return { front: `${prefix}-front-${id}`, back: `${prefix}-back-${id}` };
-}
-
-function Plate({
-  front,
-  deep,
-  label,
-}: {
-  front: string;
-  deep: string;
-  label?: ReactNode;
-}) {
-  return (
-    <g>
-      <rect
-        x="2"
-        y="2"
-        width="20"
-        height="20"
-        rx="4.6"
-        fill={`url(#${front})`}
-        stroke={cssColor(deep)}
-        strokeOpacity=".55"
-        strokeWidth=".9"
-      />
-      <rect x="3.4" y="3.2" width="17.2" height="6.2" rx="3.1" fill="#fff" opacity=".14" />
-      {label}
-    </g>
-  );
 }
 
 function Gloss({
@@ -229,20 +400,30 @@ function Gloss({
   );
 }
 
-/** The colourful badge a download row, a picker or a category row shows. */
+/**
+ * The file type of a row, a picker or a dialog. A known extension is drawn as
+ * the page itself, an unknown one as the category glyph.
+ */
 export function FileTypeIcon({
   category,
   icon,
+  name,
   className,
 }: {
   category: CategoryName;
   /** The saved icon of the category; omitted means the default for its name. */
   icon?: CategoryIcon;
+  /** The file name, whose extension picks the drawing. */
+  name?: string;
   className?: string;
 }) {
+  // A saved category icon is the user's choice and wins over the extension.
+  const kind = icon || !name ? null : fileKind(name);
+  if (kind) {
+    return <FilePageIcon kind={kind} className={className} />;
+  }
   const art = artFor(category, icon);
   const colors = categoryPaint(art);
-  const ids = useArtIds("file");
   return (
     <svg
       viewBox="0 0 24 24"
@@ -250,24 +431,16 @@ export function FileTypeIcon({
       aria-hidden="true"
       focusable="false"
     >
-      <defs>
-        <Gloss id={ids.front} bright={colors.bright} base={colors.base} />
-      </defs>
-      <Plate
-        front={ids.front}
-        deep={colors.deep}
-        label={
-          <g
-            fill={colors.ink}
-            opacity=".96"
-            stroke={cssColor(colors.deep)}
-            strokeWidth=".9"
-            strokeLinejoin="round"
-          >
-            {GLYPHS[art.glyph](colors)}
-          </g>
-        }
-      />
+      <g
+        fill={cssColor(colors.base)}
+        stroke={cssColor(colors.deep)}
+        strokeWidth=".9"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+        transform="translate(12 12) scale(1.2) translate(-12 -12)"
+      >
+        {GLYPHS[art.glyph](colors)}
+      </g>
     </svg>
   );
 }
@@ -350,7 +523,7 @@ const VIEW_PALETTES = {
 
 export type ViewKind = keyof typeof VIEW_PALETTES;
 
-/** The plate of All Downloads, Unfinished and Finished. */
+/** The glyph of All Downloads, Unfinished and Finished. */
 export function ViewIcon({
   view,
   className,
@@ -359,7 +532,6 @@ export function ViewIcon({
   className?: string;
 }) {
   const palette = VIEW_PALETTES[view];
-  const ids = useArtIds("view");
   return (
     <svg
       viewBox="0 0 24 24"
@@ -367,42 +539,34 @@ export function ViewIcon({
       aria-hidden="true"
       focusable="false"
     >
-      <defs>
-        <Gloss id={ids.front} bright={palette.bright} base={palette.base} />
-      </defs>
-      <Plate
-        front={ids.front}
-        deep={palette.deep}
-        label={
-          <g
-            fill="#fff"
-            opacity=".96"
-            stroke={cssColor(palette.deep)}
-            strokeWidth=".9"
-            strokeLinejoin="round"
-          >
-            {view === "all" ? (
-              <>
-                <path d="M10.7 5.4h2.6v4.9h2.6L12 15.2l-3.9-4.9h2.6z" />
-                <path d="M5.4 15.8h13.2v1.7a2 2 0 0 1-2 2H7.4a2 2 0 0 1-2-2z" />
-              </>
-            ) : view === "unfinished" ? (
-              <>
-                <circle cx="12" cy="12" r="5.1" />
-                <path
-                  d="M12 8.7V12l2.5 1.6"
-                  fill="none"
-                  stroke={cssColor(palette.deep)}
-                  strokeWidth="1.7"
-                  strokeLinecap="round"
-                />
-              </>
-            ) : (
-              <path d="m6.5 12.4 2.2-2.2 2.6 2.6 5.1-5.3 2.2 2.2-7.3 7.5z" />
-            )}
-          </g>
-        }
-      />
+      <g
+        fill={cssColor(palette.base)}
+        stroke={cssColor(palette.deep)}
+        strokeWidth=".9"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+        transform="translate(12 12) scale(1.2) translate(-12 -12)"
+      >
+        {view === "all" ? (
+          <>
+            <path d="M10.7 5.4h2.6v4.9h2.6L12 15.2l-3.9-4.9h2.6z" />
+            <path d="M5.4 15.8h13.2v1.7a2 2 0 0 1-2 2H7.4a2 2 0 0 1-2-2z" />
+          </>
+        ) : view === "unfinished" ? (
+          <>
+            <circle cx="12" cy="12" r="5.1" />
+            <path
+              d="M12 8.7V12l2.5 1.6"
+              fill="none"
+              stroke={cssColor(palette.deep)}
+              strokeWidth="1.7"
+              strokeLinecap="round"
+            />
+          </>
+        ) : (
+          <path d="m6.5 12.4 2.2-2.2 2.6 2.6 5.1-5.3 2.2 2.2-7.3 7.5z" />
+        )}
+      </g>
     </svg>
   );
 }

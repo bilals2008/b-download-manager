@@ -136,6 +136,7 @@ export function DownloadFailedDialog({
             icon={
               categories.find((entry) => entry.name === item.category)?.icon
             }
+            name={item.fileName}
             className="mt-px size-6 shrink-0"
           />
           <div className="min-w-0 flex-1">

@@ -355,6 +355,12 @@
   --icon-amber: #d99a2b;
   --icon-amber-bright: #f2bf62;
   --icon-amber-deep: #7a4f07;
+
+  /* A file icon is paper with a coloured band, the way a desktop draws one:
+     the page stays light in both appearances, the band carries the type. */
+  --file-paper: #eef3f3;
+  --file-paper-edge: #7f8d8a;
+  --file-mark: #ffffff;
 }
 
 /*
@@ -537,6 +543,10 @@
     --icon-amber: #8a5906;
     --icon-amber-bright: #9c6608;
     --icon-amber-deep: #5f3b03;
+
+    --file-paper: #ffffff;
+    --file-paper-edge: #66716e;
+    --file-mark: #ffffff;
 }
 
 @theme inline {

@@ -78,6 +78,7 @@ export function FileExistsDialog({
           <FileTypeIcon
             category={category}
             icon={categories.find((entry) => entry.name === category)?.icon}
+            name={conflict.name}
             className="mt-px size-6 shrink-0"
           />
           <div className="min-w-0 flex-1">

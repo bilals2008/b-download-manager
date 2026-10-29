@@ -81,6 +81,7 @@ export function DownloadCompleteWindow({ info }: { info: DownloadInfo }) {
             <FileTypeIcon
               category={category}
               icon={categoryIcon(categories, category)}
+              name={name}
               className="size-9"
             />
             <span className="absolute -right-1 -bottom-1 grid size-4 place-items-center rounded-full bg-success text-success-foreground ring-2 ring-chrome-popup">

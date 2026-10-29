@@ -584,6 +584,7 @@ export function AddDownloadDialog({
             <FileTypeIcon
               category={category}
               icon={categoryIcon}
+              name={name}
               className="size-7 shrink-0"
             />
             <div className="min-w-0 flex-1" aria-live="polite">

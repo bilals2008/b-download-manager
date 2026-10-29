@@ -117,6 +117,7 @@ export function DownloadRow({
           <FileTypeIcon
             category={item.category}
             icon={icon}
+            name={item.fileName}
             className="size-5 shrink-0"
           />
 
