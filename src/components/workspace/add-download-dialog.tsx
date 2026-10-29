@@ -27,7 +27,9 @@ import {
   chooseFolder,
   defaultDestination,
   inspectDestination,
+  muxStreams,
   probeLink,
+  probeMedia,
   type DestinationInfo,
 } from "@/lib/ipc";
 import {
@@ -37,6 +39,10 @@ import {
   saveSettings,
 } from "@/lib/settings";
 import { useDownloads } from "@/state/download-store";
+import {
+  VideoQualityPicker,
+  type VideoQualitySelection,
+} from "@/components/workspace/video-quality-picker";
 
 interface AddDownloadDialogProps {
   open: boolean;
@@ -107,6 +113,9 @@ export function AddDownloadDialog({
   const [error, setError] = useState<string | null>(null);
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
+  // A video quality the reader picked, when the address is a video page. Its
+  // download is muxed or taken from the chosen stream instead of the address.
+  const [quality, setQuality] = useState<VideoQualitySelection | null>(null);
   // A second click in the same tick reaches the command before React has
   // re-rendered the disabled button; this is the guard that holds.
   const running = useRef(false);
@@ -164,6 +173,7 @@ export function AddDownloadDialog({
     setError(null);
     setTouched(false);
     setBusy(false);
+    setQuality(null);
   }, [open, seedUrl]);
 
   // Start from the folder of the last download, then from the folder of the
@@ -358,6 +368,7 @@ export function AddDownloadDialog({
     setDestination(null);
     setTouched(false);
     setError(null);
+    setQuality(null);
   }
 
   function close() {
@@ -416,20 +427,37 @@ export function AddDownloadDialog({
     running.current = true;
     setBusy(true);
     try {
-      const outcome = await addDownload({
-        url: address,
-        fileName: chosenName,
-        category,
-        savePath: chosenFolder,
-        referer: referer || undefined,
-      });
-      // A dismissed destination question leaves the dialog as it was, with
-      // the address and the folder still in it.
-      if (outcome === "cancelled") {
-        return;
-      }
-      if (outcome === "started") {
+      if (quality && quality.kind === "video-only") {
+        // A picture-only stream: download it with its sound and mux them into
+        // one playable file. The mux itself probes the result, and this second
+        // look confirms the file on disk before the dialog closes.
+        if (!quality.audioUrl) {
+          throw new Error("This quality needs a sound track to mux with.");
+        }
+        const dest = joinPath(chosenFolder, quality.fileName);
+        await muxStreams(quality.videoUrl, quality.audioUrl, dest, quality.container);
+        await probeMedia(dest);
         saveLastFolder(chosenFolder);
+      } else {
+        // A complete file (muxed or audio-only), or the plain address when no
+        // quality was picked: the engine downloads it the usual way.
+        const downloadUrl = quality ? quality.videoUrl : address;
+        const downloadName = quality ? quality.fileName : chosenName;
+        const outcome = await addDownload({
+          url: downloadUrl,
+          fileName: downloadName,
+          category,
+          savePath: chosenFolder,
+          referer: referer || undefined,
+        });
+        // A dismissed destination question leaves the dialog as it was, with
+        // the address and the folder still in it.
+        if (outcome === "cancelled") {
+          return;
+        }
+        if (outcome === "started") {
+          saveLastFolder(chosenFolder);
+        }
       }
       onClose();
     } catch (failure) {
@@ -599,6 +627,20 @@ export function AddDownloadDialog({
                 </p>
               ) : null}
             </div>
+          </div>
+        ) : null}
+
+        {/* A video page can offer several qualities. The reader picks one and
+            the download muxes the picture with its sound, or takes the chosen
+            file. It is read on demand, not on every keystroke. */}
+        {valid && isDesktop() ? (
+          <div>
+            <span className={LABEL}>Video quality</span>
+            <VideoQualityPicker
+              url={address}
+              baseName={name}
+              onSelect={setQuality}
+            />
           </div>
         ) : null}
 

@@ -6,6 +6,7 @@ mod conflict;
 mod dest;
 mod grabber;
 mod lifecycle;
+mod media;
 mod prefs;
 mod progress;
 mod state;
@@ -38,6 +39,8 @@ struct StartRequest {
     referer: Option<String>,
     queue: Option<bool>,
     category: Option<String>,
+    /// Put the file in the folder its category saves to.
+    use_category_folder: Option<bool>,
     description: Option<String>,
     /// What the File Exists dialog answered, when it was asked.
     conflict: Option<conflict::Choice>,
@@ -59,6 +62,7 @@ fn start_download(
             referer: request.referer,
             queue: request.queue.unwrap_or(false),
             category: request.category,
+            use_category_folder: request.use_category_folder.unwrap_or(false),
             description: request.description,
             conflict: request.conflict.unwrap_or_default(),
         },
@@ -450,6 +454,19 @@ fn set_browser_policy(state: State<'_, AppState>, policy: BrowserPolicy) -> Brow
     policy
 }
 
+/// The appearance of the floating video download button the extension draws.
+#[tauri::command]
+fn set_video_button_settings(state: State<'_, AppState>, settings: state::VideoButtonSettings) {
+    state.set_video_button_settings(settings);
+}
+
+/// The appearance of the floating video download button, served to the
+/// extension over the loopback bridge.
+#[tauri::command]
+fn video_button_settings(state: State<'_, AppState>) -> state::VideoButtonSettings {
+    state.video_button_settings()
+}
+
 /// What the window can say about the browser bridge without guessing.
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -687,6 +704,80 @@ fn set_browser_folder(state: State<'_, AppState>, folder: String) -> String {
     trimmed.to_string()
 }
 
+/// The unfinished folder and the folder each category saves to.
+///
+/// The options window owns both lists. The backend keeps the resolved answer,
+/// because a browser hand-over has no window to read and a start needs the work
+/// folder before it creates its first part. An empty unfinished folder means the
+/// application's own data folder, so a fresh install still keeps the parts away
+/// from the finished files.
+#[tauri::command]
+fn set_download_folders(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    unfinished_folder: String,
+    categories: Vec<state::CategoryRule>,
+) -> Result<String, String> {
+    let trimmed = unfinished_folder.trim();
+    let folder = if trimmed.is_empty() {
+        app.path()
+            .app_data_dir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .join("unfinished")
+    } else {
+        PathBuf::from(trimmed)
+    };
+    if folder.exists() && !folder.is_dir() {
+        return Err(format!("{} is a file, not a folder.", folder.display()));
+    }
+    std::fs::create_dir_all(&folder)
+        .map_err(|error| format!("the unfinished folder could not be created: {error}"))?;
+    state.set_download_folders(Some(folder.clone()), normalize_category_rules(categories));
+    Ok(folder.to_string_lossy().to_string())
+}
+
+/// Clean the rules a window sends. A name is required, the extensions are the
+/// engine's file types, and only an absolute folder is kept: a bad rule is
+/// dropped rather than failing the push, so one typo cannot stop the rest.
+fn normalize_category_rules(rules: Vec<state::CategoryRule>) -> Vec<state::CategoryRule> {
+    let mut out = Vec::new();
+    for rule in rules {
+        let name = rule.name.trim();
+        if name.is_empty() {
+            continue;
+        }
+        let mut extensions: Vec<String> = Vec::new();
+        for extension in rule.extensions {
+            let Some(cleaned) = clean_file_type(&extension) else {
+                continue;
+            };
+            if !extensions.contains(&cleaned) {
+                extensions.push(cleaned);
+            }
+            if extensions.len() >= MAX_RULES {
+                break;
+            }
+        }
+        let folder = rule.folder.trim();
+        let folder = if folder.is_empty() || !PathBuf::from(folder).is_absolute() {
+            String::new()
+        } else {
+            folder.to_string()
+        };
+        out.push(state::CategoryRule {
+            name: name.to_string(),
+            extensions,
+            folder,
+            builtin: rule.builtin,
+            fallback: rule.fallback,
+        });
+        if out.len() >= MAX_RULES {
+            break;
+        }
+    }
+    out
+}
+
 /// A sensible starting point for the destination path.
 #[tauri::command]
 fn default_destination(app: AppHandle) -> String {
@@ -911,6 +1002,7 @@ pub fn run() {
             None,
         ))
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(AppState::default())
         .manage(grabber::Grabber::default())
@@ -927,6 +1019,19 @@ pub fn run() {
             // still there after a restart.
             state.set_index(Index::new(dir.join("downloads.json")));
             state.restore_downloads();
+            // Parts and manifests have a folder of their own from the very
+            // first moment: a hand-over from the tray or the browser can
+            // arrive before the window has read its settings, and its parts
+            // must not land beside the finished file. The window pushes the
+            // folder the reader chose over this default when it opens.
+            let unfinished = dir.join("unfinished");
+            match std::fs::create_dir_all(&unfinished) {
+                Ok(()) => state.set_download_folders(Some(unfinished), Vec::new()),
+                Err(error) => idm_core::log::write(
+                    "warn",
+                    &format!("the unfinished folder could not be made: {error}"),
+                ),
+            }
             // The tray and the close button follow a file of their own: they
             // are consulted before a page has loaded, and a webview that has
             // not painted yet must not decide whether closing exits.
@@ -1031,6 +1136,13 @@ pub fn run() {
             set_clipboard_capture,
             set_launch_on_startup,
             set_browser_policy,
+            set_video_button_settings,
+            video_button_settings,
+            media::ffmpeg_available,
+            media::extract_formats,
+            media::mux_streams,
+            media::probe_media,
+            set_download_folders,
             browser_status,
             folder_status,
             app_paths,

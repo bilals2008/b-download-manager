@@ -203,8 +203,12 @@ async fn route(app: &AppHandle, request: &Request) -> (u16, Value) {
     match (request.method.as_str(), path) {
         ("GET", "/v1/ping") => (200, ok(ping())),
         ("GET", "/v1/capture") => (200, ok(capture_policy(app))),
+        ("GET", "/v1/video-button-settings") => (200, ok(video_button_settings(app))),
         ("GET", "/v1/downloads") => (200, ok(downloads(app))),
         ("POST", "/v1/downloads") => add_download(app, &request.body).await,
+        ("POST", "/v1/downloads/mux") => mux_download(app, &request.body).await,
+        ("GET", "/v1/media/tools") => media_tools(app).await,
+        ("GET", "/v1/extract-formats") => extract_formats(app, &request).await,
         ("GET", "/v1/batch-options") => (200, ok(batch::options(app, &app.state::<AppState>()))),
         ("POST", "/v1/downloads/batch") => batch::add(app, &app.state::<AppState>(), &request.body),
         ("POST", "/v1/focus") => {
@@ -269,7 +273,184 @@ fn downloads(app: &AppHandle) -> Value {
     json!({ "downloads": infos, "active": active })
 }
 
+/// The video download button appearance the extension applies to its overlay.
+fn video_button_settings(app: &AppHandle) -> Value {
+    let settings = app.state::<AppState>().video_button_settings();
+    json!({
+        "style": settings.style,
+        "label": settings.label,
+        "hover": settings.hover,
+    })
+}
+
+/// Which bundled media tools can run, so the extension knows whether muxing
+/// and quality selection are available.
+async fn media_tools(app: &AppHandle) -> (u16, Value) {
+    let tools = crate::media::media_tools(app).await;
+    (
+        200,
+        ok(serde_json::to_value(tools).unwrap_or(Value::Null)),
+    )
+}
+
+/// Enumerate the formats of a video page for the extension's quality panel.
+async fn extract_formats(app: &AppHandle, request: &Request) -> (u16, Value) {
+    let Some(url) = query_param(request.target.as_str(), "url") else {
+        return (
+            400,
+            error_body("bad_request", "a url query parameter is required"),
+        );
+    };
+    if !is_web_url(&url) {
+        return (
+            400,
+            error_body("bad_request", "the URL must start with http:// or https://"),
+        );
+    }
+    let proxy = app.state::<AppState>().limits().proxy();
+    match crate::media::extract::extract(app, proxy.as_deref(), &url).await {
+        Ok(formats) => (200, ok(json!({ "formats": formats }))),
+        Err(message) => (422, error_body("extraction_failed", message)),
+    }
+}
+
+/// Download and mux a video and an audio stream the extension picked.
+///
+/// The streams are the fresh, signed addresses the extractor returned, so the
+/// download does not depend on a URL the page captured hours earlier. The mux
+/// runs to completion before the bridge answers, so a successful answer means
+/// the file is already on disk and has been probed as playable.
+async fn mux_download(app: &AppHandle, body: &[u8]) -> (u16, Value) {
+    let request: MuxRequest = match serde_json::from_slice(body) {
+        Ok(request) => request,
+        Err(error) => {
+            return (
+                400,
+                error_body(
+                    "bad_request",
+                    format!("the body could not be read: {error}"),
+                ),
+            )
+        }
+    };
+
+    let video_url = request.video_url.trim().to_string();
+    if !is_web_url(&video_url) {
+        return (
+            400,
+            error_body("bad_request", "the video stream is not a web address"),
+        );
+    }
+    let audio_url = request.audio_url.trim().to_string();
+    if !audio_url.is_empty() && !is_web_url(&audio_url) {
+        return (
+            400,
+            error_body("bad_request", "the audio stream is not a web address"),
+        );
+    }
+    let container = request
+        .container
+        .trim()
+        .to_ascii_lowercase()
+        .trim_start_matches('.')
+        .to_string();
+    if !matches!(container.as_str(), "mp4" | "webm" | "mkv") {
+        return (
+            400,
+            error_body("bad_request", "the container must be mp4, webm or mkv"),
+        );
+    }
+
+    let state = app.state::<AppState>();
+    let folder = state
+        .browser_folder()
+        .or_else(|| app.path().download_dir().ok())
+        .unwrap_or_else(|| PathBuf::from("."));
+
+    let cleaned = dest::sanitize(&request.name).unwrap_or_else(|| "video".to_string());
+    let file_name = if cleaned
+        .to_ascii_lowercase()
+        .ends_with(&format!(".{container}"))
+    {
+        cleaned
+    } else {
+        format!("{cleaned}.{container}")
+    };
+    let target = dest::unique(&folder, &file_name);
+
+    let proxy = state.limits().proxy();
+    match crate::media::mux::mux(
+        app,
+        proxy.as_deref(),
+        &video_url,
+        &audio_url,
+        &target,
+        &container,
+    )
+    .await
+    {
+        Ok(()) => (
+            200,
+            ok(json!({
+                "dest": target.to_string_lossy().to_string(),
+                "name": target.file_name().map(|name| name.to_string_lossy().to_string()).unwrap_or(file_name),
+            })),
+        ),
+        Err(message) => (422, error_body("mux_failed", message)),
+    }
+}
+
+/// What the extension asks for when it starts a mux download.
+#[derive(Debug, Deserialize)]
+struct MuxRequest {
+    video_url: String,
+    #[serde(default)]
+    audio_url: String,
+    #[serde(default)]
+    container: String,
+    #[serde(default)]
+    name: String,
+}
+
+/// Read one query parameter out of a request target, percent escapes decoded.
+fn query_param(target: &str, name: &str) -> Option<String> {
+    let query = target.split_once('?').map(|(_, query)| query)?;
+    for pair in query.split('&') {
+        let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
+        if key == name {
+            return Some(percent_decode(value));
+        }
+    }
+    None
+}
+
+/// Decode the percent escapes of a query value.
+fn percent_decode(value: &str) -> String {
+    let bytes = value.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' && index + 2 < bytes.len() {
+            let hex = std::str::from_utf8(&bytes[index + 1..index + 3]).unwrap_or("");
+            if let Ok(byte) = u8::from_str_radix(hex, 16) {
+                out.push(byte);
+                index += 3;
+                continue;
+            }
+        }
+        out.push(bytes[index]);
+        index += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
 /// Start a download, or open the add dialog when the user asked to confirm.
+///
+/// A direct hand-over that finds its destination already taken — the file is
+/// on disk, or another row is writing it — becomes an ask as well: the window
+/// shows the file, and the engine only starts after the answer. The extension
+/// has already been told the app took the link, so the browser copy is stopped
+/// and the download goes through the dialog instead of the browser.
 async fn add_download(app: &AppHandle, body: &[u8]) -> (u16, Value) {
     let request: AddRequest = match serde_json::from_slice(body) {
         Ok(request) => request,
@@ -307,12 +488,7 @@ async fn add_download(app: &AppHandle, body: &[u8]) -> (u16, Value) {
 
     match request.mode {
         Mode::Ask => {
-            crate::tray::show_window(app);
-            let _ = app.emit(
-                DOWNLOAD_EVENT,
-                json!({ "url": url, "name": name, "referer": referer }),
-            );
-            log::write("info", &format!("the browser asked for {url}"));
+            ask_window(app, &url, &name, &referer, "the browser asked");
             (200, ok(json!({ "mode": "ask" })))
         }
         Mode::Direct => {
@@ -321,7 +497,23 @@ async fn add_download(app: &AppHandle, body: &[u8]) -> (u16, Value) {
                 .browser_folder()
                 .or_else(|| app.path().download_dir().ok())
                 .unwrap_or_else(|| PathBuf::from("."));
-            let target = dest::unique(&folder, &name);
+
+            // The destination is looked at before anything is started: a file
+            // that is already there is a question for the window, not a name
+            // to talk around with a silent rename.
+            let target = match plan_direct(&state, &folder, &name) {
+                DirectPlan::Taken { dest } => {
+                    ask_window(
+                        app,
+                        &url,
+                        &name,
+                        &referer,
+                        &format!("{dest} is already there", dest = dest.display()),
+                    );
+                    return (200, ok(json!({ "mode": "ask" })));
+                }
+                DirectPlan::Free { dest } => dest,
+            };
             let referer = if referer.is_empty() {
                 None
             } else {
@@ -341,6 +533,9 @@ async fn add_download(app: &AppHandle, body: &[u8]) -> (u16, Value) {
                     // A hand-over has no dialog to ask, so it never replaces
                     // a file: it takes the next free name beside it.
                     conflict: crate::conflict::Choice::Rename,
+                    // Nor does it have a folder field: the folder the file's
+                    // category saves to decides where it lands.
+                    use_category_folder: true,
                     ..crate::actions::StartOptions::default()
                 },
             ) {
@@ -361,6 +556,50 @@ async fn add_download(app: &AppHandle, body: &[u8]) -> (u16, Value) {
                 Err(refusal) => (400, error_body("bad_request", refusal.message)),
             }
         }
+    }
+}
+
+/// Show the window and hand it the link to ask about.
+///
+/// The answer comes back through the window's own start command, so the File
+/// Exists question — rename, replace or cancel — is settled from there.
+fn ask_window(app: &AppHandle, url: &str, name: &str, referer: &str, why: &str) {
+    crate::tray::show_window(app);
+    let _ = app.emit(
+        DOWNLOAD_EVENT,
+        json!({ "url": url, "name": name, "referer": referer }),
+    );
+    log::write(
+        "info",
+        &format!("the bridge asked the window for {url}: {why}"),
+    );
+}
+
+/// What a direct hand-over may do with its destination.
+enum DirectPlan {
+    /// Nothing is in the way: the engine can start at once.
+    Free { dest: PathBuf },
+    /// A file is already there, or another row is writing that name: the
+    /// window has to ask before anything starts.
+    Taken { dest: PathBuf },
+}
+
+/// Where a direct hand-over would write, and whether that name is free.
+///
+/// The category's folder is applied first, exactly as [`crate::actions::start`]
+/// applies it, so the question is about the file that would really be written
+/// rather than one beside the wrong folder. An invalid destination is left for
+/// the start to refuse, as before; `conflict::inspect` only answers for
+/// destinations the engine can use.
+fn plan_direct(state: &AppState, folder: &Path, name: &str) -> DirectPlan {
+    let (target, _) = crate::actions::category_destination(state, folder.join(name), None, true);
+    let Ok(status) = crate::conflict::inspect(state, &target) else {
+        return DirectPlan::Free { dest: target };
+    };
+    if status.file_exists || status.active {
+        DirectPlan::Taken { dest: target }
+    } else {
+        DirectPlan::Free { dest: target }
     }
 }
 
@@ -546,5 +785,118 @@ mod tests {
         assert_eq!(answer["app"], APP_ID);
         assert_eq!(answer["api"], API_VERSION);
         assert_eq!(answer["port"], PORT);
+    }
+
+    #[test]
+    fn a_query_parameter_is_read_and_decoded() {
+        assert_eq!(
+            query_param("/v1/extract-formats?url=https%3A%2F%2Fexample.org%2Fa%3Fb%3D1", "url"),
+            Some("https://example.org/a?b=1".to_string())
+        );
+        assert_eq!(
+            query_param("/v1/extract-formats?url=x&other=y", "url"),
+            Some("x".to_string())
+        );
+        assert_eq!(query_param("/v1/extract-formats", "url"), None);
+        assert_eq!(query_param("/v1/extract-formats?other=y", "url"), None);
+    }
+
+    fn temp_dir(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "my-idm-clone-bridge-plan-{tag}-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        dir
+    }
+
+    fn row(id: u64, dest: &Path) -> std::sync::Arc<idm_core::downloader::Download> {
+        idm_core::downloader::Download::new(
+            id,
+            "https://example.org/film.mp4".to_string(),
+            dest.to_path_buf(),
+            4,
+            None,
+            None,
+        )
+        .expect("a download")
+    }
+
+    #[test]
+    fn a_file_that_is_already_there_sends_the_handover_to_the_window() {
+        let dir = temp_dir("exists");
+        std::fs::write(dir.join("film.mp4"), b"old").expect("write");
+        let state = AppState::default();
+
+        match plan_direct(&state, &dir, "film.mp4") {
+            DirectPlan::Taken { dest } => {
+                assert_eq!(
+                    dest,
+                    dir.join("film.mp4"),
+                    "the question is about the real file"
+                );
+            }
+            DirectPlan::Free { .. } => {
+                panic!("a taken name is a question, not a silent rename")
+            }
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_free_name_starts_without_a_question() {
+        let dir = temp_dir("free");
+        let state = AppState::default();
+
+        match plan_direct(&state, &dir, "film.mp4") {
+            DirectPlan::Free { dest } => assert_eq!(dest, dir.join("film.mp4")),
+            DirectPlan::Taken { .. } => panic!("nothing holds that name"),
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_name_another_row_is_writing_is_a_question_too() {
+        let dir = temp_dir("active");
+        let state = AppState::default();
+        state.insert(row(1, &dir.join("film.mp4")));
+
+        // The file itself is not on disk yet — a running download keeps parts
+        // elsewhere — but the name belongs to that row.
+        match plan_direct(&state, &dir, "film.mp4") {
+            DirectPlan::Taken { .. } => {}
+            DirectPlan::Free { dest } => panic!("that name is held, but it starts at {dest:?}"),
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_question_follows_the_category_folder() {
+        let dir = temp_dir("category");
+        let films = dir.join("Films");
+        std::fs::create_dir_all(&films).expect("folder");
+        std::fs::write(films.join("film.mp4"), b"old").expect("write");
+
+        let state = AppState::default();
+        state.set_download_folders(
+            None,
+            vec![crate::state::CategoryRule {
+                name: "Films".to_string(),
+                extensions: vec!["mp4".to_string()],
+                folder: films.to_string_lossy().to_string(),
+                builtin: false,
+                fallback: false,
+            }],
+        );
+
+        // The Downloads folder is free; the folder the file's category saves
+        // to is not. The question must be about the file that would really be
+        // written.
+        match plan_direct(&state, &dir, "film.mp4") {
+            DirectPlan::Taken { dest } => assert_eq!(dest, films.join("film.mp4")),
+            DirectPlan::Free { dest } => panic!("the category folder is taken, not {dest:?}"),
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

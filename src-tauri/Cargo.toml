@@ -23,6 +23,7 @@ reqwest = { version = "0.12", default-features = false, features = ["stream", "r
 futures-util = "0.3"
 tauri-plugin-autostart = "2"
 tauri-plugin-clipboard-manager = "2"
+tauri-plugin-shell = "2"
 tauri-plugin-updater = "2"
 
 [target.'cfg(windows)'.dependencies]
