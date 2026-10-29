@@ -31,10 +31,6 @@
     "active": true,
     "publisher": "bilals2008",
     "targets": "nsis",
-    "externalBin": [
-      "binaries/ffmpeg",
-      "binaries/yt-dlp"
-    ],
     "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",

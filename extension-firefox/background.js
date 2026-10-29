@@ -490,53 +490,6 @@ async function handleMessage(message, sender) {
       }
     }
 
-    case "bdm:media-tools": {
-      try {
-        const data = await bdmBridgeMediaTools();
-        return {
-          ok: true,
-          ffmpeg: Boolean(data?.ffmpeg),
-          ytdlp: Boolean(data?.ytdlp),
-        };
-      } catch (error) {
-        return bridgeFailure(error);
-      }
-    }
-
-    case "bdm:extract-formats": {
-      const url = String(message.url || "");
-      if (!bdmIsHttpUrl(url)) {
-        return { ok: false, error: { kind: "refused", message: "This page has no video to download." } };
-      }
-      try {
-        const data = await bdmBridgeExtractFormats(url);
-        return { ok: true, formats: Array.isArray(data?.formats) ? data.formats : [] };
-      } catch (error) {
-        return bridgeFailure(error);
-      }
-    }
-
-    case "bdm:mux": {
-      const payload = message.payload || {};
-      if (!bdmIsHttpUrl(payload.videoUrl)) {
-        return { ok: false, error: { kind: "refused", message: "The video stream is not a download." } };
-      }
-      if (payload.audioUrl && !bdmIsHttpUrl(payload.audioUrl)) {
-        return { ok: false, error: { kind: "refused", message: "The audio stream is not a download." } };
-      }
-      try {
-        const data = await bdmBridgeMux({
-          videoUrl: payload.videoUrl,
-          audioUrl: payload.audioUrl || "",
-          container: payload.container || "mp4",
-          name: payload.name || "",
-        });
-        return { ok: true, result: data };
-      } catch (error) {
-        return bridgeFailure(error);
-      }
-    }
-
     case "bdm:open-settings": {
       await browser.runtime.openOptionsPage();
       return { ok: true };

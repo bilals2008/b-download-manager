@@ -171,17 +171,6 @@
     sending: false,
     // What the button last showed, so a hover does not rewrite it.
     progressStamp: "",
-    // The extracted formats of the page, for a player that streams through MSE
-    // (YouTube). These are the complete list the app read with yt-dlp, with a
-    // fresh address each, instead of whichever itag the page happened to fetch.
-    formats: [],
-    formatStatus: "idle", // "idle" | "loading" | "ready" | "failed"
-    formatError: "",
-    formatPage: "",
-    formatTimer: 0,
-    // The last video that had nothing to show yet. A stream or a format that
-    // arrives later brings the button up without the pointer still being on it.
-    pendingVideo: null,
   };
 
   /**
@@ -297,19 +286,7 @@
       if (!button || button.disabled) return;
       const row = button.closest(".row");
       const url = row?.dataset.url;
-      if (!url) return;
-      if (row.dataset.audio) {
-        void sendMux(
-          url,
-          row.dataset.audio,
-          row.dataset.container || "mp4",
-          row.dataset.name || "",
-          row,
-          button,
-        );
-      } else {
-        void send(url, row, button, row.dataset.name || "");
-      }
+      if (url) void send(url, row, button);
     });
 
     // In fullscreen the host sits inside the player, so its own events must
@@ -448,139 +425,32 @@
 
   /* --------------------------------------------------------------- showing */
 
+  /**
+   * What this video offers. A player that streams through MSE names no file of
+   * its own, so the addresses the page requested stand in for it.
+   */
+  function sourcesFor(video) {
+    if (video.mediaKeys) return [];
+    const direct = bdmSourcesFor(video);
+    return direct.length ? direct : bdmCapturedSources();
+  }
+
   function sameSources(a, b) {
     if (a.length !== b.length) return false;
     return a.every((url, index) => url === b[index]);
   }
 
-  /* ------------------------------------------------------ extracted formats */
-
-  /** The page's own address, without the fragment a player appends. */
-  function pageUrl() {
-    return String(location.href || "").split("#")[0];
-  }
-
-  /** One format of the extractor, reduced to what the panel needs. */
-  function normalizeFormat(format) {
-    const hasVideo = Boolean(format?.vcodec);
-    const hasAudio = Boolean(format?.acodec);
-    const kind = format?.kind || (hasVideo && !hasAudio
-      ? "video-only"
-      : !hasVideo && hasAudio
-        ? "audio-only"
-        : "muxed");
-    const height = Number(format?.height) || 0;
-    const resolution =
-      format?.resolution || (kind === "video-only" && height ? `${height}p` : "");
-    return {
-      id: String(format?.formatId || ""),
-      url: String(format?.url || ""),
-      kind,
-      resolution,
-      height,
-      fps: format?.fps ? Number(format.fps) : null,
-      ext: String(format?.ext || "mp4"),
-      size: Number(format?.filesize) || 0,
-      vcodec: String(format?.vcodec || ""),
-      acodec: String(format?.acodec || ""),
-    };
-  }
-
-  /** Ask the app for the page's formats, once per page address. */
-  function scheduleFormats() {
-    // Extraction is expensive, so it runs once per page: idle -> loading ->
-    // ready or failed, and a later hover does not start it again.
-    if (state.formatStatus !== "idle") return;
-    if (state.formatTimer) return;
-    state.formatTimer = setTimeout(() => {
-      state.formatTimer = 0;
-      void loadFormats();
-    }, 80);
-  }
-
-  async function loadFormats() {
-    const url = pageUrl();
-    if (state.formatStatus === "loading" && state.formatPage === url) return;
-    state.formatStatus = "loading";
-    state.formatPage = url;
-    state.formatError = "";
-    setStatus("Reading qualities…", "");
-
-    let answer;
-    try {
-      answer = await browser.runtime.sendMessage({ type: "bdm:extract-formats", url });
-    } catch {
-      answer = null;
-    }
-
-    // The page moved on while the extractor worked; this answer is stale.
-    if (pageUrl() !== url) return;
-
-    if (answer && answer.ok && Array.isArray(answer.formats) && answer.formats.length) {
-      state.formats = answer.formats.map(normalizeFormat);
-      state.formatStatus = "ready";
-    } else {
-      state.formats = [];
-      state.formatStatus = "failed";
-      state.formatError =
-        answer?.error?.message || "The app could not read this video's qualities.";
-    }
-
-    // The button may have been waiting on the pointer; a fresh answer brings
-    // it up whether the pointer is still there or not.
-    const target =
-      state.hovered && state.hovered.isConnected ? state.hovered : state.pendingVideo;
-    if (target && target.isConnected) present(target);
-  }
-
-  /** The best audio stream, judged by size as the nearest proxy for bitrate. */
-  function bestAudioFormat() {
-    const audios = state.formats.filter((format) => format.kind === "audio-only");
-    audios.sort((left, right) => (right.size || 0) - (left.size || 0));
-    return audios[0] || null;
-  }
-
-  /** The best picture-only stream, by height then by size. */
-  function bestVideoFormat() {
-    const videos = state.formats.filter((format) => format.kind === "video-only");
-    videos.sort(
-      (left, right) => (right.height || 0) - (left.height || 0) || (right.size || 0) - (left.size || 0),
-    );
-    return videos[0] || null;
-  }
-
-  /** The best single stream that already carries both picture and sound. */
-  function bestMuxedFormat() {
-    const muxed = state.formats.filter((format) => format.kind === "muxed");
-    muxed.sort(
-      (left, right) => (right.height || 0) - (left.height || 0) || (right.size || 0) - (left.size || 0),
-    );
-    return muxed[0] || null;
-  }
-
-  /** The file name a format should save as. */
-  function formatFileName(format) {
-    const base = bdmPageName();
-    if (format.kind === "audio-only") return `${base} audio.${format.ext}`;
-    const quality = (format.resolution || "video").toLowerCase();
-    return `${base} ${quality}.${format.ext}`;
-  }
-
   /**
    * Show the button for a video, or remember it until it has an address.
    *
-   * A video that names a file directly is offered as it is. A player that
-   * streams through MSE (YouTube) names no file of its own, so its qualities
-   * come from the extractor, with the captured requests as a fallback when the
-   * extractor cannot read the page. Either way the button is not hidden just
-   * because nothing has arrived yet: the pointer's video is remembered, and a
-   * stream or a format that lands later brings it up.
+   * A stream that the player has not asked for yet has nothing to offer, and a
+   * button that opens an empty panel is worse than no button. The element is
+   * kept as the pointer's video instead, so the first request that arrives
+   * brings the button up while the pointer is still on the player.
    */
   function present(video) {
     if (!state.ready || !overlayAllowed()) return;
     if (!bdmIsVideo(video) || !video.isConnected) return;
-    // A protected (EME) video has no address the application may read. It is
-    // refused honestly rather than offered a download that cannot work.
     if (video.mediaKeys) {
       forget(video);
       return;
@@ -598,60 +468,14 @@
 
     state.hovered = video;
 
-    const direct = bdmSourcesFor(video);
-    if (direct.length) {
-      state.pendingVideo = null;
-      presentSources(video, direct);
+    const sources = sourcesFor(video);
+    if (!sources.length) {
+      // The pointer is still on the player, so the video stays the pointer's
+      // video and the next stream brings the button back without a new hover.
+      if (state.video === video) hide(true);
       return;
     }
 
-    // No file of its own: this is a stream the player built with MSE. The
-    // browser's own signed streams are the reliable source (the IDM way): a
-    // picture and its sound already fetched form a pair that can be muxed
-    // without asking the site for anything.
-    state.pendingVideo = video;
-    if (state.formatPage !== pageUrl()) {
-      state.formats = [];
-      state.formatStatus = "idle";
-      state.formatError = "";
-    }
-
-    const captured = bdmCapturedSources();
-    const pairs = bdmCapturedPairs();
-
-    // A complete pair is shown at once, and the extractor is skipped: a page
-    // like YouTube would refuse it anyway, and the pair is already enough.
-    if (pairs.length) {
-      presentSources(video, captured);
-      return;
-    }
-
-    if (captured.length) {
-      // Streams, but no pair yet (only the picture so far): show them, and ask
-      // the extractor for the full list in the background.
-      presentSources(video, captured);
-      scheduleFormats();
-      return;
-    }
-
-    // Nothing captured yet: the extractor may answer, or a stream may arrive.
-    scheduleFormats();
-    if (state.formatStatus === "ready" && state.formats.length) {
-      presentSources(video, []);
-      return;
-    }
-    if (state.formatStatus === "loading") {
-      presentSources(video, []);
-      return;
-    }
-
-    // Nothing yet. The pointer is still on the player, so the next stream or
-    // format brings the button back without a new hover.
-    if (state.video === video) hide(true);
-  }
-
-  /** Put the button on a video and show it the given direct or captured files. */
-  function presentSources(video, sources) {
     const changed = state.video !== video || !sameSources(state.sources, sources);
     state.video = video;
     state.sources = sources;
@@ -772,203 +596,43 @@
     const list = state.ui.list;
     list.textContent = "";
 
-    if (state.formatStatus === "loading") {
-      renderNote(list, "Reading qualities…");
-      return;
-    }
-
-    if (state.formatStatus === "ready" && state.formats.length) {
-      renderQualities(list);
-      return;
-    }
-
-    // The fallback: the files the page asked for. A picture and its sound that
-    // belong together are offered as one muxed download, and the picture-only
-    // row that would save a silent video is hidden in their favour. The sound
-    // stays available on its own for an audio-only download.
-    const pairs = bdmCapturedPairs();
-    const pairedVideo = new Set();
-    for (const pair of pairs) {
-      pairedVideo.add(pair.videoUrl);
-      renderQualityRow(list, {
-        tag: "MUX",
-        name: pair.label,
-        url: pair.videoUrl,
-        audio: pair.audioUrl,
-        container: pair.container,
-        file: pair.file,
-      });
-    }
-
     for (const url of state.sources) {
-      if (pairedVideo.has(url)) continue;
-      renderCapturedRow(list, url);
+      const row = document.createElement("li");
+      row.className = "row";
+      row.dataset.url = url;
+
+      const tag = document.createElement("span");
+      tag.className = "tag";
+      tag.textContent = bdmMediaLabel(url);
+
+      const name = document.createElement("span");
+      name.className = "name";
+      name.textContent = bdmMediaName(url, "");
+      name.title = url;
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "row-action";
+      button.append(bdmIcon("download"));
+      button.setAttribute("aria-label", `Download ${name.textContent} with B Download Manager`);
+
+      // A row that was handed over keeps its check while its download runs.
+      if (track.url === url) {
+        row.dataset.sent = "true";
+        button.replaceChildren(bdmIcon("check"));
+        button.setAttribute("aria-label", "Sent to B Download Manager");
+      }
+
+      row.append(tag, name, button);
+      list.append(row);
     }
 
-    if (!state.sources.length && !pairs.length) {
-      const note =
-        state.formatStatus === "failed"
-          ? state.formatError
-          : "Nothing here can be downloaded.";
-      renderNote(list, note);
+    if (!state.sources.length) {
+      const empty = document.createElement("li");
+      empty.className = "empty";
+      empty.textContent = "Nothing here can be downloaded.";
+      list.append(empty);
     }
-  }
-
-  /** One captured stream offered as its own file. */
-  function renderCapturedRow(list, url) {
-    const row = document.createElement("li");
-    row.className = "row";
-    row.dataset.url = url;
-
-    const tag = document.createElement("span");
-    tag.className = "tag";
-    tag.textContent = bdmMediaLabel(url);
-
-    const name = document.createElement("span");
-    name.className = "name";
-    name.textContent = bdmMediaName(url, "");
-    name.title = url;
-
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "row-action";
-    button.append(bdmIcon("download"));
-    button.setAttribute("aria-label", `Download ${name.textContent} with B Download Manager`);
-
-    // A row that was handed over keeps its check while its download runs.
-    if (track.url === url) {
-      row.dataset.sent = "true";
-      button.replaceChildren(bdmIcon("check"));
-      button.setAttribute("aria-label", "Sent to B Download Manager");
-    }
-
-    row.append(tag, name, button);
-    list.append(row);
-  }
-
-  /** One non-interactive line at the bottom of the panel. */
-  function renderNote(list, text) {
-    const row = document.createElement("li");
-    row.className = "empty";
-    row.textContent = text;
-    list.append(row);
-  }
-
-  /** The extracted qualities, grouped and sorted for a quick pick. */
-  function renderQualities(list) {
-    const videos = state.formats
-      .filter((format) => format.kind === "video-only")
-      .sort(byQualityDesc);
-    const muxed = state.formats
-      .filter((format) => format.kind === "muxed")
-      .sort(byQualityDesc);
-    const audios = state.formats
-      .filter((format) => format.kind === "audio-only")
-      .sort((left, right) => (right.size || 0) - (left.size || 0));
-    const bestAudio = audios[0];
-    const bestVideo = videos[0];
-
-    // The one-click best: the highest picture with the best sound, muxed.
-    if (bestVideo && bestAudio) {
-      renderQualityRow(list, {
-        tag: "BEST",
-        name: `Best quality (${bestVideo.resolution || "video"} + audio)`,
-        url: bestVideo.url,
-        audio: bestAudio.url,
-        container: bestVideo.ext,
-        file: formatFileName(bestVideo),
-      });
-    } else if (!videos.length && muxed.length) {
-      renderQualityRow(list, {
-        tag: "BEST",
-        name: `Best quality (${muxed[0].resolution || "video"})`,
-        url: muxed[0].url,
-        container: muxed[0].ext,
-        file: formatFileName(muxed[0]),
-      });
-    }
-
-    // Each picture-only quality, muxed with the best sound.
-    for (const format of videos) {
-      renderQualityRow(list, {
-        tag: format.resolution || "VIDEO",
-        name: qualityName(format),
-        url: format.url,
-        audio: bestAudio ? bestAudio.url : "",
-        container: format.ext,
-        file: formatFileName(format),
-      });
-    }
-
-    // Single streams that already carry both tracks.
-    for (const format of muxed) {
-      renderQualityRow(list, {
-        tag: format.resolution || format.ext.toUpperCase(),
-        name: qualityName(format),
-        url: format.url,
-        container: format.ext,
-        file: formatFileName(format),
-      });
-    }
-
-    // Audio-only downloads.
-    for (const format of audios) {
-      renderQualityRow(list, {
-        tag: "AUDIO",
-        name: audioName(format),
-        url: format.url,
-        container: format.ext,
-        file: formatFileName(format),
-      });
-    }
-  }
-
-  /** One quality row. `audio` is set when the row must be muxed with sound. */
-  function renderQualityRow(list, spec) {
-    const row = document.createElement("li");
-    row.className = "row";
-    row.dataset.url = spec.url;
-    if (spec.audio) row.dataset.audio = spec.audio;
-    if (spec.container) row.dataset.container = spec.container;
-    if (spec.file) row.dataset.name = spec.file;
-
-    const tag = document.createElement("span");
-    tag.className = "tag";
-    tag.textContent = spec.tag;
-
-    const name = document.createElement("span");
-    name.className = "name";
-    name.textContent = spec.name;
-    name.title = spec.url;
-
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "row-action";
-    button.append(bdmIcon("download"));
-    button.setAttribute("aria-label", `Download ${spec.name} with B Download Manager`);
-
-    row.append(tag, name, button);
-    list.append(row);
-  }
-
-  function byQualityDesc(left, right) {
-    return (right.height || 0) - (left.height || 0) || (right.size || 0) - (left.size || 0);
-  }
-
-  function qualityName(format) {
-    const bits = [];
-    if (format.resolution) bits.push(format.resolution);
-    if (format.fps) bits.push(`${Math.round(format.fps)} fps`);
-    bits.push(format.ext.toUpperCase());
-    if (format.size) bits.push(bdmFormatSize(format.size));
-    return bits.join(" · ");
-  }
-
-  function audioName(format) {
-    const bits = ["Audio"];
-    if (format.acodec) bits.push(format.acodec);
-    if (format.size) bits.push(bdmFormatSize(format.size));
-    return bits.join(" · ");
   }
 
   function setStatus(text, tone) {
@@ -1004,7 +668,7 @@
 
   /* ---------------------------------------------------------------- send */
 
-  async function send(url, row, button, fileName) {
+  async function send(url, row, button) {
     if (state.sending) return;
     state.sending = true;
     button.disabled = true;
@@ -1019,7 +683,7 @@
         mode: "ask",
         payload: {
           url,
-          name: fileName || bdmMediaFileName(url, bdmPageName()),
+          name: bdmMediaFileName(url, bdmPageName()),
           referer: location.href,
         },
       });
@@ -1035,44 +699,6 @@
       button.setAttribute("aria-label", "Sent to B Download Manager");
 
       startTracking(url, answer.result);
-    } catch {
-      setStatus("B Download Manager is not running", "error");
-      button.disabled = false;
-    } finally {
-      state.sending = false;
-    }
-  }
-
-  /**
-   * Download a picture-only stream with its sound and mux them into one file.
-   *
-   * The two addresses are the fresh ones the extractor returned, so the mux
-   * does not depend on a signed URL the page captured and let expire. The app
-   * answers only once the file is on disk and has been probed as playable.
-   */
-  async function sendMux(videoUrl, audioUrl, container, fileName, row, button) {
-    if (state.sending) return;
-    state.sending = true;
-    button.disabled = true;
-    setProgress(0, true);
-    setStatus("Downloading and muxing…", "");
-
-    try {
-      const answer = await browser.runtime.sendMessage({
-        type: "bdm:mux",
-        payload: { videoUrl, audioUrl, container, name: fileName },
-      });
-
-      if (!answer || !answer.ok) {
-        setStatus(statusForError(answer?.error), "error");
-        button.disabled = false;
-        return;
-      }
-
-      row.dataset.sent = "true";
-      button.replaceChildren(bdmIcon("check"));
-      button.setAttribute("aria-label", "Saved by B Download Manager");
-      setStatus("Saved by B Download Manager", "ok");
     } catch {
       setStatus("B Download Manager is not running", "error");
       button.disabled = false;
@@ -1392,11 +1018,7 @@
   /** A player asked for another stream: the button may now have an address. */
   function onMediaFound() {
     scheduleCountRefresh();
-    // The pointer may have left the player while the first stream was still on
-    // its way; the pending video is re-presented so the button still appears.
-    const target =
-      state.hovered && state.hovered.isConnected ? state.hovered : state.pendingVideo;
-    if (target && target.isConnected) present(target);
+    if (state.hovered && state.hovered.isConnected) present(state.hovered);
   }
 
   /** The page put a video in or took one out. */
@@ -1508,12 +1130,6 @@
     if (!bdmCaptureSyncPage()) return;
     stopTracking();
     state.lastCount = -1;
-    // The formats and the pending video belong to the page that was left.
-    state.formats = [];
-    state.formatStatus = "idle";
-    state.formatError = "";
-    state.formatPage = "";
-    state.pendingVideo = null;
     scheduleCountRefresh();
     if (state.hovered && state.hovered.isConnected) present(state.hovered);
   }
@@ -1607,22 +1223,6 @@
     { signal: pageEvents.signal },
   );
   window.addEventListener("popstate", onPageMoved, { signal: pageEvents.signal });
-  // A site that navigates with history.pushState or replaceState fires no
-  // popstate, but its video has changed. Patch the two methods so the capture
-  // and the button reset for the new page. Best-effort: a content script may
-  // run in a compartment where the page's calls are not seen, in which case
-  // the video registry's mutation watch still catches the new player.
-  if (typeof window !== "undefined" && window.history) {
-    for (const method of ["pushState", "replaceState"]) {
-      const original = window.history[method];
-      if (typeof original !== "function") continue;
-      window.history[method] = function (...args) {
-        const result = original.apply(this, args);
-        onPageMoved();
-        return result;
-      };
-    }
-  }
   browser.storage.onChanged.addListener(onSettingsChanged);
 
   browser.runtime.onMessage.addListener((message) => {

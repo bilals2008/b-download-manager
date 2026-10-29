@@ -6,7 +6,6 @@ mod conflict;
 mod dest;
 mod grabber;
 mod lifecycle;
-mod media;
 mod prefs;
 mod progress;
 mod state;
@@ -1002,7 +1001,6 @@ pub fn run() {
             None,
         ))
         .plugin(tauri_plugin_clipboard_manager::init())
-        .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(AppState::default())
         .manage(grabber::Grabber::default())
@@ -1138,10 +1136,6 @@ pub fn run() {
             set_browser_policy,
             set_video_button_settings,
             video_button_settings,
-            media::ffmpeg_available,
-            media::extract_formats,
-            media::mux_streams,
-            media::probe_media,
             set_download_folders,
             browser_status,
             folder_status,
