@@ -5,17 +5,21 @@ import type { ShellCommand } from "@/components/shell/commands";
 import { TopBar } from "@/components/shell/top-bar";
 import { toolbarState } from "@/components/shell/toolbar-state";
 import { useShellShortcuts } from "@/components/shell/use-shell-shortcuts";
+import { TipOfTheDayDialog } from "@/components/tips/tip-of-the-day-dialog";
 import { AboutDialog } from "@/components/workspace/about-dialog";
 import { AddDownloadDialog } from "@/components/workspace/add-download-dialog";
 import { CloseConfirmDialog } from "@/components/workspace/close-confirm-dialog";
 import { UpdateDialog } from "@/components/workspace/update-dialog";
 import { Workspace } from "@/components/workspace/workspace";
+import { APP_HOME_PAGE } from "@/lib/brand";
+import { describeError, isDesktop } from "@/lib/errors";
 import { applyFont } from "@/lib/fonts";
 import { openGrabberWindow } from "@/lib/grabber";
 import {
   hideMainWindow,
   onClipboardLink,
   onCloseRequested,
+  openUrl,
   quitApp,
   setBrowserConnections,
   setBrowserFolder,
@@ -37,6 +41,7 @@ import {
   saveToolbarSize,
   type ToolbarSize,
 } from "@/lib/settings";
+import { nextTipIndex, saveTipCursor } from "@/lib/tips";
 import { runCheck, type UpdateFound } from "@/lib/updates";
 import { useDownloads } from "@/state/download-store";
 
@@ -54,6 +59,11 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [updateOpen, setUpdateOpen] = useState(false);
+  const [tipsOpen, setTipsOpen] = useState(false);
+  const [tipIndex, setTipIndex] = useState(0);
+  // A tip is offered once per start, and never while another dialog has the
+  // reader's attention.
+  const startupTipAsked = useRef(false);
   // The answer a startup check already got, so the window that shows it does
   // not ask the release server the same question a second time.
   const [startupUpdate, setStartupUpdate] = useState<UpdateFound | null>(null);
@@ -130,18 +140,36 @@ export default function App() {
     }).catch(() => {
       // The extension falls back to its own rules when the bridge is closed.
     });
-    // The one question the reader agreed to on the About page. Only a newer
-    // release earns a window: an answer that is the current version, or one
-    // that did not arrive at all, is written down and left quietly there.
-    if (settings.updateAutoCheck) {
-      void runCheck().then((outcome) => {
-        saveSettings({ ...loadSettings(), lastUpdateCheck: Date.now() });
-        if (outcome.kind === "found") {
-          setStartupUpdate(outcome.update);
-          setUpdateOpen(true);
-        }
-      });
+  }, []);
+
+  // The one question the reader agreed to on the About page. It runs once the
+  // window is up: only a newer release earns a dialog; an answer that is the
+  // current version, or one that did not arrive at all, is written down and
+  // left quietly there.
+  useEffect(() => {
+    if (!isDesktop() || !loadSettings().updateAutoCheck) {
+      return;
     }
+    void runCheck().then((outcome) => {
+      saveSettings({ ...loadSettings(), lastUpdateCheck: Date.now() });
+      if (outcome.kind === "found") {
+        setStartupUpdate(outcome.update);
+        setUpdateOpen(true);
+      }
+    });
+  }, []);
+
+  // A tip is offered once per start, and never over the add dialog the browser
+  // just asked for.
+  useEffect(() => {
+    if (!isDesktop() || startupTipAsked.current) {
+      return;
+    }
+    startupTipAsked.current = true;
+    if (!loadSettings().tipsOnStartup || addOpenRef.current) {
+      return;
+    }
+    openTips();
   }, []);
 
   // A link that the browser extension handed over opens the add dialog with
@@ -149,6 +177,8 @@ export default function App() {
   useEffect(() => {
     if (downloads.browserRequest) {
       setAddDownloadOpen(true);
+      // The reader is already looking at a download; the tip can wait.
+      setTipsOpen(false);
     }
   }, [downloads.browserRequest]);
 
@@ -197,6 +227,7 @@ export default function App() {
       }
       setClipboardLink(url);
       setAddDownloadOpen(true);
+      setTipsOpen(false);
     }).then((unlisten) => {
       if (closed) {
         unlisten();
@@ -227,6 +258,24 @@ export default function App() {
     applyFont(font);
   }
 
+  // Browsing from Help also moves the run on, so an open never repeats the
+  // tip the reader just closed. The startup tip uses the same step.
+  function openTips() {
+    setTipIndex(nextTipIndex());
+    setTipsOpen(true);
+  }
+
+  function changeTip(index: number) {
+    setTipIndex(index);
+    saveTipCursor(index);
+  }
+
+  // Permanent, unlike closing the popup. Settings > Tips turns it back on.
+  function disableStartupTips() {
+    saveSettings({ ...loadSettings(), tipsOnStartup: false });
+    setTipsOpen(false);
+  }
+
   function handleCommand(command: ShellCommand) {
     if (command.startsWith("font:")) {
       chooseFont(command.slice("font:".length));
@@ -254,6 +303,20 @@ export default function App() {
         break;
       case "about":
         setAboutOpen(true);
+        break;
+      case "tip-of-the-day":
+        openTips();
+        break;
+      case "website":
+        // The window is a webview, so the address goes to the browser instead
+        // of replacing the page that is running.
+        if (isDesktop()) {
+          void openUrl(APP_HOME_PAGE).catch((failure: unknown) =>
+            downloads.reportError(describeError(failure)),
+          );
+        } else {
+          window.open(APP_HOME_PAGE, "_blank", "noopener");
+        }
         break;
       case "check-updates":
         // A request from the menu is a fresh question, whatever a startup
@@ -358,8 +421,15 @@ export default function App() {
         onClose={() => setSettingsOpen(false)}
       />
       <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
+      <TipOfTheDayDialog
+        open={tipsOpen}
+        index={tipIndex}
+        onIndexChange={changeTip}
+        onClose={() => setTipsOpen(false)}
+        onDisable={disableStartupTips}
+      />
       <UpdateDialog
-        open={updateOpen}
+        open={updateOpen && !tipsOpen}
         found={startupUpdate ?? undefined}
         onClose={() => {
           setUpdateOpen(false);

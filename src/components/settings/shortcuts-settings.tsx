@@ -3,6 +3,7 @@ import {
   SettingRow,
   SettingsPage,
 } from "@/components/settings/settings-page";
+import { KeyCap } from "@/components/ui/key-cap";
 
 interface Shortcut {
   label: string;
@@ -104,15 +105,6 @@ const GROUPS: readonly ShortcutGroup[] = [
   },
 ];
 
-/** A key cap, drawn like the one the toolbar tooltips print. */
-function Key({ children }: { children: string }) {
-  return (
-    <kbd className="rounded-sm border border-chrome-line bg-chrome-toolbar-active px-1.5 py-0.5 font-mono text-chrome-micro text-chrome-muted">
-      {children}
-    </kbd>
-  );
-}
-
 /**
  * Keyboard shortcuts: what the main window listens for, grouped by where it
  * applies. There is no editor here, because every key is fixed in the code.
@@ -132,7 +124,7 @@ export function ShortcutsSettings() {
                   Coming soon
                 </span>
               ) : row.keys ? (
-                <Key>{row.keys}</Key>
+                <KeyCap>{row.keys}</KeyCap>
               ) : null}
             </SettingRow>
           ))}

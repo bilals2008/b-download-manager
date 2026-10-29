@@ -19,6 +19,8 @@ export interface Settings {
   showCompleteDialog: boolean;
   /** Whether a new download opens its progress window. */
   showProgressOnStart: boolean;
+  /** Whether one tip is offered when the application is revealed at startup. */
+  tipsOnStartup: boolean;
   /** Auto follows the system; the other two override it. */
   theme: ThemePreference;
   /** The face the whole window is drawn in, built in or imported. */
@@ -84,6 +86,7 @@ export const DEFAULT_SETTINGS: Settings = {
   closeToTray: true,
   showCompleteDialog: true,
   showProgressOnStart: false,
+  tipsOnStartup: true,
   theme: "auto",
   uiFont: "googlesans",
   uiWeight: "medium",
@@ -160,6 +163,10 @@ export function loadSettings(): Settings {
       showProgressOnStart: boolean(
         value.showProgressOnStart,
         DEFAULT_SETTINGS.showProgressOnStart,
+      ),
+      tipsOnStartup: boolean(
+        value.tipsOnStartup,
+        DEFAULT_SETTINGS.tipsOnStartup,
       ),
       theme: theme(value.theme, DEFAULT_SETTINGS.theme),
       uiFont: font(value.uiFont, DEFAULT_SETTINGS.uiFont),

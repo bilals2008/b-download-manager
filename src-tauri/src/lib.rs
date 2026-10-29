@@ -911,15 +911,16 @@ pub fn run() {
         .manage(AppState::default())
         .manage(grabber::Grabber::default())
         .setup(|app| {
-            // The downloads of an earlier run are brought back, so the list is
-            // still there after a restart.
             let state = app.state::<AppState>();
             let dir = app
                 .path()
                 .app_data_dir()
                 .unwrap_or_else(|_| std::path::PathBuf::from("."));
-            // The log of what the downloads did.
+            // The log of what the downloads did. Opened first so a start that
+            // goes wrong anywhere below has somewhere to be written down.
             idm_core::log::open(dir.join("idm-clone.log"));
+            // The downloads of an earlier run are brought back, so the list is
+            // still there after a restart.
             state.set_index(Index::new(dir.join("downloads.json")));
             state.restore_downloads();
             // The tray and the close button follow a file of their own: they

@@ -151,6 +151,7 @@ export type SettingsGlyphKind =
   | "general"
   | "appearance"
   | "shortcuts"
+  | "tips"
   | "file-types"
   | "save-to"
   | "downloads"
@@ -244,6 +245,13 @@ export function SettingsGlyph({
           <path d="M4.4 4.3h.01M6 4.3h.01" />
           <circle cx="8" cy="9.4" r="2.1" />
           <path d="M5.9 9.4h4.2" />
+        </Glyph>
+      );
+    case "tips":
+      return (
+        <Glyph className={className}>
+          <path d="M8 2.2a3.9 3.9 0 0 0-2.3 7v1.4h4.6V9.2A3.9 3.9 0 0 0 8 2.2z" />
+          <path d="M6.4 12.2h3.2M7.2 13.6h1.6" />
         </Glyph>
       );
     case "appearance":

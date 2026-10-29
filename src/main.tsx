@@ -16,9 +16,10 @@ import "./index.css";
 // what keeps a progress window in the theme it was opened beside.
 startAppearanceSync();
 
-// The backend opens the two small windows with an initialization script, so
-// the page knows the download before it renders: the completion window gets a
-// finished one, the progress window a live one. Every other window is the app.
+// The backend opens its extra windows with an initialization script, so the
+// page knows what it is before it renders: the completion window gets a
+// finished download, the progress window a live one. Every other window is the
+// app.
 const progress = (
   window as Window & { __BDM_PROGRESS__?: DownloadInfo }
 ).__BDM_PROGRESS__;

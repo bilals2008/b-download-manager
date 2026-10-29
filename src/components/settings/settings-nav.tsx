@@ -11,6 +11,7 @@ export type SettingsPageId =
   | "general"
   | "appearance"
   | "shortcuts"
+  | "tips"
   | "downloads"
   | "save-locations"
   | "browser"
@@ -34,6 +35,7 @@ export const SETTINGS_GROUPS: readonly {
       { id: "general", label: "General", glyph: "general" },
       { id: "appearance", label: "Appearance", glyph: "appearance" },
       { id: "shortcuts", label: "Shortcuts", glyph: "shortcuts" },
+      { id: "tips", label: "Tips", glyph: "tips" },
     ],
   },
   {

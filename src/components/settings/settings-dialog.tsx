@@ -10,6 +10,7 @@ import { GeneralSettings } from "@/components/settings/general-settings";
 import { ProxySettings } from "@/components/settings/proxy-settings";
 import { SaveLocationsSettings } from "@/components/settings/save-locations-settings";
 import { ShortcutsSettings } from "@/components/settings/shortcuts-settings";
+import { TipsSettings } from "@/components/settings/tips-settings";
 import {
   settingsPageLabel,
   type SettingsPageId,
@@ -41,6 +42,7 @@ import {
   type Settings,
 } from "@/lib/settings";
 import { applyTheme } from "@/lib/theme";
+import { resetTipCursor } from "@/lib/tips";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -215,6 +217,7 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
     setSettings(next);
     saveSettings(next);
     clearLastFolder();
+    resetTipCursor();
     applyTheme(next.theme);
     applyFont(next.uiFont);
     applyWeight(next.uiWeight);
@@ -248,6 +251,8 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
         return <AppearanceSettings settings={settings} onChange={update} />;
       case "shortcuts":
         return <ShortcutsSettings />;
+      case "tips":
+        return <TipsSettings settings={settings} onChange={update} />;
       case "downloads":
         return <DownloadsSettings settings={settings} onChange={update} />;
       case "save-locations":

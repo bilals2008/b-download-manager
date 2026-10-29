@@ -292,6 +292,11 @@ export function openPath(path: string): Promise<void> {
   return invoke<void>("open_path", { path });
 }
 
+/** Open a web address in the browser the system uses. */
+export function openUrl(url: string): Promise<void> {
+  return invoke<void>("open_url", { url });
+}
+
 /** Cap the bandwidth of the whole application. Zero means no cap. */
 export function setSpeedLimit(bytesPerSecond: number): Promise<number> {
   return invoke<number>("set_speed_limit", { bytesPerSecond });

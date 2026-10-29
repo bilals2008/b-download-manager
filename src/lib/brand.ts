@@ -8,6 +8,9 @@
  */
 export const APP_NAME = "B Download Manager";
 
+/** The project's home page, opened from the Help menu. */
+export const APP_HOME_PAGE = "https://b-download-manager.vercel.app/";
+
 export const APP_TAGLINE =
   "A download manager that finishes files faster by using several connections at once.";
 
