@@ -1486,6 +1486,7 @@ fn a_download_read_back_from_the_index_has_no_connection_open() {
         category: Some("Programs".to_string()),
         description: Some("the installer".to_string()),
         replace: true,
+        unfinished_dir: None,
     };
 
     let download = Download::from_known(&known).expect("download");
@@ -1666,7 +1667,8 @@ fn a_row_that_leaves_the_list_takes_its_parts_with_it() {
 }
 
 #[tokio::test]
-async fn a_download_resumes_from_the_manifest() {    let data = sample_data();
+async fn a_download_resumes_from_the_manifest() {
+    let data = sample_data();
     let (url, requests) = spawn_range_server(data.clone());
     let dir = temp_dir("resume");
     let dest = dir.join("out.bin");
@@ -2220,6 +2222,156 @@ fn a_cancel_covers_the_run_requests_that_came_before_it() {
         "a newer request replaces an older one that has not started"
     );
     assert!(!download.is_superseded(newer));
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The parts and the manifest live in the unfinished folder, never beside the
+/// finished file in a category folder.
+#[test]
+fn an_unfinished_folder_keeps_the_resume_state_out_of_the_final_folder() {
+    let dir = temp_dir("unfinished-folder");
+    let final_folder = dir.join("Video");
+    let work = dir.join("unfinished");
+    let download = Download::new_in(
+        73,
+        "https://example.com/film.mp4".to_string(),
+        final_folder.join("film.mp4"),
+        Some(&work),
+        2,
+        None,
+        None,
+    )
+    .expect("download");
+
+    assert!(final_folder.is_dir(), "the finished folder is made");
+    assert!(
+        download.manifest.starts_with(&work),
+        "the resume state is in the unfinished folder"
+    );
+    download.save_manifest();
+    assert!(download.manifest.exists());
+    assert!(
+        !final_folder.read_dir().expect("read dir").any(|entry| {
+            entry
+                .map(|entry| entry.file_name().to_string_lossy().contains(".idm"))
+                .unwrap_or(false)
+        }),
+        "the final folder holds no temporary files"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A real transfer whose parts wait in the unfinished folder and whose bytes
+/// end up in a category folder that did not exist when it started.
+#[tokio::test]
+async fn a_real_download_finishes_in_the_final_folder_and_leaves_nothing_behind() {
+    let data = sample_data();
+    let (url, _requests) = spawn_range_server(data.clone());
+    let dir = temp_dir("unfinished-run");
+    let unfinished = dir.join("unfinished");
+    let final_folder = dir.join("Video");
+    let dest = final_folder.join("film.bin");
+
+    let download = Download::new_in(74, url, dest.clone(), Some(&unfinished), 4, None, None)
+        .expect("download");
+    assert!(
+        final_folder.is_dir(),
+        "the destination folder is made before the bytes arrive"
+    );
+    assert_eq!(download.dir, unfinished);
+    assert!(
+        download.manifest.starts_with(&unfinished),
+        "the resume state waits in the unfinished folder"
+    );
+
+    run(silent(), Limits::default(), download.clone()).await;
+
+    assert_eq!(download.info().status, Status::Completed);
+    assert_eq!(std::fs::read(&dest).expect("the finished file"), data);
+
+    let mut in_unfinished: Vec<String> = std::fs::read_dir(&unfinished)
+        .expect("read the unfinished folder")
+        .flatten()
+        .map(|entry| entry.file_name().to_string_lossy().to_string())
+        .collect();
+    in_unfinished.sort();
+    assert!(
+        in_unfinished.is_empty(),
+        "nothing of the transfer is left unfinished: {in_unfinished:?}"
+    );
+    let mut in_final: Vec<String> = std::fs::read_dir(&final_folder)
+        .expect("read the final folder")
+        .flatten()
+        .map(|entry| entry.file_name().to_string_lossy().to_string())
+        .collect();
+    in_final.sort();
+    assert_eq!(in_final, vec!["film.bin".to_string()]);
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A restart: the row comes back from the index, finds its parts and its
+/// manifest in the unfinished folder and asks for the bytes it has not got.
+#[tokio::test]
+async fn a_download_restored_from_the_unfinished_folder_resumes_where_it_stopped() {
+    let data = sample_data();
+    let (url, requests) = spawn_range_server(data.clone());
+    let dir = temp_dir("unfinished-resume");
+    let unfinished = dir.join("unfinished");
+    let final_folder = dir.join("Programs");
+    let dest = final_folder.join("setup.bin");
+
+    let download = Download::new_in(75, url, dest.clone(), Some(&unfinished), 4, None, None)
+        .expect("download");
+
+    // The first run got 400 bytes in and then the application was closed.
+    let mut segments = segmenter::plan(data.len() as u64, 1, &unfinished, &download.stem);
+    segments[0].downloaded = 400;
+    std::fs::write(&segments[0].part, &data[..400]).expect("part file");
+    let manifest = Manifest {
+        url: download.url.clone(),
+        total: data.len() as u64,
+        segments,
+        validator: None,
+    };
+    std::fs::write(
+        &download.manifest,
+        serde_json::to_string(&manifest).expect("manifest"),
+    )
+    .expect("write manifest");
+
+    // What the index remembers about it, and what the next start reads back.
+    let known = download.known();
+    assert_eq!(
+        known.unfinished_dir.as_deref(),
+        Some(unfinished.to_string_lossy().as_ref())
+    );
+    assert_eq!(
+        crate::session::inspect(&known),
+        crate::session::Recovered::Resumable,
+        "the manifest in the unfinished folder is enough to resume"
+    );
+    let restored = Download::from_known(&known).expect("a resumable row");
+    assert_eq!(restored.dir, unfinished);
+    assert!(restored.manifest.starts_with(&unfinished));
+
+    run(silent(), Limits::default(), restored.clone()).await;
+
+    assert_eq!(restored.info().status, Status::Completed);
+    assert_eq!(std::fs::read(&dest).expect("the finished file"), data);
+    let heads: Vec<String> = std::iter::from_fn(|| requests.try_recv().ok())
+        .map(|head| head.to_ascii_lowercase())
+        .collect();
+    assert!(
+        heads.iter().any(|head| head.contains("range: bytes=400-")),
+        "the restored download must not ask for the bytes it has: {heads:?}"
+    );
+    assert!(
+        !final_folder.join("setup.bin.idm.json").exists(),
+        "the manifest never sits in the finished folder"
+    );
 
     let _ = std::fs::remove_dir_all(&dir);
 }

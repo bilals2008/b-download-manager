@@ -303,11 +303,33 @@ impl Download {
         proxy: Option<&str>,
         referer: Option<&str>,
     ) -> Result<Arc<Download>, String> {
-        let dir = dest
+        Download::new_in(id, url, dest, None, connections, proxy, referer)
+    }
+
+    /// Create a download whose parts and manifest live in `unfinished`.
+    ///
+    /// The destination folder is created as well: the finished file is moved
+    /// there, and a folder that does not exist yet would fail that move.
+    pub fn new_in(
+        id: u64,
+        url: String,
+        dest: PathBuf,
+        unfinished: Option<&Path>,
+        connections: u32,
+        proxy: Option<&str>,
+        referer: Option<&str>,
+    ) -> Result<Arc<Download>, String> {
+        let finish = dest
             .parent()
             .filter(|p| !p.as_os_str().is_empty())
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("."));
+        let dir = unfinished
+            .filter(|p| !p.as_os_str().is_empty())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| finish.clone());
+        std::fs::create_dir_all(&finish)
+            .map_err(|e| format!("cannot create {}: {e}", finish.display()))?;
         std::fs::create_dir_all(&dir)
             .map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
 
@@ -612,10 +634,11 @@ impl Download {
     /// The parts and the manifest are still on disk, so the download can be
     /// resumed. It comes back paused: nothing starts on its own.
     pub fn from_known(known: &crate::session::KnownDownload) -> Option<Arc<Download>> {
-        let download = Download::new(
+        let download = Download::new_in(
             known.id,
             known.url.clone(),
             PathBuf::from(&known.dest),
+            known.unfinished_dir.as_deref().map(Path::new),
             known.connections,
             None,
             known.referer.as_deref(),
@@ -678,6 +701,7 @@ impl Download {
             category: info.category,
             description: info.description,
             replace: self.allow_replace.load(Ordering::SeqCst),
+            unfinished_dir: Some(self.dir.to_string_lossy().to_string()),
         }
     }
 
@@ -1496,7 +1520,11 @@ async fn assemble(download: &Arc<Download>) -> Result<(), String> {
         return Err(error);
     }
 
-    guard_replace(download)?;
+    if let Err(error) = guard_replace(download) {
+        // The half written file never became the destination.
+        let _ = std::fs::remove_file(&tmp);
+        return Err(error);
+    }
     if let Err(error) = disk::replace_file(&tmp, &dest) {
         let _ = std::fs::remove_file(&tmp);
         return Err(error.to_string());
@@ -1556,9 +1584,26 @@ fn cleanup(download: &Arc<Download>) {
     let _ = std::fs::remove_file(&download.manifest);
 }
 
-/// Check that the destination volume still has room for the download.
+/// Check that the volume the bytes land on has room for the download.
+///
+/// The parts go to the unfinished folder. When the finished file is moved to
+/// another volume, that volume needs the room too.
 fn check_free_space(download: &Arc<Download>, total: Option<u64>) -> Result<(), String> {
-    let Some(free) = disk::free_space(&download.dest) else {
+    let final_folder = download
+        .dest
+        .parent()
+        .filter(|path| !path.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+
+    check_volume(&download.dir, total)?;
+    if !disk::same_volume(&download.dir, final_folder) {
+        check_volume(final_folder, total)?;
+    }
+    Ok(())
+}
+
+fn check_volume(folder: &Path, total: Option<u64>) -> Result<(), String> {
+    let Some(free) = disk::free_space(folder) else {
         return Ok(());
     };
     if free < DISK_MARGIN {

@@ -19,7 +19,7 @@ fn directory_of(path: &Path) -> std::path::PathBuf {
     }
 }
 
-/// Put `from` in place of `to`.
+/// Put `from` in place of `to`, across volumes as well.
 ///
 /// The old file is moved aside first, because Windows will not rename over an
 /// existing file, and it is only removed once the new file is in place. A
@@ -35,7 +35,7 @@ pub fn replace_file(from: &Path, to: &Path) -> std::io::Result<()> {
         std::fs::rename(to, &backup)?;
     }
 
-    match std::fs::rename(from, to) {
+    match move_into_place(from, to) {
         Ok(()) => {
             let _ = std::fs::remove_file(&backup);
             Ok(())
@@ -48,6 +48,57 @@ pub fn replace_file(from: &Path, to: &Path) -> std::io::Result<()> {
             Err(error)
         }
     }
+}
+
+/// Move a file into place, copying through the destination volume when the
+/// unfinished folder and the final folder are on different disks.
+fn move_into_place(from: &Path, to: &Path) -> std::io::Result<()> {
+    match std::fs::rename(from, to) {
+        Ok(()) => Ok(()),
+        Err(_) => {
+            // A copy cannot replace a name atomically, so it goes beside the
+            // destination first and is renamed over it once complete.
+            let temporary = to.with_file_name(format!("{}.idmmove", name_of(to)));
+            let copied = std::fs::copy(from, &temporary).and_then(|_| {
+                std::fs::File::open(&temporary)?.sync_all()?;
+                std::fs::rename(&temporary, to)
+            });
+            if copied.is_err() {
+                let _ = std::fs::remove_file(&temporary);
+                return copied;
+            }
+            std::fs::remove_file(from)
+        }
+    }
+}
+
+fn name_of(path: &Path) -> String {
+    path.file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_else(|| "download".to_string())
+}
+
+/// Whether two paths sit on the same volume, so a move is a rename.
+///
+/// The folders have to exist: the volume of a path that does not is a guess,
+/// and a guess here would either skip a free-space check or run it twice.
+pub fn same_volume(left: &Path, right: &Path) -> bool {
+    let (Ok(left), Ok(right)) = (std::fs::canonicalize(left), std::fs::canonicalize(right)) else {
+        return false;
+    };
+
+    let root = |path: &Path| -> std::path::PathBuf {
+        let mut out = std::path::PathBuf::new();
+        for part in path.components() {
+            use std::path::Component;
+            match part {
+                Component::Prefix(_) | Component::RootDir => out.push(part.as_os_str()),
+                _ => break,
+            }
+        }
+        out
+    };
+    root(&left) == root(&right)
 }
 
 #[cfg(windows)]

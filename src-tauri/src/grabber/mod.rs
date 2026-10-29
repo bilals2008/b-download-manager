@@ -496,6 +496,9 @@ pub async fn grabber_download(
                 referer: referer.clone(),
                 queue,
                 category: batch::clean_category(&item.category),
+                // A grabber has no dialog to choose a folder, so the folder
+                // its category saves to decides where the file lands.
+                use_category_folder: true,
                 description: None,
                 // A grabber has no dialog to ask about a taken name, so it
                 // never replaces a file: the next free name is used.

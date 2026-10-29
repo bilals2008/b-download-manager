@@ -31,6 +31,9 @@ pub struct StartOptions {
     pub queue: bool,
     /// The category the add dialog showed.
     pub category: Option<String>,
+    /// Put the file in the folder its category saves to. The add dialog clears
+    /// this when the user picked a folder themselves.
+    pub use_category_folder: bool,
     /// The note the user typed in the add dialog.
     pub description: Option<String>,
     /// What the File Exists dialog answered.
@@ -128,6 +131,12 @@ pub fn start(
         ));
     }
 
+    // A category with a folder of its own is applied before the destination is
+    // checked, so the File Exists question is asked about the file that will
+    // really be written.
+    let (dest, category) =
+        category_destination(state, dest, options.category, options.use_category_folder);
+
     // The check and the insert are one step: two starts that both found the
     // name free would otherwise write over each other's part files.
     let _gate = state.start_gate();
@@ -142,10 +151,11 @@ pub fn start(
         conflict::Resolved::Start { dest, replace } => (dest, replace),
     };
 
-    let download = Download::new(
+    let download = Download::new_in(
         state.next_id(),
         url,
         dest.clone(),
+        state.unfinished_dir().as_deref(),
         options
             .connections
             .unwrap_or(DEFAULT_CONNECTIONS)
@@ -154,7 +164,7 @@ pub fn start(
         options.referer.as_deref(),
     )
     .map_err(|message| refused("invalid", message, &dest))?;
-    download.set_meta(options.category, options.description);
+    download.set_meta(category, options.description);
     download.set_allow_replace(replace);
 
     let id = download.id;
@@ -181,6 +191,36 @@ pub fn start(
         dest: dest.to_string_lossy().to_string(),
         skipped: false,
     })
+}
+
+/// The destination a category gives a start, and the category it belongs to.
+///
+/// Only a start that did not name a folder of its own is moved: the add dialog
+/// clears the flag when the user picked one. A category without a folder
+/// leaves the destination alone. When no category was supplied, the file name
+/// decides, so a hand-over from the browser lands with the rest of its type.
+/// The bridge asks this the same question before it answers the extension, so
+/// a conflict is found on the file the start would really write.
+pub(crate) fn category_destination(
+    state: &AppState,
+    dest: PathBuf,
+    category: Option<String>,
+    apply: bool,
+) -> (PathBuf, Option<String>) {
+    if !apply {
+        return (dest, category);
+    }
+    let category = category.or_else(|| state.detect_category(&dest));
+    let Some(folder) = category
+        .as_deref()
+        .and_then(|name| state.category_folder(name))
+    else {
+        return (dest, category);
+    };
+    match dest.file_name() {
+        Some(name) => (folder.join(name), category),
+        None => (dest, category),
+    }
 }
 
 /// Start a failed download again.
@@ -244,10 +284,11 @@ pub fn redownload(
     };
 
     let previous = old.info();
-    let fresh = Download::new(
+    let fresh = Download::new_in(
         state.next_id(),
         previous.url.clone(),
         dest.clone(),
+        state.unfinished_dir().as_deref(),
         old.max_connections,
         state.limits().proxy().as_deref(),
         old.referer.as_deref(),
@@ -425,10 +466,11 @@ fn moved_download(
     replace: bool,
 ) -> Result<Arc<Download>, String> {
     let previous = old.info();
-    let moved = Download::new(
+    let moved = Download::new_in(
         old.id,
         old.url.clone(),
         dest,
+        state.unfinished_dir().as_deref(),
         old.max_connections,
         state.limits().proxy().as_deref(),
         old.referer.as_deref(),
@@ -442,7 +484,7 @@ fn moved_download(
     let mut moved_files: Vec<(PathBuf, PathBuf)> = Vec::new();
     for mut segment in old_segments {
         let target = part_path(&moved.dir, &moved.stem, segment.id);
-        if segment.part.exists() {
+        if segment.part.exists() && !conflict::same_path(&segment.part, &target) {
             // A file already at the target name belongs to the row that is
             // moving; its own part file is not a conflict with itself.
             if let Err(error) = move_file(&segment.part, &target) {
@@ -980,6 +1022,63 @@ mod tests {
             "a finished row has nothing to queue"
         );
         assert!(dequeue_row(&state, 1).is_err(), "it is not in the queue");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_category_folder_decides_where_a_start_lands() {
+        let dir = temp_dir("category-folder");
+        let films = dir.join("Films");
+        let state = AppState::default();
+        state.set_download_folders(
+            Some(dir.join("unfinished")),
+            vec![
+                crate::state::CategoryRule {
+                    name: "Video".to_string(),
+                    extensions: vec!["mp4".to_string(), "mkv".to_string()],
+                    folder: String::new(),
+                    builtin: true,
+                    fallback: false,
+                },
+                crate::state::CategoryRule {
+                    name: "Films".to_string(),
+                    extensions: vec!["mp4".to_string()],
+                    folder: films.to_string_lossy().to_string(),
+                    builtin: false,
+                    fallback: false,
+                },
+                crate::state::CategoryRule {
+                    name: "Relative".to_string(),
+                    extensions: vec!["zip".to_string()],
+                    folder: "parts\\nowhere".to_string(),
+                    builtin: false,
+                    fallback: false,
+                },
+            ],
+        );
+
+        // No category was named, so the file type decides — and a rule the
+        // reader wrote wins over the built-in one claiming the same type.
+        let (dest, category) = category_destination(&state, dir.join("film.mp4"), None, true);
+        assert_eq!(category.as_deref(), Some("Films"));
+        assert_eq!(dest, films.join("film.mp4"));
+
+        // The add dialog clears the flag when the reader picked a folder.
+        let (dest, _) = category_destination(
+            &state,
+            dir.join("elsewhere").join("film.mp4"),
+            Some("Films".to_string()),
+            false,
+        );
+        assert_eq!(dest, dir.join("elsewhere").join("film.mp4"));
+
+        // A category with no folder, or only a relative one, changes nothing.
+        let (dest, category) = category_destination(&state, dir.join("clip.mkv"), None, true);
+        assert_eq!(category.as_deref(), Some("Video"));
+        assert_eq!(dest, dir.join("clip.mkv"));
+        let (dest, _) = category_destination(&state, dir.join("pack.zip"), None, true);
+        assert_eq!(dest, dir.join("pack.zip"), "a relative folder is not used");
+
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

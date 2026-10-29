@@ -299,6 +299,9 @@ pub fn add(app: &AppHandle, state: &AppState, body: &[u8]) -> (u16, Value) {
                 referer: referer.clone(),
                 queue,
                 category: clean_category(&item.category),
+                // A batch has no dialog to choose a folder, so the folder its
+                // category saves to decides where the file lands.
+                use_category_folder: true,
                 description: None,
                 // A batch has no dialog to ask, so it never replaces a file:
                 // it takes the next free name beside it.

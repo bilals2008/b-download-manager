@@ -45,6 +45,11 @@ pub struct KnownDownload {
     /// put its own finished file where the one it replaced still is.
     #[serde(default)]
     pub replace: bool,
+    /// The folder the parts and the manifest live in, when it is not the
+    /// folder of the destination. Older index files have none, and their
+    /// parts sit beside the file.
+    #[serde(default)]
+    pub unfinished_dir: Option<String>,
 }
 
 /// What is left on disk for a remembered download.
@@ -64,21 +69,30 @@ pub fn inspect(known: &KnownDownload) -> Recovered {
     if dest.exists() {
         return Recovered::Finished;
     }
-    if manifest_path(&dest).exists() {
+    let unfinished = known.unfinished_dir.as_deref().map(Path::new);
+    if manifest_path(&dest, unfinished).exists() {
         return Recovered::Resumable;
     }
     Recovered::Gone
 }
 
 /// The manifest that belongs to a destination file.
-pub fn manifest_path(dest: &Path) -> PathBuf {
+///
+/// The parts and the manifest sit in the unfinished folder when one is
+/// configured, and beside the file otherwise.
+pub fn manifest_path(dest: &Path, unfinished: Option<&Path>) -> PathBuf {
     let stem = dest
         .file_name()
         .map(|s| s.to_string_lossy().to_string())
         .unwrap_or_else(|| "download".to_string());
-    dest.parent()
-        .filter(|p| !p.as_os_str().is_empty())
+    unfinished
+        .filter(|path| !path.as_os_str().is_empty())
         .map(PathBuf::from)
+        .or_else(|| {
+            dest.parent()
+                .filter(|p| !p.as_os_str().is_empty())
+                .map(PathBuf::from)
+        })
         .unwrap_or_else(|| PathBuf::from("."))
         .join(format!("{stem}.idm.json"))
 }
@@ -149,6 +163,7 @@ mod tests {
             category: None,
             description: None,
             replace: false,
+            unfinished_dir: None,
         }
     }
 
@@ -199,8 +214,22 @@ mod tests {
     fn a_download_with_its_manifest_on_disk_can_resume() {
         let dir = temp_dir("resumable");
         let dest = dir.join("a.bin");
-        std::fs::write(manifest_path(&dest), "{}").expect("write");
+        std::fs::write(manifest_path(&dest, None), "{}").expect("write");
         assert_eq!(inspect(&known(&dest)), Recovered::Resumable);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_manifest_in_the_unfinished_folder_proves_a_resume() {
+        let dir = temp_dir("unfinished");
+        let dest = dir.join("final").join("a.bin");
+        let unfinished = dir.join("unfinished");
+        std::fs::create_dir_all(&unfinished).expect("folder");
+        std::fs::write(manifest_path(&dest, Some(&unfinished)), "{}").expect("write");
+
+        let mut entry = known(&dest);
+        entry.unfinished_dir = Some(unfinished.to_string_lossy().to_string());
+        assert_eq!(inspect(&entry), Recovered::Resumable);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

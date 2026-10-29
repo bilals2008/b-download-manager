@@ -86,18 +86,69 @@ pub struct DestinationStatus {
     pub suggested_path: String,
 }
 
+/// The names a start may not take.
+///
+/// A start writes two things: the destination file, and the part files and
+/// manifest that live in the unfinished folder. Those are named after the file
+/// name alone, so two downloads in different folders that share a file name
+/// would share their part files as well. A name is therefore only free when
+/// both what it writes and where it writes it are free.
+pub struct Taken {
+    /// Every path another row writes to: its destination and its work base.
+    paths: Vec<PathBuf>,
+    /// The folder a start keeps its parts in, when the parts have one of their
+    /// own. `None` keeps them beside the destination, where the destination
+    /// already covers the name.
+    unfinished: Option<PathBuf>,
+}
+
+impl Taken {
+    /// What the rows in the list are already writing, minus one row.
+    pub fn of(state: &AppState, except: Option<u64>) -> Self {
+        let mut paths = state.destinations_except(except);
+        paths.extend(state.work_bases_except(except));
+        Self {
+            paths,
+            unfinished: state.unfinished_dir(),
+        }
+    }
+
+    /// A name nothing else is writing to. Only the tests build one by hand;
+    /// real starts take theirs from the list.
+    #[cfg(test)]
+    pub fn new(paths: Vec<PathBuf>, unfinished: Option<PathBuf>) -> Self {
+        Self { paths, unfinished }
+    }
+
+    /// The base the part files and the manifest of a start are named from.
+    fn work_base(&self, dest: &Path) -> Option<PathBuf> {
+        let folder = self.unfinished.as_ref()?;
+        let name = dest.file_name()?;
+        Some(folder.join(name))
+    }
+
+    /// Whether another row already writes under this name, at either end.
+    pub fn owns(&self, dest: &Path) -> bool {
+        if self.paths.iter().any(|other| same_path(other, dest)) {
+            return true;
+        }
+        match self.work_base(dest) {
+            Some(base) => self.paths.iter().any(|other| same_path(other, &base)),
+            None => false,
+        }
+    }
+}
+
 /// Look at a destination, including the name a rename would pick.
 pub fn inspect(state: &AppState, dest: &Path) -> Result<DestinationStatus, String> {
     let seen = dest::inspect(dest)?;
-    let suggested = unique_destination(dest, &state.destinations());
+    let taken = Taken::of(state, None);
+    let suggested = unique_destination(dest, &taken);
     Ok(DestinationStatus {
         folder: seen.folder,
         folder_exists: seen.folder_exists,
         file_exists: seen.file_exists,
-        active: state
-            .destinations()
-            .iter()
-            .any(|active| same_path(active, dest)),
+        active: taken.owns(dest),
         suggested_name: suggested
             .file_name()
             .map(|name| name.to_string_lossy().to_string())
@@ -130,12 +181,12 @@ pub fn resolve(
         return Ok(Resolved::Skip);
     }
 
-    let busy = state.destinations_except(except);
+    let busy = Taken::of(state, except);
     dest::validate(dest).map_err(|message| {
         Refusal::new("invalid", message, dest, &unique_destination(dest, &busy))
     })?;
 
-    let active = busy.iter().any(|active| same_path(active, dest));
+    let active = busy.owns(dest);
     let exists = dest.exists();
 
     if !active && !exists {
@@ -178,7 +229,7 @@ pub fn resolve(
 }
 
 /// The first free name beside `dest`: `film (2).mp4`, `film (3).mp4`, ...
-pub fn unique_destination(dest: &Path, active: &[PathBuf]) -> PathBuf {
+pub fn unique_destination(dest: &Path, busy: &Taken) -> PathBuf {
     let folder = dest::folder_of(dest);
     let stem = dest
         .file_stem()
@@ -201,7 +252,7 @@ pub fn unique_destination(dest: &Path, active: &[PathBuf]) -> PathBuf {
             None => format!("{short}{suffix}"),
         };
         let candidate = folder.join(name);
-        if !candidate.exists() && !active.iter().any(|other| same_path(other, &candidate)) {
+        if !candidate.exists() && !busy.owns(&candidate) {
             return candidate;
         }
     }
@@ -256,18 +307,19 @@ mod tests {
         let dir = temp_dir("rename");
         let dest = dir.join("film.mp4");
         std::fs::write(&dest, b"old").expect("write");
-        let unique = unique_destination(&dest, &[]);
+        let free = Taken::new(Vec::new(), None);
+        let unique = unique_destination(&dest, &free);
         assert_eq!(unique, dir.join("film (2).mp4"));
 
         std::fs::write(&unique, b"taken").expect("write");
         assert_eq!(
-            unique_destination(&dest, &[]),
+            unique_destination(&dest, &free),
             dir.join("film (3).mp4"),
             "the next free number is used"
         );
 
         let long = dir.join(format!("{}.zip", "a".repeat(199)));
-        let renamed = unique_destination(&long, &[]);
+        let renamed = unique_destination(&long, &free);
         let name = renamed.file_name().unwrap().to_string_lossy();
         assert!(name.chars().count() <= MAX_NAME, "name was {name}");
         assert!(name.ends_with(".zip"), "the extension is kept");
@@ -279,10 +331,28 @@ mod tests {
         let dir = temp_dir("active");
         let dest = dir.join("film.mp4");
         let held = dir.join("film (2).mp4");
-        let unique = unique_destination(&dest, std::slice::from_ref(&held));
+        let busy = Taken::new(vec![held.clone()], None);
+        let unique = unique_destination(&dest, &busy);
         assert_ne!(unique, held);
         assert_eq!(unique, dir.join("film (3).mp4"));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_part_file_another_row_is_writing_is_not_offered() {
+        let dir = temp_dir("parts");
+        let unfinished = temp_dir("parts-unfinished");
+        let dest = dir.join("film.mp4");
+        // Another row in another folder is already writing its parts under
+        // that name, so taking it would mix two downloads into one file.
+        let busy = Taken::new(vec![unfinished.join("film.mp4")], Some(unfinished.clone()));
+        assert!(busy.owns(&dest));
+
+        let unique = unique_destination(&dest, &busy);
+        assert_eq!(unique, dir.join("film (2).mp4"));
+        assert!(!busy.owns(&unique));
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&unfinished);
     }
 
     #[test]
