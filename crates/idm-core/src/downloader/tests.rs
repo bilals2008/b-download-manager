@@ -1622,9 +1622,51 @@ fn discarding_progress_removes_the_parts_and_the_manifest() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+#[test]
+fn a_row_that_leaves_the_list_takes_its_parts_with_it() {
+    let dir = temp_dir("forget-progress");
+    let dest = dir.join("out.bin");
+    let download = Download::new(
+        73,
+        "https://example.com/a.bin".to_string(),
+        dest,
+        4,
+        None,
+        None,
+    )
+    .expect("download");
+
+    let mut segments = segmenter::plan(1024, 2, &dir, &download.stem);
+    for segment in &mut segments {
+        std::fs::write(&segment.part, vec![0u8; segment.len() as usize]).expect("part");
+    }
+    *download.segments.lock().expect("segments lock") = segments;
+    download.total.store(1024, Ordering::SeqCst);
+    download.save_manifest();
+
+    // The row is removed while its task is still winding down: the bytes go
+    // now, and the task is told not to write them back when it ends.
+    download.running.store(true, Ordering::SeqCst);
+    download.forget_progress();
+
+    assert!(!download.manifest.exists(), "the manifest is gone");
+    let leftovers: Vec<_> = std::fs::read_dir(&dir)
+        .expect("read dir")
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.file_name().to_string_lossy().to_string())
+        .filter(|name| name.contains(".part"))
+        .collect();
+    assert!(leftovers.is_empty(), "the parts are gone: {leftovers:?}");
+    assert!(
+        download.discarded.load(Ordering::SeqCst),
+        "a winding down task cleans up instead of writing the state back"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[tokio::test]
-async fn a_download_resumes_from_the_manifest() {
-    let data = sample_data();
+async fn a_download_resumes_from_the_manifest() {    let data = sample_data();
     let (url, requests) = spawn_range_server(data.clone());
     let dir = temp_dir("resume");
     let dest = dir.join("out.bin");

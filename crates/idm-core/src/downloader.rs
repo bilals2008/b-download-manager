@@ -280,6 +280,9 @@ pub struct Download {
     cancelled_request: AtomicU64,
     /// Whether a task is running this download right now.
     running: AtomicBool,
+    /// Set when the row left the list. A task that is still winding down would
+    /// otherwise write the resume state of a download nothing can show.
+    discarded: AtomicBool,
     /// Whether the destination may be replaced at the end of the transfer.
     /// Only an explicit Replace in the File Exists dialog sets this, so a
     /// file that appears while a download runs is never overwritten.
@@ -352,6 +355,7 @@ impl Download {
             run_requests: AtomicU64::new(0),
             cancelled_request: AtomicU64::new(0),
             running: AtomicBool::new(false),
+            discarded: AtomicBool::new(false),
             allow_replace: AtomicBool::new(false),
             category: Mutex::new(None),
             description: Mutex::new(None),
@@ -492,6 +496,17 @@ impl Download {
         *self.resumable.lock().expect("resumable lock poisoned") = None;
         self.set_validator(None);
         Ok(())
+    }
+
+    /// Remove the parts and the manifest of a download that is leaving the list.
+    ///
+    /// A row that no window can show has nothing left to resume, so its bytes
+    /// go with it. A task that is still winding down writes the manifest back
+    /// at its end; the flag makes it clean up there instead.
+    pub fn forget_progress(&self) {
+        self.discarded.store(true, Ordering::SeqCst);
+        remove_orphan_parts(&self.dir, &self.stem, &[]);
+        let _ = std::fs::remove_file(&self.manifest);
     }
 
     /// The epoch of the newest task of this download.
@@ -1846,8 +1861,11 @@ pub async fn run_claimed(
     // The part files are gone once the file is assembled, so a finished
     // download has no resume state to write. Everything else does: the last
     // bytes a stopped or failed run received are what the next run continues
-    // from.
-    if download.status() != Status::Completed {
+    // from. A row that left the list while this task was winding down keeps
+    // nothing: it cleans up instead of writing state nothing can resume.
+    if download.discarded.load(Ordering::SeqCst) {
+        cleanup(&download);
+    } else if download.status() != Status::Completed {
         save_manifest(&download);
     }
     download.running.store(false, Ordering::SeqCst);
