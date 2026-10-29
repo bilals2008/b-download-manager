@@ -23,6 +23,15 @@ pub fn label(id: u64) -> String {
     format!("{LABEL_PREFIX}-{id}")
 }
 
+/// The download id a window label names, when it names one.
+pub fn id_of_label(label: &str) -> Option<u64> {
+    label
+        .strip_prefix(LABEL_PREFIX)?
+        .strip_prefix('-')?
+        .parse()
+        .ok()
+}
+
 /// The script that hands the finished download to the page.
 fn payload(info: &DownloadInfo) -> String {
     let json = serde_json::to_string(info).unwrap_or_else(|_| "null".to_string());
@@ -72,6 +81,14 @@ mod tests {
     #[test]
     fn a_window_is_named_after_its_download() {
         assert_eq!(label(42), "complete-42");
+    }
+
+    #[test]
+    fn a_label_names_its_download_or_nothing() {
+        assert_eq!(id_of_label("complete-42"), Some(42));
+        assert_eq!(id_of_label("progress-42"), None);
+        assert_eq!(id_of_label("complete-"), None);
+        assert_eq!(id_of_label("main"), None);
     }
 
     #[test]

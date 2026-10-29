@@ -231,6 +231,10 @@ fn remove_download(app: AppHandle, state: State<'_, AppState>, id: u64) -> Resul
     // writing to the disk with nothing to show for it.
     if let Some(download) = state.get(id) {
         download.cancel();
+        // The parts and the manifest are the resume state of a row that will
+        // not exist any more. Left behind, they sit in the download folder as
+        // files nothing in the list explains.
+        download.forget_progress();
     }
     state.remove(id);
     state.save_index();
@@ -981,6 +985,13 @@ pub fn run() {
                 if let Some(id) = progress::id_of_label(window.label()) {
                     progress::remove_tray(window.app_handle(), id);
                     progress::forget(window.label());
+                    // The two windows report one download, so closing either
+                    // closes both. Two reports of one row left open read as a
+                    // close that did not work.
+                    complete::close(window.app_handle(), id);
+                }
+                if let Some(id) = complete::id_of_label(window.label()) {
+                    progress::close(window.app_handle(), id);
                 }
             }
             _ => {}
