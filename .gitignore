@@ -29,6 +29,10 @@ src-tauri/gen
 !.env.example
 *.local
 
+# Tauri updater signing key (never commit the private key)
+src-tauri/.signing-key
+src-tauri/.signing-key.pub
+
 # Logs, caches, editor and OS noise
 *.log
 *.tsbuildinfo

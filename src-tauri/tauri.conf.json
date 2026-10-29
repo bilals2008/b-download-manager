@@ -52,7 +52,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEU3NDE2RkJFNTgzNkNERTYKUldUbXpUWll2bTlCNTNVVXE2ZFpFeGlSL0pzdmx4Vjd6SW5yelNXL3Nydzg3ZzBmZW5SK3JrSE0K",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ4OEJBNjMyMDNFOERCNTAKUldSUTIrZ0RNcWFMU0RNYXlDTlJkb1o1M0Q3M3pxSms1cUNOQURPcStuc04xcVpGTjJ5N3RlR1EK",
       "endpoints": [
         "https://github.com/bilals2008/b-download-manager/releases/latest/download/latest.json"
       ]
