@@ -8,6 +8,7 @@ import {
   SettingRow,
   SettingsPage,
 } from "@/components/settings/settings-page";
+import { ReleaseNotes } from "@/components/ui/release-notes";
 import { Switch } from "@/components/ui/switch";
 import { WarningMark } from "@/components/icons/desktop-icons";
 import { useAppVersion } from "@/lib/app-version";
@@ -187,9 +188,9 @@ function UpdateAnswer({
         Version {update.version} is available.
       </p>
       {update.notes ? (
-        <p className="max-h-28 overflow-y-auto whitespace-pre-wrap rounded-chrome border border-chrome-line bg-chrome-canvas p-2 text-xs text-chrome-menu-text">
-          {update.notes}
-        </p>
+        <div className="max-h-28 overflow-y-auto scrollbar-thin rounded-chrome border border-chrome-line bg-chrome-canvas p-2">
+          <ReleaseNotes notes={update.notes} />
+        </div>
       ) : null}
       <div className="flex flex-wrap gap-2">
         <SettingsButton tone="normal" onClick={onInstall}>

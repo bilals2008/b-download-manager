@@ -17,7 +17,9 @@ globalThis.window = {
 const { DEFAULT_SETTINGS, loadSettings, saveSettings } = await import(
   "../src/lib/settings.ts"
 );
-const { formatReleaseDate } = await import("../src/lib/updates.ts");
+const { formatReleaseDate, releaseNoteLines } = await import(
+  "../src/lib/updates.ts"
+);
 
 assert.equal(
   DEFAULT_SETTINGS.firstRunDone,
@@ -48,6 +50,25 @@ const day = formatReleaseDate("2026-10-27T12:00:00Z");
 assert.match(day ?? "", /2026/, "a real date carries the year");
 assert.equal(formatReleaseDate(null), null);
 assert.equal(formatReleaseDate("not a date"), null);
+
+// The notes box shows the words a release body means, not its markdown: the
+// hashes, the dashes and the bold marks stay out of the reading.
+assert.deepEqual(
+  releaseNoteLines("## [0.1.2] - 29 October 2026\n\n### Added\n\n- **icons:** Draw file icons\n- A light page"),
+  [
+    { kind: "heading", text: "[0.1.2] - 29 October 2026" },
+    { kind: "heading", text: "Added" },
+    { kind: "bullet", text: "icons: Draw file icons" },
+    { kind: "bullet", text: "A light page" },
+  ],
+);
+assert.equal(
+  releaseNoteLines("See [the notes](https://example.com) for `ERR_INVALID_ARG_TYPE`.")[0]
+    .text,
+  "See the notes for ERR_INVALID_ARG_TYPE.",
+  "a link keeps its words and a code span keeps its underscores",
+);
+assert.equal(releaseNoteLines("---")[0], undefined, "a rule is not a note");
 
 /* ------------------------------------------------------------ outcomes */
 

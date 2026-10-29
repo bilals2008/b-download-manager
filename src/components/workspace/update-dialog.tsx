@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Dialog } from "@/components/ui/dialog";
 import { DialogAction } from "@/components/ui/dialog-action";
 import { WarningMark } from "@/components/icons/desktop-icons";
+import { ReleaseNotes } from "@/components/ui/release-notes";
 import { APP_NAME } from "@/lib/brand";
 import {
   describeFailure,
@@ -110,8 +111,15 @@ export function UpdateDialog({ open, found, onClose }: UpdateDialogProps) {
     );
 
   return (
-    <Dialog open={open} title={title} onClose={onClose} footer={footer}>
-      <div className="flex flex-col gap-2 text-xs text-chrome-menu-text">
+    <Dialog
+      open={open}
+      title={title}
+      onClose={onClose}
+      footer={footer}
+      className="h-1/2 w-1/2"
+      bodyClassName="flex min-h-0 flex-col"
+    >
+      <div className="flex min-h-0 flex-1 flex-col gap-2 text-xs text-chrome-menu-text">
         {stage.kind === "checking" && <p>Looking for a newer version…</p>}
         {stage.kind === "installing" && (
           <p>
@@ -139,9 +147,12 @@ export function UpdateDialog({ open, found, onClose }: UpdateDialogProps) {
               . You are on {stage.update.currentVersion}.
             </p>
             {stage.update.notes && (
-              <p className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded-(--radius-sm) border border-chrome-border bg-chrome-panel p-2 text-chrome-title-text">
-                {stage.update.notes}
-              </p>
+              <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin rounded-(--radius-sm) border border-chrome-border bg-chrome-panel p-2">
+                <ReleaseNotes
+                  notes={stage.update.notes}
+                  className="text-chrome-title-text"
+                />
+              </div>
             )}
           </>
         )}

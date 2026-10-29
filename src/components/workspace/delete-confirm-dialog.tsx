@@ -33,8 +33,9 @@ export function DeleteConfirmDialog() {
       }
     >
       <p className="text-xs text-chrome-menu-text">
-        Remove {one ? "1 download" : `${count} downloads`} from the list? Files
-        already saved to disk are not deleted.
+        Remove {one ? "1 download" : `${count} downloads`} from the list? A
+        finished file is kept on the disk; the parts of an unfinished download
+        are deleted.
       </p>
     </Dialog>
   );

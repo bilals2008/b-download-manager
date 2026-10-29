@@ -2,7 +2,6 @@ import { useRef } from "react";
 
 import { FileTypeIcon, StatusMark } from "@/components/icons/desktop-icons";
 import { Tooltip } from "@/components/ui/tooltip";
-import type { CategoryIcon } from "@/lib/category-icons";
 import { SelectionCheckbox } from "@/components/workspace/selection-checkbox";
 import { DownloadProgress } from "@/components/workspace/download-progress";
 import {
@@ -18,8 +17,6 @@ import type { SelectMode } from "@/state/download-store";
 
 interface DownloadRowProps {
   item: Download;
-  /** The saved icon of the row's category, so a custom icon reaches the row. */
-  icon?: CategoryIcon;
   selected: boolean;
   /** The checkbox picks this row alone. */
   onToggle: () => void;
@@ -42,7 +39,6 @@ interface DownloadRowProps {
  */
 export function DownloadRow({
   item,
-  icon,
   selected,
   onToggle,
   onSelect,
@@ -116,9 +112,8 @@ export function DownloadRow({
 
           <FileTypeIcon
             category={item.category}
-            icon={icon}
             name={item.fileName}
-            className="size-5 shrink-0"
+            className="size-5.5 shrink-0"
           />
 
           <div ref={nameRef} className="min-w-0 flex-1">

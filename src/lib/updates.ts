@@ -45,6 +45,47 @@ export function formatReleaseDate(date: string | null): string | null {
   });
 }
 
+/** A line of release notes, with the markdown the release body is written in. */
+export interface NoteLine {
+  kind: "heading" | "bullet" | "text";
+  text: string;
+}
+
+/**
+ * Release notes as a reader should see them.
+ *
+ * A release body is markdown written for a forge's page, not for a small notes
+ * box: the heading marks, the bullet dashes and the emphasis arrive as text
+ * instead of being shown to the reader.
+ */
+export function releaseNoteLines(notes: string): NoteLine[] {
+  const lines: NoteLine[] = [];
+  for (const raw of notes.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || /^([-*_])\1{2,}$/.test(line)) continue;
+    const heading = /^#{1,6}\s+(.*)$/.exec(line);
+    const bullet = /^[-*+]\s+(.*)$/.exec(line);
+    if (heading) {
+      lines.push({ kind: "heading", text: plainLine(heading[1]) });
+    } else if (bullet) {
+      lines.push({ kind: "bullet", text: plainLine(bullet[1]) });
+    } else {
+      lines.push({ kind: "text", text: plainLine(line) });
+    }
+  }
+  return lines;
+}
+
+/** One line of markdown reduced to its words: links keep the word, not the URL. */
+function plainLine(line: string): string {
+  return line
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/\*\*(.+?)\*\*|`([^`]+)`/g, (_, bold: string, code: string) => {
+      return bold ?? code;
+    })
+    .trim();
+}
+
 /**
  * The one answer a check gives, in the shape every screen that shows it uses.
  *
