@@ -1,5 +1,13 @@
 # AGENTS.md
 
+## Most important rule
+
+For unfamiliar features, don't write from scratch. First search GitHub for
+open-source projects that already solve it, compare the approaches, then get
+started.
+
+---
+
 Project-specific rules for coding agents. Details: `docs/DEVELOPMENT.md`.
 Organize files properly: Keep folders and files logically structured by feature and responsibility.
 - Keep folders and files well-organized, modular, and maintainable.
