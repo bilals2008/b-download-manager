@@ -10,14 +10,13 @@
 use std::path::{Path, PathBuf};
 
 use futures_util::StreamExt;
-use serde::Deserialize;
 use tauri::AppHandle;
 use tokio::io::AsyncWriteExt;
 
 use idm_core::disk;
 use idm_core::transfer::Source;
 
-use crate::media::{run_sidecar, MediaInfo};
+use crate::media::{clean_stderr, run_sidecar, run_sidecar_stderr, MediaInfo};
 
 /// The containers ffmpeg is asked to mux into. Anything else is a mistake the
 /// caller should hear about rather than have guessed.
@@ -96,19 +95,18 @@ pub async fn mux(
     Ok(())
 }
 
-/// Read what a media file holds with ffprobe.
+/// Read what a media file holds with ffmpeg.
 pub async fn probe(app: &AppHandle, file: &Path) -> Result<MediaInfo, String> {
+    // ffmpeg prints the input's streams to stderr and exits non-zero when it
+    // is only asked to read a file, so the stderr is read and the status
+    // ignored. This keeps one ffmpeg binary doing both the mux and the probe.
     let args = vec![
-        "-v".to_string(),
-        "error".to_string(),
-        "-print_format".to_string(),
-        "json".to_string(),
-        "-show_format".to_string(),
-        "-show_streams".to_string(),
+        "-hide_banner".to_string(),
+        "-i".to_string(),
         file.to_string_lossy().to_string(),
     ];
-    let stdout = run_sidecar(app, "ffprobe", &args).await?;
-    parse_probe(&stdout)
+    let stderr = run_sidecar_stderr(app, "ffmpeg", &args).await?;
+    parse_ffmpeg_probe(&stderr)
 }
 
 /// Download one stream to a file, reusing the engine's HTTP layer so the
@@ -191,68 +189,120 @@ fn normalize_container(container: &str) -> Result<String, String> {
     }
 }
 
-/// The slice of ffprobe's JSON this module reads.
-#[derive(Deserialize)]
-struct ProbeJson {
-    #[serde(default)]
-    streams: Vec<ProbeStream>,
-    #[serde(default)]
-    format: Option<ProbeFormat>,
-}
+/// Read the streams and the container out of ffmpeg's `-i` report.
+///
+/// ffmpeg prints the input to stderr in a stable, human-readable shape: the
+/// container after `Input #0,`, a `Duration: HH:MM:SS.cc` line, and one
+/// `Stream #...: Video: <codec> ... WxH ...` or `Audio: <codec>` line per
+/// track. Probing reads that instead of shipping a second ffprobe binary.
+fn parse_ffmpeg_probe(stderr: &str) -> Result<MediaInfo, String> {
+    let mut container = None;
+    let mut duration = None;
+    let mut has_video = false;
+    let mut has_audio = false;
+    let mut width = None;
+    let mut height = None;
+    let mut video_codec = None;
+    let mut audio_codec = None;
+    let mut found_input = false;
 
-#[derive(Deserialize)]
-struct ProbeStream {
-    #[serde(default)]
-    codec_type: Option<String>,
-    #[serde(default)]
-    codec_name: Option<String>,
-    #[serde(default)]
-    width: Option<u32>,
-    #[serde(default)]
-    height: Option<u32>,
-}
+    for line in stderr.lines() {
+        let line = line.trim();
+        if let Some(rest) = line.strip_prefix("Input #0,") {
+            found_input = true;
+            container = rest
+                .split(", from")
+                .next()
+                .map(str::trim)
+                .filter(|name| !name.is_empty())
+                .map(str::to_string);
+        } else if let Some(rest) = line.strip_prefix("Duration:") {
+            duration = rest
+                .split(',')
+                .next()
+                .map(str::trim)
+                .and_then(parse_duration);
+        } else if let Some(rest) = line.strip_prefix("Stream #") {
+            // `Stream #0:0[0x1](und): Video: h264 ... 320x240 ...`
+            let after = rest.split_once(": ").map(|(_, tail)| tail).unwrap_or(rest);
+            if let Some(tail) = after.strip_prefix("Video:") {
+                has_video = true;
+                let tail = tail.trim();
+                video_codec = codec_name(tail);
+                if let Some((w, h)) = find_resolution(tail) {
+                    width = Some(w);
+                    height = Some(h);
+                }
+            } else if let Some(tail) = after.strip_prefix("Audio:") {
+                has_audio = true;
+                audio_codec = codec_name(tail.trim());
+            }
+        }
+    }
 
-#[derive(Deserialize)]
-struct ProbeFormat {
-    #[serde(default)]
-    duration: Option<String>,
-    #[serde(default)]
-    format_name: Option<String>,
-}
-
-/// Read the streams and the container out of ffprobe's JSON answer.
-fn parse_probe(json: &str) -> Result<MediaInfo, String> {
-    let parsed: ProbeJson = serde_json::from_str(json)
-        .map_err(|error| format!("the probe answered with unreadable data: {error}"))?;
-
-    let video = parsed
-        .streams
-        .iter()
-        .find(|stream| stream.codec_type.as_deref() == Some("video"));
-    let audio = parsed
-        .streams
-        .iter()
-        .find(|stream| stream.codec_type.as_deref() == Some("audio"));
-
-    let duration = parsed
-        .format
-        .as_ref()
-        .and_then(|format| format.duration.as_deref())
-        .and_then(|value| value.parse::<f64>().ok());
+    if !found_input {
+        return Err(clean_stderr(stderr));
+    }
 
     Ok(MediaInfo {
-        has_video: video.is_some(),
-        has_audio: audio.is_some(),
+        has_video,
+        has_audio,
         duration,
-        width: video.and_then(|stream| stream.width),
-        height: video.and_then(|stream| stream.height),
-        video_codec: video.and_then(|stream| stream.codec_name.clone()),
-        audio_codec: audio.and_then(|stream| stream.codec_name.clone()),
-        container: parsed
-            .format
-            .as_ref()
-            .and_then(|format| format.format_name.clone()),
+        width,
+        height,
+        video_codec,
+        audio_codec,
+        container,
     })
+}
+
+/// The codec at the head of a stream line: `h264 (High ...)` becomes `h264`.
+fn codec_name(tail: &str) -> Option<String> {
+    tail.split(|c: char| c.is_whitespace() || c == '(' || c == ',')
+        .map(str::trim)
+        .find(|part| !part.is_empty())
+        .map(str::to_string)
+}
+
+/// The `WxH` of a video stream, ignoring the `0x…` codec tag that also
+/// contains an `x`.
+fn find_resolution(line: &str) -> Option<(u32, u32)> {
+    let bytes = line.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        if !bytes[index].is_ascii_digit() {
+            index += 1;
+            continue;
+        }
+        let mut width_end = index;
+        while width_end < bytes.len() && bytes[width_end].is_ascii_digit() {
+            width_end += 1;
+        }
+        let width_len = width_end - index;
+        if (2..=5).contains(&width_len) && width_end < bytes.len() && bytes[width_end] == b'x' {
+            let mut height_end = width_end + 1;
+            while height_end < bytes.len() && bytes[height_end].is_ascii_digit() {
+                height_end += 1;
+            }
+            let height_len = height_end - (width_end + 1);
+            if (2..=5).contains(&height_len) {
+                let width: u32 = line[index..width_end].parse().ok()?;
+                let height: u32 = line[width_end + 1..height_end].parse().ok()?;
+                return Some((width, height));
+            }
+        }
+        index = width_end;
+    }
+    None
+}
+
+/// `00:00:02.00` in seconds.
+fn parse_duration(value: &str) -> Option<f64> {
+    let mut parts = value.split(':');
+    let hours: f64 = parts.next()?.parse().ok()?;
+    let minutes: f64 = parts.next()?.parse().ok()?;
+    let seconds: f64 = parts.next()?.parse().ok()?;
+    Some(hours * 3600.0 + minutes * 60.0 + seconds)
 }
 
 /// Temporary files that are removed when they leave scope, whatever the exit
@@ -320,42 +370,45 @@ mod tests {
 
     #[test]
     fn a_probe_reads_both_tracks_and_the_duration() {
-        let info = parse_probe(
-            r#"{
-                "streams": [
-                    {"codec_type": "video", "codec_name": "h264", "width": 1920, "height": 1080},
-                    {"codec_type": "audio", "codec_name": "aac", "width": null, "height": null}
-                ],
-                "format": {"duration": "12.340000", "format_name": "mov,mp4,m4a,3gp,3g2,mj2"}
-            }"#,
+        let info = parse_ffmpeg_probe(
+            "Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'out.mp4':\n\
+             Duration: 00:00:02.00, start: 0.000000, bitrate: 131 kb/s\n\
+             Stream #0:0[0x1](und): Video: h264 (High) (avc1 / 0x31637661), yuv444p(progressive), 320x240 [SAR 1:1 DAR 4:3], 46 kb/s, 30 fps\n\
+             Stream #0:1[0x2](und): Audio: aac (LC) (mp4a / 0x6134706D), 44100 Hz, mono, fltp, 69 kb/s\n",
         )
         .expect("a probe");
 
         assert!(info.has_video);
         assert!(info.has_audio);
-        assert_eq!(info.duration, Some(12.34));
-        assert_eq!(info.width, Some(1920));
-        assert_eq!(info.height, Some(1080));
+        assert_eq!(info.duration, Some(2.0));
+        // The 0x… codec tag is not mistaken for a resolution.
+        assert_eq!(info.width, Some(320));
+        assert_eq!(info.height, Some(240));
         assert_eq!(info.video_codec.as_deref(), Some("h264"));
         assert_eq!(info.audio_codec.as_deref(), Some("aac"));
-        assert_eq!(
-            info.container.as_deref(),
-            Some("mov,mp4,m4a,3gp,3g2,mj2")
-        );
+        assert_eq!(info.container.as_deref(), Some("mov,mp4,m4a,3gp,3g2,mj2"));
     }
 
     #[test]
     fn a_video_only_probe_reports_no_audio() {
-        let info = parse_probe(
-            r#"{
-                "streams": [{"codec_type": "video", "codec_name": "vp9", "width": 640, "height": 360}],
-                "format": {"duration": "4.000000", "format_name": "matroska,webm"}
-            }"#,
+        let info = parse_ffmpeg_probe(
+            "Input #0, matroska,webm, from 'clip.webm':\n\
+             Duration: 00:00:04.00, start: 0.000000, bitrate: 100 kb/s\n\
+             Stream #0:0: Video: vp9, yuv420p(tv), 640x360, 100 kb/s, 30 fps, 30 tbr\n",
         )
         .expect("a probe");
 
         assert!(info.has_video);
         assert!(!info.has_audio);
+        assert_eq!(info.duration, Some(4.0));
+        assert_eq!(info.video_codec.as_deref(), Some("vp9"));
         assert_eq!(info.audio_codec, None);
+    }
+
+    #[test]
+    fn an_unreadable_file_is_reported() {
+        let error =
+            parse_ffmpeg_probe("out.mp4: No such file or directory\n").expect_err("an error");
+        assert!(error.contains("No such file"), "the error was: {error}");
     }
 }

@@ -33,7 +33,6 @@
     "targets": "nsis",
     "externalBin": [
       "binaries/ffmpeg",
-      "binaries/ffprobe",
       "binaries/yt-dlp"
     ],
     "createUpdaterArtifacts": true,

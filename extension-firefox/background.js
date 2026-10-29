@@ -496,7 +496,6 @@ async function handleMessage(message, sender) {
         return {
           ok: true,
           ffmpeg: Boolean(data?.ffmpeg),
-          ffprobe: Boolean(data?.ffprobe),
           ytdlp: Boolean(data?.ytdlp),
         };
       } catch (error) {

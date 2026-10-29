@@ -73,13 +73,12 @@ pub struct MediaInfo {
 #[serde(rename_all = "camelCase")]
 pub struct MediaTools {
     pub ffmpeg: bool,
-    pub ffprobe: bool,
     pub ytdlp: bool,
 }
 
 /// Run a bundled sidecar and return its stdout, or a readable error from its
-/// stderr. This is the single point where the application spawns ffmpeg,
-/// ffprobe and yt-dlp.
+/// stderr. This is the single point where the application spawns ffmpeg and
+/// yt-dlp.
 pub(crate) async fn run_sidecar(
     app: &AppHandle,
     name: &str,
@@ -102,8 +101,28 @@ pub(crate) async fn run_sidecar(
     }
 }
 
+/// Run a bundled sidecar and return its stderr, whatever its exit code. ffmpeg
+/// writes the file's streams to stderr and exits non-zero when it is only
+/// asked to probe, so probing reads the stderr and ignores the status.
+pub(crate) async fn run_sidecar_stderr(
+    app: &AppHandle,
+    name: &str,
+    args: &[String],
+) -> Result<String, String> {
+    let command = app
+        .shell()
+        .sidecar(name)
+        .map_err(|error| format!("{name} is not available: {error}"))?;
+    let output = command
+        .args(args)
+        .output()
+        .await
+        .map_err(|error| format!("{name} could not run: {error}"))?;
+    Ok(String::from_utf8_lossy(&output.stderr).into_owned())
+}
+
 /// Trim a program's stderr down to one short, readable line for the user.
-fn clean_stderr(stderr: &str) -> String {
+pub(crate) fn clean_stderr(stderr: &str) -> String {
     let mut message = stderr
         .lines()
         .map(str::trim)
@@ -128,27 +147,21 @@ fn clean_stderr(stderr: &str) -> String {
 /// as unavailable. The answer is what both the desktop window and the
 /// extension use to decide whether muxing and quality selection are offered.
 pub async fn media_tools(app: &AppHandle) -> MediaTools {
-    let (ffmpeg, ffprobe, ytdlp) = tokio::join!(
+    let (ffmpeg, ytdlp) = tokio::join!(
         version_ok(app, "ffmpeg", "-version"),
-        version_ok(app, "ffprobe", "-version"),
         version_ok(app, "yt-dlp", "--version"),
     );
-    MediaTools {
-        ffmpeg,
-        ffprobe,
-        ytdlp,
-    }
+    MediaTools { ffmpeg, ytdlp }
 }
 
 async fn version_ok(app: &AppHandle, name: &str, flag: &str) -> bool {
     run_sidecar(app, name, &[flag.to_string()]).await.is_ok()
 }
 
-/// Whether ffmpeg and ffprobe are both present, which is what muxing needs.
+/// Whether ffmpeg is present, which is what muxing and probing need.
 #[tauri::command]
 pub async fn ffmpeg_available(app: AppHandle) -> bool {
-    let tools = media_tools(&app).await;
-    tools.ffmpeg && tools.ffprobe
+    media_tools(&app).await.ffmpeg
 }
 
 /// Enumerate the formats of a video page, refusing protected (DRM) content.
