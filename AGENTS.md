@@ -36,9 +36,12 @@ donot use broswer tools to verify user will review manually
 ## React
 
 -Avoid useEffect: Do not use React's useEffect by default. Prefer event handlers, derived state, and proper data flow. Use it only when genuinely necessary.
+
+
 ## Links
  
 - Design tokens: `src/index.css`
+- Toolbar pack format: `docs/TOOLBARS.md`
 - shadcn/ui themes: https://ui.shadcn.com/themes
 - tweakcn theme editor: https://tweakcn.com
 - Tailwind CSS v4 theme variables: https://tailwindcss.com/docs/theme

@@ -167,6 +167,12 @@ export const TIPS: readonly Tip[] = [
     title: "Choose a smaller toolbar",
     body: "View > Toolbar switches between large and small buttons, and the choice is remembered.",
   },
+  {
+    id: "toolbar-customize",
+    category: "Appearance",
+    title: "Put your buttons on the bar",
+    body: "View > Toolbar > Customize moves buttons on and off the bar, changes their order and adds separators. An installed toolbar keeps its own layout.",
+  },
 ];
 
 const CURSOR_KEY = "idm-clone.tips.v1";

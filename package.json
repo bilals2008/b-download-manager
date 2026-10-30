@@ -19,6 +19,7 @@
     "check:properties": "node scripts/check-properties.mjs",
     "check:recovery": "node scripts/check-recovery.mjs",
     "check:tooltip": "node scripts/check-tooltip.mjs",
+    "check:toolbars": "node scripts/check-toolbars.mjs",
     "check:settings": "node scripts/check-settings.mjs",
     "check:extension": "node scripts/check-extension.mjs",
     "check:grabber": "node scripts/check-grabber.mjs",
