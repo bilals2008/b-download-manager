@@ -10,6 +10,21 @@ edit one before its release ships if a bullet needs better words.
 
 ---
 
+## [0.2.0] - 31 October 2026
+
+### Added
+
+- **toolbar:** Five built-in styles, a Customize window, size and label switches, and JSON packs with per-style layouts
+- **settings:** A Toolbar page for styles, size, labels and pack management
+- **share:** Tell a Friend opens the system share sheet, with the clipboard as fallback
+- **site:** A toolbar feature page with previews and a guide to installing and making packs
+
+### Changed
+
+- **icons:** Refined the gloss on category icons
+
+---
+
 ## [0.1.3] - 30 October 2026
 
 ### Added
