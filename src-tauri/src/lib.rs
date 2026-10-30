@@ -9,6 +9,7 @@ mod lifecycle;
 mod prefs;
 mod progress;
 mod state;
+mod toolbars;
 mod tray;
 mod updater;
 mod window_style;
@@ -932,7 +933,7 @@ fn open_url(url: String) -> Result<(), String> {
 
 /// Hand the path to the shell of the system.
 #[cfg(target_os = "windows")]
-fn open_in_os(target: &std::path::Path) -> Result<(), String> {
+pub(crate) fn open_in_os(target: &std::path::Path) -> Result<(), String> {
     let mut command = if target.is_dir() {
         let mut command = std::process::Command::new("explorer");
         command.arg(target);
@@ -951,7 +952,7 @@ fn open_in_os(target: &std::path::Path) -> Result<(), String> {
 }
 
 #[cfg(target_os = "macos")]
-fn open_in_os(target: &std::path::Path) -> Result<(), String> {
+pub(crate) fn open_in_os(target: &std::path::Path) -> Result<(), String> {
     std::process::Command::new("open")
         .arg(target)
         .spawn()
@@ -960,7 +961,7 @@ fn open_in_os(target: &std::path::Path) -> Result<(), String> {
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-fn open_in_os(target: &std::path::Path) -> Result<(), String> {
+pub(crate) fn open_in_os(target: &std::path::Path) -> Result<(), String> {
     std::process::Command::new("xdg-open")
         .arg(target)
         .spawn()
@@ -1157,6 +1158,10 @@ pub fn run() {
             open_url,
             updater::check_update,
             updater::install_update,
+            toolbars::list_toolbar_packs,
+            toolbars::install_toolbar_pack,
+            toolbars::remove_toolbar_pack,
+            toolbars::reveal_toolbar_packs,
         ])
         .build(tauri::generate_context!())
         .expect("error while building B Download Manager")
