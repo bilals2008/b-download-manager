@@ -85,8 +85,7 @@ mod sheet {
 
     pub fn show(hwnd: HWND, title: &str, text: &str, url: &str) -> Result<(), String> {
         let interop: IDataTransferManagerInterop =
-            factory::<DataTransferManager, IDataTransferManagerInterop>()
-                .map_err(describe)?;
+            factory::<DataTransferManager, IDataTransferManagerInterop>().map_err(describe)?;
         let mut raw: *mut c_void = std::ptr::null_mut();
         unsafe { interop.get_for_window(hwnd, &DTM_IID, &mut raw) }
             .ok()
@@ -101,7 +100,8 @@ mod sheet {
         let handler = TypedEventHandler::<DataTransferManager, DataRequestedEventArgs>::new(
             move |_, args| {
                 let data = args.ok()?.Request()?.Data()?;
-                data.Properties()?.SetTitle(&HSTRING::from(title.as_str()))?;
+                data.Properties()?
+                    .SetTitle(&HSTRING::from(title.as_str()))?;
                 data.SetText(&HSTRING::from(text.as_str()))?;
                 data.SetWebLink(&Uri::CreateUri(&HSTRING::from(url.as_str()))?)?;
                 Ok(())

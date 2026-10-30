@@ -30,7 +30,7 @@ const MAX_DESCRIPTION: usize = 240;
 /// Ids the application owns; an installed file may not take them.
 const RESERVED_IDS: [&str; 5] = ["default", "3d", "classic", "isometric", "blueprint"];
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct PackStyle {
     pub background: Option<String>,
@@ -40,20 +40,6 @@ pub struct PackStyle {
     pub active: Option<String>,
     pub line: Option<String>,
     pub glow: bool,
-}
-
-impl Default for PackStyle {
-    fn default() -> Self {
-        Self {
-            background: None,
-            text: None,
-            accent: None,
-            hover: None,
-            active: None,
-            line: None,
-            glow: false,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -431,7 +417,7 @@ pub fn list_toolbar_packs(app: AppHandle) -> Result<PacksSnapshot, String> {
             }),
         }
     }
-    packs.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    packs.sort_by_key(|pack| pack.name.to_lowercase());
 
     Ok(PacksSnapshot {
         folder: shown,
