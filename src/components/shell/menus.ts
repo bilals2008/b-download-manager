@@ -10,6 +10,12 @@ export interface MenuDefinition {
   rows: MenuRow<ShellCommand>[];
 }
 
+/** A toolbar pack the View > Toolbar group can switch to. */
+export interface ToolbarMenuEntry {
+  id: string;
+  label: string;
+}
+
 /**
  * The menus of the reference download manager, read out of the string table
  * of the reference binary: the top level is Tasks, File, Downloads, View and
@@ -18,9 +24,13 @@ export interface MenuDefinition {
  * left out: this application is not licensed or ordered from anywhere.
  *
  * Built rather than written down, because the Font group lists the faces the
- * user can actually pick, imported ones included.
+ * user can actually pick, imported ones included, and the Toolbar group lists
+ * the packs installed beside the application.
  */
-export function buildMenus(fonts: FontOption[]): MenuDefinition[] {
+export function buildMenus(
+  fonts: FontOption[],
+  toolbars: readonly ToolbarMenuEntry[] = [],
+): MenuDefinition[] {
   return [
   {
     id: "tasks",
@@ -130,11 +140,17 @@ export function buildMenus(fonts: FontOption[]): MenuDefinition[] {
         command: "toolbar-large",
         label: "Toolbar",
         submenu: [
-          { command: "toolbar-customize", label: "Customize...", disabled: true },
+          { command: "toolbar-customize", label: "Customize..." },
           { command: "toolbar-large", label: "Large Buttons", radio: true },
           { command: "toolbar-small", label: "Small Buttons", radio: true },
-          { command: "toolbar-new", label: "Look for new toolbars", disabled: true },
-          { command: "toolbar-neon", label: "Neon", disabled: true },
+          "separator",
+          { command: "toolbar-new", label: "Look for new toolbars..." },
+          "separator",
+          ...toolbars.map((toolbar) => ({
+            command: `toolbar-pack:${toolbar.id}` as ShellCommand,
+            label: toolbar.label,
+            radio: true,
+          })),
         ],
       },
       {

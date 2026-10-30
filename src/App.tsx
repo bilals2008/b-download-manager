@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { SettingsDialog } from "@/components/settings/settings-dialog";
 import type { ShellCommand } from "@/components/shell/commands";
+import { CustomizeToolbarDialog } from "@/components/shell/customize-toolbar-dialog";
+import { ToolbarsDialog } from "@/components/shell/toolbars-dialog";
 import { TopBar } from "@/components/shell/top-bar";
 import { toolbarState } from "@/components/shell/toolbar-state";
 import { useShellShortcuts } from "@/components/shell/use-shell-shortcuts";
@@ -43,6 +45,24 @@ import {
   type ToolbarSize,
 } from "@/lib/settings";
 import { nextTipIndex, saveTipCursor } from "@/lib/tips";
+import {
+  BUILTIN_TOOLBAR_PACKS,
+  DEFAULT_TOOLBAR_PACK,
+  defaultToolbarLayoutFor,
+  type ToolbarPack,
+} from "@/lib/toolbar-packs";
+import { listToolbarPacks, type ToolbarPacksSnapshot } from "@/lib/toolbar-packs-api";
+import {
+  DEFAULT_TOOLBAR_ID,
+  loadToolbarPreference,
+  resolveToolbarLayout,
+  saveToolbarPreference,
+  withActiveToolbar,
+  withToolbarLabels,
+  withToolbarLayout,
+  type ToolbarPreference,
+  type ToolbarToken,
+} from "@/lib/toolbars";
 import { runCheck, type UpdateFound } from "@/lib/updates";
 import { useDownloads } from "@/state/download-store";
 
@@ -72,6 +92,45 @@ export default function App() {
   // Null when the close button has not asked anything.
   const [closeRequest, setCloseRequest] = useState<number | null>(null);
   const [toolbarSize, setToolbarSize] = useState<ToolbarSize>(loadToolbarSize);
+  // The bar is a pack plus a layout. The pack paints it and may suggest a
+  // button order; the layout is what this reader chose on this machine.
+  const [toolbarPreference, setToolbarPreference] =
+    useState<ToolbarPreference>(loadToolbarPreference);
+  const [toolbarPacks, setToolbarPacks] = useState<ToolbarPacksSnapshot>({
+    folder: "",
+    packs: [],
+    problems: [],
+  });
+  const [customizeToolbarOpen, setCustomizeToolbarOpen] = useState(false);
+  const [toolbarsOpen, setToolbarsOpen] = useState(false);
+
+  const allToolbars = useMemo<ToolbarPack[]>(
+    () => [...BUILTIN_TOOLBAR_PACKS, ...toolbarPacks.packs],
+    [toolbarPacks.packs],
+  );
+  // A remembered pack can disappear between runs; the default bar is always
+  // there to fall back to.
+  const activeToolbar =
+    allToolbars.find((pack) => pack.id === toolbarPreference.active) ??
+    DEFAULT_TOOLBAR_PACK;
+  const toolbarLayout = resolveToolbarLayout(
+    toolbarPreference,
+    activeToolbar.id,
+    activeToolbar.buttons,
+  );
+  const toolbarMenu = useMemo(
+    () => allToolbars.map((pack) => ({ id: pack.id, label: pack.name })),
+    [allToolbars],
+  );
+  const showToolbarLabels = toolbarPreference.labels;
+  const toolbarChecks = useMemo<Partial<Record<ShellCommand, boolean>>>(
+    () => ({
+      "toolbar-large": toolbarSize === "large",
+      "toolbar-small": toolbarSize === "small",
+      [`toolbar-pack:${activeToolbar.id}`]: true,
+    }),
+    [toolbarSize, activeToolbar.id],
+  );
   // The clipboard listener is subscribed once; the ref carries the current
   // dialog state so a link that arrives mid-edit cannot overwrite the field.
   const addOpenRef = useRef(addDownloadOpen);
@@ -147,6 +206,33 @@ export default function App() {
     }).catch(() => {
       // The extension falls back to its own rules when the bridge is closed.
     });
+  }, []);
+
+  // Toolbar packs live in a folder beside the application's data. They are
+  // read once at start; opening the View menu's "Look for new toolbars" reads
+  // the folder again, so a file dropped there by hand shows up at once.
+  useEffect(() => {
+    if (!isDesktop()) {
+      return;
+    }
+    let cancelled = false;
+    void listToolbarPacks()
+      .then((snapshot) => {
+        if (!cancelled) {
+          setToolbarPacks(snapshot);
+        }
+      })
+      .catch((failure: unknown) => {
+        if (!cancelled) {
+          setToolbarPacks((current) => ({
+            ...current,
+            problems: [{ file: "toolbars", message: describeError(failure) }],
+          }));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // The one question the reader agreed to on the About page. It runs once the
@@ -253,6 +339,56 @@ export default function App() {
     saveToolbarSize(size);
   }
 
+  // Switching the pack repaints the bar. The reader's button order for that
+  // pack is kept, so going back and forth does not undo customization.
+  function switchToolbarPack(id: string) {
+    const next = withActiveToolbar(toolbarPreference, id);
+    setToolbarPreference(next);
+    saveToolbarPreference(next);
+  }
+
+  function saveToolbarLayout(layout: ToolbarToken[]) {
+    const next = withToolbarLayout(toolbarPreference, activeToolbar.id, layout);
+    setToolbarPreference(next);
+    saveToolbarPreference(next);
+  }
+
+  function setToolbarLabels(show: boolean) {
+    const next = withToolbarLabels(toolbarPreference, show);
+    setToolbarPreference(next);
+    saveToolbarPreference(next);
+  }
+
+  // Both the View menu and the Toolbar page of the options window open the
+  // same two dialogs, and both pick up a pack dropped into the folder since
+  // the window opened.
+  function openToolbarManager() {
+    setToolbarsOpen(true);
+    void refreshToolbarPacks().catch((failure: unknown) => {
+      setToolbarPacks((current) => ({
+        ...current,
+        problems: [{ file: "toolbars", message: describeError(failure) }],
+      }));
+    });
+  }
+
+  // Removing the pack in use must not leave the View menu pointing at a bar
+  // that is gone. The default bar takes over, along with its own layout.
+  function forgetToolbarPack(id: string) {
+    if (toolbarPreference.active !== id) {
+      return;
+    }
+    const next = withActiveToolbar(toolbarPreference, DEFAULT_TOOLBAR_ID);
+    setToolbarPreference(next);
+    saveToolbarPreference(next);
+  }
+
+  async function refreshToolbarPacks(): Promise<ToolbarPacksSnapshot> {
+    const snapshot = await listToolbarPacks();
+    setToolbarPacks(snapshot);
+    return snapshot;
+  }
+
   // A copied link seeds one add dialog; closing it must not seed the next one.
   function closeAddDownload() {
     setAddDownloadOpen(false);
@@ -286,6 +422,11 @@ export default function App() {
   function handleCommand(command: ShellCommand) {
     if (command.startsWith("font:")) {
       chooseFont(command.slice("font:".length));
+      return;
+    }
+
+    if (command.startsWith("toolbar-pack:")) {
+      switchToolbarPack(command.slice("toolbar-pack:".length));
       return;
     }
 
@@ -394,6 +535,12 @@ export default function App() {
       case "toolbar-small":
         setToolbar("small");
         break;
+      case "toolbar-customize":
+        setCustomizeToolbarOpen(true);
+        break;
+      case "toolbar-new":
+        openToolbarManager();
+        break;
       case "font-reset":
         chooseFont("googlesans");
         break;
@@ -407,11 +554,12 @@ export default function App() {
         menuLabels={{
           categories: categoriesVisible ? "Hide categories" : "Show categories",
         }}
-        menuChecks={{
-          "toolbar-large": toolbarSize === "large",
-          "toolbar-small": toolbarSize === "small",
-        }}
+        menuChecks={toolbarChecks}
         toolbarSize={toolbarSize}
+        toolbarLayout={toolbarLayout}
+        toolbarPack={activeToolbar}
+        toolbarShowLabels={showToolbarLabels}
+        toolbars={toolbarMenu}
         toolbarDisabled={toolbarDisabled}
       />
       <Workspace
@@ -426,6 +574,18 @@ export default function App() {
       <SettingsDialog
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
+        toolbar={{
+          pack: activeToolbar,
+          packs: allToolbars,
+          layout: toolbarLayout,
+          size: toolbarSize,
+          showLabels: showToolbarLabels,
+          onSelectPack: switchToolbarPack,
+          onSize: setToolbar,
+          onShowLabels: setToolbarLabels,
+          onCustomize: () => setCustomizeToolbarOpen(true),
+          onManage: openToolbarManager,
+        }}
       />
       <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
       <TipOfTheDayDialog
@@ -449,6 +609,24 @@ export default function App() {
           onKeepRunning={keepRunning}
           onExit={exitAnyway}
           onCancel={() => setCloseRequest(null)}
+        />
+      ) : null}
+      {customizeToolbarOpen ? (
+        <CustomizeToolbarDialog
+          pack={activeToolbar}
+          layout={toolbarLayout}
+          defaultLayout={defaultToolbarLayoutFor(activeToolbar)}
+          onSave={saveToolbarLayout}
+          onClose={() => setCustomizeToolbarOpen(false)}
+        />
+      ) : null}
+      {toolbarsOpen ? (
+        <ToolbarsDialog
+          snapshot={toolbarPacks}
+          activeId={activeToolbar.id}
+          onRefresh={refreshToolbarPacks}
+          onPackRemoved={forgetToolbarPack}
+          onClose={() => setToolbarsOpen(false)}
         />
       ) : null}
     </div>

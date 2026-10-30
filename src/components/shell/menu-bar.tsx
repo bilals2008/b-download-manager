@@ -4,7 +4,7 @@ import { FONT_OPTIONS } from "@/lib/fonts";
 import { loadSettings } from "@/lib/settings";
 
 import type { ShellCommand } from "./commands";
-import { buildMenus } from "./menus";
+import { buildMenus, type ToolbarMenuEntry } from "./menus";
 import { MenuPopup, type FocusTarget, type MenuItem } from "./menu-popup";
 
 interface MenuBarProps {
@@ -13,13 +13,20 @@ interface MenuBarProps {
   menuLabels?: Partial<Record<ShellCommand, string>>;
   /** Which radio rows are picked, like the toolbar size. */
   menuChecks?: Partial<Record<ShellCommand, boolean>>;
+  /** The packed toolbars the View menu can switch to. */
+  toolbars?: readonly ToolbarMenuEntry[];
 }
 
 /**
  * Windows-style menu bar: click opens, hover slides between open menus, and the
  * whole bar is reachable with the keyboard (arrows, Home/End, Escape, Alt+key).
  */
-export function MenuBar({ onCommand, menuLabels, menuChecks }: MenuBarProps) {
+export function MenuBar({
+  onCommand,
+  menuLabels,
+  menuChecks,
+  toolbars = [],
+}: MenuBarProps) {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const barRef = useRef<HTMLElement>(null);
@@ -37,10 +44,10 @@ export function MenuBar({ onCommand, menuLabels, menuChecks }: MenuBarProps) {
       fontChecks[`font:${font.value}`] = font.value === current;
     }
     return {
-      menus: buildMenus(fonts),
+      menus: buildMenus(fonts, toolbars),
       checks: { ...menuChecks, ...fontChecks },
     };
-  }, [menuChecks, openIndex]);
+  }, [menuChecks, openIndex, toolbars]);
 
   useEffect(() => {
     if (openIndex === null) {

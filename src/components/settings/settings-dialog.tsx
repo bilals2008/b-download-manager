@@ -11,6 +11,10 @@ import { ProxySettings } from "@/components/settings/proxy-settings";
 import { SaveLocationsSettings } from "@/components/settings/save-locations-settings";
 import { ShortcutsSettings } from "@/components/settings/shortcuts-settings";
 import { TipsSettings } from "@/components/settings/tips-settings";
+import {
+  ToolbarSettings,
+  type ToolbarSettingsProps,
+} from "@/components/settings/toolbar-settings";
 import { VideoDownloadButtonSettings } from "@/components/settings/video-download-button-settings";
 import {
   settingsPageLabel,
@@ -50,6 +54,8 @@ import { resetTipCursor } from "@/lib/tips";
 interface SettingsDialogProps {
   open: boolean;
   onClose: () => void;
+  /** The toolbar page reads and writes the bar the shell already owns. */
+  toolbar: ToolbarSettingsProps;
 }
 
 /** How long typing settles before the engine hears about it. */
@@ -85,7 +91,7 @@ const ENGINE_KEYS: readonly (keyof Settings)[] = [
  * startup entry is the one setting the operating system can refuse; its switch
  * follows what the system reports rather than what was asked.
  */
-export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
+export function SettingsDialog({ open, onClose, toolbar }: SettingsDialogProps) {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [page, setPage] = useState<SettingsPageId>("general");
   const [error, setError] = useState<string | null>(null);
@@ -276,6 +282,8 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
         return <GeneralSettings settings={settings} onChange={update} />;
       case "appearance":
         return <AppearanceSettings settings={settings} onChange={update} />;
+      case "toolbar":
+        return <ToolbarSettings {...toolbar} />;
       case "shortcuts":
         return <ShortcutsSettings />;
       case "tips":

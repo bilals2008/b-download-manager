@@ -150,6 +150,7 @@ export function SpinnerGlyph({ className }: GlyphProps) {
 export type SettingsGlyphKind =
   | "general"
   | "appearance"
+  | "toolbar"
   | "shortcuts"
   | "tips"
   | "file-types"
@@ -252,6 +253,16 @@ export function SettingsGlyph({
         <Glyph className={className}>
           <path d="M8 2.2a3.9 3.9 0 0 0-2.3 7v1.4h4.6V9.2A3.9 3.9 0 0 0 8 2.2z" />
           <path d="M6.4 12.2h3.2M7.2 13.6h1.6" />
+        </Glyph>
+      );
+    case "toolbar":
+      return (
+        <Glyph className={className}>
+          <rect x="1.8" y="4.2" width="12.4" height="7.6" rx="1.6" />
+          <path d="M1.8 6.4h12.4" />
+          <rect x="3.8" y="7.8" width="2.2" height="2.4" rx="0.5" />
+          <rect x="7.2" y="7.8" width="2.2" height="2.4" rx="0.5" />
+          <rect x="10.6" y="7.8" width="2.2" height="2.4" rx="0.5" />
         </Glyph>
       );
     case "appearance":

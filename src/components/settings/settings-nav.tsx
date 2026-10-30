@@ -10,6 +10,7 @@ export interface SettingsPageEntry {
 export type SettingsPageId =
   | "general"
   | "appearance"
+  | "toolbar"
   | "shortcuts"
   | "tips"
   | "downloads"
@@ -35,6 +36,7 @@ export const SETTINGS_GROUPS: readonly {
     pages: [
       { id: "general", label: "General", glyph: "general" },
       { id: "appearance", label: "Appearance", glyph: "appearance" },
+      { id: "toolbar", label: "Toolbar", glyph: "toolbar" },
       { id: "shortcuts", label: "Shortcuts", glyph: "shortcuts" },
       { id: "tips", label: "Tips", glyph: "tips" },
     ],

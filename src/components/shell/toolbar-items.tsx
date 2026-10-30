@@ -1,6 +1,11 @@
 import type { ComponentType } from "react";
 
-import type { ShellCommand } from "./commands";
+import {
+  TOOLBAR_CATALOG,
+  type ToolbarCommand,
+  type ToolbarItemMeta,
+} from "@/lib/toolbars";
+
 import {
   AddIcon,
   DeleteCompletedIcon,
@@ -16,34 +21,34 @@ import {
   type ToolbarIconProps,
 } from "./toolbar-icons";
 
-export interface ToolbarItem {
-  command: ShellCommand;
-  label: string;
+export interface ToolbarItem extends ToolbarItemMeta {
   icon: ComponentType<ToolbarIconProps>;
-  /** An accelerator the tooltip can print on a key cap. */
-  shortcut?: string;
-  /** Toolbar buttons whose screen is not built yet stay visible but inert. */
-  disabled?: boolean;
-  /** Why a button is inert, in the tooltip instead of a silent dead control. */
-  note?: string;
 }
 
-export const TOOLBAR_ITEMS: ToolbarItem[] = [
-  { command: "add-download", label: "Add URL", icon: AddIcon, shortcut: "Ctrl+N" },
-  { command: "resume", label: "Resume", icon: ResumeIcon },
-  { command: "stop", label: "Stop", icon: StopIcon },
-  { command: "stop-all", label: "Stop All", icon: StopAllIcon },
-  { command: "delete", label: "Delete", icon: DeleteIcon },
-  { command: "delete-completed", label: "Delete Completed", icon: DeleteCompletedIcon },
-  { command: "options", label: "Options", icon: OptionsIcon },
-  {
-    command: "scheduler",
-    label: "Scheduler",
-    icon: SchedulerIcon,
-    disabled: true,
-    note: "Queues and schedules are coming soon",
-  },
-  { command: "start-queue", label: "Start Queue", icon: StartQueueIcon },
-  { command: "stop-queue", label: "Stop Queue", icon: StopQueueIcon },
-  { command: "tell-friend", label: "Tell a Friend", icon: TellFriendIcon, disabled: true },
-];
+/**
+ * The artwork of every catalogue button. The record is keyed by the command
+ * union, so adding a button to the catalogue without drawing it is a compile
+ * error rather than an empty square on the bar.
+ */
+const ICONS: Record<ToolbarCommand, ComponentType<ToolbarIconProps>> = {
+  "add-download": AddIcon,
+  resume: ResumeIcon,
+  stop: StopIcon,
+  "stop-all": StopAllIcon,
+  delete: DeleteIcon,
+  "delete-completed": DeleteCompletedIcon,
+  options: OptionsIcon,
+  scheduler: SchedulerIcon,
+  "start-queue": StartQueueIcon,
+  "stop-queue": StopQueueIcon,
+  "tell-friend": TellFriendIcon,
+};
+
+export const TOOLBAR_ITEMS: readonly ToolbarItem[] = TOOLBAR_CATALOG.map(
+  (item) => ({ ...item, icon: ICONS[item.command] }),
+);
+
+/** The button behind a command, for a layout that is stored as names. */
+export const TOOLBAR_BY_COMMAND: ReadonlyMap<ToolbarCommand, ToolbarItem> = new Map(
+  TOOLBAR_ITEMS.map((item) => [item.command, item]),
+);

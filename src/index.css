@@ -835,3 +835,47 @@
     outline-offset: 2px;
   }
 }
+
+/*
+  A toolbar pack paints the button bar from its manifest. Every variable falls
+  back to the theme tokens, so a pack that only chooses an accent still follows
+  the light and dark appearances, and the Default bar is the plain chrome.
+*/
+.toolbar-pack {
+  background-color: var(--toolbar-pack-bg, var(--color-chrome-toolbar));
+  color: var(--toolbar-pack-text, var(--color-chrome-toolbar-text));
+}
+
+.toolbar-pack-button {
+  color: inherit;
+}
+
+.toolbar-pack-button:not([data-inert]):hover {
+  background-color: var(--toolbar-pack-hover, var(--color-chrome-toolbar-hover));
+}
+
+.toolbar-pack-button:not([data-inert]):active {
+  background-color: var(--toolbar-pack-active, var(--color-chrome-toolbar-active));
+}
+
+.toolbar-pack-separator {
+  background-color: var(--toolbar-pack-line, var(--color-chrome-line));
+}
+
+/*
+  A glowing pack lights its artwork from behind. The glow is decoration, so it
+  is drawn with a filter that costs nothing when the pack does not ask for it,
+  and it is the color the pack names, never a hard-coded one.
+*/
+.toolbar-pack[data-glow="true"] .toolbar-pack-icon {
+  filter: drop-shadow(
+    0 0 5px
+      color-mix(in srgb, var(--toolbar-pack-accent, #ffffff) 70%, transparent)
+  );
+}
+
+.toolbar-pack[data-glow="true"] .toolbar-pack-label {
+  color: var(--toolbar-pack-accent, var(--color-chrome-toolbar-text));
+  text-shadow: 0 0 9px
+    color-mix(in srgb, var(--toolbar-pack-accent, #ffffff) 55%, transparent);
+}

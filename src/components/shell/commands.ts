@@ -48,7 +48,8 @@ export type ShellCommand =
   | "toolbar-large"
   | "toolbar-small"
   | "toolbar-new"
-  | "toolbar-neon"
+  /** `toolbar-pack:<id>` switches the button bar to an installed pack. */
+  | `toolbar-pack:${string}`
   | "tray-3d"
   | "tray-classic"
   | "tray-hidden"
