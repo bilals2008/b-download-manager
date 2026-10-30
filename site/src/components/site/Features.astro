@@ -1,6 +1,7 @@
 ---
 import Icon from "./Icon.astro";
 import type { IconName } from "./Icon.astro";
+import Button from "./Button.astro";
 import PreviewPlaceholder from "./PreviewPlaceholder.astro";
 
 type Feature = {
@@ -129,6 +130,12 @@ const features: Feature[] = [
           </article>
         ))
       }
+    </div>
+
+    <div class="features-more reveal">
+      <Button href="/features/" variant="secondary" icon="arrow-right">
+        See more features
+      </Button>
     </div>
   </div>
 </section>
@@ -273,6 +280,12 @@ const features: Feature[] = [
 
   .feature-visual :global(.preview-placeholder) {
     aspect-ratio: 4 / 3;
+  }
+
+  .features-more {
+    display: flex;
+    justify-content: center;
+    margin-top: clamp(2.5rem, 5vw, 3.75rem);
   }
 
   @media (min-width: 56rem) {

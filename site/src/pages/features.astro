@@ -1,0 +1,72 @@
+---
+import LandingLayout from "../layouts/LandingLayout.astro";
+import Button from "../components/site/Button.astro";
+import { RELEASES_URL } from "../lib/releases";
+---
+
+<LandingLayout
+  title="Features · B Download Manager"
+  description="More features for B Download Manager are on the way."
+>
+  <section class="section features-soon" aria-labelledby="features-soon-title">
+    <div class="container-page">
+      <div class="soon-band reveal">
+        <p class="eyebrow">Features</p>
+        <h1 id="features-soon-title" class="soon-title">
+          More features are on the way.
+        </h1>
+        <p class="soon-copy">
+          A fuller feature list is being written up. In the meantime, everything
+          the engine already does is on the home page.
+        </p>
+        <div class="soon-action">
+          <Button href="/" variant="secondary" icon="arrow-right">
+            Back to overview
+          </Button>
+          <Button href={RELEASES_URL} variant="primary" icon="download">
+            Download
+          </Button>
+        </div>
+      </div>
+    </div>
+  </section>
+</LandingLayout>
+
+<style>
+  .soon-band {
+    max-width: 56rem;
+    margin-inline: auto;
+    padding: clamp(2.5rem, 6vw, 4.5rem) clamp(1.25rem, 5vw, 4rem);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    background-color: var(--surface);
+    text-align: center;
+  }
+
+  .soon-title {
+    margin-top: 1rem;
+    color: var(--ink);
+    font-family: var(--face-display);
+    font-size: var(--type-section);
+    font-weight: 500;
+    letter-spacing: -0.035em;
+    line-height: 1.02;
+    text-wrap: balance;
+  }
+
+  .soon-copy {
+    max-width: 44ch;
+    margin: 1.25rem auto 0;
+    color: var(--muted);
+    font-size: var(--type-body);
+    line-height: 1.65;
+  }
+
+  .soon-action {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.75rem;
+    margin-top: 2rem;
+  }
+</style>

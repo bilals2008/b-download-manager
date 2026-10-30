@@ -53,6 +53,10 @@ const platforms = [
             <PlatformIcon name="linux" size={15} />
           </span>
         </Button>
+
+        <Button href={RELEASES_URL} variant="secondary" icon="github">
+          All releases
+        </Button>
       </div>
       <p class="download-meta">
         Windows, macOS and Linux · no account · no telemetry
@@ -123,7 +127,9 @@ const platforms = [
 
   .download-action {
     display: flex;
+    flex-wrap: wrap;
     justify-content: center;
+    gap: 0.75rem;
     margin-top: 1.9rem;
   }
 
