@@ -1,6 +1,5 @@
 ---
 import Button from "./Button.astro";
-import RepoStars from "./RepoStars.astro";
 import ThemeToggle from "./ThemeToggle.astro";
 import { RELEASES_URL } from "../../lib/releases";
 ---
@@ -9,7 +8,7 @@ import { RELEASES_URL } from "../../lib/releases";
 
 <header class="nav" data-nav>
   <div class="nav-inner">
-    <a class="brand" href="/" aria-label="B Download Manager (Beta) home">
+    <a class="brand" href="/" aria-label="B Download Manager home">
       <img
         src="/images/app-icon.png"
         alt=""
@@ -18,7 +17,6 @@ import { RELEASES_URL } from "../../lib/releases";
         class="brand-mark"
       />
       <span class="brand-name">B Download Manager</span>
-      <span class="beta-badge" aria-hidden="true">Beta</span>
     </a>
 
     <nav class="nav-links" aria-label="Primary">
@@ -33,7 +31,6 @@ import { RELEASES_URL } from "../../lib/releases";
           />
         </svg>
         GitHub
-        <RepoStars />
       </a>
     </nav>
 
@@ -67,7 +64,6 @@ import { RELEASES_URL } from "../../lib/releases";
                 />
               </svg>
               GitHub
-              <RepoStars />
             </a>
           </nav>
           <div class="nav-menu-foot">
@@ -150,21 +146,6 @@ import { RELEASES_URL } from "../../lib/releases";
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .beta-badge {
-    flex: none;
-    padding: 0.12rem 0.42rem;
-    border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
-    border-radius: 999px;
-    background-color: color-mix(in srgb, var(--accent) 9%, transparent);
-    color: var(--accent);
-    font-family: var(--face-sans);
-    font-size: var(--type-micro);
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    line-height: 1.5;
-    text-transform: uppercase;
   }
 
   .nav-links {
