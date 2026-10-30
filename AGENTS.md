@@ -37,6 +37,20 @@ donot use broswer tools to verify user will review manually
 
 -Avoid useEffect: Do not use React's useEffect by default. Prefer event handlers, derived state, and proper data flow. Use it only when genuinely necessary.
 
+## Design slop indicators
+
+Do not ship these. They are the tells of generic AI-generated UI:
+
+- Tags (pill badges, label chips used as decoration)
+- Italicized words
+- Instrument Serif with negative kerning (or any "editorial" font pairing)
+- Over-the-top detailed UI
+- Dividers (decorative rules between sections)
+- Many color shades and opacities (keep one accent, one neutral ramp)
+- Containers with borders (nested cards, bordered panels inside bordered panels)
+- Diagrams (the more detailed, the worse)
+- Code breadcrumbs (`provider / model / version` paths in UI copy)
+- Section numbering (01, 02, 03 labels)
 
 ## Links
  

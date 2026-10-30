@@ -17,6 +17,8 @@ everything.
 | [06-milestones.md](./06-milestones.md) | phased plan with acceptance criteria |
 | [07-verification-plan.md](./07-verification-plan.md) | how we prove each piece works instead of assuming it |
 | [08-risks-and-open-questions.md](./08-risks-and-open-questions.md) | what could go wrong and what is still unknown |
+| [10-video-capture-research.md](./10-video-capture-research.md) | how the reference manager captures video (HLS/DASH/YouTube), with evidence |
+| [11-media-download-plan.md](./11-media-download-plan.md) | the implementation plan for video capture: contracts, phases V0-V7, gates, risks |
 | [decisions/](./decisions/) | architecture decision records |
 
 ## Where the evidence lives
@@ -37,7 +39,7 @@ everything.
 | Chunked transfer encoding | handled by `reqwest` |
 | FTP | not implemented |
 | Proxy / SOCKS | not implemented |
-| Media splitting (HLS / DASH / MPEG-TS) | not implemented |
+| Media splitting (HLS / DASH / MPEG-TS) | not implemented, research in [10](./10-video-capture-research.md), plan in [11](./11-media-download-plan.md) |
 | Speed limiting, scheduling, queue | not implemented |
 | Integrity verification of chunk heads | not implemented |
 | Graceful shutdown, disk space checks, retry backoff policy | partial |

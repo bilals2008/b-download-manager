@@ -207,26 +207,17 @@ function artFor(category: CategoryName, icon?: CategoryIcon): CategoryIcon {
 }
 
 /** One gradient per drawing instance, so the gloss never leaks between rows. */
-function useArtIds(prefix: string): { front: string; back: string } {
+function useArtIds(prefix: string): {
+  front: string;
+  back: string;
+  gloss: string;
+} {
   const id = useId().replace(/[^a-zA-Z0-9_-]/g, "");
-  return { front: `${prefix}-front-${id}`, back: `${prefix}-back-${id}` };
-}
-
-function Gloss({
-  id,
-  bright,
-  base,
-}: {
-  id: string;
-  bright: string;
-  base: string;
-}) {
-  return (
-    <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" style={{ stopColor: cssColor(bright) }} />
-      <stop offset="1" style={{ stopColor: cssColor(base) }} />
-    </linearGradient>
-  );
+  return {
+    front: `${prefix}-front-${id}`,
+    back: `${prefix}-back-${id}`,
+    gloss: `${prefix}-gloss-${id}`,
+  };
 }
 
 /**
@@ -404,12 +395,26 @@ function fileIconSource(name: string, kind: FileKind): string {
   return MATERIAL_KIND_ICONS[kind];
 }
 
-const CLOSED_FACE =
-  "M3 9.6a2.2 2.2 0 0 1 2.2-2.2h13.6a2.2 2.2 0 0 1 2.2 2.2v8.2a2.2 2.2 0 0 1-2.2 2.2H5.2A2.2 2.2 0 0 1 3 17.8z";
-const OPEN_FACE =
-  "M4.4 8.4h15.2a1.4 1.4 0 0 1 1.37 1.7l-1.75 8a2.2 2.2 0 0 1-2.15 1.74H5.2A2.2 2.2 0 0 1 3 17.8v-7.2a2.2 2.2 0 0 1 1.4-2.2z";
+/**
+ * The folder's back plate: the tab and the body the cover wraps around. Its
+ * edges sit inside the cover's, so the folder reads as two sheets with depth.
+ */
+const FOLDER_BACK =
+  "M3.05 6.5a1.9 1.9 0 0 1 1.9-1.9h3.85c.5 0 .98.2 1.33.55l1.28 1.28h7.59a1.95 1.95 0 0 1 1.95 1.95v8.62a1.95 1.95 0 0 1-1.95 1.95H5a1.95 1.95 0 0 1-1.95-1.95z";
 
-/** A real folder, tab and all, tinted for its category. */
+/** The closed cover, overhanging the plate on both sides. */
+const FOLDER_COVER =
+  "M2.1 11.05a1.15 1.15 0 0 1 1.15-1.15h17.5a1.15 1.15 0 0 1 1.15 1.15v6.75a1.9 1.9 0 0 1-1.9 1.9H4a1.9 1.9 0 0 1-1.9-1.9z";
+
+/** The cover swung open: its top edge drawn in, its sides splayed out. */
+const FOLDER_COVER_OPEN =
+  "M4.6 10.9h14.8l1.55 7.2a1.2 1.2 0 0 1-1.18 1.45H4.03a1.2 1.2 0 0 1-1.18-1.45z";
+
+/**
+ * A real folder, tab and all: a darker back plate, a lighter cover with a
+ * top sheen, a rim light and a crease, tinted for its category. The open state
+ * tips the cover forward so an expanded category reads at a glance.
+ */
 export function CategoryFolderIcon({
   category,
   icon,
@@ -425,6 +430,7 @@ export function CategoryFolderIcon({
   const art = artFor(category, icon);
   const colors = categoryPaint(art);
   const ids = useArtIds("folder");
+  const cover = open ? FOLDER_COVER_OPEN : FOLDER_COVER;
   return (
     <svg
       viewBox="0 0 24 24"
@@ -433,40 +439,59 @@ export function CategoryFolderIcon({
       focusable="false"
     >
       <defs>
-        <Gloss id={ids.front} bright={colors.bright} base={colors.base} />
         <linearGradient id={ids.back} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" style={{ stopColor: cssColor(colors.base) }} />
           <stop offset="1" style={{ stopColor: cssColor(colors.deep) }} />
         </linearGradient>
+        <linearGradient id={ids.front} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" style={{ stopColor: cssColor(colors.bright) }} />
+          <stop offset=".68" style={{ stopColor: cssColor(colors.base) }} />
+          <stop offset="1" style={{ stopColor: cssColor(colors.deep) }} />
+        </linearGradient>
+        <linearGradient id={ids.gloss} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" style={{ stopColor: "#fff", stopOpacity: 0.38 }} />
+          <stop offset=".5" style={{ stopColor: "#fff", stopOpacity: 0 }} />
+        </linearGradient>
       </defs>
       <path
-        d="M3 6.4a2.2 2.2 0 0 1 2.2-2.2h4.1l2.1 2.4h7.4a2.2 2.2 0 0 1 2.2 2.2v9.2a2.2 2.2 0 0 1-2.2 2.2H5.2A2.2 2.2 0 0 1 3 17.8z"
+        d={FOLDER_BACK}
         fill={`url(#${ids.back})`}
         stroke={cssColor(colors.deep)}
-        strokeOpacity=".6"
-        strokeWidth=".8"
+        strokeOpacity=".7"
+        strokeWidth=".7"
+        strokeLinejoin="round"
       />
       <path
-        d={open ? OPEN_FACE : CLOSED_FACE}
+        d={cover}
         fill={`url(#${ids.front})`}
         stroke={cssColor(colors.deep)}
-        strokeOpacity=".55"
-        strokeWidth=".8"
+        strokeOpacity=".5"
+        strokeWidth=".7"
+        strokeLinejoin="round"
+      />
+      <path d={cover} fill={`url(#${ids.gloss})`} />
+      <path
+        d={open ? "M5.1 11.25h13.8" : "M3.8 10.2h16.4"}
+        stroke="#fff"
+        strokeOpacity=".45"
+        strokeWidth=".65"
+        strokeLinecap="round"
       />
       <path
-        d="M4.6 10.8h14.8"
-        stroke="#fff"
-        strokeOpacity=".3"
-        strokeWidth=".9"
+        d={open ? "M4.35 12.4h15.1" : "M3.2 11.55h17.6"}
+        stroke={cssColor(colors.deep)}
+        strokeOpacity=".28"
+        strokeWidth=".6"
         strokeLinecap="round"
       />
       <g
         fill={colors.ink}
-        opacity=".96"
+        opacity=".95"
         stroke={cssColor(colors.deep)}
-        strokeWidth=".8"
+        strokeOpacity=".45"
+        strokeWidth=".7"
         strokeLinejoin="round"
-        transform="translate(12 14) scale(.82) translate(-12 -12)"
+        transform="translate(12 15) scale(.62) translate(-12 -12)"
       >
         {GLYPHS[art.glyph](colors)}
       </g>
