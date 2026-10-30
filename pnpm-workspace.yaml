@@ -6,3 +6,6 @@ allowBuilds:
 
 minimumReleaseAgeExclude:
   - "@astrojs/starlight@0.42.7"
+  - framer-motion@14.8.0
+  - motion-dom@14.8.0
+  - motion@14.8.0

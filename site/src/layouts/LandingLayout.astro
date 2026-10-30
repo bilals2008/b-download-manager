@@ -2,6 +2,7 @@
 import "../styles/global.css";
 import Header from "../components/site/Header.astro";
 import Footer from "../components/site/Footer.astro";
+import { latestRelease } from "../lib/releases";
 
 interface Props {
   title: string;
@@ -9,6 +10,10 @@ interface Props {
 }
 
 const { title, description } = Astro.props;
+
+// One GitHub read per build. The version and the file list are baked into the
+// page, so a click downloads straight away with no runtime API call.
+const release = await latestRelease();
 ---
 
 <!doctype html>
@@ -85,6 +90,13 @@ const { title, description } = Astro.props;
           !window.matchMedia("(prefers-reduced-motion: reduce)").matches
         ) {
           document.documentElement.classList.add("js-reveal");
+
+          // Never leave the page hidden if the motion bundle fails to run.
+          setTimeout(() => {
+            if (!document.documentElement.classList.contains("is-motion-ready")) {
+              document.documentElement.classList.remove("js-reveal");
+            }
+          }, 2500);
         }
       })();
     </script>
@@ -92,62 +104,47 @@ const { title, description } = Astro.props;
 
   <body id="top">
     <a class="skip-link" href="#main">Skip to content</a>
-    <Header />
+    <Header version={release?.version ?? ""} />
     <main id="main" tabindex="-1">
       <slot />
     </main>
     <Footer />
 
+    <script
+      type="application/json"
+      id="release-assets"
+      set:html={JSON.stringify(release?.assets ?? [])}
+    />
+
     <script>
-      const items = document.querySelectorAll<HTMLElement>(".reveal");
-
-      if (document.documentElement.classList.contains("js-reveal")) {
-        const observer = new IntersectionObserver(
-          (entries) => {
-            for (const entry of entries) {
-              if (entry.isIntersecting) {
-                entry.target.classList.add("is-visible");
-                observer.unobserve(entry.target);
-              }
-            }
-          },
-          { threshold: 0.08, rootMargin: "0px 0px -8% 0px" },
-        );
-
-        items.forEach((item) => observer.observe(item));
-      }
+      import "../scripts/motion";
     </script>
 
     <script>
-      import {
-        detectPlatform,
-        latestAssets,
-        pickAsset,
-        platformNames,
-      } from "../lib/releases";
+      import { detectPlatform, pickAsset, platformNames } from "../lib/releases";
 
       const platform = detectPlatform();
+      const data = document.getElementById("release-assets");
+      const assets = data?.textContent ? JSON.parse(data.textContent) : [];
+      const asset =
+        platform === "other" ? undefined : pickAsset(assets, platform);
 
-      // Every button already points at the releases page. Every desktop
-      // platform has a build, so each is narrowed to its own file.
-      if (platform !== "other") {
-        const assets = await latestAssets();
-        const asset = assets && pickAsset(assets, platform);
+      if (platform !== "other" && asset) {
+        // The CSS reveals only the mark that matches this attribute.
+        document.documentElement.dataset.platform = platform;
 
-        if (asset) {
-          for (const link of document.querySelectorAll<HTMLAnchorElement>(
-            "[data-download]",
-          )) {
-            link.href = asset.url;
-          }
+        for (const link of document.querySelectorAll<HTMLAnchorElement>(
+          "[data-download]",
+        )) {
+          link.href = asset.url;
+        }
 
-          for (const button of document.querySelectorAll<HTMLElement>(
-            "[data-download-label]",
-          )) {
-            const label = button.querySelector("span");
-            if (label) {
-              label.textContent = `Download for ${platformNames[platform]}`;
-            }
+        for (const button of document.querySelectorAll<HTMLElement>(
+          "[data-download-label]",
+        )) {
+          const label = button.querySelector("[data-download-text]");
+          if (label) {
+            label.textContent = `Download for ${platformNames[platform]}`;
           }
         }
       }

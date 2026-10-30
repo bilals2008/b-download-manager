@@ -16,7 +16,7 @@ const platforms = [
     <div class="hero-copy">
       <p class="hero-eyebrow">
         <span class="hero-eyebrow-dot" aria-hidden="true"></span>
-        Version 0.1.1 · live
+        Free · Open source
       </p>
 
       <h1 id="hero-title" class="hero-title">
@@ -33,11 +33,15 @@ const platforms = [
         <Button
           href={RELEASES_URL}
           variant="primary"
-          icon="download"
           data-download
           data-download-label
         >
-          Download
+          <span data-download-text>Download</span>
+          <span data-download-icon aria-hidden="true">
+            <PlatformIcon name="windows" size={15} />
+            <PlatformIcon name="apple" size={15} />
+            <PlatformIcon name="linux" size={15} />
+          </span>
         </Button>
         <Button href="#features" variant="secondary" icon="arrow-down">
           See what it does

@@ -2,6 +2,13 @@
 import Button from "./Button.astro";
 import ThemeToggle from "./ThemeToggle.astro";
 import { RELEASES_URL } from "../../lib/releases";
+
+interface Props {
+  /// Newest release tag, read from GitHub at build time. Empty hides the badge.
+  version?: string;
+}
+
+const { version = "" } = Astro.props;
 ---
 
 <div class="nav-sentinel" data-nav-sentinel aria-hidden="true"></div>
@@ -17,6 +24,7 @@ import { RELEASES_URL } from "../../lib/releases";
         class="brand-mark"
       />
       <span class="brand-name">B Download Manager</span>
+      <span class="brand-version" data-repo-version hidden={!version}>{version}</span>
     </a>
 
     <nav class="nav-links" aria-label="Primary">
@@ -146,6 +154,19 @@ import { RELEASES_URL } from "../../lib/releases";
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .brand-version {
+    flex: none;
+    padding: 0.08em 0.4em;
+    border-radius: var(--radius-xs);
+    background-color: color-mix(in srgb, var(--accent) 12%, transparent);
+    color: var(--accent);
+    font-family: var(--face-sans);
+    font-size: var(--type-micro);
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    line-height: 1.5;
   }
 
   .nav-links {

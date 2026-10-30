@@ -7,6 +7,22 @@ const links = [
   { href: "#faq", label: "FAQ" },
   { href: "/getting-started/", label: "Documentation" },
 ];
+
+const socials = [
+  { href: "https://github.com/bilals2008", label: "GitHub", icon: "github" },
+  {
+    href: "https://www.linkedin.com/in/muhammad-bilal-hassan-327209414/",
+    label: "LinkedIn",
+    icon: "linkedin",
+  },
+  { href: "https://x.com/MBilal7555", label: "X", icon: "x-social" },
+  {
+    href: "https://discord.com/users/1263166539058647140",
+    label: "Discord",
+    icon: "discord",
+  },
+  { href: "mailto:bilaldev7575@gmail.com", label: "Email", icon: "mail" },
+] as const;
 ---
 
 <footer class="site-footer">
@@ -41,7 +57,21 @@ const links = [
           rel="noreferrer">Muhammad Bilal Hassan</a
         >
       </p>
-      <p>Version 0.1.1 preview · Windows, macOS, Linux</p>
+
+      <nav class="footer-socials" aria-label="Social">
+        {
+          socials.map((social) => (
+            <a
+              href={social.href}
+              aria-label={social.label}
+              target={social.href.startsWith("mailto:") ? undefined : "_blank"}
+              rel="noreferrer"
+            >
+              <Icon name={social.icon} size={17} />
+            </a>
+          ))
+        }
+      </nav>
     </div>
   </div>
 </footer>
@@ -154,6 +184,32 @@ const links = [
   .footer-base a:hover {
     color: var(--footer-accent);
     text-decoration-color: currentColor;
+  }
+
+  .footer-socials {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem;
+    margin-inline-end: -0.5rem;
+  }
+
+  .footer-socials a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: var(--radius-xs);
+    color: var(--footer-muted);
+    transition:
+      color var(--duration-fast) var(--ease-out),
+      background-color var(--duration-fast) var(--ease-out);
+  }
+
+  .footer-socials a:hover {
+    background-color: color-mix(in srgb, var(--footer-ink) 6%, transparent);
+    color: var(--footer-ink);
   }
 
   .site-footer :focus-visible {

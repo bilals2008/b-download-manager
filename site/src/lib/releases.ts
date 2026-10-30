@@ -8,13 +8,19 @@ export const REPO = "bilals2008/b-download-manager";
 export const RELEASES_URL = `https://github.com/${REPO}/releases/latest`;
 
 const API_URL = `https://api.github.com/repos/${REPO}/releases/latest`;
-const CACHE_KEY = "bdm-latest-assets";
+const CACHE_KEY = "bdm-latest-release";
 
 export type Platform = "windows" | "macos" | "linux" | "other";
 
 export interface ReleaseAsset {
   name: string;
   url: string;
+}
+
+export interface Release {
+  /// The git tag of the newest release, e.g. `v0.1.3`.
+  version: string;
+  assets: ReleaseAsset[];
 }
 
 export const platformNames: Record<Exclude<Platform, "other">, string> = {
@@ -53,14 +59,16 @@ export function pickAsset(
   return undefined;
 }
 
-/// The assets of the newest published release, cached for the browser session.
+/// The newest published release, cached for the browser session.
 ///
 /// The GitHub API allows cross-origin reads but rate-limits them per address,
 /// so the answer is reused instead of fetched on every page view.
-export async function latestAssets(): Promise<ReleaseAsset[] | undefined> {
+export async function latestRelease(): Promise<Release | undefined> {
+  const cache = typeof sessionStorage === "undefined" ? undefined : sessionStorage;
+
   try {
-    const cached = sessionStorage.getItem(CACHE_KEY);
-    if (cached) return JSON.parse(cached) as ReleaseAsset[];
+    const cached = cache?.getItem(CACHE_KEY);
+    if (cached) return JSON.parse(cached) as Release;
   } catch {
     // A blocked sessionStorage costs the cache, not the download.
   }
@@ -71,21 +79,25 @@ export async function latestAssets(): Promise<ReleaseAsset[] | undefined> {
     });
     if (!response.ok) return undefined;
 
-    const release = (await response.json()) as {
+    const data = (await response.json()) as {
+      tag_name?: string;
       assets?: { name: string; browser_download_url: string }[];
     };
-    const assets = (release.assets ?? []).map((asset) => ({
-      name: asset.name,
-      url: asset.browser_download_url,
-    }));
+    const release: Release = {
+      version: data.tag_name ?? "",
+      assets: (data.assets ?? []).map((asset) => ({
+        name: asset.name,
+        url: asset.browser_download_url,
+      })),
+    };
 
     try {
-      sessionStorage.setItem(CACHE_KEY, JSON.stringify(assets));
+      cache?.setItem(CACHE_KEY, JSON.stringify(release));
     } catch {
       // Same: caching is only an optimisation.
     }
 
-    return assets;
+    return release;
   } catch {
     // Offline or blocked: the buttons keep the releases page.
     return undefined;

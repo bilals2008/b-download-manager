@@ -36,18 +36,22 @@ const platforms = [
         Install it, or build it.
       </h2>
       <p class="download-copy">
-        Version 0.1.1 ships a Windows installer, Linux AppImage and deb
-        packages, and a universal macOS dmg, all published on GitHub Releases.
+        A Windows installer, Linux AppImage and deb packages, and a universal
+        macOS dmg, all published on GitHub Releases.
       </p>
       <div class="download-action">
         <Button
           href={RELEASES_URL}
           variant="primary"
-          icon="download"
           data-download
           data-download-label
         >
-          Download
+          <span data-download-text>Download</span>
+          <span data-download-icon aria-hidden="true">
+            <PlatformIcon name="windows" size={15} />
+            <PlatformIcon name="apple" size={15} />
+            <PlatformIcon name="linux" size={15} />
+          </span>
         </Button>
       </div>
       <p class="download-meta">

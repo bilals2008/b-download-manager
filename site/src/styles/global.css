@@ -176,21 +176,33 @@
   }
 
   /*
-    Content is visible by default. Only when the observer script has claimed
-    the page does the hidden state exist, so a failed script never hides a
-    section.
+    One brand mark on a download button, matching the OS the page script found.
+    Until that happens the marks stay hidden and the button just reads "Download".
+  */
+  [data-download-icon] {
+    display: none;
+    align-items: center;
+    margin-inline-start: 0.3rem;
+  }
+
+  html[data-platform] [data-download-icon] {
+    display: inline-flex;
+  }
+
+  html[data-platform="windows"] [data-download-icon] > :not(:nth-child(1)),
+  html[data-platform="macos"] [data-download-icon] > :not(:nth-child(2)),
+  html[data-platform="linux"] [data-download-icon] > :not(:nth-child(3)) {
+    display: none;
+  }
+
+  /*
+    Content is visible by default. Only when the motion bundle is about to run
+    does the hidden state exist, so a failed script never hides a section.
+    Motion animates each `.reveal` to its visible state on scroll.
   */
   .js-reveal .reveal {
     opacity: 0;
     transform: translate3d(0, 18px, 0);
-  }
-
-  .js-reveal .reveal.is-visible {
-    opacity: 1;
-    transform: none;
-    transition:
-      opacity var(--duration-reveal) var(--ease-out),
-      transform var(--duration-reveal) var(--ease-spring);
   }
 
   @media (prefers-reduced-motion: reduce) {
