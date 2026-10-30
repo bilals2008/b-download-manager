@@ -1,0 +1,229 @@
+---
+import Button from "./Button.astro";
+
+const styles = [
+  {
+    id: "default",
+    name: "Default",
+    image: "/images/toolbars/default.webp",
+    alt: "The Default toolbar style with Add URL, Resume, Stop, Delete, Options and the other standard buttons.",
+  },
+  {
+    id: "3d",
+    name: "3D Style",
+    image: "/images/toolbars/3d-style.webp",
+    alt: "The 3D Style toolbar with glossy folder, globe, gear and clock buttons.",
+  },
+  {
+    id: "classic",
+    name: "Classic",
+    image: "/images/toolbars/classic.webp",
+    alt: "The Classic toolbar with flat folder, globe, gear and clock buttons.",
+  },
+  {
+    id: "isometric",
+    name: "Isometric",
+    image: "/images/toolbars/isometric.webp",
+    alt: "The Isometric toolbar with chunky slab buttons in riso inks.",
+  },
+  {
+    id: "blueprint",
+    name: "Blueprint",
+    image: "/images/toolbars/blueprint.webp",
+    alt: "The Blueprint toolbar with the same slab buttons in shades of blue.",
+  },
+] as const;
+---
+
+<section id="toolbars" class="toolbar-feature" aria-labelledby="toolbar-feature-title">
+  <div class="container-page">
+    <header class="toolbar-head reveal">
+      <p class="eyebrow">Feature · Toolbar packs</p>
+      <h1 id="toolbar-feature-title" class="toolbar-title">
+        A bar that looks like yours.
+      </h1>
+      <p class="toolbar-copy">
+        Five original styles ship with the app, and a toolbar pack can change
+        the colours, order and icons again. Special toolbars are coming soon.
+      </p>
+      <div class="toolbar-actions">
+        <Button href="/toolbars/" variant="primary" icon="arrow-right">
+          See the toolbar docs
+        </Button>
+      </div>
+    </header>
+
+    <div class="toolbar-showcase reveal">
+      <div class="toolbar-switcher" role="radiogroup" aria-label="Toolbar style">
+        {
+          styles.map((style, index) => (
+            <>
+              <input
+                class="toolbar-radio"
+                type="radio"
+                name="toolbar-style"
+                id={`toolbar-style-${style.id}`}
+                checked={index === 0}
+              />
+              <label for={`toolbar-style-${style.id}`}>{style.name}</label>
+            </>
+          ))
+        }
+      </div>
+
+      <div class="toolbar-stage">
+        {
+          styles.map((style, index) => (
+            <img
+              class:list={["toolbar-shot", `toolbar-shot--${style.id}`]}
+              src={style.image}
+              width="900"
+              height="80"
+              alt={style.alt}
+              loading={index === 0 ? "eager" : "lazy"}
+              decoding="async"
+            />
+          ))
+        }
+      </div>
+
+      <p class="toolbar-caption">
+        Large buttons shown. Size, labels and button order are yours in
+        Settings → Toolbar.
+      </p>
+    </div>
+  </div>
+</section>
+
+<style>
+  .toolbar-feature {
+    padding-block: var(--section-space);
+  }
+
+  .toolbar-head {
+    max-width: 46rem;
+    margin-inline: auto;
+    text-align: center;
+  }
+
+  .toolbar-title {
+    margin-top: 1.1rem;
+    color: var(--ink);
+    font-family: var(--face-display);
+    font-size: var(--type-section);
+    font-weight: 500;
+    letter-spacing: -0.035em;
+    line-height: 1.02;
+    text-wrap: balance;
+  }
+
+  .toolbar-copy {
+    max-width: 46ch;
+    margin: 1.25rem auto 0;
+    color: var(--muted);
+    font-size: var(--type-body);
+    line-height: 1.65;
+  }
+
+  .toolbar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.85rem;
+    margin-top: 1.75rem;
+  }
+
+  .toolbar-showcase {
+    max-width: 60rem;
+    margin: clamp(2.5rem, 5vw, 4rem) auto 0;
+  }
+
+  .toolbar-switcher {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.4rem;
+  }
+
+  .toolbar-radio {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .toolbar-switcher label {
+    padding: 0.45rem 0.8rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: var(--muted);
+    font-size: var(--type-caption);
+    font-weight: 500;
+    line-height: 1;
+    cursor: pointer;
+    transition:
+      background-color var(--duration-fast) var(--ease-out),
+      border-color var(--duration-fast) var(--ease-out),
+      color var(--duration-fast) var(--ease-out);
+  }
+
+  .toolbar-switcher label:hover {
+    border-color: var(--muted);
+    color: var(--ink);
+  }
+
+  .toolbar-radio:checked + label {
+    border-color: var(--ink);
+    background-color: var(--ink);
+    color: var(--page);
+  }
+
+  .toolbar-radio:focus-visible + label {
+    outline: 2px solid var(--focus);
+    outline-offset: 3px;
+  }
+
+  .toolbar-stage {
+    margin-top: 1rem;
+    padding: 0.55rem;
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    background-color: #0b1416;
+  }
+
+  .toolbar-shot {
+    display: none;
+    width: 100%;
+    height: auto;
+    border-radius: calc(var(--radius-md) - 2px);
+  }
+
+  .toolbar-showcase:has(#toolbar-style-default:checked) .toolbar-shot--default,
+  .toolbar-showcase:has(#toolbar-style-3d:checked) .toolbar-shot--3d,
+  .toolbar-showcase:has(#toolbar-style-classic:checked) .toolbar-shot--classic,
+  .toolbar-showcase:has(#toolbar-style-isometric:checked) .toolbar-shot--isometric,
+  .toolbar-showcase:has(#toolbar-style-blueprint:checked) .toolbar-shot--blueprint {
+    display: block;
+  }
+
+  .toolbar-caption {
+    margin-top: 0.8rem;
+    color: var(--muted);
+    font-size: var(--type-caption);
+    line-height: 1.5;
+    text-align: center;
+  }
+
+  @media (max-width: 47.999rem) {
+    .toolbar-shot {
+      min-width: 42rem;
+    }
+  }
+</style>

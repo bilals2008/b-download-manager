@@ -1,23 +1,26 @@
 ---
 import LandingLayout from "../layouts/LandingLayout.astro";
 import Button from "../components/site/Button.astro";
+import ToolbarFeature from "../components/site/ToolbarFeature.astro";
 import { RELEASES_URL } from "../lib/releases";
 ---
 
 <LandingLayout
-  title="Features · B Download Manager"
-  description="More features for B Download Manager are on the way."
+  title="Features · Toolbar packs · B Download Manager"
+  description="Five toolbar styles, custom toolbar packs from JSON, and more features on the way."
 >
+  <ToolbarFeature />
+
   <section class="section features-soon" aria-labelledby="features-soon-title">
     <div class="container-page">
       <div class="soon-band reveal">
-        <p class="eyebrow">Features</p>
-        <h1 id="features-soon-title" class="soon-title">
+        <p class="eyebrow">More features</p>
+        <h2 id="features-soon-title" class="soon-title">
           More features are on the way.
-        </h1>
+        </h2>
         <p class="soon-copy">
-          A fuller feature list is being written up. In the meantime, everything
-          the engine already does is on the home page.
+          The toolbar packs are ready now. The rest of the feature list is being
+          written up; everything the engine already does is on the home page.
         </p>
         <div class="soon-action">
           <Button href="/" variant="secondary" icon="arrow-right">

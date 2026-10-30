@@ -48,6 +48,7 @@ export default defineConfig({
             { label: 'Getting started', slug: 'getting-started' },
             { label: 'Getting the app', slug: 'installation' },
             { label: 'Using the app', slug: 'usage' },
+            { label: 'Toolbar packs', slug: 'toolbars' },
             { label: 'Troubleshooting', slug: 'troubleshooting' },
             { label: 'FAQ', slug: 'faq' },
           ],

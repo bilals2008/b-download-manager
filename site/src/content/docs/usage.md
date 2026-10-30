@@ -69,6 +69,12 @@ To make closing the window quit the app instead, open **Options → General** an
 
 **Options → General** holds the theme — **Auto** follows Windows — and the font with its weight. Changes appear immediately in every open window.
 
+## The toolbar
+
+The bar under the menu can switch between five styles and your own button order. **View → Toolbar** changes the style, size and buttons; **Settings → Toolbar** also switches text labels and opens the same Customize and Manage windows.
+
+[Toolbar packs](/toolbars/) explains how to install a custom toolbar from a JSON file, or make one yourself.
+
 The File types, Browser capture, Sites Logins, Dial Up / VPN and Sounds pages are listed but not built yet. They say so when you open them.
 
 ## Keyboard
