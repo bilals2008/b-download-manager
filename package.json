@@ -25,6 +25,7 @@
     "check:grabber": "node scripts/check-grabber.mjs",
     "check:updates": "node scripts/check-updates.mjs",
     "check:tips": "node scripts/check-tips.mjs",
+    "check:share": "node scripts/check-share.mjs",
     "release:patch": "node scripts/release.mjs patch",
     "release:minor": "node scripts/release.mjs minor",
     "release:major": "node scripts/release.mjs major",

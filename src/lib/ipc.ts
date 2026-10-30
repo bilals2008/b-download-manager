@@ -303,6 +303,21 @@ export function openUrl(url: string): Promise<void> {
   return invoke<void>("open_url", { url });
 }
 
+/**
+ * Show the share window of the system, the one that lists WhatsApp and Mail.
+ * False when it cannot be shown, so the caller can fall back to the clipboard.
+ */
+export function shareToSystem(
+  title: string,
+  text: string,
+  url: string,
+): Promise<boolean> {
+  return invoke<void>("share_app", { title, text, url }).then(
+    () => true,
+    () => false,
+  );
+}
+
 /** Cap the bandwidth of the whole application. Zero means no cap. */
 export function setSpeedLimit(bytesPerSecond: number): Promise<number> {
   return invoke<number>("set_speed_limit", { bytesPerSecond });

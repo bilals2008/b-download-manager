@@ -8,6 +8,7 @@ mod grabber;
 mod lifecycle;
 mod prefs;
 mod progress;
+mod share;
 mod state;
 mod toolbars;
 mod tray;
@@ -1156,6 +1157,7 @@ pub fn run() {
             set_window_background,
             open_path,
             open_url,
+            share::share_app,
             updater::check_update,
             updater::install_update,
             toolbars::list_toolbar_packs,

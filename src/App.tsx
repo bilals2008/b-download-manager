@@ -13,7 +13,7 @@ import { AddDownloadDialog } from "@/components/workspace/add-download-dialog";
 import { CloseConfirmDialog } from "@/components/workspace/close-confirm-dialog";
 import { UpdateDialog } from "@/components/workspace/update-dialog";
 import { Workspace } from "@/components/workspace/workspace";
-import { APP_HOME_PAGE } from "@/lib/brand";
+import { APP_HOME_PAGE, APP_NAME, APP_TAGLINE } from "@/lib/brand";
 import { describeError, isDesktop } from "@/lib/errors";
 import { applyFont } from "@/lib/fonts";
 import { openGrabberWindow } from "@/lib/grabber";
@@ -36,6 +36,7 @@ import {
   setShowCompleteDialog,
   setShowProgressOnStart,
   setSpeedLimit,
+  shareToSystem,
 } from "@/lib/ipc";
 import {
   loadSettings,
@@ -44,6 +45,7 @@ import {
   saveToolbarSize,
   type ToolbarSize,
 } from "@/lib/settings";
+import { shareApp } from "@/lib/share";
 import { nextTipIndex, saveTipCursor } from "@/lib/tips";
 import {
   BUILTIN_TOOLBAR_PACKS,
@@ -419,6 +421,24 @@ export default function App() {
     setTipsOpen(false);
   }
 
+  // No box in between: the Help row and the toolbar button hand the invitation
+  // straight to the share window of the system. Only a machine that can show
+  // neither that window nor the Web Share API falls back to the clipboard, and
+  // only a clipboard that refuses says anything.
+  function tellFriend() {
+    const system = isDesktop()
+      ? () => shareToSystem(APP_NAME, APP_TAGLINE, APP_HOME_PAGE)
+      : undefined;
+    void shareApp(system).then((outcome) => {
+      if (outcome === "failed") {
+        downloads.reportError(
+          "The invitation could not be shared or copied. The address is " +
+            APP_HOME_PAGE,
+        );
+      }
+    });
+  }
+
   function handleCommand(command: ShellCommand) {
     if (command.startsWith("font:")) {
       chooseFont(command.slice("font:".length));
@@ -451,6 +471,9 @@ export default function App() {
         break;
       case "about":
         setAboutOpen(true);
+        break;
+      case "tell-friend":
+        tellFriend();
         break;
       case "tip-of-the-day":
         openTips();

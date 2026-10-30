@@ -27,6 +27,10 @@ tauri-plugin-updater = "2"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem", "Win32_Foundation", "Win32_Graphics_Dwm"] }
+windows = { version = "0.62", features = ["ApplicationModel_DataTransfer", "Foundation", "Win32_Foundation"] }
+# The `interface` macro expands to `windows_core::` paths, so the crate has to
+# be a direct dependency, not just a re-export of `windows`.
+windows-core = "0.62"
 
 [profile.release]
 codegen-units = 1

@@ -199,7 +199,7 @@ export function buildMenus(
       { command: "check-updates", label: "Check for updates..." },
       "separator",
       { command: "about", label: "About B Download Manager..." },
-      { command: "tell-friend", label: "Tell a friend", disabled: true },
+      { command: "tell-friend", label: "Tell a friend" },
     ],
   },
   ];
