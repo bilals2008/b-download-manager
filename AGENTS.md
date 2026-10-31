@@ -21,7 +21,6 @@ Organize files properly: Keep folders and files logically structured by feature 
 - Follow the existing project structure, conventions, and tech stack. Avoid unnecessary files, dependencies, and architectural changes.
 - Prioritize clean architecture, maintainability, performance, accessibility, and consistency.
 Also, structure the design system  to support multiple themes in the future. Switching themes should instantly update the entire UI, including backgrounds, colors, borders, and other design tokens. Use centralized semantic CSS variables and theme configurations to make adding or changing themes easy without modifying individual components.
-donot use broswer tools to verify user will review manually 
 
 ## Problem solving
 
