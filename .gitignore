@@ -33,6 +33,9 @@ src-tauri/gen
 src-tauri/.signing-key
 src-tauri/.signing-key.pub
 
+# The fetched ffmpeg sidecar (see src-tauri/binaries/README.md)
+src-tauri/binaries/ffmpeg-*
+
 # Logs, caches, editor and OS noise
 *.log
 *.tsbuildinfo

@@ -11,6 +11,8 @@ pub(crate) mod download;
 pub(crate) mod mux;
 pub(crate) mod policy;
 mod probe;
+pub(crate) mod tools;
+pub(crate) mod verify;
 pub(crate) mod window;
 pub(crate) mod ytdlp;
 

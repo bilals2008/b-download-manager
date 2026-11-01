@@ -28,6 +28,8 @@
     "check:tips": "node scripts/check-tips.mjs",
     "check:share": "node scripts/check-share.mjs",
     "check:whats-new": "node scripts/check-whats-new.mjs",
+    "ffmpeg:fetch": "node scripts/fetch-ffmpeg.mjs",
+    "check:ffmpeg": "node scripts/fetch-ffmpeg.mjs --check",
     "release:patch": "node scripts/release.mjs patch",
     "release:minor": "node scripts/release.mjs minor",
     "release:major": "node scripts/release.mjs major",

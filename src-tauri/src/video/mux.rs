@@ -1,21 +1,22 @@
 //! Remuxing tracks into one file.
 //!
 //! **The one function the whole application calls is [`join`].** It copies the
-//! bytes of the tracks into a container; it never re-encodes. V4 ships an
-//! `ffmpeg` sidecar behind it, and a future native writer may replace the body
-//! of [`join`] without touching a caller.
+//! bytes of the tracks into a container; it never re-encodes. The `ffmpeg`
+//! sidecar ships with the application, so this works on a stock install; a
+//! future native writer may replace the body of [`join`] without touching a
+//! caller.
 //!
 //! The output is written to a temporary file beside the destination, then put
 //! in place with [`idm_core::disk::replace_file`]. A cancelled or failed join
 //! therefore leaves either the old file or no file, never half of one. The
 //! tracks are the caller's to delete, and only after this function returned
-//! successfully.
+//! successfully **and** the file was checked by [`super::verify`].
 //!
-//! `ffmpeg` is located in this order: `BDM_FFMPEG` (a test/override hook), a
-//! sidecar beside the executable (`ffmpeg.exe`, `ffmpeg`, or the target-triple
-//! name Tauri gives an `externalBin`), then `PATH`. It is run with `-c copy`
-//! and, for MP4, `+faststart`.
+//! `ffmpeg` is located by [`super::tools`]: `BDM_FFMPEG` (a test/override
+//! hook), a sidecar beside the executable, then `PATH`. It is run with
+//! `-c copy` and, for the MP4 family, `+faststart`.
 
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Mutex;
@@ -25,30 +26,62 @@ use idm_core::disk;
 use idm_core::log;
 use idm_core::media::{Format, MediaKind};
 
+use super::tools::{self, Tool};
+
 /// The container the joined file is written in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Container {
     Mp4,
+    /// Sound alone in an MP4 container, which is what an `.m4a` file is.
+    M4a,
     Mkv,
+    Webm,
 }
 
 impl Container {
     pub fn extension(self) -> &'static str {
         match self {
             Container::Mp4 => "mp4",
+            Container::M4a => "m4a",
             Container::Mkv => "mkv",
+            Container::Webm => "webm",
         }
     }
 
+    /// The `-f` name of the muxer. `ipod` is the MP4 muxer's audio profile: it
+    /// writes the `M4A ` brand a `.m4a` file should carry.
     fn format(self) -> &'static str {
         match self {
             Container::Mp4 => "mp4",
+            Container::M4a => "ipod",
             Container::Mkv => "matroska",
+            Container::Webm => "webm",
         }
     }
 
     fn faststart(self) -> bool {
-        self == Container::Mp4
+        matches!(self, Container::Mp4 | Container::M4a)
+    }
+
+    /// The container a finished file with this name should be in.
+    pub fn from_extension(extension: &str) -> Option<Container> {
+        match extension.to_ascii_lowercase().as_str() {
+            "mp4" => Some(Container::Mp4),
+            "m4a" => Some(Container::M4a),
+            "mkv" => Some(Container::Mkv),
+            "webm" => Some(Container::Webm),
+            _ => None,
+        }
+    }
+
+    /// The container for a sound-only download, from what the manifest said.
+    pub fn for_audio(format: &Format) -> Container {
+        let opus = format.container == "webm" || codec_has(format, &["opus", "vorbis"]);
+        if opus {
+            Container::Webm
+        } else {
+            Container::M4a
+        }
     }
 }
 
@@ -59,6 +92,8 @@ pub enum MuxError {
     NotFound,
     /// `ffmpeg` ran and refused. The exit code is the only detail logged.
     Failed(Option<i32>),
+    /// `ffmpeg` said it was done and wrote nothing usable.
+    Empty,
     TimedOut,
     Cancelled,
     Io(String),
@@ -69,15 +104,16 @@ impl std::fmt::Display for MuxError {
         match self {
             MuxError::NotFound => write!(
                 f,
-                "the tracks could not be joined because ffmpeg was not found; the download was kept"
+                "the tracks could not be joined because the video tool is missing from this install"
             ),
             MuxError::Failed(code) => match code {
                 Some(code) => write!(
                     f,
-                    "the tracks could not be joined (ffmpeg exited with {code})"
+                    "the tracks could not be joined (the video tool exited with {code})"
                 ),
                 None => write!(f, "the tracks could not be joined"),
             },
+            MuxError::Empty => write!(f, "the tracks were joined but the file is empty"),
             MuxError::TimedOut => write!(f, "the join took too long and was stopped"),
             MuxError::Cancelled => write!(f, "the join was stopped"),
             MuxError::Io(message) => write!(f, "the join could not be written: {message}"),
@@ -135,10 +171,20 @@ impl Drop for CancelFlag<'_> {
 /// Join the tracks in order into `output` in `container`. **No re-encode.**
 ///
 /// This is the only remux entry point in the application. An empty input list
-/// is refused; the caller never has nothing to join.
+/// is refused; the caller never has nothing to join. A join that produced no
+/// usable file is an error, so the caller never puts a zero-byte file in
+/// place.
 pub fn join(inputs: &[PathBuf], output: &Path, container: Container) -> Result<(), MuxError> {
     if inputs.is_empty() {
         return Err(MuxError::Io("there is nothing to join".to_string()));
+    }
+    for input in inputs {
+        if !input.is_file() {
+            return Err(MuxError::Io(format!(
+                "a track is missing: {}",
+                input.display()
+            )));
+        }
     }
     let _one = ONE_AT_A_TIME
         .lock()
@@ -147,41 +193,84 @@ pub fn join(inputs: &[PathBuf], output: &Path, container: Container) -> Result<(
     clear_cancel(output);
     let _cancel_flag = CancelFlag(output);
 
-    let ffmpeg = locate().ok_or(MuxError::NotFound)?;
+    let ffmpeg = Tool::Ffmpeg.locate().ok_or(MuxError::NotFound)?;
     let temporary = temporary_path(output);
     let mut command = build_command(&ffmpeg, inputs, &temporary, container);
+    let started = Instant::now();
     let mut child = command
         .spawn()
-        .map_err(|error| MuxError::Io(format!("ffmpeg could not be started: {error}")))?;
+        .map_err(|error| MuxError::Io(format!("the video tool could not be started: {error}")))?;
 
-    let started = Instant::now();
+    // The tool's complaints are the only way to know why a join was refused;
+    // they are read on a thread so a noisy run cannot fill the pipe and stall.
+    let complaints = child.stderr.take().map(|stderr| {
+        std::thread::spawn(move || {
+            let mut text = String::new();
+            let mut limited = stderr.take(64 * 1024);
+            let _ = limited.read_to_string(&mut text);
+            text
+        })
+    });
+
+    let outcome = wait(&mut child, output, started, &temporary);
+    if let Some(handle) = complaints {
+        let text = handle.join().unwrap_or_default();
+        let text = text.trim();
+        if !text.is_empty() {
+            let last = text
+                .lines()
+                .rev()
+                .map(str::trim)
+                .find(|line| !line.is_empty())
+                .unwrap_or(text);
+            log::write("warn", &format!("ffmpeg: {}", take(last, 300)));
+        }
+    }
+    outcome
+}
+
+/// Wait for the child, honouring cancel and the timeout.
+fn wait(
+    child: &mut std::process::Child,
+    output: &Path,
+    started: Instant,
+    temporary: &Path,
+) -> Result<(), MuxError> {
     loop {
         match child.try_wait() {
             Ok(Some(status)) => {
-                if status.success() {
-                    if let Err(error) = disk::replace_file(&temporary, output) {
-                        let _ = std::fs::remove_file(&temporary);
-                        return Err(MuxError::Io(error.to_string()));
-                    }
+                if !status.success() {
+                    let _ = std::fs::remove_file(temporary);
+                    let code = status.code();
                     log::write(
-                        "info",
-                        &format!("joined {} track(s) into {}", inputs.len(), output.display()),
+                        "warn",
+                        &format!("the video tool refused to join the tracks (exit {code:?})"),
                     );
-                    return Ok(());
+                    return Err(MuxError::Failed(code));
                 }
-                let _ = std::fs::remove_file(&temporary);
-                let code = status.code();
+                let size = std::fs::metadata(temporary)
+                    .map(|meta| meta.len())
+                    .unwrap_or(0);
+                if size == 0 {
+                    let _ = std::fs::remove_file(temporary);
+                    log::write("warn", "the video tool wrote no file");
+                    return Err(MuxError::Empty);
+                }
+                if let Err(error) = disk::replace_file(temporary, output) {
+                    let _ = std::fs::remove_file(temporary);
+                    return Err(MuxError::Io(error.to_string()));
+                }
                 log::write(
-                    "warn",
-                    &format!("ffmpeg refused to join the tracks (exit {code:?})"),
+                    "info",
+                    &format!("joined {size} bytes into {}", output.display()),
                 );
-                return Err(MuxError::Failed(code));
+                return Ok(());
             }
             Ok(None) => {}
             Err(error) => {
                 let _ = child.kill();
                 let _ = child.wait();
-                let _ = std::fs::remove_file(&temporary);
+                let _ = std::fs::remove_file(temporary);
                 return Err(MuxError::Io(error.to_string()));
             }
         }
@@ -189,14 +278,14 @@ pub fn join(inputs: &[PathBuf], output: &Path, container: Container) -> Result<(
         if is_cancelled(output) {
             let _ = child.kill();
             let _ = child.wait();
-            let _ = std::fs::remove_file(&temporary);
+            let _ = std::fs::remove_file(temporary);
             log::write("info", "the join was stopped");
             return Err(MuxError::Cancelled);
         }
         if started.elapsed() > TIMEOUT {
             let _ = child.kill();
             let _ = child.wait();
-            let _ = std::fs::remove_file(&temporary);
+            let _ = std::fs::remove_file(temporary);
             log::write("warn", "the join timed out and was stopped");
             return Err(MuxError::TimedOut);
         }
@@ -226,10 +315,9 @@ pub fn choose_container(video: Option<&Format>, audio: Option<&Format>) -> Conta
     }
 
     let Some(video) = video else {
-        return if audio.is_some_and(|audio| audio.container == "webm") {
-            Container::Mkv
-        } else {
-            Container::Mp4
+        return match audio {
+            Some(audio) => Container::for_audio(audio),
+            None => Container::Mp4,
         };
     };
 
@@ -262,20 +350,23 @@ fn temporary_path(output: &Path) -> PathBuf {
     output.with_file_name(format!(".{name}.idmmux"))
 }
 
+fn take(text: &str, limit: usize) -> String {
+    text.chars().take(limit).collect()
+}
+
 /// The command, with `-c copy` and no input on stdin.
+///
+/// The bitstream is copied as it is. `ffmpeg` inserts the one filter a copy
+/// genuinely needs (`aac_adtstoasc` for ADTS AAC into MP4, which is what every
+/// TS-to-MP4 HLS join is), so no filter is named here and none can be applied
+/// to a stream that does not take it.
 fn build_command(
     ffmpeg: &Path,
     inputs: &[PathBuf],
     output: &Path,
     container: Container,
 ) -> Command {
-    let mut command = if runs_through_cmd(ffmpeg) {
-        let mut command = Command::new("cmd");
-        command.arg("/C").arg(ffmpeg);
-        command
-    } else {
-        Command::new(ffmpeg)
-    };
+    let mut command = tools::command_for(ffmpeg);
 
     command.args(["-hide_banner", "-loglevel", "error", "-nostdin", "-y"]);
     for input in inputs {
@@ -302,84 +393,19 @@ fn build_command(
         .arg(output)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null());
+        .stderr(Stdio::piped());
 
     command
-}
-
-fn runs_through_cmd(path: &Path) -> bool {
-    #[cfg(windows)]
-    {
-        path.extension()
-            .map(|extension| {
-                let extension = extension.to_string_lossy().to_ascii_lowercase();
-                extension == "cmd" || extension == "bat"
-            })
-            .unwrap_or(false)
-    }
-    #[cfg(not(windows))]
-    {
-        let _ = path;
-        false
-    }
-}
-
-/// `ffmpeg` from the override, beside the application, or on `PATH`.
-fn locate() -> Option<PathBuf> {
-    if let Some(value) = std::env::var_os("BDM_FFMPEG") {
-        let path = PathBuf::from(value);
-        if path.is_file() {
-            return Some(path);
-        }
-    }
-
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(folder) = exe.parent() {
-            for name in ["ffmpeg.exe", "ffmpeg", "ffmpeg.cmd", "ffmpeg.bat"] {
-                let path = folder.join(name);
-                if path.is_file() {
-                    return Some(path);
-                }
-            }
-            // A Tauri sidecar keeps its target triple in the file name.
-            if let Ok(entries) = std::fs::read_dir(folder) {
-                for entry in entries.flatten() {
-                    let path = entry.path();
-                    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
-                        continue;
-                    };
-                    if name.starts_with("ffmpeg-") && path.is_file() {
-                        return Some(path);
-                    }
-                }
-            }
-        }
-    }
-
-    let path = std::env::var_os("PATH")?;
-    for folder in std::env::split_paths(&path) {
-        for name in ["ffmpeg.exe", "ffmpeg"] {
-            let candidate = folder.join(name);
-            if candidate.is_file() {
-                return Some(candidate);
-            }
-        }
-    }
-    None
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::MutexGuard;
 
-    /// The tests share `BDM_FFMPEG` and the module's cancel flag.
-    static TEST_LOCK: Mutex<()> = Mutex::new(());
-
-    fn lock() -> MutexGuard<'static, ()> {
-        TEST_LOCK
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    /// The tests point `BDM_FFMPEG` at a stand-in, and the module's cancel
+    /// flag is shared too.
+    fn lock() -> std::sync::MutexGuard<'static, ()> {
+        super::super::tools::test_guard()
     }
 
     fn format(kind: MediaKind, container: &str, codec: &str) -> Format {
@@ -408,6 +434,20 @@ mod tests {
 
         let ts = format(MediaKind::Muxed, "ts", "");
         assert_eq!(choose_container(Some(&ts), None), Container::Mp4);
+    }
+
+    #[test]
+    fn sound_alone_gets_the_container_its_codec_fits() {
+        assert_eq!(
+            Container::for_audio(&format(MediaKind::Audio, "m4a", "mp4a.40.2")),
+            Container::M4a
+        );
+        assert_eq!(
+            Container::for_audio(&format(MediaKind::Audio, "webm", "opus")),
+            Container::Webm
+        );
+        assert_eq!(Container::M4a.extension(), "m4a");
+        assert_eq!(Container::Webm.format(), "webm");
     }
 
     #[test]
@@ -446,6 +486,31 @@ mod tests {
         assert!(args.windows(2).any(|pair| pair == ["-f", "matroska"]));
         assert!(!args.iter().any(|arg| arg == "-movflags"));
         assert!(args.windows(2).any(|pair| pair == ["-map", "1:a:0?"]));
+
+        let sound = build_command(
+            Path::new("ffmpeg"),
+            &[PathBuf::from("audio.track")],
+            &output,
+            Container::M4a,
+        );
+        let args: Vec<String> = sound
+            .get_args()
+            .map(|arg| arg.to_string_lossy().to_string())
+            .collect();
+        assert!(args.windows(2).any(|pair| pair == ["-f", "ipod"]));
+    }
+
+    #[test]
+    fn a_missing_track_is_refused_before_the_tool_runs() {
+        let output = std::env::temp_dir().join(format!("bdm-mux-missing-{}", std::process::id()));
+        let error = join(
+            &[PathBuf::from("there-is-no-such-track.track")],
+            &output,
+            Container::Mp4,
+        )
+        .expect_err("a missing track");
+        assert!(matches!(error, MuxError::Io(_)), "{error}");
+        assert!(!output.exists());
     }
 
     #[cfg(windows)]
@@ -497,7 +562,7 @@ mod tests {
         std::fs::write(&video, b"v").expect("the video");
         std::fs::write(&audio, b"a").expect("the audio");
         let output = dir.join("film.mkv");
-        join(&[video], &output, Container::Mkv).expect("a join");
+        join(&[video, audio], &output, Container::Mkv).expect("a join");
         assert_eq!(std::fs::read(&output).expect("the file"), b"MKV\r\n");
 
         std::env::remove_var("BDM_FFMPEG");
@@ -511,7 +576,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("bdm-mux-fail-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("the test folder");
-        let fake = fake_ffmpeg(&dir, "exit /b 3");
+        let fake = fake_ffmpeg(&dir, "echo an error 1>&2\r\nexit /b 3");
         std::env::set_var("BDM_FFMPEG", &fake);
 
         let input = dir.join("video.track");
@@ -519,6 +584,31 @@ mod tests {
         let output = dir.join("film.mp4");
         let error = join(&[input], &output, Container::Mp4).expect_err("a refusing ffmpeg");
         assert_eq!(error, MuxError::Failed(Some(3)));
+        assert!(!output.exists());
+        assert!(!temporary_path(&output).exists());
+
+        std::env::remove_var("BDM_FFMPEG");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_tool_that_writes_nothing_is_an_error_not_an_empty_file() {
+        let _guard = lock();
+        let dir = std::env::temp_dir().join(format!("bdm-mux-empty-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("the test folder");
+        let fake = fake_ffmpeg(
+            &dir,
+            "set \"last=\"\r\nfor %%a in (%*) do set \"last=%%a\"\r\nbreak > \"%last%\"",
+        );
+        std::env::set_var("BDM_FFMPEG", &fake);
+
+        let input = dir.join("video.track");
+        std::fs::write(&input, b"track").expect("the track");
+        let output = dir.join("film.mp4");
+        let error = join(&[input], &output, Container::Mp4).expect_err("an empty join");
+        assert_eq!(error, MuxError::Empty);
         assert!(!output.exists());
         assert!(!temporary_path(&output).exists());
 

@@ -21,12 +21,28 @@ use crate::state::AppState;
 
 use super::capture::DownloadRequest;
 use super::mux::{self, Container};
+use super::verify::{self, Expect};
 use super::{MediaJob, MediaState, SourcePlan};
 
 /// The row id a started media download answers with.
 pub struct Started {
     pub id: u64,
     pub dest: String,
+}
+
+/// What the finished file has to be, decided before a byte is fetched.
+#[derive(Debug, Clone)]
+pub struct Delivery {
+    /// The extension the file is given. It is what the finished bytes are
+    /// checked against.
+    pub extension: String,
+    /// The container the tracks are joined into. `None` when no join is
+    /// needed; a track that turns out not to be in the claimed container is
+    /// still joined into the one this name implies.
+    pub container: Option<Container>,
+    /// The finished file must hold a picture and/or sound.
+    pub video: bool,
+    pub audio: bool,
 }
 
 /// Start the chosen track(s). The work is done on a task of its own; the
@@ -82,13 +98,28 @@ pub fn start(
         && matches!(job.source, Some(SourcePlan::Files { .. }))
         && matches!(format.kind, MediaKind::Muxed | MediaKind::Video)
         && matches!(format.container.as_str(), "mp4" | "webm" | "mkv");
-    let (extension, mux_container, audio_only) = if format.kind == MediaKind::Audio {
-        (output_container(format), None, true)
+    let audio_only = format.kind == MediaKind::Audio;
+    let (extension, container) = if audio_only {
+        // Sound alone keeps its own name and its own container. The track may
+        // still arrive as a bare ADTS stream under an `.m4a` name, which the
+        // delivery step joins into the container the name promises.
+        let extension = output_container(format);
+        let container = Container::from_extension(&extension);
+        (extension, container)
     } else if direct {
-        (format.container.clone(), None, false)
+        (
+            format.container.clone(),
+            Container::from_extension(&format.container),
+        )
     } else {
         let container = mux::choose_container(Some(format), audio_format);
-        (container.extension().to_string(), Some(container), false)
+        (container.extension().to_string(), Some(container))
+    };
+    let delivery = Delivery {
+        video: !audio_only,
+        audio: audio_only || audio_format.is_some() || matches!(format.kind, MediaKind::Muxed),
+        extension: extension.clone(),
+        container,
     };
     let file_name = with_extension(&name, &extension);
     let dest = crate::bridge::dest::unique(&folder, &file_name);
@@ -124,17 +155,7 @@ pub fn start(
     let app = app.clone();
     let dest_clone = dest.clone();
     tauri::async_runtime::spawn(async move {
-        run(
-            &app,
-            job,
-            request,
-            dest_clone,
-            work_dir,
-            mux_container,
-            audio_only,
-            control,
-        )
-        .await;
+        run(&app, job, request, dest_clone, work_dir, delivery, control).await;
     });
 
     Ok(Started {
@@ -143,15 +164,13 @@ pub fn start(
     })
 }
 
-#[allow(clippy::too_many_arguments)]
 async fn run(
     app: &AppHandle,
     job: MediaJob,
     request: DownloadRequest,
     dest: PathBuf,
     work_dir: PathBuf,
-    container: Option<Container>,
-    audio_only: bool,
+    delivery: Delivery,
     control: Arc<TrackControl>,
 ) {
     let state = app.state::<AppState>();
@@ -211,31 +230,7 @@ async fn run(
 
     match result {
         Ok(()) => {
-            let video = video_track_path(&work_dir);
-            if audio_only {
-                // Sound on its own is already in its container; there is
-                // nothing to join.
-                if let Err(error) = disk::replace_file(&video, &dest) {
-                    finish_failed(&state, job.id, error.to_string());
-                    return;
-                }
-                let _ = std::fs::remove_dir_all(&work_dir);
-                finish_saved(&state, job.id);
-                return;
-            }
-
-            let Some(container) = container else {
-                // A plain file that is already in a final container has no
-                // second track and needs no remux; it is the deliverable.
-                if let Err(error) = disk::replace_file(&video, &dest) {
-                    finish_failed(&state, job.id, error.to_string());
-                    return;
-                }
-                let _ = std::fs::remove_dir_all(&work_dir);
-                finish_saved(&state, job.id);
-                return;
-            };
-            let mut inputs = vec![video.clone()];
+            let mut inputs = vec![video_track_path(&work_dir)];
             if request.audio.is_some() {
                 let audio = audio_track_path(&work_dir);
                 if !audio.is_file() {
@@ -249,30 +244,22 @@ async fn run(
                 inputs.push(audio);
             }
 
-            state.update_media_job(job.id, |job| {
-                job.stage = Some("Joining".to_string());
-            });
+            let stage = stage_sink(app, job.id);
             let destination = dest.clone();
-            let join_inputs = inputs.clone();
-            let joined = tokio::task::spawn_blocking(move || {
-                mux::join(&join_inputs, &destination, container)
+            let plan = delivery.clone();
+            let finished = tokio::task::spawn_blocking(move || {
+                deliver(&destination, inputs, &plan, stage.as_ref())
             })
             .await;
 
-            match joined {
-                Ok(Ok(())) => {
-                    // The finished name is in place, so the pieces can go.
-                    for input in &inputs {
-                        let _ = std::fs::remove_file(input);
-                    }
+            match finished {
+                Ok(Ok(path)) => {
+                    // The finished file is in place and checked, so the pieces
+                    // can go.
                     let _ = std::fs::remove_dir_all(&work_dir);
-                    finish_saved(&state, job.id);
+                    finish_saved(&state, job.id, path);
                 }
-                Ok(Err(mux::MuxError::Cancelled)) => {
-                    // A stopped join leaves neither track behind.
-                    for input in &inputs {
-                        let _ = std::fs::remove_file(input);
-                    }
+                Ok(Err(DeliverError::Cancelled)) => {
                     state.update_media_job(job.id, |job| {
                         job.downloading = false;
                         job.dest = None;
@@ -280,7 +267,7 @@ async fn run(
                         job.stage = Some("Stopped".to_string());
                     });
                 }
-                Ok(Err(error)) => finish_failed(&state, job.id, error.to_string()),
+                Ok(Err(DeliverError::Failed(message))) => finish_failed(&state, job.id, message),
                 Err(error) => finish_failed(&state, job.id, error.to_string()),
             }
         }
@@ -311,8 +298,34 @@ async fn run(
                     .await;
                     match fallback {
                         Ok(Ok(())) => {
-                            let _ = std::fs::remove_dir_all(&work_dir);
-                            finish_saved(&state, job.id);
+                            // The tool wrote the file; it still has to be what
+                            // the name promises before the row is called saved.
+                            let check_path = dest.clone();
+                            let extension = delivery.extension.clone();
+                            let video = delivery.video;
+                            let audio = delivery.audio;
+                            let checked = tokio::task::spawn_blocking(move || {
+                                verify::check_finished(
+                                    &check_path,
+                                    Expect {
+                                        extension: &extension,
+                                        video,
+                                        audio,
+                                    },
+                                )
+                            })
+                            .await;
+                            match checked {
+                                Ok(Ok(_)) => {
+                                    let _ = std::fs::remove_dir_all(&work_dir);
+                                    finish_saved(&state, job.id, dest.clone());
+                                }
+                                Ok(Err(error)) => {
+                                    let _ = std::fs::remove_file(&dest);
+                                    finish_failed(&state, job.id, error)
+                                }
+                                Err(error) => finish_failed(&state, job.id, error.to_string()),
+                            }
                         }
                         Ok(Err(super::ytdlp::YtDlpError::Cancelled)) => {
                             state.update_media_job(job.id, |job| {
@@ -345,6 +358,87 @@ async fn run(
 enum Outcome {
     Cancelled,
     Failed(String),
+}
+
+/// Why the finished file could not be delivered.
+enum DeliverError {
+    Cancelled,
+    Failed(String),
+}
+
+/// Put the downloaded tracks in place, then read the result back.
+///
+/// A track that already is the file the name promises (a progressive MP4, a
+/// WebM, a fragmented `.m4a`) is moved; everything else is copied into and
+/// checked against that container. Either way the bytes are verified before
+/// the caller is told the download succeeded, so a file that is not what it
+/// claims can never be reported as Saved.
+pub(super) fn deliver(
+    dest: &Path,
+    inputs: Vec<PathBuf>,
+    delivery: &Delivery,
+    stage: &dyn Fn(&str),
+) -> Result<PathBuf, DeliverError> {
+    let primary = inputs
+        .first()
+        .cloned()
+        .ok_or_else(|| DeliverError::Failed("there is nothing to save".to_string()))?;
+    let already = inputs.len() == 1
+        && verify::inspect(&primary)
+            .ok()
+            .is_some_and(|info| info.container.fits_extension(&delivery.extension));
+    let container = delivery
+        .container
+        .or_else(|| Container::from_extension(&delivery.extension));
+
+    if already {
+        stage("Checking");
+        disk::replace_file(&primary, dest).map_err(|error| {
+            DeliverError::Failed(format!(
+                "the finished file could not be put in place: {error}"
+            ))
+        })?;
+    } else if let Some(container) = container {
+        stage("Joining");
+        mux::join(&inputs, dest, container).map_err(|error| match error {
+            mux::MuxError::Cancelled => DeliverError::Cancelled,
+            other => DeliverError::Failed(other.to_string()),
+        })?;
+    } else {
+        // Nothing can be joined into this name and the track is not in it:
+        // saving the bytes under it would be a lie about the file.
+        return Err(DeliverError::Failed(format!(
+            "the download is not the {} it should be",
+            delivery.extension
+        )));
+    }
+
+    stage("Checking");
+    verify::check_finished(
+        dest,
+        Expect {
+            extension: &delivery.extension,
+            video: delivery.video,
+            audio: delivery.audio,
+        },
+    )
+    .map_err(|error| {
+        // A file that cannot be played is not kept: the row says it failed and
+        // nothing wait-shaped is left in the folder.
+        let _ = std::fs::remove_file(dest);
+        DeliverError::Failed(error)
+    })?;
+    Ok(dest.to_path_buf())
+}
+
+/// A callback that writes the job's stage, for the blocking delivery step.
+fn stage_sink(app: &AppHandle, id: u64) -> Arc<dyn Fn(&str) + Send + Sync> {
+    let app = app.clone();
+    Arc::new(move |text: &str| {
+        app.state::<AppState>().update_media_job(id, |job| {
+            job.stage = Some(text.to_string());
+        });
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -731,12 +825,13 @@ fn progress_sink(
     })
 }
 
-fn finish_saved(state: &AppState, id: u64) {
+fn finish_saved(state: &AppState, id: u64, dest: PathBuf) {
     state.update_media_job(id, |job| {
         job.downloading = false;
         job.done = true;
         job.error = None;
         job.stage = Some("Saved".to_string());
+        job.dest = Some(dest.to_string_lossy().to_string());
     });
 }
 

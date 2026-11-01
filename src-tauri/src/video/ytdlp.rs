@@ -8,16 +8,18 @@
 //! for the same video once; if it is not present, the download fails with one
 //! sentence and nothing is downloaded silently.
 //!
-//! The binary is located like `ffmpeg`: `BDM_YTDLP`, a sidecar beside the
+//! The binary is located by [`super::tools`]: `BDM_YTDLP`, a sidecar beside the
 //! executable, or `PATH`. There is no download of the tool itself.
 
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use idm_core::disk;
 use idm_core::log;
+
+use super::tools::{self, Tool};
 
 /// How long the fallback may run.
 pub const TIMEOUT: Duration = Duration::from_secs(30 * 60);
@@ -85,7 +87,7 @@ impl Drop for CancelFlag<'_> {
 
 /// Whether a binary this module can use is present.
 pub fn available() -> bool {
-    locate().is_some()
+    Tool::YtDlp.available()
 }
 
 /// Download `page_url` with the chosen format, into `output`.
@@ -105,7 +107,7 @@ pub fn download(page_url: &str, selector: Option<&str>, output: &Path) -> Result
     clear_cancel(output);
     let _cancel_flag = CancelFlag(output);
 
-    let tool = locate().ok_or(YtDlpError::NotFound)?;
+    let tool = Tool::YtDlp.locate().ok_or(YtDlpError::NotFound)?;
     let work_dir = output
         .parent()
         .filter(|parent| !parent.as_os_str().is_empty())
@@ -120,7 +122,7 @@ pub fn download(page_url: &str, selector: Option<&str>, output: &Path) -> Result
     cleanup(work_dir, &prefix);
 
     let pattern = work_dir.join(format!("{prefix}.%(ext)s"));
-    let mut command = command_for(&tool);
+    let mut command = tools::command_for(&tool);
     command
         .arg("--no-playlist")
         .arg("--no-progress")
@@ -190,25 +192,6 @@ pub fn download(page_url: &str, selector: Option<&str>, output: &Path) -> Result
     }
 }
 
-fn command_for(tool: &Path) -> Command {
-    #[cfg(windows)]
-    {
-        let script = tool
-            .extension()
-            .map(|extension| {
-                let extension = extension.to_string_lossy().to_ascii_lowercase();
-                extension == "cmd" || extension == "bat"
-            })
-            .unwrap_or(false);
-        if script {
-            let mut command = Command::new("cmd");
-            command.arg("/C").arg(tool);
-            return command;
-        }
-    }
-    Command::new(tool)
-}
-
 fn cleanup(work_dir: &Path, prefix: &str) {
     let Ok(entries) = std::fs::read_dir(work_dir) else {
         return;
@@ -239,46 +222,6 @@ fn find_output(work_dir: &Path, prefix: &str) -> Option<PathBuf> {
         }
     }
     found.map(|(_, path)| path)
-}
-
-fn locate() -> Option<PathBuf> {
-    if let Some(value) = std::env::var_os("BDM_YTDLP") {
-        let path = PathBuf::from(value);
-        if path.is_file() {
-            return Some(path);
-        }
-    }
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(folder) = exe.parent() {
-            for name in ["yt-dlp.exe", "yt-dlp", "yt-dlp.cmd", "yt-dlp.bat"] {
-                let path = folder.join(name);
-                if path.is_file() {
-                    return Some(path);
-                }
-            }
-            if let Ok(entries) = std::fs::read_dir(folder) {
-                for entry in entries.flatten() {
-                    let path = entry.path();
-                    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
-                        continue;
-                    };
-                    if name.starts_with("yt-dlp-") && path.is_file() {
-                        return Some(path);
-                    }
-                }
-            }
-        }
-    }
-    let path = std::env::var_os("PATH")?;
-    for folder in std::env::split_paths(&path) {
-        for name in ["yt-dlp.exe", "yt-dlp"] {
-            let candidate = folder.join(name);
-            if candidate.is_file() {
-                return Some(candidate);
-            }
-        }
-    }
-    None
 }
 
 #[cfg(test)]
