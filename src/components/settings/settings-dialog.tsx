@@ -6,7 +6,10 @@ import { AppearanceSettings } from "@/components/settings/appearance-settings";
 import { BrowserSettings } from "@/components/settings/browser-settings";
 import { ConnectionsSettings } from "@/components/settings/connections-settings";
 import { DownloadsSettings } from "@/components/settings/downloads-settings";
-import { GeneralSettings } from "@/components/settings/general-settings";
+import {
+  GeneralSettings,
+  type TraySettingsProps,
+} from "@/components/settings/general-settings";
 import { ProxySettings } from "@/components/settings/proxy-settings";
 import { SaveLocationsSettings } from "@/components/settings/save-locations-settings";
 import { ShortcutsSettings } from "@/components/settings/shortcuts-settings";
@@ -56,6 +59,8 @@ interface SettingsDialogProps {
   onClose: () => void;
   /** The toolbar page reads and writes the bar the shell already owns. */
   toolbar: ToolbarSettingsProps;
+  /** The General page reads and writes the tray icon the backend owns. */
+  tray: TraySettingsProps;
 }
 
 /** How long typing settles before the engine hears about it. */
@@ -91,7 +96,12 @@ const ENGINE_KEYS: readonly (keyof Settings)[] = [
  * startup entry is the one setting the operating system can refuse; its switch
  * follows what the system reports rather than what was asked.
  */
-export function SettingsDialog({ open, onClose, toolbar }: SettingsDialogProps) {
+export function SettingsDialog({
+  open,
+  onClose,
+  toolbar,
+  tray,
+}: SettingsDialogProps) {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [page, setPage] = useState<SettingsPageId>("general");
   const [error, setError] = useState<string | null>(null);
@@ -279,7 +289,9 @@ export function SettingsDialog({ open, onClose, toolbar }: SettingsDialogProps) 
   function body() {
     switch (page) {
       case "general":
-        return <GeneralSettings settings={settings} onChange={update} />;
+        return (
+          <GeneralSettings settings={settings} onChange={update} tray={tray} />
+        );
       case "appearance":
         return <AppearanceSettings settings={settings} onChange={update} />;
       case "toolbar":

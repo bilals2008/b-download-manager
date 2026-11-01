@@ -8,6 +8,11 @@
 //! The webview cannot read the clipboard while it is hidden, and the setting
 //! has to work from the tray too, so the watch runs in the backend. The
 //! clipboard is only read while the preference is on.
+//!
+//! Which addresses count as one is the reader's list — the URL list of
+//! **View > B Download Manager tray icon > Customize URL List...** — kept with
+//! the other desk-side choices so a link is offered the same way before the
+//! window has loaded.
 
 use std::time::Duration;
 
@@ -47,11 +52,12 @@ pub fn start(app: AppHandle) {
                 last.clear();
                 continue;
             }
+            let protocols = state.url_protocols();
 
             let Ok(text) = app.clipboard().read_text() else {
                 continue;
             };
-            let Some(link) = captured_url(&text) else {
+            let Some(link) = captured_url(&text, &protocols) else {
                 last = text;
                 continue;
             };
@@ -67,50 +73,79 @@ pub fn start(app: AppHandle) {
 /// The download address in a piece of clipboard text, if it is one.
 ///
 /// One address per copy: a note that happens to contain a link is not a
-/// download, and a link with a second line is not one either.
-fn captured_url(text: &str) -> Option<&str> {
+/// download, and a link with a second line is not one either. The protocol has
+/// to be one the reader put on the list.
+fn captured_url<'a>(text: &'a str, protocols: &[String]) -> Option<&'a str> {
     let link = text.trim();
     if link.is_empty() || link.len() > MAX_LINK || link.split_whitespace().count() != 1 {
         return None;
     }
-    if link.starts_with("http://") || link.starts_with("https://") || link.starts_with("ftp://") {
-        Some(link)
-    } else {
-        None
-    }
+    protocols
+        .iter()
+        .find(|protocol| link.starts_with(&format!("{protocol}://")))
+        .map(|_| link)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn protocols(names: &[&str]) -> Vec<String> {
+        names.iter().map(|name| (*name).to_string()).collect()
+    }
+
+    const STANDARD: &[&str] = &["http", "https", "ftp"];
+
     #[test]
     fn an_address_on_its_own_is_a_link() {
+        let list = protocols(STANDARD);
         assert_eq!(
-            captured_url("  https://example.org/film.mp4\n"),
+            captured_url("  https://example.org/film.mp4\n", &list),
             Some("https://example.org/film.mp4")
         );
         assert_eq!(
-            captured_url("ftp://example.org/archive.zip"),
+            captured_url("ftp://example.org/archive.zip", &list),
             Some("ftp://example.org/archive.zip")
         );
     }
 
     #[test]
     fn a_note_or_another_scheme_is_not_a_link() {
-        assert_eq!(captured_url("see https://example.org/film.mp4"), None);
+        let list = protocols(STANDARD);
         assert_eq!(
-            captured_url("https://example.org/a\nhttps://example.org/b"),
+            captured_url("see https://example.org/film.mp4", &list),
             None
         );
-        assert_eq!(captured_url("javascript:alert(1)"), None);
-        assert_eq!(captured_url("file:///C:/Windows/notepad.exe"), None);
-        assert_eq!(captured_url(""), None);
+        assert_eq!(
+            captured_url("https://example.org/a\nhttps://example.org/b", &list),
+            None
+        );
+        assert_eq!(captured_url("javascript:alert(1)", &list), None);
+        assert_eq!(captured_url("file:///C:/Windows/notepad.exe", &list), None);
+        assert_eq!(captured_url("", &list), None);
+    }
+
+    #[test]
+    fn a_protocol_the_reader_added_is_offered_and_a_dropped_one_is_not() {
+        let list = protocols(&["https", "mms"]);
+        assert_eq!(
+            captured_url("mms://example.org/stream.asf", &list),
+            Some("mms://example.org/stream.asf")
+        );
+        assert_eq!(captured_url("ftp://example.org/archive.zip", &list), None);
+    }
+
+    #[test]
+    fn a_protocol_needs_its_slashes_before_it_counts() {
+        let list = protocols(&["http"]);
+        assert_eq!(captured_url("httpexample.org/a.zip", &list), None);
+        assert_eq!(captured_url("https://example.org/a.zip", &list), None);
     }
 
     #[test]
     fn a_document_is_not_a_link() {
+        let list = protocols(STANDARD);
         let long = format!("https://example.org/{}", "a".repeat(MAX_LINK));
-        assert_eq!(captured_url(&long), None);
+        assert_eq!(captured_url(&long, &list), None);
     }
 }

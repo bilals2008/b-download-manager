@@ -1,7 +1,9 @@
 import { onSettingsChanged } from "@/lib/app-events";
+import { isDesktop } from "@/lib/errors";
 import { applyFont, applyWeight } from "@/lib/fonts";
+import { setTrayAppearance } from "@/lib/ipc";
 import { loadSettings } from "@/lib/settings";
-import { applyTheme, watchTheme } from "@/lib/theme";
+import { applyTheme, resolveTheme } from "@/lib/theme";
 import { syncWindowBackground } from "@/lib/window";
 
 /**
@@ -18,6 +20,14 @@ function applySavedAppearance(): void {
   // The native fill follows the same token, so a repaint before the page is
   // drawn never shows the webview's default white.
   void syncWindowBackground();
+  // The tray icon is the one thing outside the window that takes its inks from
+  // the appearance, and only the window knows which one it settled on. The
+  // backend ignores the report unless "Dark Mode support" is switched on.
+  if (isDesktop()) {
+    void setTrayAppearance(resolveTheme(settings.theme) === "light").catch(() => {
+      // The icon keeps the drawing it has until the next time the window is up.
+    });
+  }
 }
 
 let started = false;
@@ -42,8 +52,11 @@ export function startAppearanceSync(): void {
 
   applySavedAppearance();
 
-  // Auto follows the operating system for as long as the window is open.
-  watchTheme();
+  // Auto follows the operating system for as long as the window is open. The
+  // whole appearance is applied again, so the tray moves with the window.
+  window
+    .matchMedia("(prefers-color-scheme: light)")
+    .addEventListener("change", applySavedAppearance);
 
   // The settings window says when a saved preference changed.
   onSettingsChanged(applySavedAppearance);

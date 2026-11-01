@@ -154,14 +154,17 @@ export function buildMenus(
         ],
       },
       {
-        command: "tray-3d",
+        command: "tray-default",
         label: "B Download Manager tray icon",
         submenu: [
-          { command: "tray-3d", label: "3D style", disabled: true },
-          { command: "tray-classic", label: "Classic style", disabled: true },
-          { command: "tray-hidden", label: "Don't show", disabled: true },
-          { command: "tray-customize-list", label: "Customize URL List...", disabled: true },
-          { command: "tray-dark-mode", label: "Dark Mode support", disabled: true },
+          { command: "tray-default", label: "Default style", radio: true },
+          { command: "tray-3d", label: "3D style", radio: true },
+          { command: "tray-classic", label: "Classic style", radio: true },
+          "separator",
+          { command: "tray-hidden", label: "Don't show", checkbox: true },
+          { command: "tray-dark-mode", label: "Dark Mode support", checkbox: true },
+          "separator",
+          { command: "tray-customize-list", label: "Customize URL List..." },
         ],
       },
       {

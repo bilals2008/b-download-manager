@@ -6,11 +6,20 @@
 //! looking, what the downloads are doing; the tooltip follows the same
 //! `download://update` reports the lists use, so it needs no timer of its own.
 //!
+//! The reader chooses which of the three drawings it uses and whether it is
+//! there at all, in **View > B Download Manager tray icon**. The drawings come
+//! from `scripts/make-icons.py`, in a pair for every style: one for a dark
+//! taskbar and one for a light one. Following the appearance of the window is
+//! the "Dark Mode support" choice; without it the icon keeps the dark drawing
+//! it has always used.
+//!
 //! Each progress window owns a tray icon of its own (`progress.rs`). This one
 //! belongs to the application and outlives every window.
 
 use std::sync::{Mutex, OnceLock};
 
+use tauri::image::Image;
+use tauri::include_image;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager};
@@ -19,6 +28,7 @@ use idm_core::downloader::{DownloadInfo, Status};
 use idm_core::log;
 
 use crate::actions;
+use crate::prefs::TrayStyle;
 use crate::state::AppState;
 
 /// The id the rest of the application uses to find this icon.
@@ -153,8 +163,42 @@ fn remember(text: &str) -> bool {
     true
 }
 
+/// Forget the line the icon last carried, so the next report is written even
+/// when the text has not changed. An icon that is only now being put up starts
+/// with the default tooltip, so it needs this.
+fn forget_last_tip() {
+    if let Some(last) = LAST_TIP.get() {
+        *last.lock().unwrap_or_else(|error| error.into_inner()) = None;
+    }
+}
+
+/// The drawing of one style on one surface. Both halves of the pair are the
+/// same mark; only the inks change.
+fn drawing(style: TrayStyle, on_light_surface: bool) -> Image<'static> {
+    match (style, on_light_surface) {
+        (TrayStyle::Default, false) => include_image!("./icons/tray-default-on-dark.png"),
+        (TrayStyle::Default, true) => include_image!("./icons/tray-default-on-light.png"),
+        (TrayStyle::ThreeD, false) => include_image!("./icons/tray-3d-on-dark.png"),
+        (TrayStyle::ThreeD, true) => include_image!("./icons/tray-3d-on-light.png"),
+        (TrayStyle::Classic, false) => include_image!("./icons/tray-classic-on-dark.png"),
+        (TrayStyle::Classic, true) => include_image!("./icons/tray-classic-on-light.png"),
+    }
+}
+
+/// The drawing the saved choices ask for. A light surface is only followed
+/// when the reader switched "Dark Mode support" on.
+fn current_drawing(app: &AppHandle) -> Image<'static> {
+    let state = app.state::<AppState>();
+    let preferences = state.preferences();
+    let on_light_surface = preferences.tray_dark_mode && state.appearance_is_light();
+    drawing(preferences.tray_style, on_light_surface)
+}
+
 /// Build the application tray and its menu.
-pub fn install(app: &AppHandle) -> tauri::Result<()> {
+///
+/// Only `set_visible` calls it: one place puts the icon up, so one place knows
+/// whether the window can be hidden safely.
+fn install(app: &AppHandle) -> tauri::Result<()> {
     let show = MenuItem::with_id(app, "show", "Show B Download Manager", true, None::<&str>)?;
     let pause = MenuItem::with_id(app, "pause-all", "Pause all downloads", true, None::<&str>)?;
     let resume = MenuItem::with_id(
@@ -167,16 +211,11 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
     let quit = MenuItem::with_id(app, "quit", "Exit", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show, &pause, &resume, &quit])?;
 
-    let mut builder = TrayIconBuilder::with_id(TRAY_ID)
+    TrayIconBuilder::with_id(TRAY_ID)
         .menu(&menu)
         .show_menu_on_left_click(false)
-        .tooltip(format!("{NAME} — no active downloads"));
-
-    if let Some(icon) = app.default_window_icon() {
-        builder = builder.icon(icon.clone());
-    }
-
-    builder
+        .tooltip(format!("{NAME} — no active downloads"))
+        .icon(current_drawing(app))
         .on_menu_event(|app, event| match event.id.as_ref() {
             "show" => show_window(app),
             "pause-all" => pause_all(app),
@@ -199,6 +238,47 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
         })
         .build(app)?;
     Ok(())
+}
+
+/// Repaint the icon that is already up, following the saved style.
+pub fn repaint(app: &AppHandle) {
+    let Some(tray) = app.tray_by_id(TRAY_ID) else {
+        return;
+    };
+    if let Err(error) = tray.set_icon(Some(current_drawing(app))) {
+        log::write("warn", &format!("the tray icon did not change: {error}"));
+    }
+}
+
+/// Put the icon up or take it down, and say whether it is there afterwards.
+///
+/// The icon's own existence is the truth the close and minimize buttons follow:
+/// `tray_available` is what keeps a window from being hidden with no way back.
+pub fn set_visible(app: &AppHandle, visible: bool) -> bool {
+    let state = app.state::<AppState>();
+    if !visible {
+        remove(app);
+        state.set_tray_available(false);
+        return false;
+    }
+    if app.tray_by_id(TRAY_ID).is_some() {
+        state.set_tray_available(true);
+        repaint(app);
+        return true;
+    }
+    match install(app) {
+        Ok(()) => {
+            state.set_tray_available(true);
+            forget_last_tip();
+            refresh(app);
+            true
+        }
+        Err(error) => {
+            log::write("warn", &format!("the tray icon did not open: {error}"));
+            state.set_tray_available(false);
+            false
+        }
+    }
 }
 
 /// Bring the window back from the tray.
@@ -227,6 +307,11 @@ pub fn show_window(app: &AppHandle) {
 /// is written.
 pub fn refresh(app: &AppHandle) {
     let state = app.state::<AppState>();
+    // With the icon taken away there is nothing to describe, and every progress
+    // report would otherwise say that it is missing.
+    if !state.tray_available() {
+        return;
+    }
     let rows = state
         .list()
         .iter()

@@ -13,6 +13,7 @@ mod state;
 mod toolbars;
 mod tray;
 mod updater;
+mod video;
 mod window_style;
 
 use std::path::PathBuf;
@@ -22,7 +23,7 @@ use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
 use idm_core::downloader::{DownloadInfo, Status};
 use idm_core::session::Index;
 use idm_core::transfer::Source;
-use prefs::DesktopPreferences;
+use prefs::{DesktopPreferences, TrayStyle};
 use state::{AppState, BrowserPolicy};
 
 use actions::UPDATE_EVENT;
@@ -381,24 +382,85 @@ fn desktop_preferences(state: State<'_, AppState>) -> DesktopPreferences {
     state.preferences()
 }
 
+/// Change one saved choice and write the file again.
+///
+/// The whole object goes back and forth, so two choices that belong together
+/// cannot be saved one after the other and leave the file between them.
+fn rewrite_preferences(
+    state: &AppState,
+    change: impl FnOnce(&mut DesktopPreferences),
+) -> DesktopPreferences {
+    let mut preferences = state.preferences();
+    change(&mut preferences);
+    let saved = preferences.clone();
+    state.set_preferences(preferences);
+    state.save_preferences();
+    saved
+}
+
 /// Whether the minimize button hides the window into the tray.
 #[tauri::command]
 fn set_minimize_to_tray(state: State<'_, AppState>, on: bool) -> bool {
-    let mut preferences = state.preferences();
-    preferences.minimize_to_tray = on;
-    state.set_preferences(preferences);
-    state.save_preferences();
-    on
+    rewrite_preferences(&state, |preferences| preferences.minimize_to_tray = on).minimize_to_tray
 }
 
 /// Whether closing the window keeps the application in the tray.
 #[tauri::command]
 fn set_close_to_tray(state: State<'_, AppState>, on: bool) -> bool {
-    let mut preferences = state.preferences();
-    preferences.close_to_tray = on;
-    state.set_preferences(preferences);
-    state.save_preferences();
+    rewrite_preferences(&state, |preferences| preferences.close_to_tray = on).close_to_tray
+}
+
+/// Which of the three drawings the tray icon uses.
+#[tauri::command]
+fn set_tray_style(app: AppHandle, state: State<'_, AppState>, style: TrayStyle) -> TrayStyle {
+    rewrite_preferences(&state, |preferences| preferences.tray_style = style);
+    tray::repaint(&app);
+    style
+}
+
+/// Take the tray icon out of the notification area, or put it back.
+///
+/// The answer is the choice as saved. Whether the icon is really there is what
+/// `desktop_preferences` says next time the window reads it; a shell that
+/// refuses an icon is written down in the log.
+#[tauri::command]
+fn set_tray_hidden(app: AppHandle, state: State<'_, AppState>, on: bool) -> bool {
+    rewrite_preferences(&state, |preferences| preferences.tray_hidden = on);
+    tray::set_visible(&app, !on);
     on
+}
+
+/// Whether the tray icon follows the appearance of the window.
+#[tauri::command]
+fn set_tray_dark_mode(app: AppHandle, state: State<'_, AppState>, on: bool) -> bool {
+    rewrite_preferences(&state, |preferences| preferences.tray_dark_mode = on);
+    tray::repaint(&app);
+    on
+}
+
+/// Which appearance the window is drawn in, so the icon can follow it.
+///
+/// The webview owns the appearance; the tray only knows what it is told. A
+/// report of the appearance it already has repaints nothing.
+#[tauri::command]
+fn set_tray_appearance(app: AppHandle, state: State<'_, AppState>, light: bool) -> bool {
+    if state.appearance_is_light() == light {
+        return light;
+    }
+    state.set_appearance_is_light(light);
+    tray::repaint(&app);
+    light
+}
+
+/// The protocols a copied address has to start with to be offered as a
+/// download. The list comes back as it was stored, so the window can show what
+/// the backend will actually match.
+#[tauri::command]
+fn set_url_protocols(state: State<'_, AppState>, protocols: Vec<String>) -> Vec<String> {
+    rewrite_preferences(&state, |preferences| {
+        preferences.url_protocols = prefs::clean_url_protocols(&protocols);
+    })
+    .url_protocols
 }
 
 /// Whether a finished download gets its own window.
@@ -1036,20 +1098,11 @@ pub fn run() {
             // are consulted before a page has loaded, and a webview that has
             // not painted yet must not decide whether closing exits.
             state.set_preferences_path(dir.join(prefs::FILE_NAME));
-            match tray::install(app.handle()) {
-                Ok(()) => {
-                    state.set_tray_available(true);
-                    // A restored download is already active when the window
-                    // opens; the tooltip must say so before the next report.
-                    tray::refresh(app.handle());
-                }
-                Err(error) => {
-                    // Without an icon there is no way back from a hidden
-                    // window, so the close and minimize choices fall back to
-                    // closing and minimizing.
-                    idm_core::log::write("warn", &format!("the tray icon did not open: {error}"));
-                }
-            }
+            // The icon goes up unless the reader took it away in an earlier
+            // run. Without it the close and minimize choices fall back to
+            // closing and minimizing, which is what `tray_available` says.
+            // Putting it up also writes the tooltip of what is already running.
+            tray::set_visible(app.handle(), !state.preferences().tray_hidden);
             if let Some(window) = app.get_webview_window("main") {
                 window_style::round_corners(&window);
             }
@@ -1128,6 +1181,11 @@ pub fn run() {
             desktop_preferences,
             set_minimize_to_tray,
             set_close_to_tray,
+            set_tray_style,
+            set_tray_hidden,
+            set_tray_dark_mode,
+            set_tray_appearance,
+            set_url_protocols,
             lifecycle::minimize_window,
             lifecycle::hide_main_window,
             set_show_complete_dialog,
@@ -1164,6 +1222,12 @@ pub fn run() {
             toolbars::install_toolbar_pack,
             toolbars::remove_toolbar_pack,
             toolbars::reveal_toolbar_packs,
+            video::capture::media_job,
+            video::capture::media_jobs,
+            video::capture::media_forget,
+            video::capture::media_download,
+            video::capture::media_allow_cookies,
+            video::capture::media_cancel,
         ])
         .build(tauri::generate_context!())
         .expect("error while building B Download Manager")

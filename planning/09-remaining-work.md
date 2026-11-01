@@ -56,9 +56,12 @@ this file says what is left to do.
 - [x] The window: title bar, menu bar, toolbar, the categories pane, the
       download list
 - [x] The list of downloads survives a restart
-- [ ] **The tray icon**, in the three styles the reference product offers,
-      and the tray only mode. The icon itself is there, with the mark of the
-      application, and closing the window keeps the application in the tray.
+- [x] **The tray icon**, in the three styles the reference product offers, with
+      "Don't show", "Dark Mode support" and "Customize URL List...". The
+      drawings come from `scripts/make-icons.py`, the choices live in
+      `desktop.json`, and the clipboard watch matches the URL list.
+- [ ] **The tray only mode**: start with no window at all, and open one from
+      the icon.
 - [ ] **The browser integration**: the detection, the keys, the context menu.
       The extension in `browser-extension/` hands a link to the application
       today (a right click menu, and taking over the downloads the browser

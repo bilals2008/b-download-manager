@@ -6,6 +6,7 @@ import { CustomizeToolbarDialog } from "@/components/shell/customize-toolbar-dia
 import { ToolbarsDialog } from "@/components/shell/toolbars-dialog";
 import { TopBar } from "@/components/shell/top-bar";
 import { toolbarState } from "@/components/shell/toolbar-state";
+import { UrlListDialog } from "@/components/shell/url-list-dialog";
 import { useShellShortcuts } from "@/components/shell/use-shell-shortcuts";
 import { TipOfTheDayDialog } from "@/components/tips/tip-of-the-day-dialog";
 import { AboutDialog } from "@/components/workspace/about-dialog";
@@ -18,6 +19,7 @@ import { describeError, isDesktop } from "@/lib/errors";
 import { applyFont } from "@/lib/fonts";
 import { openGrabberWindow } from "@/lib/grabber";
 import {
+  desktopPreferences,
   hideMainWindow,
   onClipboardLink,
   onCloseRequested,
@@ -36,6 +38,10 @@ import {
   setShowCompleteDialog,
   setShowProgressOnStart,
   setSpeedLimit,
+  setTrayDarkMode,
+  setTrayHidden,
+  setTrayStyle,
+  setUrlProtocols,
   shareToSystem,
 } from "@/lib/ipc";
 import {
@@ -47,6 +53,13 @@ import {
 } from "@/lib/settings";
 import { shareApp } from "@/lib/share";
 import { nextTipIndex, saveTipCursor } from "@/lib/tips";
+import {
+  DEFAULT_TRAY_PREFERENCES,
+  normalizeUrlProtocols,
+  type TrayPreferences,
+  type TrayStyle,
+  trayPreferencesFrom,
+} from "@/lib/tray";
 import {
   BUILTIN_TOOLBAR_PACKS,
   DEFAULT_TOOLBAR_PACK,
@@ -105,6 +118,10 @@ export default function App() {
   });
   const [customizeToolbarOpen, setCustomizeToolbarOpen] = useState(false);
   const [toolbarsOpen, setToolbarsOpen] = useState(false);
+  // The tray choices belong to the backend, which owns the icon and reads them
+  // before this window has drawn anything. The menu shows what it saved.
+  const [tray, setTray] = useState<TrayPreferences>(DEFAULT_TRAY_PREFERENCES);
+  const [urlListOpen, setUrlListOpen] = useState(false);
 
   const allToolbars = useMemo<ToolbarPack[]>(
     () => [...BUILTIN_TOOLBAR_PACKS, ...toolbarPacks.packs],
@@ -130,8 +147,13 @@ export default function App() {
       "toolbar-large": toolbarSize === "large",
       "toolbar-small": toolbarSize === "small",
       [`toolbar-pack:${activeToolbar.id}`]: true,
+      "tray-default": tray.style === "default",
+      "tray-3d": tray.style === "3d",
+      "tray-classic": tray.style === "classic",
+      "tray-hidden": tray.hidden,
+      "tray-dark-mode": tray.darkMode,
     }),
-    [toolbarSize, activeToolbar.id],
+    [toolbarSize, activeToolbar.id, tray],
   );
   // The clipboard listener is subscribed once; the ref carries the current
   // dialog state so a link that arrives mid-edit cannot overwrite the field.
@@ -235,6 +257,21 @@ export default function App() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // The tray choices are kept with the close button's, in the backend's own
+  // file: the icon has to be right from the first second, before this page has
+  // read anything. The menu opens on what it actually holds.
+  useEffect(() => {
+    if (!isDesktop()) {
+      return;
+    }
+    void desktopPreferences()
+      .then((saved) => setTray(trayPreferencesFrom(saved)))
+      .catch(() => {
+        // The defaults are what the icon was built with, so showing them while
+        // the backend is not answering is not a lie.
+      });
   }, []);
 
   // The one question the reader agreed to on the About page. It runs once the
@@ -359,6 +396,44 @@ export default function App() {
     const next = withToolbarLabels(toolbarPreference, show);
     setToolbarPreference(next);
     saveToolbarPreference(next);
+  }
+
+  /**
+   * Move one tray choice. The backend owns the icon, so the request goes
+   * there; the menu shows the choice the row was given.
+   */
+  function changeTray(next: TrayPreferences, request: () => Promise<unknown>) {
+    setTray(next);
+    if (!isDesktop()) {
+      return;
+    }
+    void request().catch(() => {
+      // The same fall-back every other backend setting uses: the choice stands
+      // for this run and the next open reads what is on disk.
+    });
+  }
+
+  function chooseTrayStyle(style: TrayStyle) {
+    changeTray({ ...tray, style }, () => setTrayStyle(style));
+  }
+
+  // With no icon there is no way back from a hidden window, so closing the
+  // window quits instead. `lifecycle::close_action` already decides that from
+  // whether the icon is there.
+  function chooseTrayHidden(hidden: boolean) {
+    changeTray({ ...tray, hidden }, () => setTrayHidden(hidden));
+  }
+
+  function chooseTrayDarkMode(darkMode: boolean) {
+    changeTray({ ...tray, darkMode }, () => setTrayDarkMode(darkMode));
+  }
+
+  /** The protocols the clipboard watch offers a copied address for. */
+  function saveUrlProtocols(protocols: string[]) {
+    changeTray(
+      { ...tray, urlProtocols: normalizeUrlProtocols(protocols) },
+      () => setUrlProtocols(protocols),
+    );
   }
 
   // Both the View menu and the Toolbar page of the options window open the
@@ -564,6 +639,24 @@ export default function App() {
       case "toolbar-new":
         openToolbarManager();
         break;
+      case "tray-default":
+        chooseTrayStyle("default");
+        break;
+      case "tray-3d":
+        chooseTrayStyle("3d");
+        break;
+      case "tray-classic":
+        chooseTrayStyle("classic");
+        break;
+      case "tray-hidden":
+        chooseTrayHidden(!tray.hidden);
+        break;
+      case "tray-dark-mode":
+        chooseTrayDarkMode(!tray.darkMode);
+        break;
+      case "tray-customize-list":
+        setUrlListOpen(true);
+        break;
       case "font-reset":
         chooseFont("googlesans");
         break;
@@ -609,6 +702,13 @@ export default function App() {
           onCustomize: () => setCustomizeToolbarOpen(true),
           onManage: openToolbarManager,
         }}
+        tray={{
+          preferences: tray,
+          onStyle: chooseTrayStyle,
+          onHidden: chooseTrayHidden,
+          onDarkMode: chooseTrayDarkMode,
+          onCustomizeUrlList: () => setUrlListOpen(true),
+        }}
       />
       <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
       <TipOfTheDayDialog
@@ -650,6 +750,13 @@ export default function App() {
           onRefresh={refreshToolbarPacks}
           onPackRemoved={forgetToolbarPack}
           onClose={() => setToolbarsOpen(false)}
+        />
+      ) : null}
+      {urlListOpen ? (
+        <UrlListDialog
+          protocols={tray.urlProtocols}
+          onSave={saveUrlProtocols}
+          onClose={() => setUrlListOpen(false)}
         />
       ) : null}
     </div>

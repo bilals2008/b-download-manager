@@ -14,8 +14,10 @@ export interface MenuItem<T extends string = string> {
   disabled?: boolean;
   /** A command that removes or overwrites data is drawn in the error tone. */
   danger?: boolean;
-  /** A radio row: the menu shows which one is picked. */
+  /** A radio row: the menu shows which one of the group is picked. */
   radio?: boolean;
+  /** A row that is simply on or off, like "Don't show". */
+  checkbox?: boolean;
   /** A nested menu, for groups like "Export" and "Arrange files". */
   submenu?: MenuRow<T>[];
 }
@@ -221,8 +223,8 @@ export function MenuPopup<T extends string>({
                 itemRefs.current[index] = node;
               }}
               type="button"
-              role={row.radio ? "menuitemradio" : "menuitem"}
-              aria-checked={row.radio ? (checked?.[row.command] ?? false) : undefined}
+              role={roleOf(row)}
+              aria-checked={isCheckable(row) ? (checked?.[row.command] ?? false) : undefined}
               tabIndex={-1}
               aria-disabled={row.disabled || undefined}
               aria-haspopup={row.submenu ? "menu" : undefined}
@@ -258,7 +260,7 @@ export function MenuPopup<T extends string>({
               </span>
               {row.submenu ? (
                 <ChevronRight className="ml-auto size-3.5 shrink-0 text-chrome-muted" />
-              ) : row.radio && checked?.[row.command] ? (
+              ) : isCheckable(row) && checked?.[row.command] ? (
                 <CheckGlyph className="ml-auto size-3.5 shrink-0 text-chrome-focus" />
               ) : row.shortcut ? (
                 <span
@@ -299,4 +301,22 @@ function enabledRows<T extends string>(rows: MenuRow<T>[]): number[] {
   return rows
     .map((row, index) => (row === "separator" || row.disabled ? -1 : index))
     .filter((index) => index >= 0);
+}
+
+/** Whether the row carries a mark that says it is on, or picked. */
+function isCheckable<T extends string>(row: MenuItem<T>): boolean {
+  return Boolean(row.radio || row.checkbox);
+}
+
+/**
+ * The ARIA role of a row. A group of styles is a radio group and says which
+ * one is picked; a switch like "Don't show" is a checkbox and says whether it
+ * is on. Both show the same mark, but a screen reader should not hear "radio"
+ * for a row that has no group to choose from.
+ */
+function roleOf<T extends string>(row: MenuItem<T>): string {
+  if (row.radio) {
+    return "menuitemradio";
+  }
+  return row.checkbox ? "menuitemcheckbox" : "menuitem";
 }

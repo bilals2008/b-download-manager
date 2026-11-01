@@ -1,4 +1,4 @@
-import { loadSettings, type ThemePreference } from "@/lib/settings";
+import type { ThemePreference } from "@/lib/settings";
 
 /**
  * Appearance. The tokens live in `src/index.css`; this file only decides which
@@ -17,12 +17,4 @@ export function resolveTheme(preference: ThemePreference): "light" | "dark" {
 
 export function applyTheme(preference: ThemePreference): void {
   document.documentElement.dataset.theme = resolveTheme(preference);
-}
-
-/** Re-resolve Auto when the operating system switches appearance. */
-export function watchTheme(): () => void {
-  const media = window.matchMedia("(prefers-color-scheme: light)");
-  const sync = () => applyTheme(loadSettings().theme);
-  media.addEventListener("change", sync);
-  return () => media.removeEventListener("change", sync);
 }

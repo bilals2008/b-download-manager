@@ -1,22 +1,37 @@
+import { SettingsButton } from "@/components/settings/settings-button";
 import {
   Section,
   SettingRow,
   SettingsPage,
 } from "@/components/settings/settings-page";
+import { ListBox } from "@/components/ui/listbox";
 import { Switch } from "@/components/ui/switch";
 import { APP_NAME } from "@/lib/brand";
 import type { Settings } from "@/lib/settings";
+import { TRAY_STYLES, type TrayPreferences, type TrayStyle } from "@/lib/tray";
 
 interface GeneralSettingsProps {
   settings: Settings;
   onChange: <K extends keyof Settings>(key: K, value: Settings[K]) => void;
+  /** The tray icon choices, which the backend owns rather than this window. */
+  tray: TraySettingsProps;
+}
+
+/** What the General page needs to drive the tray icon. */
+export interface TraySettingsProps {
+  preferences: TrayPreferences;
+  onStyle: (style: TrayStyle) => void;
+  onHidden: (hidden: boolean) => void;
+  onDarkMode: (darkMode: boolean) => void;
+  onCustomizeUrlList: () => void;
 }
 
 /**
  * The General page: how the application starts, what it watches, and what the
  * close button does.
  */
-export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
+export function GeneralSettings({ settings, onChange, tray }: GeneralSettingsProps) {
+  const { preferences } = tray;
   return (
     <SettingsPage
       title="General"
@@ -68,6 +83,50 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
             checked={settings.closeToTray}
             onChange={(checked) => onChange("closeToTray", checked)}
           />
+        </SettingRow>
+        <SettingRow
+          label="Icon style"
+          hint="The same mark, drawn flat, glossy or outlined."
+        >
+          <div className="w-40">
+            <ListBox
+              label="Tray icon style"
+              value={preferences.style}
+              onChange={(value) => tray.onStyle(value as TrayStyle)}
+              options={[...TRAY_STYLES]}
+            />
+          </div>
+        </SettingRow>
+        <SettingRow
+          label="Show the tray icon"
+          hint="Off leaves the window the only way back, so closing it exits."
+        >
+          <Switch
+            label="Show the tray icon"
+            checked={!preferences.hidden}
+            onChange={(shown) => tray.onHidden(!shown)}
+          />
+        </SettingRow>
+        <SettingRow
+          label="Dark mode support"
+          hint="The icon takes the inks of the appearance the window is in."
+        >
+          <Switch
+            label="Dark mode support"
+            checked={preferences.darkMode}
+            onChange={(checked) => tray.onDarkMode(checked)}
+          />
+        </SettingRow>
+        <SettingRow
+          label="Customize URL List"
+          hint="The protocols a copied address has to start with."
+        >
+          <SettingsButton
+            aria-haspopup="dialog"
+            onClick={tray.onCustomizeUrlList}
+          >
+            Customize URL List...
+          </SettingsButton>
         </SettingRow>
       </Section>
     </SettingsPage>

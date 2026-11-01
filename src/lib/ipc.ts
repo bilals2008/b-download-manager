@@ -8,6 +8,7 @@ import {
   type CategoryDefinition,
 } from "@/lib/categories";
 
+import type { TrayStyle } from "@/lib/tray";
 import type { DownloadInfo } from "@/types";
 
 export function onDownloadUpdate(
@@ -337,6 +338,14 @@ export function setMaxConnections(max: number): Promise<number> {
 export interface DesktopPreferences {
   minimizeToTray: boolean;
   closeToTray: boolean;
+  /** Which of the three drawings the tray icon uses. */
+  trayStyle: TrayStyle;
+  /** "Don't show": the icon is out of the notification area. */
+  trayHidden: boolean;
+  /** "Dark Mode support": the icon follows the appearance of the window. */
+  trayDarkMode: boolean;
+  /** The protocols a copied address has to start with to be offered. */
+  urlProtocols: string[];
 }
 
 /** Whether the minimize button hides the window into the tray. */
@@ -347,6 +356,40 @@ export function setMinimizeToTray(on: boolean): Promise<boolean> {
 /** Whether closing the window keeps the application in the tray. */
 export function setCloseToTray(on: boolean): Promise<boolean> {
   return invoke<boolean>("set_close_to_tray", { on });
+}
+
+/** Which drawing the tray icon uses. Resolves with the one now in force. */
+export function setTrayStyle(style: TrayStyle): Promise<TrayStyle> {
+  return invoke<TrayStyle>("set_tray_style", { style });
+}
+
+/** Take the tray icon out of the notification area, or put it back. */
+export function setTrayHidden(on: boolean): Promise<boolean> {
+  return invoke<boolean>("set_tray_hidden", { on });
+}
+
+/** Whether the tray icon follows the appearance of the window. */
+export function setTrayDarkMode(on: boolean): Promise<boolean> {
+  return invoke<boolean>("set_tray_dark_mode", { on });
+}
+
+/**
+ * Which appearance the window is drawn in, so the tray can pick its inks.
+ *
+ * The webview decides light or dark; the icon only knows what it is told.
+ */
+export function setTrayAppearance(light: boolean): Promise<boolean> {
+  return invoke<boolean>("set_tray_appearance", { light });
+}
+
+/**
+ * The protocols a copied address has to start with to be offered.
+ *
+ * Resolves with the list as the backend stored it, which is the input with
+ * junk and repeats taken out.
+ */
+export function setUrlProtocols(protocols: string[]): Promise<string[]> {
+  return invoke<string[]>("set_url_protocols", { protocols });
 }
 
 /** Read back what the backend saved, for a window that has no storage. */
