@@ -466,7 +466,7 @@ fn control(app: &AppHandle, id: u64, action: &str) -> (u16, Value) {
     let state = app.state::<AppState>();
     let result = match action {
         "pause" => crate::actions::pause(app, &state, id),
-        "resume" => crate::actions::resume(app, &state, id),
+        "resume" => crate::actions::resume(app, &state, id, false),
         "cancel" => crate::actions::cancel(app, &state, id),
         "show" => {
             let Some(download) = state.get(id) else {

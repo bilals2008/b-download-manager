@@ -10,6 +10,7 @@ use idm_core::limits::Limits;
 use idm_core::session::{Index, KnownDownload};
 
 use crate::prefs::{self, DesktopPreferences};
+use crate::queue::Queue;
 use crate::video::{MediaJob, MediaState, SourcePlan};
 
 /// The capture rules the browser extension follows while the application is
@@ -140,6 +141,8 @@ pub struct AppState {
     /// Held while a start checks its destination and inserts the download, so
     /// two starts cannot both find the same name free.
     start_gate: Mutex<()>,
+    /// The download queue scheduler: order, running set, limit, active flag.
+    queue: Mutex<Queue>,
 }
 
 impl Default for AppState {
@@ -169,6 +172,7 @@ impl Default for AppState {
             unfinished_dir: Mutex::new(None),
             category_rules: Mutex::new(Vec::new()),
             start_gate: Mutex::new(()),
+            queue: Mutex::new(Queue::default()),
         }
     }
 }
@@ -306,6 +310,22 @@ impl AppState {
     /// Hold the destination check and the insert of a new download together.
     pub fn start_gate(&self) -> std::sync::MutexGuard<'_, ()> {
         self.start_gate.lock().expect("start gate lock poisoned")
+    }
+
+    /// The download queue scheduler.
+    pub fn queue(&self) -> std::sync::MutexGuard<'_, Queue> {
+        self.queue.lock().expect("queue lock poisoned")
+    }
+
+    /// Called when a queue-managed download finishes. Removes it from the
+    /// queue's running set and starts the next queued download if the queue is
+    /// still active and below its simultaneous limit.
+    pub fn queue_on_finished(&self, app: &tauri::AppHandle, id: u64) {
+        let was_queue = self.queue().on_finished(id);
+        drop(self.queue());
+        if was_queue {
+            Queue::try_start_next(app, self);
+        }
     }
 
     /// The files the downloads in the list write to, minus one row.
@@ -555,6 +575,34 @@ impl AppState {
             0 => None,
             seconds => Some(seconds),
         }
+    }
+
+    /// Restore the queue order from saved preferences, after downloads have
+    /// been restored. Only downloads that exist and are still queued are kept.
+    pub fn restore_queue(&self) {
+        let order: Vec<u64> = self.preferences().queue_order.clone();
+        let mut valid: Vec<u64> = Vec::new();
+        for id in order {
+            if let Some(download) = self.get(id) {
+                if download.status() == Status::Queued {
+                    valid.push(id);
+                }
+            }
+        }
+        if !valid.is_empty() {
+            self.queue().set_order(valid);
+        }
+    }
+
+    /// Persist the current queue order to preferences.
+    pub fn save_queue(&self) {
+        let queue = self.queue();
+        let order = queue.snapshot().order;
+        drop(queue);
+        let mut preferences = self.preferences();
+        preferences.queue_order = order;
+        self.set_preferences(preferences);
+        self.save_preferences();
     }
 
     /// Whether a new download opens its progress window.

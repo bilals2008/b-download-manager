@@ -59,6 +59,8 @@ import {
   setDownloadMeta,
   startDownload,
   setDownloadCategory,
+  startQueue,
+  stopQueue,
   type BridgeDownload,
   type ConflictChoice,
   type StartDownloadInput,
@@ -1412,46 +1414,19 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
       // always asks - even when only one row is finished.
       setState((current) => ({ ...current, pendingDelete: ids }));
     },
-    startQueue: () => {
-      const resumable = latest.current.downloads.filter(
-        (item) =>
-          !item.mediaJob &&
-          (item.status === "paused" ||
-            item.status === "queued" ||
-            item.status === "stopped"),
-      );
-      if (resumable.length === 0) {
-        return;
+    startQueue: async () => {
+      try {
+        await startQueue();
+      } catch (failure) {
+        setError(describeError(failure));
       }
-      setState((current) => ({
-        ...current,
-        downloads: current.downloads.map((item) =>
-          !item.mediaJob &&
-          (item.status === "paused" ||
-            item.status === "queued" ||
-            item.status === "stopped")
-            ? { ...item, status: "downloading", speed: 0, error: null }
-            : item,
-        ),
-      }));
-      run(Promise.all(resumable.map((item) => resumeDownload(item.id))));
     },
-    stopQueue: () => {
-      const items = latest.current.downloads.filter(
-        (item) => item.status === "downloading" && !item.mediaJob,
-      );
-      if (items.length === 0) {
-        return;
+    stopQueue: async () => {
+      try {
+        await stopQueue();
+      } catch (failure) {
+        setError(describeError(failure));
       }
-      setState((current) => ({
-        ...current,
-        downloads: current.downloads.map((item) =>
-          item.status === "downloading" && !item.mediaJob
-            ? { ...item, status: "paused", speed: 0, eta: 0 }
-            : item,
-        ),
-      }));
-      run(Promise.all(items.map((item) => pauseDownload(item.id))));
     },
   };
 

@@ -8,6 +8,16 @@
   section for its own version, and the release page uses the same words.
 -->
 
+## [Unreleased]
+
+### A real download queue
+
+- Start Queue starts downloads one at a time, in the order you set, instead of starting every row at once.
+- Choose how many downloads may run together at once; the rest wait their turn.
+- Drag a queued download to change its position, or take it out of the queue.
+- The queue order and the simultaneous limit are saved, so a restart does not lose them.
+- A failed download does not hold up the ones behind it.
+
 ## 0.2.0 — 31 October 2026
 
 ### A toolbar that fits

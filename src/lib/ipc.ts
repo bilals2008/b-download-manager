@@ -572,3 +572,40 @@ export function appPaths(): Promise<AppPaths> {
 export function quitApp(): Promise<void> {
   return invoke<void>("quit_app");
 }
+
+/** The current state of the download queue scheduler. */
+export interface QueueState {
+  /** Download IDs waiting to run, highest priority first. */
+  order: number[];
+  /** Download IDs the queue currently has running. */
+  running: number[];
+  /** Maximum simultaneous downloads the queue may start. */
+  maxSimultaneous: number;
+  /** Whether Start Queue has been activated. */
+  active: boolean;
+}
+
+/** Read back the queue's current state. */
+export function getQueue(): Promise<QueueState> {
+  return invoke<QueueState>("get_queue");
+}
+
+/** Activate the queue and start queued downloads in order. */
+export function startQueue(): Promise<void> {
+  return invoke<void>("start_queue");
+}
+
+/** Stop the queue and pause every download it has running. */
+export function stopQueue(): Promise<void> {
+  return invoke<void>("stop_queue");
+}
+
+/** Move a queued download to a new position (0 = first). */
+export function setQueuePosition(id: number, position: number): Promise<void> {
+  return invoke<void>("set_queue_position", { id, position });
+}
+
+/** Set the maximum number of simultaneous downloads the queue may start. */
+export function setMaxSimultaneous(max: number): Promise<number> {
+  return invoke<number>("set_max_simultaneous", { max });
+}

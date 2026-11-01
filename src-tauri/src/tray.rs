@@ -367,7 +367,7 @@ fn resume_all(app: &AppHandle) {
     let mut started = 0usize;
     for download in state.list() {
         if matches!(download.status(), Status::Paused | Status::Queued) {
-            match actions::resume(app, &state, download.id) {
+            match actions::resume(app, &state, download.id, false) {
                 Ok(()) => started += 1,
                 Err(error) => log::write(
                     "warn",

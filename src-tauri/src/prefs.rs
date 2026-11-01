@@ -71,6 +71,10 @@ pub struct DesktopPreferences {
     /// requests. Off by default; the panel asks once before the first cookie.
     #[serde(default)]
     pub cookie_consent: bool,
+    /// Download IDs waiting in the queue, highest priority first. Kept so a
+    /// restart does not lose the order the reader chose.
+    #[serde(default)]
+    pub queue_order: Vec<u64>,
 }
 
 impl Default for DesktopPreferences {
@@ -87,6 +91,7 @@ impl Default for DesktopPreferences {
                 .collect(),
             video_quality: HashMap::new(),
             cookie_consent: false,
+            queue_order: Vec::new(),
         }
     }
 }
@@ -239,6 +244,7 @@ mod tests {
             url_protocols: vec!["https".to_string(), "rtsp".to_string()],
             video_quality: HashMap::from([("example.org".to_string(), "1080p".to_string())]),
             cookie_consent: true,
+            queue_order: vec![7, 3, 1],
         };
 
         save(&path, &prefs).expect("a saved file");

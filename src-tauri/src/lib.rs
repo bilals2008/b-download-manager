@@ -8,6 +8,7 @@ mod grabber;
 mod lifecycle;
 mod prefs;
 mod progress;
+mod queue;
 mod share;
 mod state;
 mod toolbars;
@@ -108,7 +109,7 @@ fn pause_download(app: AppHandle, state: State<'_, AppState>, id: u64) -> Result
 
 #[tauri::command]
 fn resume_download(app: AppHandle, state: State<'_, AppState>, id: u64) -> Result<(), String> {
-    actions::resume(&app, &state, id)
+    actions::resume(&app, &state, id, false)
 }
 
 #[tauri::command]
@@ -197,6 +198,53 @@ fn queue_download(app: AppHandle, state: State<'_, AppState>, id: u64) -> Result
 #[tauri::command]
 fn dequeue_download(app: AppHandle, state: State<'_, AppState>, id: u64) -> Result<(), String> {
     actions::dequeue(&app, &state, id)
+}
+
+/// Activate the queue and start queued downloads in order, up to the
+/// simultaneous limit.
+#[tauri::command]
+fn start_queue(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    actions::start_queue(&app, &state)
+}
+
+/// Stop the queue and pause every download it has running.
+#[tauri::command]
+fn stop_queue(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    actions::stop_queue(&app, &state)
+}
+
+/// Move a queued download to a new position (0 = first).
+#[tauri::command]
+fn set_queue_position(state: State<'_, AppState>, id: u64, position: u32) -> Result<(), String> {
+    actions::set_queue_position(&state, id, position)
+}
+
+/// Set the maximum number of simultaneous downloads the queue may start.
+#[tauri::command]
+fn set_max_simultaneous(state: State<'_, AppState>, max: u32) -> u32 {
+    actions::set_max_simultaneous(&state, max)
+}
+
+/// The queue's current state: order, running set, limit, active flag.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct QueueState {
+    order: Vec<u64>,
+    running: Vec<u64>,
+    max_simultaneous: u32,
+    active: bool,
+}
+
+/// Return the queue's current state for the UI.
+#[tauri::command]
+fn get_queue(state: State<'_, AppState>) -> QueueState {
+    let snapshot = state.queue().snapshot();
+    QueueState {
+        order: snapshot.order,
+        running: snapshot.running,
+        max_simultaneous: snapshot.max_simultaneous,
+        active: snapshot.active,
+    }
 }
 
 /// Delete the file of a finished download, then forget the row.
@@ -1081,6 +1129,7 @@ pub fn run() {
             // still there after a restart.
             state.set_index(Index::new(dir.join("downloads.json")));
             state.restore_downloads();
+            state.restore_queue();
             // Parts and manifests have a folder of their own from the very
             // first moment: a hand-over from the tray or the browser can
             // arrive before the window has read its settings, and its parts
@@ -1167,6 +1216,11 @@ pub fn run() {
             set_download_destination,
             queue_download,
             dequeue_download,
+            start_queue,
+            stop_queue,
+            set_queue_position,
+            set_max_simultaneous,
+            get_queue,
             delete_download_file,
             remove_download,
             set_speed_limit,

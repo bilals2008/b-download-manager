@@ -94,14 +94,32 @@ fn announce(app: &AppHandle, download: &Download) {
 /// Hand a download to a task of its own.
 ///
 /// The task claims the run itself, so a stop that lands right after the spawn
-/// still covers it.
-fn spawn_run(app: &AppHandle, state: &AppState, download: Arc<Download>) {
+/// still covers it. `queue_managed` marks a download the queue started, so the
+/// scheduler can start the next one when this run ends.
+fn spawn_run(app: &AppHandle, state: &AppState, download: Arc<Download>, queue_managed: bool) {
+    start_download_run(app, state, download, queue_managed);
+}
+
+/// Start one download run and, when it ends, tell the queue if it was
+/// queue-managed so the scheduler can start the next waiting download.
+fn start_download_run(
+    app: &AppHandle,
+    state: &AppState,
+    download: Arc<Download>,
+    queue_managed: bool,
+) {
     let limits: Limits = state.limits().clone();
-    let request = download.request_run();
-    let app = app.clone();
+    let reporter = Arc::new(AppReporter(app.clone()));
+    let running = download.clone();
+    let download_id = running.id;
+    let request = running.request_run();
+    let app_clone = app.clone();
     tauri::async_runtime::spawn(async move {
-        idm_core::downloader::run_claimed(Arc::new(AppReporter(app)), limits, download, request)
-            .await;
+        idm_core::downloader::run_claimed(reporter, limits, running, request).await;
+        if queue_managed {
+            let state = app_clone.state::<AppState>();
+            state.queue_on_finished(&app_clone, download_id);
+        }
     });
 }
 
@@ -184,7 +202,7 @@ pub fn start(
         });
     }
 
-    spawn_run(app, state, download);
+    spawn_run(app, state, download, false);
 
     Ok(Started {
         id: Some(id),
@@ -239,7 +257,7 @@ pub fn retry(app: &AppHandle, state: &AppState, id: u64, restart: bool) -> Resul
         download.discard_progress()?;
         download.set_status(Status::Queued);
     }
-    resume(app, state, id)
+    resume(app, state, id, false)
 }
 
 /// Start a download over, from its first byte.
@@ -312,7 +330,7 @@ pub fn redownload(
     // The new row takes the place of the old one at once, instead of waiting
     // for the first bytes of the transfer.
     announce(app, &fresh);
-    spawn_run(app, state, fresh);
+    spawn_run(app, state, fresh, false);
 
     Ok(Started {
         id: Some(new_id),
@@ -554,7 +572,7 @@ pub fn relocate(app: &AppHandle, state: &AppState, id: u64, folder: PathBuf) -> 
         .parent()
         .is_some_and(|parent| conflict::same_path(parent, &folder))
     {
-        return resume(app, state, id);
+        return resume(app, state, id, false);
     }
     let wanted = folder.join(name);
 
@@ -573,7 +591,7 @@ pub fn relocate(app: &AppHandle, state: &AppState, id: u64, folder: PathBuf) -> 
         UPDATE_EVENT,
         state.get(id).expect("the moved download").info(),
     );
-    resume(app, state, id)
+    resume(app, state, id, false)
 }
 
 /// Put a download in the queue, parking its task but keeping its bytes.
@@ -582,6 +600,8 @@ pub fn relocate(app: &AppHandle, state: &AppState, id: u64, folder: PathBuf) -> 
 /// one is started. A finished row has nothing left to queue.
 pub fn queue(app: &AppHandle, state: &AppState, id: u64) -> Result<(), String> {
     queue_row(state, id)?;
+    state.queue().enqueue(id);
+    state.save_queue();
     if let Some(download) = state.get(id) {
         announce(app, &download);
     }
@@ -615,6 +635,8 @@ fn queue_row(state: &AppState, id: u64) -> Result<(), String> {
 /// Take a queued download back out of the queue and leave it paused.
 pub fn dequeue(app: &AppHandle, state: &AppState, id: u64) -> Result<(), String> {
     dequeue_row(state, id)?;
+    state.queue().dequeue(id);
+    state.save_queue();
     if let Some(download) = state.get(id) {
         announce(app, &download);
     }
@@ -630,6 +652,43 @@ fn dequeue_row(state: &AppState, id: u64) -> Result<(), String> {
     download.set_status(Status::Paused);
     state.save_index();
     Ok(())
+}
+
+/// Start the queue: activate the scheduler and begin starting queued
+/// downloads in order, up to `max_simultaneous` at a time.
+pub fn start_queue(app: &AppHandle, state: &AppState) -> Result<(), String> {
+    state.queue().start_queue(app, state);
+    state.save_queue();
+    state.save_index();
+    Ok(())
+}
+
+/// Stop the queue: deactivate the scheduler and pause every download it
+/// has running.
+pub fn stop_queue(app: &AppHandle, state: &AppState) -> Result<(), String> {
+    state.queue().stop_queue(app, state);
+    state.save_queue();
+    state.save_index();
+    Ok(())
+}
+
+/// Move a queued download to a new position (0 = first).
+pub fn set_queue_position(state: &AppState, id: u64, position: u32) -> Result<(), String> {
+    state
+        .queue()
+        .reorder(id, position as usize)
+        .map_err(|error| error.to_string())?;
+    state.save_queue();
+    state.save_index();
+    Ok(())
+}
+
+/// Set the maximum number of simultaneous downloads the queue may start.
+pub fn set_max_simultaneous(state: &AppState, max: u32) -> u32 {
+    state.queue().set_max_simultaneous(max);
+    state.save_queue();
+    state.save_index();
+    state.queue().max_simultaneous()
 }
 
 /// Delete the file of a finished download and forget the row.
@@ -704,7 +763,15 @@ pub fn pause(app: &AppHandle, state: &AppState, id: u64) -> Result<(), String> {
 }
 
 /// Let a paused or stopped download run again.
-pub fn resume(app: &AppHandle, state: &AppState, id: u64) -> Result<(), String> {
+///
+/// `queue_managed` marks a download the queue started, so the scheduler can
+/// start the next one when this run ends.
+pub fn resume(
+    app: &AppHandle,
+    state: &AppState,
+    id: u64,
+    queue_managed: bool,
+) -> Result<(), String> {
     let download = state.get(id).ok_or("unknown download")?;
     let info = download.info();
     if info.status == Status::Completed {
@@ -731,15 +798,7 @@ pub fn resume(app: &AppHandle, state: &AppState, id: u64) -> Result<(), String> 
         announce(app, &download);
     }
     if restarting {
-        let limits = state.limits().clone();
-        let reporter = Arc::new(AppReporter(app.clone()));
-        let running = download.clone();
-        // Claim the run now. The task may wait for a cancelled run to finish,
-        // and a stop that lands in that window has to cover it too.
-        let request = running.request_run();
-        tauri::async_runtime::spawn(async move {
-            idm_core::downloader::run_claimed(reporter, limits, running, request).await;
-        });
+        start_download_run(app, state, download, queue_managed);
     }
 
     state.save_index();
@@ -1080,5 +1139,62 @@ mod tests {
         assert_eq!(dest, dir.join("pack.zip"), "a relative folder is not used");
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_queue_position_can_be_changed() {
+        let dir = temp_dir("queue-pos");
+        let state = AppState::default();
+        let download = row(1, &dir.join("film.mp4"));
+        download.set_status(Status::Queued);
+        state.insert(download);
+        state.queue().enqueue(1);
+        state.queue().enqueue(2);
+
+        set_queue_position(&state, 2, 0).expect("move to front");
+        let order = state.queue().snapshot().order;
+        assert_eq!(order, vec![2, 1]);
+
+        set_queue_position(&state, 1, 1).expect("move to second");
+        let order = state.queue().snapshot().order;
+        assert_eq!(order, vec![2, 1]);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_queue_position_out_of_range_is_refused() {
+        let dir = temp_dir("queue-pos-bad");
+        let state = AppState::default();
+        let download = row(1, &dir.join("film.mp4"));
+        download.set_status(Status::Queued);
+        state.insert(download);
+        state.queue().enqueue(1);
+
+        assert!(
+            set_queue_position(&state, 1, 5).is_err(),
+            "past the end of the queue"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_queue_position_for_unknown_download_is_refused() {
+        let state = AppState::default();
+        assert!(
+            set_queue_position(&state, 99, 0).is_err(),
+            "not in the queue"
+        );
+    }
+
+    #[test]
+    fn the_max_simultaneous_can_be_changed() {
+        let state = AppState::default();
+        assert_eq!(state.queue().max_simultaneous(), 3);
+        let rate = set_max_simultaneous(&state, 7);
+        assert_eq!(rate, 7);
+        assert_eq!(state.queue().max_simultaneous(), 7);
+        let rate = set_max_simultaneous(&state, 0);
+        assert_eq!(rate, 1, "never below one");
     }
 }
