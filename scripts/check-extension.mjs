@@ -134,9 +134,11 @@ for (const page of [
   );
   assert.ok(!/\son[a-z]+\s*=/i.test(html), `${page} has no inline event handler`);
 
-  for (const match of html.matchAll(/(?:src|href)="([^"]+)"/g)) {
-    const ref = match[1];
+  for (const match of html.matchAll(/<(\w+)\b[^>]*?\s(?:src|href)="([^"]+)"/g)) {
+    const [, tag, ref] = match;
     if (ref.startsWith("#") || ref.startsWith("data:")) continue;
+    // An anchor navigates away on a click; it loads nothing into the page.
+    if (tag.toLowerCase() === "a" && /^https?:/i.test(ref)) continue;
     assert.ok(!/^https?:/i.test(ref), `${page} loads ${ref} from the network`);
     const target = new URL(ref, htmlPath);
     assert.ok(existsSync(fileURLToPath(target)), `${page} -> ${ref} exists`);

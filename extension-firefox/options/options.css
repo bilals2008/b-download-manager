@@ -392,6 +392,39 @@ h2 {
   color: var(--danger);
 }
 
+/* --------------------------------------------------------------- socials */
+
+.socials {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+}
+
+.socials a {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-chip);
+  color: var(--text-muted);
+  transition: color 120ms ease, background-color 120ms ease;
+}
+
+.socials a:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+
+.socials a:active {
+  background: var(--active);
+}
+
+.socials svg {
+  width: 15px;
+  height: 15px;
+}
+
 /* --------------------------------------------------------------- states */
 
 :focus-visible {
@@ -423,7 +456,8 @@ h2 {
   .switch > span,
   .input,
   .button,
-  .segmented button {
+  .segmented button,
+  .socials a {
     transition: none;
   }
 }
