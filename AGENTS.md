@@ -36,6 +36,12 @@ Also, structure the design system  to support multiple themes in the future. Swi
 
 -Avoid useEffect: Do not use React's useEffect by default. Prefer event handlers, derived state, and proper data flow. Use it only when genuinely necessary.
 
+## Commits
+
+- Never add a `Co-Authored-By` trailer, an "Generated with" line, or any other
+  attribution to a commit. Strictly no co-authors. One line, English,
+  conventional prefix (`feat(scope): ...`), and no commit body.
+
 ## Design slop indicators
 
 Do not ship these. They are the tells of generic AI-generated UI:
