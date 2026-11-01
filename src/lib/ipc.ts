@@ -319,6 +319,38 @@ export function shareToSystem(
   );
 }
 
+/**
+ * The engine's settings as the settings file holds them, for a window that
+ * opens on what the engine owns rather than on stale values.
+ *
+ * Null when there is no file yet: a first run or an upgrade has the webview's
+ * own copy as the seed, and the window must not mistake the defaults for what
+ * the reader chose.
+ */
+export function savedSettings(): Promise<EngineSettings | null> {
+  return invoke<EngineSettings | null>("saved_settings");
+}
+
+/** The settings the engine stores in its own versioned file. */
+export interface EngineSettings {
+  version: number;
+  /** An absolute folder, or empty for the system Downloads folder. */
+  defaultFolder: string;
+  /** An absolute folder for unfinished parts, or empty for the engine's own. */
+  unfinishedFolder: string;
+  categories: CategoryFolderRule[];
+  defaultConnections: number;
+  maxConnections: number;
+  speedLimitEnabled: boolean;
+  speedLimitBytes: number;
+  proxyUrl: string;
+  browserPolicy: BrowserPolicyInput;
+  videoButton: VideoButtonSettings;
+  showCompleteDialog: boolean;
+  showProgressOnStart: boolean;
+  clipboardCapture: boolean;
+}
+
 /** Cap the bandwidth of the whole application. Zero means no cap. */
 export function setSpeedLimit(bytesPerSecond: number): Promise<number> {
   return invoke<number>("set_speed_limit", { bytesPerSecond });

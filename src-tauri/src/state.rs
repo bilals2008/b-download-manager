@@ -11,11 +11,12 @@ use idm_core::session::{Index, KnownDownload};
 
 use crate::prefs::{self, DesktopPreferences};
 use crate::queue::Queue;
+use crate::settings_store::{self, EngineSettings};
 use crate::video::{MediaJob, MediaState, SourcePlan};
 
 /// The capture rules the browser extension follows while the application is
 /// running. The extension keeps its own copy for when the app is closed.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct BrowserPolicy {
     /// Whether a browser download is handed to the application.
@@ -41,7 +42,7 @@ impl Default for BrowserPolicy {
 
 /// The appearance of the floating download button the browser extension draws
 /// on a video. The extension reads this from the loopback bridge.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct VideoButtonSettings {
     /// "icon", "text" or "both".
@@ -66,7 +67,7 @@ impl Default for VideoButtonSettings {
 ///
 /// The window owns the list; the backend only matches a file name against it,
 /// so a browser hand-over lands where the options window says.
-#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct CategoryRule {
     pub name: String,
@@ -118,6 +119,17 @@ pub struct AppState {
     /// already follows the user's choice.
     preferences: Mutex<DesktopPreferences>,
     preferences_path: Mutex<Option<PathBuf>>,
+    /// The engine's own settings, saved in one versioned file and applied to
+    /// the runtime fields below. The webview edits them through, the file is
+    /// the owner: a restart reads it before any window exists.
+    engine_settings: Mutex<EngineSettings>,
+    settings_path: Mutex<Option<PathBuf>>,
+    /// Whether the settings file was on disk when the app opened. A first run
+    /// or an upgrade has none, so the webview's copy seeds it.
+    settings_file: AtomicBool,
+    /// The application's own data folder, where a blank unfinished folder
+    /// resolves to. Held so a settings change can re-resolve it.
+    data_directory: Mutex<Option<PathBuf>>,
     /// Whether the main tray icon exists. Without it, hiding the window would
     /// strand the application with no way back.
     tray_available: AtomicBool,
@@ -163,6 +175,10 @@ impl Default for AppState {
             last_extension_contact: AtomicU64::new(0),
             preferences: Mutex::new(DesktopPreferences::default()),
             preferences_path: Mutex::new(None),
+            engine_settings: Mutex::new(EngineSettings::default()),
+            settings_path: Mutex::new(None),
+            settings_file: AtomicBool::new(false),
+            data_directory: Mutex::new(None),
             tray_available: AtomicBool::new(false),
             shutting_down: AtomicBool::new(false),
             show_complete_dialog: AtomicBool::new(true),
@@ -638,6 +654,124 @@ impl AppState {
         self.appearance_is_light.store(on, Ordering::SeqCst);
     }
 
+    /// Point the state at the file the engine's settings live in and apply it.
+    ///
+    /// Called once during setup, before the bridge or the clipboard start, so
+    /// a browser hand-over or a copied link meets the settings the reader
+    /// chose, not the defaults. A file that cannot be read leaves the defaults
+    /// in place, so the application still opens.
+    pub fn set_settings_path(&self, path: PathBuf, data_dir: PathBuf) {
+        // A file that exists, even one that cannot be read, is treated as the
+        // reader's choice: its fields are read one by one, and an unreadable
+        // one keeps its default. A missing file means the webview still owns
+        // the values, and its next push creates the file.
+        self.settings_file
+            .store(path.try_exists().unwrap_or(false), Ordering::SeqCst);
+        let settings = settings_store::load(&path);
+        *self.engine_settings.lock().expect("settings lock poisoned") = settings;
+        *self
+            .settings_path
+            .lock()
+            .expect("settings path lock poisoned") = Some(path);
+        *self.data_directory.lock().expect("data dir lock poisoned") = Some(data_dir);
+        self.apply_engine_settings();
+    }
+
+    /// Whether the engine's settings file was there when the app opened, so
+    /// the webview knows whether its own copy is a seed or a cache.
+    pub fn settings_file_exists(&self) -> bool {
+        self.settings_file.load(Ordering::SeqCst)
+    }
+
+    /// The engine's settings as they are saved.
+    pub fn engine_settings(&self) -> EngineSettings {
+        self.engine_settings
+            .lock()
+            .expect("settings lock poisoned")
+            .clone()
+    }
+
+    /// Change the engine's settings and write the file.
+    ///
+    /// The caller says what to change; the copy is sanitized, applied to the
+    /// runtime whole, and saved, so one set of rules feeds both the file and
+    /// the running engine and they cannot drift.
+    pub fn modify_settings(&self, change: impl FnOnce(&mut EngineSettings)) {
+        let mut settings = self.engine_settings();
+        change(&mut settings);
+        let settings = settings_store::sanitize(settings);
+        *self.engine_settings.lock().expect("settings lock poisoned") = settings;
+        let data_dir = self
+            .data_directory
+            .lock()
+            .expect("data dir lock poisoned")
+            .is_some();
+        self.save_engine_settings();
+        if data_dir {
+            self.apply_engine_settings();
+        }
+    }
+
+    /// Write the choices to the file, when one has been chosen. A failure is
+    /// logged rather than refused: the settings still apply for this run.
+    pub fn save_engine_settings(&self) {
+        let value = self.engine_settings();
+        let path = self
+            .settings_path
+            .lock()
+            .expect("settings path lock poisoned")
+            .clone();
+        let Some(path) = path else { return };
+        let value = settings_store::sanitize(value);
+        if let Err(error) = settings_store::save(&path, &value) {
+            idm_core::log::write("warn", &error);
+        } else {
+            // The first write, from the webview's seed on an upgrade, makes
+            // the file the owner from now on.
+            self.settings_file.store(true, Ordering::SeqCst);
+        }
+    }
+
+    /// Push the saved settings into the runtime fields, the whole object at a
+    /// time, so a change cannot leave the file and the engine disagreeing.
+    pub fn apply_engine_settings(&self) {
+        let settings = self.engine_settings();
+        let data_dir = self
+            .data_directory
+            .lock()
+            .expect("data dir lock poisoned")
+            .clone()
+            .unwrap_or_else(|| PathBuf::from("."));
+        let rate = if settings.speed_limit_enabled {
+            settings.speed_limit_bytes
+        } else {
+            0
+        };
+        self.limits.global_speed.set_rate(rate);
+        self.limits.budget.resize(settings.max_connections);
+        self.limits.set_proxy(if settings.proxy_url.is_empty() {
+            None
+        } else {
+            Some(&settings.proxy_url)
+        });
+        self.set_show_complete_dialog(settings.show_complete_dialog);
+        self.set_show_progress_on_start(settings.show_progress_on_start);
+        self.set_clipboard_capture(settings.clipboard_capture);
+        self.set_browser_connections(settings.default_connections);
+        self.set_browser_folder(string_folder(&settings.default_folder));
+        self.set_video_button_settings(settings.video_button.clone());
+        self.set_browser_policy(settings.browser_policy.clone());
+        // The unfinished folder is stored as the reader wrote it, blank for
+        // the engine's own; the resolution matches the command below, which
+        // stores the same raw value.
+        let unfinished = match settings.unfinished_folder.trim().is_empty() {
+            true => data_dir.join("unfinished"),
+            false => PathBuf::from(settings.unfinished_folder.trim()),
+        };
+        let _ = std::fs::create_dir_all(&unfinished);
+        self.set_download_folders(Some(unfinished), settings.categories.clone());
+    }
+
     /// The choices the tray and the close button follow.
     pub fn preferences(&self) -> DesktopPreferences {
         self.preferences
@@ -814,6 +948,13 @@ fn unfinished_stem(name: &str) -> Option<&str> {
     let (stem, id) = name.rsplit_once(".part")?;
     let numbered = !id.is_empty() && id.bytes().all(|byte| byte.is_ascii_digit());
     (numbered && !stem.is_empty()).then_some(stem)
+}
+
+/// A saved folder string as an engine folder: `None` when it is blank, which
+/// is how "the system Downloads folder" travels.
+fn string_folder(folder: &str) -> Option<PathBuf> {
+    let trimmed = folder.trim();
+    (!trimmed.is_empty()).then(|| PathBuf::from(trimmed))
 }
 
 /// Whether two paths name the same folder, matching the platform's case rules.

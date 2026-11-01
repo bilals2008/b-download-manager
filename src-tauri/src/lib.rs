@@ -9,6 +9,7 @@ mod lifecycle;
 mod prefs;
 mod progress;
 mod queue;
+mod settings_store;
 mod share;
 mod state;
 mod toolbars;
@@ -313,7 +314,10 @@ fn set_download_category(
 /// Cap the bandwidth of the whole application. Zero means no cap.
 #[tauri::command]
 fn set_speed_limit(state: State<'_, AppState>, bytes_per_second: u64) -> u64 {
-    state.limits().global_speed.set_rate(bytes_per_second);
+    state.modify_settings(|settings| {
+        settings.speed_limit_enabled = bytes_per_second > 0;
+        settings.speed_limit_bytes = bytes_per_second;
+    });
     state.limits().global_speed.rate()
 }
 
@@ -351,11 +355,7 @@ fn set_proxy(state: State<'_, AppState>, url: Option<String>) -> Result<(), Stri
         Some(value) => validate_proxy(value)?,
         None => String::new(),
     };
-    state.limits().set_proxy(if cleaned.is_empty() {
-        None
-    } else {
-        Some(&cleaned)
-    });
+    state.modify_settings(|settings| settings.proxy_url = cleaned.clone());
     Ok(())
 }
 
@@ -420,8 +420,8 @@ fn quit_app(app: AppHandle) {
 /// How many connections the whole application may have open at once.
 #[tauri::command]
 fn set_max_connections(state: State<'_, AppState>, max: u32) -> u32 {
-    state.limits().budget.resize(max);
-    max
+    state.modify_settings(|settings| settings.max_connections = max);
+    state.engine_settings().max_connections
 }
 
 /// The choices the tray and the close button follow.
@@ -514,29 +514,29 @@ fn set_url_protocols(state: State<'_, AppState>, protocols: Vec<String>) -> Vec<
 /// Whether a finished download gets its own window.
 #[tauri::command]
 fn set_show_complete_dialog(state: State<'_, AppState>, on: bool) -> bool {
-    state.set_show_complete_dialog(on);
-    on
+    state.modify_settings(|settings| settings.show_complete_dialog = on);
+    state.show_complete_dialog()
 }
 
 /// Whether a new download opens its progress window.
 #[tauri::command]
 fn set_show_progress_on_start(state: State<'_, AppState>, on: bool) -> bool {
-    state.set_show_progress_on_start(on);
-    on
+    state.modify_settings(|settings| settings.show_progress_on_start = on);
+    state.show_progress_on_start()
 }
 
 /// The connections a browser hand-over gets, since it has no dialog to ask.
 #[tauri::command]
 fn set_browser_connections(state: State<'_, AppState>, count: u32) -> u32 {
-    state.set_browser_connections(count);
+    state.modify_settings(|settings| settings.default_connections = count);
     state.browser_connections()
 }
 
 /// Whether the clipboard is watched for download links.
 #[tauri::command]
 fn set_clipboard_capture(state: State<'_, AppState>, on: bool) -> bool {
-    state.set_clipboard_capture(on);
-    on
+    state.modify_settings(|settings| settings.clipboard_capture = on);
+    state.clipboard_capture()
 }
 
 /// Register or remove the operating system's startup entry.
@@ -561,14 +561,14 @@ fn set_launch_on_startup(app: AppHandle, on: bool) -> Result<bool, String> {
 #[tauri::command]
 fn set_browser_policy(state: State<'_, AppState>, policy: BrowserPolicy) -> BrowserPolicy {
     let policy = normalize_policy(policy);
-    state.set_browser_policy(policy.clone());
+    state.modify_settings(|settings| settings.browser_policy = policy.clone());
     policy
 }
 
 /// The appearance of the floating video download button the extension draws.
 #[tauri::command]
-fn set_video_button_settings(state: State<'_, AppState>, settings: state::VideoButtonSettings) {
-    state.set_video_button_settings(settings);
+fn set_video_button_settings(state: State<'_, AppState>, video_button: state::VideoButtonSettings) {
+    state.modify_settings(|settings| settings.video_button = video_button.clone());
 }
 
 /// The appearance of the floating video download button, served to the
@@ -805,14 +805,9 @@ fn free_space(_folder: &std::path::Path) -> Option<u64> {
 /// means the system Downloads folder.
 #[tauri::command]
 fn set_browser_folder(state: State<'_, AppState>, folder: String) -> String {
-    let trimmed = folder.trim();
-    let folder = if trimmed.is_empty() {
-        None
-    } else {
-        Some(PathBuf::from(trimmed))
-    };
-    state.set_browser_folder(folder);
-    trimmed.to_string()
+    let trimmed = folder.trim().to_string();
+    state.modify_settings(|settings| settings.default_folder = trimmed.clone());
+    trimmed
 }
 
 /// The unfinished folder and the folder each category saves to.
@@ -821,7 +816,8 @@ fn set_browser_folder(state: State<'_, AppState>, folder: String) -> String {
 /// because a browser hand-over has no window to read and a start needs the work
 /// folder before it creates its first part. An empty unfinished folder means the
 /// application's own data folder, so a fresh install still keeps the parts away
-/// from the finished files.
+/// from the finished files. Both are written to the engine's settings file, so
+/// a restart restores them before any window opens.
 #[tauri::command]
 fn set_download_folders(
     app: AppHandle,
@@ -829,22 +825,42 @@ fn set_download_folders(
     unfinished_folder: String,
     categories: Vec<state::CategoryRule>,
 ) -> Result<String, String> {
-    let trimmed = unfinished_folder.trim();
-    let folder = if trimmed.is_empty() {
-        app.path()
-            .app_data_dir()
-            .unwrap_or_else(|_| PathBuf::from("."))
-            .join("unfinished")
-    } else {
-        PathBuf::from(trimmed)
-    };
-    if folder.exists() && !folder.is_dir() {
-        return Err(format!("{} is a file, not a folder.", folder.display()));
+    let trimmed = unfinished_folder.trim().to_string();
+    if !trimmed.is_empty() {
+        let folder = PathBuf::from(&trimmed);
+        if folder.exists() && !folder.is_dir() {
+            return Err(format!("{} is a file, not a folder.", folder.display()));
+        }
+        std::fs::create_dir_all(&folder)
+            .map_err(|error| format!("the unfinished folder could not be created: {error}"))?;
     }
-    std::fs::create_dir_all(&folder)
-        .map_err(|error| format!("the unfinished folder could not be created: {error}"))?;
-    state.set_download_folders(Some(folder.clone()), normalize_category_rules(categories));
-    Ok(folder.to_string_lossy().to_string())
+    state.modify_settings(|settings| {
+        settings.unfinished_folder = trimmed;
+        settings.categories = normalize_category_rules(categories);
+    });
+    let fallback = app
+        .path()
+        .app_data_dir()
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .join("unfinished");
+    Ok(state
+        .unfinished_dir()
+        .unwrap_or(fallback)
+        .to_string_lossy()
+        .to_string())
+}
+
+/// The engine's settings as the settings file holds them, for a window that
+/// opens as the cache's owner rather than on stale values.
+///
+/// `None` when there is no file yet: a first run or an upgrade has the
+/// webview's own copy as the seed, and the window must not mistake the
+/// defaults for what the reader chose.
+#[tauri::command]
+fn saved_settings(state: State<'_, AppState>) -> Option<settings_store::EngineSettings> {
+    state
+        .settings_file_exists()
+        .then(|| state.engine_settings())
 }
 
 /// Clean the rules a window sends. A name is required, the extensions are the
@@ -1147,6 +1163,14 @@ pub fn run() {
             // are consulted before a page has loaded, and a webview that has
             // not painted yet must not decide whether closing exits.
             state.set_preferences_path(dir.join(prefs::FILE_NAME));
+            // The engine's settings come back the same way, and are applied
+            // before the bridge binds: a link caught the moment the
+            // application opens must land in the folder the reader chose,
+            // through the proxy the reader set, at the connection counts the
+            // reader chose. The webview pushes its own copy over these as it
+            // still does; that push is what repairs the file after an
+            // upgrade, and the file wins after that.
+            state.set_settings_path(dir.join(settings_store::FILE_NAME), dir.clone());
             // The icon goes up unless the reader took it away in an earlier
             // run. Without it the close and minimize choices fall back to
             // closing and minimizing, which is what `tray_available` says.
@@ -1251,6 +1275,7 @@ pub fn run() {
             set_video_button_settings,
             video_button_settings,
             set_download_folders,
+            saved_settings,
             browser_status,
             folder_status,
             app_paths,

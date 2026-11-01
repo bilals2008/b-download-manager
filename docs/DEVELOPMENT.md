@@ -278,7 +278,43 @@ handed. Keep these invariants when changing it:
 `docs/SITE-GRABBER.md` is the user-facing contract; update it with any rule or
 limit that changes.
 
+## Settings persistence
+
+Who owns what, and where it is written. Keep these invariants when a setting
+is added:
+
+- **`settings.json`** (`src-tauri/src/settings_store.rs`) is the engine's own
+  versioned file: proxy, speed cap, connection counts, the browser hand-over
+  folder and connection count, the extension's capture rules, the video-button
+  appearance, the unfinished folder and category folders, and the
+  complete/progress/clipboard switches. It is loaded and applied once during
+  setup — **before the bridge binds** — so a hand-over arriving at start-up
+  meets the reader's settings, not the defaults. A proxy stored there never
+  carries a username or password: a credential is stripped on both write and
+  read (`sanitize`, `strip_credentials`), matching `validate_proxy`, which
+  refuses one.
+- Every write to these goes through `AppState::modify_settings`, which
+  sanitizes, applies the whole object to the running engine, and saves the
+  file. Never set a runtime field and a file field separately; never read the
+  runtime field to decide what the file says.
+- The webview keeps a cache of the engine's values in `localStorage`
+  (`idm-clone.settings.v1`). At start-up `syncEngineSettings()`
+  (`src/lib/settings.ts`) reads `saved_settings()` and copies the file into the
+  cache. `saved_settings()` returns null when there is **no file yet** — a
+  first run or an upgrade — and then the webview's copy is the seed: the boot
+  pushes create the file, freeing no user value. After that the file wins.
+  Never seed from defaults when the file is absent.
+- `desktop.json` (`src-tauri/src/prefs.rs`) stays the owner of the tray, the
+  close and minimize choices and the clipboard protocols — same rules, its own
+  file. The engine settings file does not duplicate it.
+- Appearance, fonts, toolbar packs and layouts, tips, the last folder and the
+  update-check stamp are read only by the webview and live only in
+  `localStorage`. Pick the owner by who reads it without a window: if the
+  engine, the tray, or the bridge needs it, it belongs in one of the two
+  backend files; otherwise `localStorage` is enough.
+
 ## Media capture
+
 
 The browser extension hands over a manifest or a playback address; the app
 parses it, shows the quality panel, downloads each track, and remuxes. Keep

@@ -51,6 +51,7 @@ import {
   loadToolbarSize,
   saveSettings,
   saveToolbarSize,
+  syncEngineSettings,
   type ToolbarSize,
 } from "@/lib/settings";
 import { shareApp } from "@/lib/share";
@@ -193,12 +194,25 @@ export default function App() {
     onFindNext: downloads.findNext,
   });
 
-  // The settings the engine owns are pushed to it when the application
+  // The settings the engine owns come back from its own file when the app
   // starts, so a proxy or a speed limit that was set yesterday is still in
-  // force today.
+  // force today; the pushes below hand it the webview's copy, which repairs
+  // the file after an upgrade. The file wins after that.
   useEffect(() => {
-    const settings = loadSettings();
-    void setProxy(settings.proxyUrl).catch(() => {
+    void (async () => {
+      let settings = loadSettings();
+      try {
+        const synced = await syncEngineSettings();
+        // No file yet (a first run or an upgrade): the webview's copy stays
+        // the seed and creates the file through the pushes.
+        if (synced) {
+          settings = synced;
+        }
+      } catch {
+        // The engine is not answering; the copy below is what this window
+        // has always read.
+      }
+      void setProxy(settings.proxyUrl).catch(() => {
       // The engine is not there yet; the settings window can set it later.
     });
     void setSpeedLimit(
@@ -255,6 +269,7 @@ export default function App() {
     }).catch(() => {
       // The extension falls back to its own rules when the bridge is closed.
     });
+    })();
   }, []);
 
   // Toolbar packs live in a folder beside the application's data. They are

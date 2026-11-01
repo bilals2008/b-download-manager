@@ -2,10 +2,7 @@
  * The preferences the options window owns.
  *
  * Every value here is stored on this machine and is read back when the
- * application starts. The ones the engine owns — the proxy, the bandwidth
- * cap, the number of connections, where unfinished files wait and where each
- * category saves — are pushed to the engine as well, so a change takes effect
- * at once.
+ * application starts.
  */
 export interface Settings {
   /** Register the application in the operating system's startup entry. */
@@ -123,6 +120,12 @@ export const DEFAULT_SETTINGS: Settings = {
   firstRunDone: false,
 };
 
+/**
+ * Ownership of the saved values: the settings the engine applies live in its
+ * own file (`settings.json` beside the application data); this storage keeps
+ * the cache the settings window opens on, and the values only the windows
+ * read — appearance, toolbars, tips.
+ */
 const STORAGE_KEY = "idm-clone.settings.v1";
 
 /**
@@ -258,6 +261,95 @@ export function saveSettings(settings: Settings): void {
   } catch {
     // Storage can be blocked; the dialog still closes with the chosen values.
   }
+}
+
+/**
+ * Read the engine's settings file into the webview's copy, so the settings
+ * window opens on what the engine really applied.
+ *
+ * The file `settings.json` beside the application data is what the engine
+ * reads at every start, so it owns the values it applies. The webview's
+ * saved copy is a cache of them, written back through the storage commands
+ * when the reader edits.
+ *
+ * Null means there is no file yet — a first run or an upgrade — and the
+ * webview's own copy stays the seed; the first write from it creates the
+ * file. A failure means the copy stays as it is, the way the window already
+ * reads it.
+ */
+export async function syncEngineSettings(): Promise<Settings | null> {
+  const { savedSettings } = await import("./ipc.ts");
+  const saved = await savedSettings();
+  if (!saved) {
+    return null;
+  }
+  const settings = loadSettings();
+  settings.defaultFolder = text(saved.defaultFolder, settings.defaultFolder);
+  settings.unfinishedFolder = text(
+    saved.unfinishedFolder,
+    settings.unfinishedFolder,
+  );
+  settings.defaultConnections = number(
+    saved.defaultConnections,
+    settings.defaultConnections,
+    1,
+    MAX_CONNECTIONS,
+  );
+  settings.maxConnections = number(
+    saved.maxConnections,
+    settings.maxConnections,
+    1,
+    MAX_CONNECTIONS,
+  );
+  settings.speedLimitEnabled = boolean(
+    saved.speedLimitEnabled,
+    settings.speedLimitEnabled,
+  );
+  settings.speedLimitBytes = number(
+    saved.speedLimitBytes,
+    settings.speedLimitBytes,
+    0,
+    1024 * 1024 * 1024,
+  );
+  settings.proxyUrl = text(saved.proxyUrl, settings.proxyUrl);
+  settings.browserCapture = boolean(
+    saved.browserPolicy.capture,
+    settings.browserCapture,
+  );
+  settings.captureAsk = boolean(saved.browserPolicy.ask, settings.captureAsk);
+  settings.captureTypes = entries(
+    saved.browserPolicy.types,
+    settings.captureTypes,
+    cleanCaptureType,
+  );
+  settings.skipSites = entries(
+    saved.browserPolicy.skipSites,
+    settings.skipSites,
+    cleanSite,
+  );
+  settings.videoButtonStyle = videoButtonStyle(saved.videoButton.style);
+  settings.videoButtonLabel = text(
+    saved.videoButton.label,
+    settings.videoButtonLabel,
+  );
+  settings.videoButtonHover = boolean(
+    saved.videoButton.hover,
+    settings.videoButtonHover,
+  );
+  settings.showCompleteDialog = boolean(
+    saved.showCompleteDialog,
+    settings.showCompleteDialog,
+  );
+  settings.showProgressOnStart = boolean(
+    saved.showProgressOnStart,
+    settings.showProgressOnStart,
+  );
+  settings.clipboardCapture = boolean(
+    saved.clipboardCapture,
+    settings.clipboardCapture,
+  );
+  saveSettings(settings);
+  return settings;
 }
 
 /** ".MP4", "*.mp4" and " mp4 " are all the same extension. */
