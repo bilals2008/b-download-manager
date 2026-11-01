@@ -41,6 +41,9 @@ Also, structure the design system  to support multiple themes in the future. Swi
 - Never add a `Co-Authored-By` trailer, an "Generated with" line, or any other
   attribution to a commit. Strictly no co-authors. One line, English,
   conventional prefix (`feat(scope): ...`), and no commit body.
+- Commit a change as one commit. Do not split a working tree into a series of
+  small per-layer commits; separate commits are only for work that is genuinely
+  unrelated.
 
 ## Design slop indicators
 
