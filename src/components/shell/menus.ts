@@ -196,6 +196,7 @@ export function buildMenus(
       },
       { command: "grabber-help", label: "Grabber Help", disabled: true },
       { command: "tip-of-the-day", label: "Tip of the Day..." },
+      { command: "whats-new", label: "What's new..." },
       "separator",
       { command: "website", label: "B Download Manager Home Page" },
       { command: "support", label: "Contact B Download Manager Support", disabled: true },

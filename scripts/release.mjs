@@ -11,6 +11,11 @@
 // installer and publishes the GitHub release that latest.json points at, so
 // installed copies see the update.
 //
+// WHATS_NEW.md must already carry a section for the new version. Those are
+// the words a reader sees in the release page and in the app, so they are
+// written by a person (or an agent) before the release, never generated from
+// commit subjects.
+//
 // Requirements: a clean worktree, an `origin` remote, and your commit
 // subjects following the convention (feat: / fix: / perf: / refactor: ...).
 
@@ -24,6 +29,7 @@ import { commitsInRange, renderSection } from "./changelog-from-commits.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const changelogPath = resolve(root, "CHANGELOG.md");
+const whatsNewPath = resolve(root, "WHATS_NEW.md");
 
 const git = (args) => execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
 
@@ -32,6 +38,28 @@ function guard(condition, message) {
     console.error(`release refused: ${message}`);
     process.exit(1);
   }
+}
+
+/** The friendly notes file's body for this version, or an empty string. */
+function whatsNewBody(version) {
+  if (!existsSync(whatsNewPath)) {
+    return "";
+  }
+  const heading = new RegExp(
+    `^##\\s+v?${version.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\s|$)`,
+  );
+  const lines = readFileSync(whatsNewPath, "utf8").split(/\r?\n/);
+  const start = lines.findIndex((line) => heading.test(line));
+  if (start === -1) {
+    return "";
+  }
+  const end = lines.findIndex((line, index) => index > start && /^##\s+/.test(line));
+  return lines.slice(start + 1, end === -1 ? undefined : end).join("\n").trim();
+}
+
+/** Whether the friendly notes file has readable lines for this version. */
+function hasWhatsNew(version) {
+  return /^[-*+]\s+\S/m.test(whatsNewBody(version));
 }
 
 const kind = (process.argv[2] ?? "").trim();
@@ -45,6 +73,10 @@ const next = kind === "explicit" ? explicit : bump(current, kind);
 guard(/^\d+\.\d+\.\d+$/.test(next), `not a plain x.y.z version: ${next || "(empty)"}`);
 guard(next !== current, `v${current} is already the current version`);
 guard(kind !== "major" || Number(current.split(".")[0]) >= 1, "pre-1.0 releases bump minor, not major");
+guard(
+  hasWhatsNew(next),
+  `WHATS_NEW.md has no readable notes for v${next}; add a "## ${next}" section with friendly bullet lines before releasing`,
+);
 
 guard(git(["status", "--porcelain"]) === "", "the worktree has uncommitted changes; commit or stash them first");
 const remotes = git(["remote"]);
@@ -102,7 +134,7 @@ if (!existsSync(changelogPath)) {
   writeFileSync(changelogPath, `${changelog.slice(0, at + marker.length)}\n${section}\n${changelog.slice(at + marker.length).replace(/^\n+/, "\n")}`);
 }
 
-git(["add", "package.json", "src-tauri/tauri.conf.json", "src-tauri/Cargo.toml", "src-tauri/Cargo.lock", "CHANGELOG.md"]);
+git(["add", "package.json", "src-tauri/tauri.conf.json", "src-tauri/Cargo.toml", "src-tauri/Cargo.lock", "CHANGELOG.md", "WHATS_NEW.md"]);
 // No `[skip ci]`: a tag push whose commit says that starts no workflow, so the
 // Release build would never run.
 git(["commit", "-m", `chore: release v${next}`]);

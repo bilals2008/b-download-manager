@@ -26,6 +26,8 @@ import {
 interface AboutSettingsProps {
   settings: Settings;
   onChange: <K extends keyof Settings>(key: K, value: Settings[K]) => void;
+  /** Open the latest release notes, after or without the startup popup. */
+  onWhatsNew: () => void;
 }
 
 /** Where the page stands between the question and the installer. */
@@ -42,7 +44,11 @@ type Check =
  * cannot disagree. A check is made when the reader asks for one, or at startup
  * if they turned that on themselves.
  */
-export function AboutSettings({ settings, onChange }: AboutSettingsProps) {
+export function AboutSettings({
+  settings,
+  onChange,
+  onWhatsNew,
+}: AboutSettingsProps) {
   const version = useAppVersion();
   const [check, setCheck] = useState<Check>({ kind: "idle" });
 
@@ -77,7 +83,12 @@ export function AboutSettings({ settings, onChange }: AboutSettingsProps) {
 
   return (
     <SettingsPage title="About" description="This build and how it updates.">
-      <Section title="Application">
+      <Section
+        title="Application"
+        action={
+          <SettingsButton onClick={onWhatsNew}>What's new</SettingsButton>
+        }
+      >
         <div className="flex items-center justify-between gap-4 py-2">
           <div className="flex min-w-0 items-center gap-3">
             <AppMark className="size-9" />

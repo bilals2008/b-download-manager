@@ -14,6 +14,8 @@ import { AddDownloadDialog } from "@/components/workspace/add-download-dialog";
 import { CloseConfirmDialog } from "@/components/workspace/close-confirm-dialog";
 import { UpdateDialog } from "@/components/workspace/update-dialog";
 import { Workspace } from "@/components/workspace/workspace";
+import { WhatsNewDialog } from "@/components/whats-new/whats-new-dialog";
+import { useWhatsNew } from "@/components/whats-new/use-whats-new";
 import { APP_HOME_PAGE, APP_NAME, APP_TAGLINE } from "@/lib/brand";
 import { describeError, isDesktop } from "@/lib/errors";
 import { applyFont } from "@/lib/fonts";
@@ -122,6 +124,29 @@ export default function App() {
   // before this window has drawn anything. The menu shows what it saved.
   const [tray, setTray] = useState<TrayPreferences>(DEFAULT_TRAY_PREFERENCES);
   const [urlListOpen, setUrlListOpen] = useState(false);
+
+  // A version's notes are offered once, after the list has loaded and every
+  // transfer has stopped. A busy window never loses focus to a popup.
+  const activeDownloads = useMemo(
+    () => downloads.downloads.filter((item) => item.status === "downloading").length,
+    [downloads.downloads],
+  );  const whatsNew = useWhatsNew({
+    loading: downloads.loading,
+    activeDownloads,
+    blocked:
+      addDownloadOpen ||
+      settingsOpen ||
+      aboutOpen ||
+      tipsOpen ||
+      updateOpen ||
+      closeRequest !== null ||
+      customizeToolbarOpen ||
+      toolbarsOpen ||
+      urlListOpen ||
+      downloads.conflict !== null ||
+      downloads.pendingDelete !== null ||
+      Boolean(downloads.browserRequest),
+  });
 
   const allToolbars = useMemo<ToolbarPack[]>(
     () => [...BUILTIN_TOOLBAR_PACKS, ...toolbarPacks.packs],
@@ -277,9 +302,13 @@ export default function App() {
   // The one question the reader agreed to on the About page. It runs once the
   // window is up: only a newer release earns a dialog; an answer that is the
   // current version, or one that did not arrive at all, is written down and
-  // left quietly there.
+  // left quietly there. A launch that is introducing this version holds the
+  // check back, so two offers cannot open one after the other.
   useEffect(() => {
-    if (!isDesktop() || !loadSettings().updateAutoCheck) {
+    if (!isDesktop() || !whatsNew.ready || whatsNew.freshNotes) {
+      return;
+    }
+    if (!loadSettings().updateAutoCheck) {
       return;
     }
     void runCheck().then((outcome) => {
@@ -289,12 +318,17 @@ export default function App() {
         setUpdateOpen(true);
       }
     });
-  }, []);
+  }, [whatsNew.ready, whatsNew.freshNotes]);
 
   // A tip is offered once per start, and never over the add dialog the browser
-  // just asked for.
+  // just asked for, or over the notes that explain an update.
   useEffect(() => {
-    if (!isDesktop() || startupTipAsked.current) {
+    if (
+      !isDesktop() ||
+      !whatsNew.ready ||
+      whatsNew.freshNotes ||
+      startupTipAsked.current
+    ) {
       return;
     }
     startupTipAsked.current = true;
@@ -302,7 +336,7 @@ export default function App() {
       return;
     }
     openTips();
-  }, []);
+  }, [whatsNew.ready, whatsNew.freshNotes]);
 
   // A link that the browser extension handed over opens the add dialog with
   // its address already in it.
@@ -318,6 +352,9 @@ export default function App() {
   // backend has already prevented the native close; this window answers the
   // question, and nothing is stopped until one of the buttons is pressed.
   useEffect(() => {
+    if (!isDesktop()) {
+      return;
+    }
     let dispose: (() => void) | undefined;
     let closed = false;
     void onCloseRequested((active) => setCloseRequest(active)).then((unlisten) => {
@@ -351,6 +388,9 @@ export default function App() {
   // until the reader confirms, and a link that arrives while the dialog is
   // being filled in does not overwrite the field.
   useEffect(() => {
+    if (!isDesktop()) {
+      return;
+    }
     let dispose: (() => void) | undefined;
     let closed = false;
     void onClipboardLink((url) => {
@@ -553,6 +593,9 @@ export default function App() {
       case "tip-of-the-day":
         openTips();
         break;
+      case "whats-new":
+        whatsNew.openManually();
+        break;
       case "website":
         // The window is a webview, so the address goes to the browser instead
         // of replacing the page that is running.
@@ -690,6 +733,7 @@ export default function App() {
       <SettingsDialog
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
+        onWhatsNew={whatsNew.openManually}
         toolbar={{
           pack: activeToolbar,
           packs: allToolbars,
@@ -710,7 +754,17 @@ export default function App() {
           onCustomizeUrlList: () => setUrlListOpen(true),
         }}
       />
-      <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
+      <AboutDialog
+        open={aboutOpen}
+        onClose={() => setAboutOpen(false)}
+        onWhatsNew={whatsNew.openManually}
+      />
+      <WhatsNewDialog
+        open={whatsNew.open}
+        release={whatsNew.release}
+        manual={whatsNew.manual}
+        onClose={whatsNew.dismiss}
+      />
       <TipOfTheDayDialog
         open={tipsOpen}
         index={tipIndex}

@@ -35,6 +35,9 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: What's New content
+        run: pnpm check:whats-new
+
       - name: Typecheck
         run: pnpm exec tsc --noEmit
 

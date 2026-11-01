@@ -19,20 +19,41 @@ agree.
 pnpm release:patch        # or :minor; :major only from 1.x
 ```
 
-The command refuses a dirty worktree, a duplicate tag, or a missing `origin`.
-It bumps, generates the `CHANGELOG.md` section from the conventional commits
-since the last tag (`feat:` Added, `fix:` Fixed, `perf:` Performance, `!` or
-`BREAKING CHANGE:` first under Breaking changes), commits, tags `vX.Y.Z` and
-pushes both. The pushed tag starts `.github/workflows/release.yml`, which
-builds the signed Windows NSIS installer, the Linux `deb` + AppImage and the
-universal macOS dmg, uploads them with their `.sig` files, merges all three
-platforms into `latest.json` and publishes the GitHub release with the
-changelog section as its body and its notes. The platform jobs run one after
-the other so the shared `latest.json` is not overwritten.
+Before running it, add a section to `WHATS_NEW.md` for the new version:
 
-Check the words of a generated section before pushing a release you care
-about: `git show` the bump commit and amend it, or edit `CHANGELOG.md` and
-tag by hand (`git tag -a vX.Y.Z -m … && git push origin vX.Y.Z`).
+```md
+## 0.3.0 — 2 November 2026
+
+### Downloads
+
+- Downloads recover more reliably after a dropped connection.
+- A finished file can be opened from the completion window.
+```
+
+`WHATS_NEW.md` is the single source of truth for reader-facing notes. The
+release script refuses to tag a version that has no section for it, and the
+release workflow uses that section as the GitHub release body and as the
+`latest.json` notes. The app also bundles the file and shows the matching
+section in its What's New popup, so the release page and the app cannot drift
+apart. Write plain sentences for someone who never reads the changelog; do not
+copy commit subjects.
+
+The command refuses a dirty worktree, a duplicate tag, a missing `origin`, or
+a missing `WHATS_NEW.md` section. It bumps, generates the technical
+`CHANGELOG.md` section from the conventional commits since the last tag
+(`feat:` Added, `fix:` Fixed, `perf:` Performance, `!` or `BREAKING CHANGE:`
+first under Breaking changes), commits, tags `vX.Y.Z` and pushes both. The
+pushed tag starts `.github/workflows/release.yml`, which builds the signed
+Windows NSIS installer, the Linux `deb` + AppImage and the universal macOS
+dmg, uploads them with their `.sig` files, merges all three platforms into
+`latest.json` and publishes the GitHub release with the What's New section as
+its body and its notes. The platform jobs run one after the other so the
+shared `latest.json` is not overwritten.
+
+Check the words of a release before pushing one you care about: add the
+`WHATS_NEW.md` section, run `pnpm check:whats-new`, and read the rendered
+notes. `CHANGELOG.md` remains the technical record for maintainers; it is not
+what the reader sees in the app popup.
 
 One-time setup on GitHub (secrets for the repository, Settings → Secrets →
 Actions):

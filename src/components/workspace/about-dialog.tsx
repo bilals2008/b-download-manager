@@ -8,6 +8,8 @@ import { APP_NAME, APP_TAGLINE } from "@/lib/brand";
 interface AboutDialogProps {
   open: boolean;
   onClose: () => void;
+  /** Open the notes for this release, even after the startup popup was closed. */
+  onWhatsNew: () => void;
 }
 
 /**
@@ -17,7 +19,7 @@ interface AboutDialogProps {
  * installer always name the same number; nothing here is typed by hand. The
  * options window reads the same value on its About page.
  */
-export function AboutDialog({ open, onClose }: AboutDialogProps) {
+export function AboutDialog({ open, onClose, onWhatsNew }: AboutDialogProps) {
   const version = useAppVersion();
 
   return (
@@ -26,9 +28,14 @@ export function AboutDialog({ open, onClose }: AboutDialogProps) {
       title={`About ${APP_NAME}`}
       onClose={onClose}
       footer={
-        <DialogAction tone="primary" data-autofocus onClick={onClose}>
-          OK
-        </DialogAction>
+        <>
+          <DialogAction tone="quiet" onClick={onWhatsNew}>
+            What's new
+          </DialogAction>
+          <DialogAction tone="primary" data-autofocus onClick={onClose}>
+            OK
+          </DialogAction>
+        </>
       }
     >
       <div className="flex flex-col gap-2 text-xs text-chrome-menu-text">

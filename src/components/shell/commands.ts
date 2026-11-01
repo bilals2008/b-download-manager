@@ -68,6 +68,7 @@ export type ShellCommand =
   | "help-scheduler-queues"
   | "grabber-help"
   | "tip-of-the-day"
+  | "whats-new"
   | "website"
   | "support"
   | "check-updates"

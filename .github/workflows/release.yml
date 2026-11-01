@@ -9,8 +9,8 @@ name: Release
 # commits, tags vX.Y.Z and pushes both. This workflow fires on that tag and
 # is the whole rest of the pipeline: it builds the signed Windows installer,
 # the Linux deb + AppImage and the universal macOS dmg, creates the GitHub
-# release with the changelog section as its body, and uploads the update
-# payloads (installers plus .sig) and latest.json.
+# release with the plain-language WHATS_NEW.md section as its body, and
+# uploads the update payloads (installers plus .sig) and latest.json.
 #
 # The jobs run one at a time (max-parallel: 1) because each one merges its
 # platform entry into the same latest.json asset; running them in parallel
@@ -89,7 +89,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Read this version's notes from CHANGELOG.md
+      - name: Read this version's notes from WHATS_NEW.md
         id: notes
         shell: bash
         run: |

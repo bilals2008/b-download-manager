@@ -9,9 +9,12 @@ import { useSyncExternalStore } from "react";
 
 import { isDesktop } from "@/lib/errors";
 
-type Snapshot =
+/** Whether the package version has arrived, and what it is. */
+export type AppVersionState =
   | { status: "reading" }
   | { status: "ready"; version: string | null };
+
+type Snapshot = AppVersionState;
 
 let snapshot: Snapshot = { status: "reading" };
 let asked = false;
@@ -59,10 +62,19 @@ function getSnapshot(): Snapshot {
 }
 
 /**
+ * The version state of this build. Callers that must wait for the answer
+ * (the What's New check at startup) can tell "still reading" from "there is
+ * no package here", which the version alone cannot say.
+ */
+export function useAppVersionState(): AppVersionState {
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+}
+
+/**
  * The version of this build, or null while it is being read — which is also
  * what a window running in a browser gets, since there is no package there.
  */
 export function useAppVersion(): string | null {
-  const current = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const current = useAppVersionState();
   return current.status === "ready" ? current.version : null;
 }

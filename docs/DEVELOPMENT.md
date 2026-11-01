@@ -18,6 +18,7 @@ pnpm tauri dev           # desktop app (the only way to see real window chrome)
 pnpm dev                 # UI only in a browser; IPC calls are no-ops
 pnpm build               # tsc --noEmit + vite build
 pnpm check:palette       # WCAG contrast gate for the colour tokens
+pnpm check:whats-new     # friendly release notes parse and match the version
 pnpm check:grabber       # the Site Grabber's window helpers
 pnpm site:dev            # Astro docs site (site/)
 cd crates/idm-core && cargo test   # the engine, without a window
@@ -165,6 +166,36 @@ Theme references:
 - Radix Colors scales: https://www.radix-ui.com/colors
 - Local design kit (tokens, taste, aesthetic systems):
   `D:/Dev/ux-ui-agent-skills/tokens/`, `D:/Dev/ux-ui-agent-skills/taste/`
+
+## What's New
+
+`WHATS_NEW.md` at the project root is the only reader-facing release record.
+It is imported into the bundle at build time (`src/lib/whats-new-content.ts`),
+so the popup works offline and the words cannot change after signing. The
+technical `CHANGELOG.md` stays for maintainers and CI; it is never shown in
+the app.
+
+- Add a `## x.y.z — date` section before every release, newest first. The
+  release script refuses to tag a version without one, and the release page
+  uses the same words.
+- `src/lib/whats-new.ts` parses the file and decides whether to show it. A
+  machine with no saved choices at all is a first install and only records the
+  version: there is no earlier release to describe. A machine that already has
+  the app's other saved choices is an install from before this feature, so the
+  current version's notes are offered once. The same version never opens
+  twice; a newer version opens once. The seen version lives in
+  `localStorage` under `idm-clone.whats-new.v1` and is written when the notes
+  actually open, so a restart cannot repeat them and an offer deferred by a
+  running download is tried again on the next quiet launch.
+- `useWhatsNew` waits for the download list to load and for every transfer to
+  stop, and stands down when another dialog is open. On a launch that has
+  fresh notes, the startup tip and the automatic update check do not open;
+  this keeps startup to one window instead of a stack.
+- Settings > About, the About box and Help > What's new call `openManually`,
+  which ignores the dismissal record and is allowed during a download.
+- Keep the box a reader's page: the app mark, version, day, short groups and
+  one line per change. No cards, tags, rules or developer vocabulary. The
+  self-check rejects markdown marks, developer words and overly long lines.
 
 ## Download progress window
 

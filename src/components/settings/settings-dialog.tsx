@@ -57,6 +57,8 @@ import { resetTipCursor } from "@/lib/tips";
 interface SettingsDialogProps {
   open: boolean;
   onClose: () => void;
+  /** Open the latest release notes from the About page. */
+  onWhatsNew: () => void;
   /** The toolbar page reads and writes the bar the shell already owns. */
   toolbar: ToolbarSettingsProps;
   /** The General page reads and writes the tray icon the backend owns. */
@@ -99,6 +101,7 @@ const ENGINE_KEYS: readonly (keyof Settings)[] = [
 export function SettingsDialog({
   open,
   onClose,
+  onWhatsNew,
   toolbar,
   tray,
 }: SettingsDialogProps) {
@@ -315,7 +318,13 @@ export function SettingsDialog({
       case "advanced":
         return <AdvancedSettings onReset={resetAll} />;
       case "about":
-        return <AboutSettings settings={settings} onChange={update} />;
+        return (
+          <AboutSettings
+            settings={settings}
+            onChange={update}
+            onWhatsNew={onWhatsNew}
+          />
+        );
     }
   }
 

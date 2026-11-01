@@ -60,9 +60,24 @@ Do not ship these. They are the tells of generic AI-generated UI:
 - Code breadcrumbs (`provider / model / version` paths in UI copy)
 - Section numbering (01, 02, 03 labels)
 
+## What's New
+
+- `WHATS_NEW.md` is the single source of truth for reader-facing release
+  notes. The in-app popup and the GitHub release body both read it.
+- Before every release, add a `## x.y.z — date` section at the top with short,
+  plain sentences a non-technical user understands. Never copy commit
+  subjects or `CHANGELOG.md` text into it, and never show developer words in
+  the popup.
+- Run `pnpm check:whats-new` after editing. The release script refuses a
+  version with no section.
+- The startup popup shows once per newer version and never interrupts an
+  active download. Settings > About and Help > What's new must always reopen
+  the notes manually.
+
 ## Links
  
 - Design tokens: `src/index.css`
+- What's New content: `WHATS_NEW.md`
 - Toolbar pack format: `docs/TOOLBARS.md`
 - shadcn/ui themes: https://ui.shadcn.com/themes
 - tweakcn theme editor: https://tweakcn.com
