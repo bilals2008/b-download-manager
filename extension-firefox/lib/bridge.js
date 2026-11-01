@@ -134,6 +134,32 @@ async function bdmBridgeSend(payload) {
   );
 }
 
+/** Register a stream manifest; the answer names the job the panel watches. */
+async function bdmBridgeMedia(payload) {
+  return bdmBridgeRequest(
+    "POST",
+    "/v1/media",
+    {
+      pageUrl: String(payload?.pageUrl || ""),
+      manifestUrl: String(payload?.manifestUrl || ""),
+      kind:
+        payload?.kind === "hls" ||
+        payload?.kind === "dash" ||
+        payload?.kind === "file"
+          ? payload.kind
+          : "auto",
+      title: String(payload?.title || ""),
+      referer: String(payload?.referer || ""),
+      headers:
+        payload?.headers && typeof payload.headers === "object"
+          ? payload.headers
+          : undefined,
+      presentation: payload?.presentation === "inline" ? "inline" : "window",
+    },
+    8000,
+  );
+}
+
 /**
  * What the link window may choose from: the folders, the queue and the
  * default connection count.
@@ -171,6 +197,36 @@ async function bdmBridgeBatch(payload) {
     },
     15000,
   );
+}
+
+/** What the application found in a media job. */
+async function bdmBridgeMediaStatus(job) {
+  return bdmBridgeRequest("GET", `/v1/media/${job}`, undefined, 4000);
+}
+
+/** Start one quality of a media job. */
+async function bdmBridgeMediaStart(job, payload) {
+  return bdmBridgeRequest(
+    "POST",
+    `/v1/media/${job}/download`,
+    {
+      video: String(payload?.video || ""),
+      audio: payload?.audio ? String(payload.audio) : null,
+      name: String(payload?.name || ""),
+      dest: String(payload?.dest || ""),
+    },
+    8000,
+  );
+}
+
+/** Allow cookies for media requests, once, and read the job again. */
+async function bdmBridgeMediaAllow(job) {
+  return bdmBridgeRequest("POST", `/v1/media/${job}/allow-cookies`, {}, 8000);
+}
+
+/** Stop a media job. */
+async function bdmBridgeMediaCancel(job) {
+  return bdmBridgeRequest("POST", `/v1/media/${job}/cancel`, {}, 4000);
 }
 
 /** Pause, resume, stop or show one download in the app. */

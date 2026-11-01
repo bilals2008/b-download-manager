@@ -36,13 +36,13 @@ assert.deepEqual(
 
 assert.deepEqual(
   [...manifest.permissions].sort(),
-  ["contextMenus", "downloads", "storage"],
-  "the extension asks for the three permissions it uses, and no more",
+  ["contextMenus", "cookies", "downloads", "storage"],
+  "the extension asks for the permissions it uses, and no more",
 );
 assert.deepEqual(
   manifest.host_permissions,
-  ["http://127.0.0.1:27500/*"],
-  "the only host permission is the loopback bridge",
+  ["http://127.0.0.1:27500/*", "http://*/*", "https://*/*"],
+  "the bridge, plus the sites whose cookies and player requests it reads",
 );
 assert.ok(!manifest.permissions.includes("scripting"));
 assert.ok(!manifest.permissions.includes("activeTab"));
@@ -732,6 +732,7 @@ assert.equal(scanListener({ type: "bdm:media-list" }), undefined, "other message
 /* ---------------------------------------------------------------- media.js */
 
 const mediaContext = vm.createContext({ URL, console });
+vm.runInContext(read("lib/manifest.js"), mediaContext, { filename: "manifest.js" });
 vm.runInContext(read("lib/media.js"), mediaContext, { filename: "media.js" });
 const {
   bdmIsDownloadableSource,
@@ -848,6 +849,7 @@ const pageContext = vm.createContext({
   },
   location: { href: "https://example.org/watch" },
 });
+vm.runInContext(read("lib/manifest.js"), pageContext, { filename: "manifest.js" });
 vm.runInContext(read("lib/media.js"), pageContext, { filename: "media.js" });
 vm.runInContext(read("content/page-media.js"), pageContext, { filename: "page-media.js" });
 pageContext.bdmWatchMediaRequests();

@@ -24,6 +24,7 @@ const read = (file) => readFileSync(path.join(rootDir, file), "utf8");
 /** The order the manifest injects, so the check runs what Firefox runs. */
 const CONTENT_SCRIPTS = [
   "lib/media.js",
+  "lib/manifest.js",
   "lib/settings.js",
   "lib/icons.js",
   "content/page-media.js",
@@ -83,6 +84,57 @@ function youTubePlayer(dom, options = {}) {
   return { player, container, video, controls };
 }
 
+/** The quality list the fake application returns for a media job. */
+function mediaView() {
+  return {
+    job: 1,
+    state: "ready",
+    error: null,
+    notice: null,
+    pageUrl: "https://www.youtube.com/watch?v=abc",
+    title: "A Test Video",
+    duration: null,
+    formats: [
+      {
+        id: "137",
+        kind: "video",
+        container: "mp4",
+        codec: "avc1.640028",
+        width: 1920,
+        height: 1080,
+        fps: 30,
+        bandwidth: 4200000,
+        size: 100,
+        label: "1080p",
+      },
+      {
+        id: "140",
+        kind: "audio",
+        container: "m4a",
+        codec: null,
+        width: null,
+        height: null,
+        fps: null,
+        bandwidth: 128000,
+        size: 20,
+        label: "Audio",
+      },
+    ],
+    pairs: [{ video: "137", audio: "140", label: "1080p" }],
+    preferred: "1080p",
+    cookiesOffered: false,
+    cookieConsent: true,
+    downloading: false,
+    done: false,
+    dest: null,
+    stage: null,
+    downloaded: 0,
+    total: 0,
+    segmentsDone: 0,
+    segmentsTotal: 0,
+  };
+}
+
 /** A plain page with one video file, for the non-YouTube cases. */
 function filePage(dom, src = "https://cdn.example.org/clip.mp4") {
   const video = dom.create("video");
@@ -105,6 +157,18 @@ async function startPage(options = {}) {
   dom.browser.runtime.sendMessage = async (message) => {
     calls.push(message);
     if (options.send) return options.send(message);
+    if (message.type === "bdm:media") {
+      return { ok: true, result: { job: 1 } };
+    }
+    if (message.type === "bdm:media-status") {
+      return { ok: true, view: mediaView() };
+    }
+    if (message.type === "bdm:media-start") {
+      return { ok: true, result: { download: 1, downloads: [1] } };
+    }
+    if (message.type === "bdm:media-allow") {
+      return { ok: true, view: mediaView() };
+    }
     if (message.type === "bdm:send") {
       return { ok: true, result: { mode: "ask" } };
     }
@@ -185,36 +249,50 @@ async function startPage(options = {}) {
   page.dom.fire(fab, "click", { clientX: 0, clientY: 0 });
   await page.dom.settle();
 
-  assert.equal(page.open(), true, "the button opens the panel");
-  assert.equal(page.rows().length, 2, "the panel lists both streams of the video");
+  assert.equal(page.open(), true, "the button opens the panel inline");
+  assert.equal(page.rows().length, 1, "the panel lists the parsed quality pairs");
   assert.equal(
-    page.rows()[0].querySelector(".tag").textContent,
-    "MP4",
-    "the first row is the picture stream",
-  );
-  assert.match(
     page.rows()[0].querySelector(".name").textContent,
-    /1080p video only/,
-    "the row names the quality",
+    "1080p",
+    "the row names the quality from the app's manifest",
   );
-  assert.equal(page.rows()[1].querySelector(".tag").textContent, "AUDIO");
+  assert.equal(
+    page.rows()[0].querySelector(".size").textContent,
+    "120 B",
+    "the row carries the size the manifest gave",
+  );
 
-  // Hand the first stream over.
+  const media = page.dom.calls.filter((message) => message.type === "bdm:media");
+  assert.equal(media.length, 2, "the picture and its sound go to the app");
+  assert.equal(
+    media[0].payload.manifestUrl,
+    wholeFile(RANGED_1080),
+    "the whole file is sent, not a range",
+  );
+  assert.equal(media[0].payload.kind, "file", "a YouTube stream is a plain file");
+  assert.equal(media[0].payload.presentation, "inline", "the panel stays inline");
+  assert.equal(media[0].payload.referer, "https://www.youtube.com/watch?v=abc");
+  assert.ok(
+    media.some((message) => message.payload.manifestUrl === wholeFile(AUDIO_140)),
+    "the sound of the same capture goes with the picture",
+  );
+
+  // Pick the quality and hand it to the app.
   const action = page.rows()[0].querySelector(".row-action");
   page.dom.fire(action, "click");
   await page.dom.settle();
 
-  const sent = page.dom.calls.find((message) => message.type === "bdm:send");
-  assert.ok(sent, "a row click hands the address to the background");
-  assert.equal(sent.mode, "ask", "a media hand-over opens the app's dialog");
-  assert.equal(sent.payload.url, wholeFile(RANGED_1080), "the whole file is sent, not a range");
-  assert.match(sent.payload.name, /1080p/, "the file name carries the quality");
-  assert.equal(sent.payload.referer, "https://www.youtube.com/watch?v=abc");
-  assert.equal(page.status(), "Confirm it in the app", "the panel says what happens next");
+  const started = page.dom.calls.find(
+    (message) => message.type === "bdm:media-start",
+  );
+  assert.ok(started, "the quality is started through the app");
+  assert.equal(started.job, 1);
+  assert.equal(started.payload.video, "137");
+  assert.equal(started.payload.audio, "140");
   assert.equal(
-    page.rows()[0].querySelector(".row-action").getAttribute("aria-label"),
-    "Sent to B Download Manager",
-    "the row shows it was handed over",
+    page.status(),
+    "Downloading in B Download Manager",
+    "the panel says where the download went",
   );
 
   // Leaving the player hides the button.
@@ -264,12 +342,19 @@ async function startPage(options = {}) {
   page.dom.fire(fab, "click");
   await page.dom.settle();
   assert.equal(page.rows().length, 1, "the file is offered");
-  assert.equal(page.rows()[0].querySelector(".tag").textContent, "MP4");
   assert.equal(
-    page.rows()[0].dataset.url,
+    page.rows()[0].querySelector(".name").textContent,
+    "1080p",
+    "the application's quality list is drawn inline",
+  );
+  const sentFile = page.dom.calls.find((message) => message.type === "bdm:media");
+  assert.ok(sentFile, "the element's own file is handed to the app");
+  assert.equal(
+    sentFile.payload.manifestUrl,
     "https://cdn.example.org/clip.mp4",
     "the element's own file is offered, not the captured streams",
   );
+  assert.equal(sentFile.payload.kind, "file");
 
   // A player that replaces its video must not leave the button behind.
   video.remove();
@@ -293,7 +378,7 @@ async function startPage(options = {}) {
   const fab = page.shadow().querySelector(".fab");
   page.dom.fire(fab, "click");
   await page.dom.settle();
-  assert.equal(page.rows().length, 2, "the first video offers its streams");
+  assert.equal(page.rows().length, 1, "the first video offers its qualities");
 
   // The player navigates to the next video without reloading the document, and
   // reuses the same <video> element for it.
@@ -302,14 +387,25 @@ async function startPage(options = {}) {
   await page.dom.settle();
 
   assert.equal(page.visible(), true, "the button stays while the next video starts");
-  const urls = page.rows().map((row) => row.dataset.url);
-  assert.equal(urls.length, 1, "only the streams of the new video are offered");
-  assert.equal(urls[0], wholeFile(MUXED_22), "the previous video's stream is dropped");
   assert.equal(
-    page.rows()[0].querySelector(".name").textContent.includes("audio"),
+    page.open(),
     false,
-    "the new stream is named by its own itag",
+    "the previous video's quality list is closed with the navigation",
   );
+  assert.equal(page.rows().length, 0, "the previous video's rows are dropped");
+
+  // The new video's button reads its own capture.
+  page.dom.fire(page.shadow().querySelector(".fab"), "click");
+  await page.dom.settle();
+  const lastMedia = page.dom.calls
+    .filter((message) => message.type === "bdm:media")
+    .at(-1);
+  assert.equal(
+    lastMedia.payload.manifestUrl,
+    wholeFile(MUXED_22),
+    "the new video's stream is the one handed over",
+  );
+  assert.equal(page.rows().length, 1, "the new quality list is shown");
 
   // The next navigation happens before the player asks for a stream. The popup
   // asks first, and must not see the video that was left behind either.
@@ -341,11 +437,15 @@ async function startPage(options = {}) {
 
   page.dom.fire(page.shadow().querySelector(".fab"), "click");
   await page.dom.settle();
-  assert.deepEqual(
-    page.rows().map((row) => row.dataset.url),
-    [wholeFile(MUXED_18)],
+  const currentMedia = page.dom.calls
+    .filter((message) => message.type === "bdm:media")
+    .at(-1);
+  assert.equal(
+    currentMedia.payload.manifestUrl,
+    wholeFile(MUXED_18),
     "the panel offers the stream that is playing now",
   );
+  assert.equal(page.rows().length, 1, "the quality row of the current stream is drawn");
 
   page.close();
 }
@@ -418,7 +518,9 @@ async function startPage(options = {}) {
     url: "https://www.youtube.com/watch?v=abc",
     seed: [RANGED_1080],
     send: (message) => {
-      if (message.type === "bdm:send") throw new TypeError("Failed to fetch");
+      if (message.type === "bdm:media" || message.type === "bdm:send") {
+        throw new TypeError("Failed to fetch");
+      }
       return { ok: true };
     },
   });
@@ -428,17 +530,10 @@ async function startPage(options = {}) {
   page.hover(controls, 600, 720);
   const fab = page.shadow().querySelector(".fab");
   page.dom.fire(fab, "click");
-  const action = page.rows()[0].querySelector(".row-action");
-  page.dom.fire(action, "click");
   await page.dom.settle();
 
   assert.equal(page.status(), "B Download Manager is not running", "a closed app is named");
-  assert.equal(action.disabled, false, "the row can be tried again");
-  assert.equal(
-    action.getAttribute("aria-label").startsWith("Download"),
-    true,
-    "no success is reported for a closed app",
-  );
+  assert.equal(page.rows().length, 0, "no quality list is invented when the app is closed");
 
   page.close();
 }
@@ -468,7 +563,7 @@ async function startPage(options = {}) {
   assert.equal(page.dom.resizeObservers.size, 0, "the resize observer is disconnected");
 }
 
-/* ------------------------------------- progress on the button, panel closed */
+/* ------------------------------------- the quality panel owns media progress */
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -487,62 +582,23 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   await page.dom.settle();
 
   const fab = page.shadow().querySelector(".fab");
-  const arc = page.shadow().querySelector(".ring-arc");
-  assert.equal(fab.getAttribute("data-progress"), "true", "the button follows the hand-over");
-  assert.equal(fab.getAttribute("data-tone"), "waiting", "the add dialog is not confirmed yet");
-  assert.equal(
-    arc.style.strokeDashoffset,
-    "",
-    "the waiting ring is drawn by the stylesheet, not by a percent",
-  );
-
-  // The user confirms the dialog and the application reports the download.
-  page.dom.list = () => ({
-    downloads: [
-      { id: 7, url: wholeFile(RANGED_1080), status: "running", downloaded: 25, total: 100 },
-    ],
-    active: 1,
-  });
-  await wait(1000);
-
-  assert.equal(fab.getAttribute("data-tone"), "running", "the button shows the running download");
-  assert.equal(arc.style.strokeDashoffset, "75", "the ring shows a quarter of the file");
-  assert.match(fab.getAttribute("aria-label"), /Downloading 25%/, "the button names the progress");
-
-  // The panel can be closed; the button keeps the download.
-  page.dom.fire(page.shadow().querySelector(".close"), "click");
-  await page.dom.settle();
-  assert.equal(page.open(), false, "the panel is closed");
-  assert.equal(fab.getAttribute("data-progress"), "true", "progress does not need the panel");
-
-  page.dom.list = () => ({
-    downloads: [
-      { id: 7, url: wholeFile(RANGED_1080), status: "completed", downloaded: 100, total: 100 },
-    ],
-    active: 0,
-  });
-  await wait(1200);
-
-  assert.equal(fab.getAttribute("data-tone"), "success", "a finished download is reported");
-  assert.equal(arc.style.strokeDashoffset, "0", "the ring closes when the file is saved");
-
-  // The same button on another video must not claim that progress.
-  const other = filePage(page.dom);
-  page.hover(other, 200, 200);
-  await page.dom.settle();
   assert.equal(
     fab.getAttribute("data-progress"),
     "false",
-    "the ring belongs to the video the download came from",
+    "the row in the home list carries progress, not the button ring",
   );
-
-  // Closing the page stops the polling instead of leaving a timer behind.
-  page.close();
-  await wait(300);
+  assert.ok(
+    page.dom.calls.some((message) => message.type === "bdm:media-start"),
+    "the chosen quality was sent to the app",
+  );
+  await wait(1100);
+  assert.equal(page.open(), false, "the panel closes after the download starts");
   const before = page.dom.calls.filter((message) => message.type === "bdm:list").length;
-  await wait(1300);
+  await wait(900);
   const after = page.dom.calls.filter((message) => message.type === "bdm:list").length;
-  assert.equal(after, before, "an unloaded page stops asking the application");
+  assert.equal(after, before, "no download polling is started by the overlay");
+
+  page.close();
 }
 
 console.log("overlay: all checks pass");

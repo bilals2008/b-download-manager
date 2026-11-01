@@ -16,6 +16,13 @@ const APP = "b-download-manager";
 
 /** Downloads already handed over, so a repeated event cannot send twice. */
 const handedOver = new Set();
+/** Media addresses already reported, so a range request cannot report twice. */
+const seenMedia = new Set();
+/** The tab whose first manifest has been sent; later media playlists are its children. */
+const manifestTabs = new Set();
+chrome.tabs?.onUpdated?.addListener((tabId, change) => {
+  if (change.status === "loading") manifestTabs.delete(tabId);
+});
 
 async function request(method, path, body) {
   const response = await fetch(`${BRIDGE}${path}`, {

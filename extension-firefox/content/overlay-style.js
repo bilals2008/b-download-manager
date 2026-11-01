@@ -160,6 +160,7 @@ const BDM_OVERLAY_STYLE = `
     has its add dialog open. It only appears on the video it belongs to.
   */
   .ring {
+    display: none;
     position: absolute;
     inset: -4px;
     width: 38px;
@@ -210,7 +211,7 @@ const BDM_OVERLAY_STYLE = `
     position: absolute;
     display: flex;
     flex-direction: column;
-    width: 260px;
+    width: 300px;
     max-height: min(340px, calc(100vh - 24px));
     overflow: hidden;
     border: 1px solid var(--bdm-line);
@@ -315,6 +316,49 @@ const BDM_OVERLAY_STYLE = `
   }
 
   .row:hover { background: var(--bdm-hover); }
+
+  .row.quality {
+    gap: 8px;
+    padding: 5px 4px 5px 8px;
+  }
+
+  .row.quality[data-selected="true"] { background: var(--bdm-active); }
+
+  .row.quality .name-wrap {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+  }
+
+  .row.quality .name { flex: none; }
+
+  .row.quality .note,
+  .row.quality .size {
+    color: var(--bdm-muted);
+    font-size: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .row.quality .size {
+    flex: none;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .row.quality .row-action {
+    width: 26px;
+    height: 26px;
+  }
+
+  .empty.cookie {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
 
   .tag {
     flex: none;

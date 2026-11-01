@@ -154,6 +154,31 @@ browser.tabs.onRemoved.addListener((tabId) => {
 
 /* ---------------------------------------------------------- hand-overs */
 
+/**
+ * The headers the player's requests carry: the site's cookies and the
+ * browser's user agent. The application scopes them to the manifest's own
+ * origin and asks the reader once before it forwards a cookie.
+ */
+async function bdmMediaHeaders(url) {
+  const headers = {};
+  try {
+    const cookies = await browser.cookies.getAll({ url });
+    if (Array.isArray(cookies) && cookies.length) {
+      headers.Cookie = cookies
+        .map((cookie) => `${cookie.name}=${cookie.value}`)
+        .join("; ");
+    }
+  } catch {
+    // The cookies permission may be refused; the manifest may still work.
+  }
+  try {
+    if (navigator.userAgent) headers["User-Agent"] = navigator.userAgent;
+  } catch {
+    // No agent to send; the application has its own.
+  }
+  return headers;
+}
+
 /*
   The capture rules. While the application runs, its Settings page owns the
   hand-over switch, the ask switch, the file types and the site list; the
@@ -352,6 +377,84 @@ async function handleMessage(message, sender) {
           mode: message.mode === "ask" || settings.ask ? "ask" : "direct",
         });
         return { ok: true, result };
+      } catch (error) {
+        return bridgeFailure(error);
+      }
+    }
+
+    case "bdm:media": {
+      const payload = message.payload || {};
+      const manifestUrl = String(payload.manifestUrl || "");
+      const kind = bdmIsManifestUrl(manifestUrl)
+        ? bdmManifestKind(manifestUrl)
+        : payload.kind === "file" && bdmIsHttpUrl(manifestUrl)
+          ? "file"
+          : "";
+      if (!kind) {
+        return {
+          ok: false,
+          error: { kind: "refused", message: "This is not a media address." },
+        };
+      }
+      try {
+        const result = await bdmBridgeMedia({
+          manifestUrl,
+          pageUrl: bdmIsHttpUrl(payload.pageUrl) ? payload.pageUrl : "",
+          title: String(payload.title || ""),
+          referer: bdmIsHttpUrl(payload.referer) ? payload.referer : "",
+          kind,
+          headers: await bdmMediaHeaders(manifestUrl),
+          presentation: payload.presentation === "inline" ? "inline" : "window",
+        });
+        return { ok: true, result };
+      } catch (error) {
+        return bridgeFailure(error);
+      }
+    }
+
+    case "bdm:media-status": {
+      const job = Number(message.job);
+      if (!Number.isInteger(job) || job <= 0) {
+        return { ok: false, error: { kind: "refused", message: "Unknown media job." } };
+      }
+      try {
+        return { ok: true, view: await bdmBridgeMediaStatus(job) };
+      } catch (error) {
+        return bridgeFailure(error);
+      }
+    }
+
+    case "bdm:media-start": {
+      const job = Number(message.job);
+      if (!Number.isInteger(job) || job <= 0) {
+        return { ok: false, error: { kind: "refused", message: "Unknown media job." } };
+      }
+      try {
+        return { ok: true, result: await bdmBridgeMediaStart(job, message.payload || {}) };
+      } catch (error) {
+        return bridgeFailure(error);
+      }
+    }
+
+    case "bdm:media-allow": {
+      const job = Number(message.job);
+      if (!Number.isInteger(job) || job <= 0) {
+        return { ok: false, error: { kind: "refused", message: "Unknown media job." } };
+      }
+      try {
+        return { ok: true, view: await bdmBridgeMediaAllow(job) };
+      } catch (error) {
+        return bridgeFailure(error);
+      }
+    }
+
+    case "bdm:media-cancel": {
+      const job = Number(message.job);
+      if (!Number.isInteger(job) || job <= 0) {
+        return { ok: false, error: { kind: "refused", message: "Unknown media job." } };
+      }
+      try {
+        return { ok: true, result: await bdmBridgeMediaCancel(job) };
       } catch (error) {
         return bridgeFailure(error);
       }

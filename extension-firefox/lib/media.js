@@ -161,12 +161,14 @@ function bdmMediaSize(url) {
 
 /** The short badge for a row: the container, or AUDIO for a sound stream. */
 function bdmMediaLabel(url) {
+  if (bdmIsManifestUrl(url)) return bdmManifestLabel(url);
   if (!bdmItagOf(url)) return bdmSourceLabel(url);
   return bdmMediaKind(url) === "audio" ? "AUDIO" : bdmMediaExtension(url).toUpperCase();
 }
 
 /** The row text: a file name, or the quality and size a stream stands for. */
 function bdmMediaName(url, fallback) {
+  if (bdmIsManifestUrl(url)) return bdmManifestName(url, fallback);
   if (!bdmItagOf(url)) return bdmNameFromUrl(url) || fallback || "";
   const kind = bdmMediaKind(url);
   const quality = BDM_ITAG_QUALITIES[Number(bdmItagOf(url))] || "";
@@ -195,6 +197,7 @@ function bdmMediaExtension(url) {
 
 /** A file name the application can save, with the quality in its name. */
 function bdmMediaFileName(url, fallback) {
+  if (bdmIsManifestUrl(url)) return bdmManifestFileName(fallback);
   const base = String(fallback || "")
     .replace(/[\\/:*?"<>|]+/g, " ")
     .replace(/\s+/g, " ")

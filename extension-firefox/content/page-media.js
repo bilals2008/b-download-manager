@@ -60,6 +60,9 @@ function bdmSourcesFor(element) {
 /** Streams the page fetched, in the order they were seen, one per itag. */
 const captured = [];
 const capturedKeys = new Set();
+/** The manifests the page fetched, so the app can list their qualities. */
+const capturedManifests = [];
+const capturedManifestKeys = new Set();
 let watchingRequests = false;
 
 /** The page the streams belong to, and the size the resource buffer takes. */
@@ -75,6 +78,8 @@ function bdmCapturePage() {
 function bdmResetMediaCapture() {
   captured.length = 0;
   capturedKeys.clear();
+  capturedManifests.length = 0;
+  capturedManifestKeys.clear();
 }
 
 /**
@@ -95,10 +100,25 @@ function bdmCaptureSyncPage() {
 
 /** The whole-file address of every stream the page asked for. */
 function bdmCapturedSources() {
-  return captured.map((entry) => entry.url);
+  return [
+    ...captured.map((entry) => entry.url),
+    ...capturedManifests.map((entry) => entry.url),
+  ];
 }
 
 function bdmRememberMediaRequest(url) {
+  // A manifest is the one thing the extension reports rather than downloads:
+  // the application parses it and offers the qualities inside.
+  if (bdmIsManifestUrl(url)) {
+    if (capturedManifestKeys.has(url)) return false;
+    capturedManifestKeys.add(url);
+    capturedManifests.push({ url });
+    if (capturedManifests.length > BDM_CAPTURED_LIMIT) {
+      const dropped = capturedManifests.shift();
+      capturedManifestKeys.delete(dropped.url);
+    }
+    return true;
+  }
   if (!bdmIsCapturedMedia(url)) return false;
   const key = bdmMediaKey(url);
   if (capturedKeys.has(key)) return false;
@@ -184,9 +204,8 @@ function bdmPageMedia() {
   // A player that streams through MSE names no file of its own; the requests
   // it made do.
   for (const url of bdmCapturedSources()) {
-    add(url, bdmMediaKind(url) === "audio" ? "audio" : "video");
+    add(url, bdmIsManifestUrl(url) ? "stream" : bdmMediaKind(url) === "audio" ? "audio" : "video");
   }
-
   // Media links are only read when the popup asks, never on every page
   // mutation, so a long page is not walked on its own.
   if (items.length < BDM_PAGE_MEDIA_LIMIT) {
@@ -204,6 +223,7 @@ function bdmPageMedia() {
 function bdmMediaCount() {
   bdmCaptureSyncPage();
   const keys = new Set(capturedKeys);
+  for (const entry of capturedManifests) keys.add(entry.url);
   for (const element of document.querySelectorAll("video, audio")) {
     for (const url of bdmSourcesFor(element)) keys.add(bdmMediaKey(url));
   }

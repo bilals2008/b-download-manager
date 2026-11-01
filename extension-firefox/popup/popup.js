@@ -13,6 +13,8 @@ const refs = {
   mediaSection: document.getElementById("media-section"),
   mediaList: document.getElementById("media-list"),
   mediaCount: document.getElementById("media-count"),
+  mediaTitle: document.getElementById("media-title"),
+  mediaBack: document.getElementById("media-back"),
 };
 
 const POLL_MS = 1000;
@@ -28,6 +30,17 @@ const speedSamples = new Map();
 let closed = false;
 let pollTimer = 0;
 let inFlight = false;
+
+/** The inline quality list the popup draws for a media job. */
+const mediaQuality = {
+  items: [],
+  referer: "",
+  job: 0,
+  jobs: [],
+  view: null,
+  timer: 0,
+  done: false,
+};
 
 /* ---------------------------------------------------------------- helpers */
 
@@ -368,7 +381,275 @@ async function loadPageMedia() {
   renderMedia(Array.isArray(answer.items) ? answer.items : [], answer.referer || "");
 }
 
+function messageRow(text) {
+  const li = document.createElement("li");
+  li.className = "media-row";
+  const span = document.createElement("span");
+  span.className = "media-name";
+  span.textContent = text;
+  li.append(span);
+  return li;
+}
+
+/** The quality rows of a job, sound-only rows last. */
+function qualityRows(view) {
+  const formats = new Map(
+    (view.formats || []).map((format) => [format.id, format]),
+  );
+  const videos = [];
+  const audios = [];
+  for (const pair of view.pairs || []) {
+    const video = formats.get(pair.video);
+    if (!video || video.kind === "audio") continue;
+    const audio = pair.audio ? formats.get(pair.audio) : null;
+    let size = video.size ?? null;
+    if (size !== null && audio) {
+      size = audio.size === null ? size : size + audio.size;
+    }
+    videos.push({
+      id: video.id,
+      audio: pair.audio || null,
+      label: pair.label || video.label || video.id,
+      size,
+      note: video.kind === "video" && !pair.audio ? "No sound" : "",
+      height: Number.isFinite(video.height) ? video.height : -1,
+    });
+  }
+  const used = new Set(
+    (view.pairs || []).map((pair) => pair.audio).filter(Boolean),
+  );
+  for (const format of view.formats || []) {
+    if (format.kind === "audio" && !used.has(format.id)) {
+      audios.push({
+        id: format.id,
+        audio: null,
+        label: format.label || format.id,
+        size: format.size ?? null,
+        note: "",
+        height: -1,
+      });
+    }
+  }
+  videos.sort(
+    (left, right) =>
+      right.height - left.height ||
+      Number(Boolean(left.note)) - Number(Boolean(right.note)),
+  );
+  return [...videos, ...audios];
+}
+
+function renderQualities(view) {
+  refs.mediaTitle.textContent = "Qualities";
+  refs.mediaBack.hidden = false;
+  refs.mediaCount.textContent = "";
+  refs.mediaList.textContent = "";
+
+  if (view.cookiesOffered && !view.cookieConsent) {
+    const consent = messageRow("This site sent its cookies.");
+    const allow = document.createElement("button");
+    allow.type = "button";
+    allow.className = "text-button";
+    allow.textContent = "Allow cookies";
+    allow.addEventListener("click", async () => {
+      const answer = await message({
+        type: "bdm:media-allow",
+        job: mediaQuality.job,
+      });
+      if (answer?.ok && answer.view) {
+        mediaQuality.view = answer.view;
+        renderQualities(answer.view);
+      }
+    });
+    consent.append(allow);
+    refs.mediaList.append(consent);
+  }
+
+  if (view.state === "failed") {
+    refs.mediaList.append(
+      messageRow(view.error || "This video cannot be listed."),
+    );
+    return;
+  }
+
+  const rows = qualityRows(view);
+  if (!rows.length) {
+    refs.mediaList.append(messageRow("No qualities were found."));
+    return;
+  }
+
+  for (const row of rows) {
+    const li = document.createElement("li");
+    li.className = "media-row";
+
+    const info = document.createElement("span");
+    info.className = "quality-info";
+    const name = document.createElement("span");
+    name.className = "media-name";
+    name.textContent = row.label;
+    info.append(name);
+    if (row.note) {
+      const note = document.createElement("span");
+      note.className = "quality-note";
+      note.textContent = row.note;
+      info.append(note);
+    }
+
+    const size = document.createElement("span");
+    size.className = "quality-size";
+    size.textContent = row.size ? bdmFormatSize(row.size) : "";
+
+    const button = iconButton("download", `Download ${row.label}`);
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      const answer = await message({
+        type: "bdm:media-start",
+        job: mediaQuality.view?.job || mediaQuality.job,
+        payload: {
+          video: row.id,
+          audio: row.audio,
+          name: view.title || "",
+        },
+      });
+      if (!answer?.ok) {
+        button.disabled = false;
+        refs.mediaCount.textContent = actionText(answer?.error);
+        return;
+      }
+      mediaQuality.done = true;
+      clearTimeout(mediaQuality.timer);
+      mediaQuality.timer = 0;
+      refs.mediaTitle.textContent = "Downloading in B Download Manager";
+      refs.mediaList.textContent = "";
+      setTimeout(() => window.close(), 800);
+    });
+
+    li.append(info, size, button);
+    refs.mediaList.append(li);
+  }
+}
+
+async function pollQuality() {
+  const ids =
+    mediaQuality.jobs.length > 0
+      ? [...mediaQuality.jobs]
+      : mediaQuality.job
+        ? [mediaQuality.job]
+        : [];
+  if (!ids.length || closed) return;
+  const score = (view) =>
+    (view.pairs?.length || 0) * 10 + (view.formats?.length || 0);
+  const answers = await Promise.all(
+    ids.map((job) => message({ type: "bdm:media-status", job })),
+  );
+  if (closed) return;
+  const views = answers
+    .map((answer) => (answer?.ok ? answer.view : null))
+    .filter(Boolean);
+  const ready = views.filter((view) => view.state === "ready");
+  const best = (ready.length ? ready : views)
+    .slice()
+    .sort((left, right) => score(right) - score(left))[0];
+  if (best) {
+    mediaQuality.job = best.job;
+    mediaQuality.view = best;
+    renderQualities(best);
+  } else {
+    const refused = answers.find((answer) => answer?.error);
+    if (refused) {
+      refs.mediaList.textContent = "";
+      refs.mediaList.append(messageRow(actionText(refused.error)));
+      return;
+    }
+  }
+  mediaQuality.timer = setTimeout(() => void pollQuality(), 800);
+}
+
+async function beginMediaQuality(item, items, referer) {
+  const manifestTargets = [...new Set(
+    items
+      .filter((entry) => bdmIsManifestUrl(entry.url))
+      .map((entry) => entry.url),
+  )].slice(0, 4);
+  const targets = bdmIsManifestUrl(item.url)
+    ? manifestTargets.length
+      ? manifestTargets
+      : [item.url]
+    : bdmItagOf(item.url)
+      ? [
+          ...new Set(
+            items
+              .filter((entry) => bdmItagOf(entry.url))
+              .map((entry) => entry.url),
+          ),
+        ]
+      : [item.url];
+  if (!targets.includes(item.url)) targets.unshift(item.url);
+
+  clearTimeout(mediaQuality.timer);
+  mediaQuality.timer = 0;
+  mediaQuality.job = 0;
+  mediaQuality.jobs = [];
+  mediaQuality.view = null;
+  mediaQuality.done = false;
+  refs.mediaTitle.textContent = "Qualities";
+  refs.mediaBack.hidden = false;
+  refs.mediaCount.textContent = "";
+  refs.mediaList.textContent = "";
+  refs.mediaList.append(messageRow("Reading the qualities…"));
+
+  const multipleManifests = targets.length > 1 && targets.every((target) => bdmIsManifestUrl(target));
+  const jobs = [];
+  for (const target of targets) {
+    const answer = await message({
+      type: "bdm:media",
+      payload: {
+        manifestUrl: target,
+        pageUrl: referer,
+        title: item.name || "",
+        referer,
+        kind: bdmIsManifestUrl(target) ? bdmManifestKind(target) : "file",
+        presentation: "inline",
+      },
+    });
+    if (!answer?.ok) {
+      refs.mediaList.textContent = "";
+      refs.mediaList.append(messageRow(actionText(answer?.error)));
+      return;
+    }
+    const job = Number(answer.result?.job);
+    if (Number.isInteger(job) && job > 0) jobs.push(job);
+  }
+  if (!jobs.length) {
+    refs.mediaList.textContent = "";
+    refs.mediaList.append(messageRow("The app did not name the media job."));
+    return;
+  }
+  mediaQuality.jobs = multipleManifests ? jobs : [jobs[0]];
+  mediaQuality.job = mediaQuality.jobs[0];
+  void pollQuality();
+}
+
+function resetQuality() {
+  clearTimeout(mediaQuality.timer);
+  mediaQuality.timer = 0;
+  mediaQuality.job = 0;
+  mediaQuality.jobs = [];
+  mediaQuality.view = null;
+  mediaQuality.done = false;
+  refs.mediaBack.hidden = true;
+}
+
+refs.mediaBack.addEventListener("click", () => {
+  resetQuality();
+  renderMedia(mediaQuality.items, mediaQuality.referer);
+});
+
 function renderMedia(items, referer) {
+  if (mediaQuality.job && !mediaQuality.done) return;
+  mediaQuality.items = items;
+  mediaQuality.referer = referer;
+  refs.mediaTitle.textContent = "On this page";
+  refs.mediaBack.hidden = true;
   const list = items.slice(0, MAX_MEDIA);
   refs.mediaList.textContent = "";
   refs.mediaSection.hidden = list.length === 0;
@@ -388,30 +669,9 @@ function renderMedia(items, referer) {
     name.title = item.url;
 
     const button = iconButton("download", `Download ${name.textContent}`);
-    button.addEventListener("click", async () => {
+    button.addEventListener("click", () => {
       button.disabled = true;
-      const answer = await message({
-        type: "bdm:send",
-        // The list is a choice of streams, so the app's dialog confirms it.
-        mode: "ask",
-        payload: {
-          url: item.url,
-          name: item.file || item.name || bdmNameFromUrl(item.url),
-          referer,
-        },
-      });
-
-      if (!answer?.ok) {
-        button.disabled = false;
-        setConnection("warn", actionText(answer?.error));
-        schedule(OFFLINE_POLL_MS);
-        return;
-      }
-
-      li.dataset.sent = "true";
-      setIcon(button, "check");
-      button.setAttribute("aria-label", "Sent to B Download Manager");
-      refreshSoon();
+      void beginMediaQuality(item, items, referer);
     });
 
     li.append(tag, name, button);

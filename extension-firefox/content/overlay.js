@@ -157,6 +157,15 @@
     video: null,
     hovered: null,
     sources: [],
+    // The quality list the application parsed for this video. It belongs to
+    // one page/video; a player that navigates inside the document clears it.
+    qualityKey: "",
+    qualityJob: 0,
+    qualityJobs: [],
+    qualityView: null,
+    qualitySelected: "",
+    qualityTimer: 0,
+    qualityBusy: false,
     visible: false,
     open: false,
     fab: null,
@@ -218,7 +227,12 @@
 
   function fabRect() {
     if (!state.fab) return null;
-    return { left: state.fab.x, top: state.fab.y, width: FAB_SIZE, height: FAB_SIZE };
+    return {
+      left: state.fab.x,
+      top: state.fab.y,
+      width: state.fab.width || FAB_SIZE,
+      height: state.fab.height || FAB_SIZE,
+    };
   }
 
   function cancelHide() {
@@ -276,8 +290,15 @@
     const ui = buildUi(root);
 
     ui.fab.addEventListener("click", () => {
-      if (state.open) closePanel(true);
-      else openPanel();
+      if (state.open) {
+        closePanel(true);
+        return;
+      }
+      if (state.qualityView && state.qualityView.state !== "failed") {
+        openPanel();
+        return;
+      }
+      void beginQualityJob();
     });
     ui.close.addEventListener("click", () => closePanel(true));
     ui.openApp.addEventListener("click", focusApp);
@@ -389,18 +410,23 @@
       return;
     }
 
+    // The saved style may put text beside the icon, so the button is wider
+    // than FAB_SIZE. Measure it; a fixed 30px box is what pushed the text out
+    // of the video's right edge.
+    const width = state.ui.fab.offsetWidth || FAB_SIZE;
+    const height = state.ui.fab.offsetHeight || FAB_SIZE;
     const x = clamp(
-      rect.right - EDGE - FAB_SIZE,
+      rect.right - EDGE - width,
       EDGE,
-      window.innerWidth - EDGE - FAB_SIZE,
+      window.innerWidth - EDGE - width,
     );
     const y = clamp(
       rect.top + 10,
       EDGE,
-      window.innerHeight - EDGE - FAB_SIZE,
+      window.innerHeight - EDGE - height,
     );
 
-    state.fab = { x, y };
+    state.fab = { x, y, width, height };
     state.host.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0)`;
     if (state.open) positionPanel();
   }
@@ -410,10 +436,12 @@
     const panel = state.ui.panel;
     const height = panel.offsetHeight || 160;
 
-    let left = state.fab.x + FAB_SIZE - PANEL_WIDTH;
+    const fabWidth = state.fab.width || FAB_SIZE;
+    let left = state.fab.x + fabWidth - PANEL_WIDTH;
     left = clamp(left, EDGE, Math.max(EDGE, window.innerWidth - EDGE - PANEL_WIDTH));
 
-    let top = state.fab.y + FAB_SIZE + FAB_GAP;
+    const fabHeight = state.fab.height || FAB_SIZE;
+    let top = state.fab.y + fabHeight + FAB_GAP;
     if (top + height > window.innerHeight - EDGE) {
       top = state.fab.y - FAB_GAP - height;
     }
@@ -461,7 +489,13 @@
 
     // A player that navigated inside this document belongs to a new page now,
     // and the download of the previous one is not this video's.
-    if (bdmCaptureSyncPage()) stopTracking();
+    if (bdmCaptureSyncPage()) {
+      stopTracking();
+      clearQuality();
+    }
+    const qualityKey = `${bdmCapturePage()}|${video.currentSrc || video.src || ""}`;
+    if (state.qualityKey && state.qualityKey !== qualityKey) clearQuality();
+    state.qualityKey = qualityKey;
 
     const rect = video.getBoundingClientRect();
     if (rect.width < MIN_WIDTH || rect.height < MIN_HEIGHT) return;
@@ -560,7 +594,7 @@
   /* --------------------------------------------------------------- panel */
 
   function openPanel() {
-    if (!state.visible || !state.sources.length) return;
+    if (!state.qualityView && (!state.visible || !state.sources.length)) return;
     ensureHost();
     if (!state.ui) return;
     state.open = true;
@@ -569,9 +603,10 @@
     state.ui.fab.setAttribute("aria-expanded", "true");
     setStatus("", "");
     setProgress(0, true);
-    renderSources();
+    renderQuality();
     applyProgress();
     position();
+    pollQuality();
     const target = state.ui.list.querySelector(".row-action") || state.ui.close;
     target.focus({ preventScroll: true });
   }
@@ -579,6 +614,10 @@
   function closePanel(focusFab) {
     const wasOpen = state.open;
     state.open = false;
+    if (state.qualityTimer) {
+      clearTimeout(state.qualityTimer);
+      state.qualityTimer = 0;
+    }
     if (state.host) state.host.dataset.open = "false";
     if (state.ui) {
       state.ui.fab.dataset.expanded = "false";
@@ -589,6 +628,430 @@
     if (wasOpen && focusFab && state.ui) {
       state.ui.fab.focus({ preventScroll: true });
     }
+  }
+
+  /* ------------------------------------------------------- quality list */
+
+  /**
+   * What the application should read for this video: the first manifest the
+   * page fetched, every YouTube playback stream (picture and sound are apart),
+   * or the one plain file the element names.
+   */
+  function qualityTargets() {
+    const manifests = [...new Set(state.sources.filter((url) => bdmIsManifestUrl(url)))].slice(0, 4);
+    if (manifests.length) return manifests;
+    const itags = [...new Set(state.sources.filter((url) => bdmItagOf(url)))];
+    if (itags.length) return itags;
+    return state.sources.length ? [state.sources[0]] : [];
+  }
+
+  function setQualityError(message) {
+    state.qualityView = {
+      state: "failed",
+      title: bdmPageName(),
+      formats: [],
+      pairs: [],
+      preferred: null,
+      cookiesOffered: false,
+      cookieConsent: true,
+      notice: null,
+      error: message || "The app could not read this video.",
+    };
+    renderQuality();
+  }
+
+  /** Ask the application for the qualities, inline in this panel. */
+  async function beginQualityJob() {
+    if (state.qualityBusy) return;
+    const targets = qualityTargets();
+    if (!targets.length) {
+      setStatus("Nothing here can be downloaded", "error");
+      return;
+    }
+    state.qualityBusy = true;
+    state.qualityJob = 0;
+    state.qualityJobs = [];
+    state.qualitySelected = "";
+    state.qualityView = {
+      state: "parsing",
+      title: bdmPageName(),
+      formats: [],
+      pairs: [],
+      preferred: null,
+      cookiesOffered: false,
+      cookieConsent: true,
+      notice: null,
+      error: null,
+    };
+    ensureHost();
+    if (state.host) {
+      state.open = true;
+      state.host.dataset.open = "true";
+      state.ui.fab.dataset.expanded = "true";
+      state.ui.fab.setAttribute("aria-expanded", "true");
+      setStatus("Reading the qualities…", "");
+      setProgress(0, true);
+      renderQuality();
+      position();
+    }
+
+    try {
+      const multipleManifests =
+        targets.length > 1 && targets.every((target) => bdmIsManifestUrl(target));
+      const jobs = [];
+      for (const target of targets) {
+        const answer = await browser.runtime.sendMessage({
+          type: "bdm:media",
+          payload: {
+            manifestUrl: target,
+            pageUrl: location.href,
+            title: bdmPageName(),
+            referer: location.href,
+            kind: bdmIsManifestUrl(target) ? bdmManifestKind(target) : "file",
+            presentation: "inline",
+          },
+        });
+        if (!answer || !answer.ok) {
+          setQualityError(statusForError(answer?.error));
+          return;
+        }
+        const job = Number(answer.result?.job);
+        if (Number.isInteger(job) && job > 0) jobs.push(job);
+      }
+      if (!jobs.length) {
+        setQualityError("The app did not name the media job.");
+        return;
+      }
+      // Several manifests on one page: only the master has the full list,
+      // and the extension cannot tell which is which from the URL. Ask the
+      // app for all of them and keep the richest parsed result.
+      state.qualityJobs = multipleManifests ? jobs : [jobs[0]];
+      state.qualityJob = state.qualityJobs[0];
+      pollQuality();
+    } catch {
+      setQualityError("B Download Manager is not running");
+    } finally {
+      state.qualityBusy = false;
+    }
+  }
+
+  /** Ask the application what it found, while this panel is open. */
+  function pollQuality() {
+    if (state.qualityTimer) {
+      clearTimeout(state.qualityTimer);
+      state.qualityTimer = 0;
+    }
+    const ids =
+      state.qualityJobs.length > 0
+        ? [...state.qualityJobs]
+        : state.qualityJob
+          ? [state.qualityJob]
+          : [];
+    if (!ids.length) return;
+    const score = (view) =>
+      (view.pairs?.length || 0) * 10 + (view.formats?.length || 0);
+    const tick = async () => {
+      state.qualityTimer = 0;
+      if (!state.open || !ids.length) return;
+      try {
+        const answers = await Promise.all(
+          ids.map((job) =>
+            browser.runtime.sendMessage({ type: "bdm:media-status", job }),
+          ),
+        );
+        const views = answers
+          .map((answer) => (answer?.ok ? answer.view : null))
+          .filter(Boolean);
+        const ready = views.filter((view) => view.state === "ready");
+        const best = (ready.length ? ready : views)
+          .slice()
+          .sort((left, right) => score(right) - score(left))[0];
+        if (best) {
+          state.qualityJob = best.job;
+          state.qualityView = best;
+          renderQuality();
+        } else {
+          const refused = answers.find((answer) => answer?.error);
+          if (refused) setQualityError(statusForError(refused.error));
+        }
+      } catch {
+        // The application is closed; the next tick can find it again.
+      }
+      if (state.open && ids.length) {
+        state.qualityTimer = setTimeout(tick, 800);
+      }
+    };
+    void tick();
+  }
+
+  /** The rows of the quality list, sound-only rows last. */
+  function qualityRows(view) {
+    const formats = new Map(
+      (view.formats || []).map((format) => [format.id, format]),
+    );
+    const videos = [];
+    const audios = [];
+    for (const pair of view.pairs || []) {
+      const video = formats.get(pair.video);
+      if (!video || video.kind === "audio") continue;
+      const audio = pair.audio ? formats.get(pair.audio) : null;
+      let size = video.size ?? null;
+      if (size !== null && audio) {
+        size = audio.size === null ? size : size + audio.size;
+      }
+      videos.push({
+        id: video.id,
+        audio: pair.audio || null,
+        label: pair.label || video.label || video.id,
+        size,
+        note: video.kind === "video" && !pair.audio ? "No sound" : "",
+        kind: "video",
+        height: Number.isFinite(video.height) ? video.height : -1,
+      });
+    }
+    const listed = new Set(videos.map((row) => row.id));
+    for (const format of view.formats || []) {
+      if (format.kind === "audio" || listed.has(format.id)) continue;
+      videos.push({
+        id: format.id,
+        audio: null,
+        label: format.label || format.id,
+        size: format.size ?? null,
+        note: format.kind === "video" ? "No sound" : "",
+        kind: "video",
+        height: Number.isFinite(format.height) ? format.height : -1,
+      });
+    }
+    const usedAudio = new Set(
+      (view.pairs || []).map((pair) => pair.audio).filter(Boolean),
+    );
+    for (const format of view.formats || []) {
+      if (format.kind !== "audio" || usedAudio.has(format.id)) continue;
+      audios.push({
+        id: format.id,
+        audio: null,
+        label: format.label || format.id,
+        size: format.size ?? null,
+        note: "",
+        kind: "audio",
+        height: -1,
+      });
+    }
+    videos.sort(
+      (left, right) =>
+        right.height - left.height ||
+        Number(Boolean(left.note)) - Number(Boolean(right.note)),
+    );
+    audios.sort((left, right) => (right.size ?? 0) - (left.size ?? 0));
+    return [...videos, ...audios];
+  }
+
+  function chooseQuality(view, rows) {
+    const preferred = String(view.preferred || "")
+      .trim()
+      .toLowerCase();
+    if (preferred) {
+      const exact = rows.find(
+        (row) =>
+          row.label.toLowerCase() === preferred ||
+          row.label.toLowerCase().startsWith(`${preferred} `),
+      );
+      if (exact) return exact.id;
+      const digits = Number.parseInt(preferred, 10);
+      if (Number.isFinite(digits)) return qualityByHeight(rows, digits);
+    }
+    return qualityByHeight(rows, 1080);
+  }
+
+  function qualityByHeight(rows, target) {
+    const videos = rows.filter(
+      (row) =>
+        row.kind === "video" && Number.isFinite(row.height) && row.height > 0,
+    );
+    if (!videos.length) return rows.length ? rows[0].id : "";
+    const sorted = [...videos].sort(
+      (left, right) =>
+        right.height - left.height ||
+        Number(Boolean(left.note)) - Number(Boolean(right.note)),
+    );
+    const exact = sorted.find((row) => row.height === target);
+    if (exact) return exact.id;
+    const lower = sorted.find((row) => row.height < target);
+    if (lower) return lower.id;
+    return sorted[sorted.length - 1].id;
+  }
+
+  function qualityMessage(text) {
+    const item = document.createElement("li");
+    item.className = "empty";
+    item.textContent = text;
+    return item;
+  }
+
+  function renderQuality() {
+    if (!state.ui) return;
+    const list = state.ui.list;
+    list.textContent = "";
+    const view = state.qualityView;
+
+    if (!view || view.state === "parsing") {
+      if (state.ui.title) state.ui.title.textContent = bdmPageName();
+      list.append(qualityMessage("Reading the qualities…"));
+      return;
+    }
+
+    if (state.ui.title) {
+      state.ui.title.textContent = view.title || bdmPageName();
+    }
+
+    if (view.cookiesOffered && !view.cookieConsent) {
+      const consent = document.createElement("li");
+      consent.className = "empty cookie";
+      const text = document.createElement("span");
+      text.textContent =
+        "This site sent its cookies. Use them only for this site?";
+      const allow = document.createElement("button");
+      allow.type = "button";
+      allow.className = "text-button";
+      allow.textContent = "Allow cookies";
+      allow.addEventListener("click", () => void allowQualityCookies());
+      consent.append(text, allow);
+      list.append(consent);
+    }
+
+    if (view.state === "failed") {
+      const message = view.error || "This video cannot be listed.";
+      list.append(qualityMessage(message));
+      setStatus(message, "error");
+      return;
+    }
+
+    const rows = qualityRows(view);
+    if (!rows.length) {
+      list.append(qualityMessage("No qualities were found."));
+      return;
+    }
+    if (!rows.some((row) => row.id === state.qualitySelected)) {
+      state.qualitySelected = chooseQuality(view, rows);
+    }
+
+    for (const row of rows) {
+      const item = document.createElement("li");
+      item.className = "row quality";
+      item.dataset.id = row.id;
+      item.dataset.selected =
+        row.id === state.qualitySelected ? "true" : "false";
+
+      const wrap = document.createElement("span");
+      wrap.className = "name-wrap";
+      const name = document.createElement("span");
+      name.className = "name";
+      name.textContent = row.label;
+      wrap.append(name);
+      if (row.note) {
+        const note = document.createElement("span");
+        note.className = "note";
+        note.textContent = row.note;
+        wrap.append(note);
+      }
+
+      const size = document.createElement("span");
+      size.className = "size";
+      size.textContent = row.size ? bdmFormatSize(row.size) : "";
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "row-action";
+      button.append(bdmIcon("download"));
+      button.setAttribute("aria-label", `Download ${row.label}`);
+
+      item.addEventListener("click", () => {
+        state.qualitySelected = row.id;
+        for (const node of list.querySelectorAll(".quality")) {
+          node.dataset.selected =
+            node.dataset.id === row.id ? "true" : "false";
+        }
+        item.focus({ preventScroll: true });
+      });
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        state.qualitySelected = row.id;
+        void startQuality(row);
+      });
+
+      item.append(wrap, size, button);
+      list.append(item);
+    }
+    setStatus("", "");
+  }
+
+  async function startQuality(row) {
+    if (state.sending || !state.qualityView) return;
+    const job = state.qualityView.job || state.qualityJob;
+    if (!job) return;
+    state.sending = true;
+    setStatus("Starting…", "");
+    try {
+      const answer = await browser.runtime.sendMessage({
+        type: "bdm:media-start",
+        job,
+        payload: {
+          video: row.id,
+          audio: row.audio,
+          name: state.qualityView.title || bdmPageName(),
+        },
+      });
+      if (!answer || !answer.ok) {
+        setStatus(statusForError(answer?.error), "error");
+        return;
+      }
+      setStatus("Downloading in B Download Manager", "ok");
+      setTimeout(() => {
+        if (state.open) closePanel(false);
+      }, 900);
+    } catch {
+      setStatus("B Download Manager is not running", "error");
+    } finally {
+      state.sending = false;
+    }
+  }
+
+  async function allowQualityCookies() {
+    const jobs = state.qualityJobs.length
+      ? [...state.qualityJobs]
+      : state.qualityJob
+        ? [state.qualityJob]
+        : [];
+    if (!jobs.length) return;
+    setStatus("Reading the qualities…", "");
+    try {
+      for (const job of jobs) {
+        const answer = await browser.runtime.sendMessage({
+          type: "bdm:media-allow",
+          job,
+        });
+        if (!answer || !answer.ok) {
+          setStatus(statusForError(answer?.error), "error");
+          return;
+        }
+      }
+      pollQuality();
+    } catch {
+      setStatus("B Download Manager is not running", "error");
+    }
+  }
+
+  function clearQuality() {
+    if (state.qualityTimer) {
+      clearTimeout(state.qualityTimer);
+      state.qualityTimer = 0;
+    }
+    state.qualityJob = 0;
+    state.qualityJobs = [];
+    state.qualityView = null;
+    state.qualitySelected = "";
+    if (state.ui) state.ui.list.textContent = "";
+    if (state.open) closePanel(false);
   }
 
   function renderSources() {
@@ -673,6 +1136,81 @@
     state.sending = true;
     button.disabled = true;
     setProgress(0, true);
+
+    // A manifest is not a file: the application reads it and opens the
+    // quality panel, so there is nothing to track here.
+    if (bdmIsManifestUrl(url)) {
+      setStatus("Reading the qualities…", "");
+      try {
+        const answer = await browser.runtime.sendMessage({
+          type: "bdm:media",
+          payload: {
+            manifestUrl: url,
+            pageUrl: location.href,
+            title: bdmPageName(),
+            referer: location.href,
+            kind: bdmManifestKind(url),
+          },
+        });
+        if (!answer || !answer.ok) {
+          setStatus(statusForError(answer?.error), "error");
+          button.disabled = false;
+          return;
+        }
+        row.dataset.sent = "true";
+        button.replaceChildren(bdmIcon("check"));
+        button.setAttribute("aria-label", "Waiting for a quality in B Download Manager");
+        setStatus("Choose a quality in B Download Manager", "ok");
+      } catch {
+        setStatus("B Download Manager is not running", "error");
+        button.disabled = false;
+      } finally {
+        state.sending = false;
+      }
+      return;
+    }
+
+    // A media address (a YouTube stream, or a plain file) is read by the
+    // application so its qualities can be chosen. YouTube picture and sound
+    // are separate streams; the page's whole capture goes with the click.
+    const itag = bdmItagOf(url);
+    if (itag || bdmIsDownloadableSource(url)) {
+      const targets = itag
+        ? [...new Set(state.sources.filter((source) => bdmItagOf(source)))]
+        : [url];
+      if (!targets.includes(url)) targets.unshift(url);
+      setStatus("Reading the qualities…", "");
+      try {
+        for (const target of targets) {
+          const answer = await browser.runtime.sendMessage({
+            type: "bdm:media",
+            payload: {
+              manifestUrl: target,
+              pageUrl: location.href,
+              title: bdmPageName(),
+              referer: location.href,
+              kind: bdmIsManifestUrl(target) ? bdmManifestKind(target) : "file",
+            },
+          });
+          if (!answer || !answer.ok) {
+            setStatus(statusForError(answer?.error), "error");
+            button.disabled = false;
+            return;
+          }
+        }
+        row.dataset.sent = "true";
+        button.replaceChildren(bdmIcon("check"));
+        button.setAttribute("aria-label", "Waiting for a quality in B Download Manager");
+        setStatus("Choose a quality in B Download Manager", "ok");
+      } catch {
+        setStatus("B Download Manager is not running", "error");
+        button.disabled = false;
+      } finally {
+        state.sending = false;
+      }
+      return;
+    }
+
     setStatus("Sending to B Download Manager…", "");
 
     try {
@@ -903,7 +1441,7 @@
     if (stamp === state.progressStamp) return;
     state.progressStamp = stamp;
 
-    const ring = done || broken || (here && !track.done);
+    const ring = here && Boolean(download) && !done && !broken;
     ui.fab.dataset.progress = ring ? "true" : "false";
     ui.fab.dataset.tone = done
       ? "success"
@@ -1129,6 +1667,7 @@
   function onPageMoved() {
     if (!bdmCaptureSyncPage()) return;
     stopTracking();
+    clearQuality();
     state.lastCount = -1;
     scheduleCountRefresh();
     if (state.hovered && state.hovered.isConnected) present(state.hovered);
@@ -1161,6 +1700,7 @@
   function destroy() {
     hide();
     stopTracking();
+    clearQuality();
     stopFollowing();
     removeHost();
     pageEvents.abort();

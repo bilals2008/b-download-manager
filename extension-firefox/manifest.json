@@ -12,14 +12,15 @@
       }
     }
   },
-  "permissions": ["contextMenus", "downloads", "storage"],
-  "host_permissions": ["http://127.0.0.1:27500/*"],
+  "permissions": ["contextMenus", "cookies", "downloads", "storage"],
+  "host_permissions": ["http://127.0.0.1:27500/*", "http://*/*", "https://*/*"],
   "background": {
     "scripts": [
       "lib/media.js",
       "lib/link-rules.js",
       "lib/settings.js",
       "lib/bridge.js",
+      "lib/manifest.js",
       "background.js"
     ]
   },
@@ -28,6 +29,7 @@
       "matches": ["http://*/*", "https://*/*"],
       "js": [
         "lib/media.js",
+        "lib/manifest.js",
         "lib/link-rules.js",
         "lib/settings.js",
         "lib/icons.js",
