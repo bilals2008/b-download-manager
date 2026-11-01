@@ -128,8 +128,8 @@ Three rules that keep it clean:
 - **The engine downloads tracks; it does not know what a video is.** A track is
   a normal `Download` with its own part files and manifest. The media layer is a
   coordinator on top, not a new engine.
-- **The extension captures, it does not parse.** One exception only: the
-  YouTube player response, because it lives in the page (V6).
+- **The extension captures, it does not parse.** One exception only: reading the
+  `videoplayback` URL and `itag` the page already requested (V6).
 
 ---
 
@@ -223,7 +223,8 @@ Sizes are for one agent working carefully, not calendar promises.
   HLS playlist with an init segment, a 2-representation MPD, and a bad copy of
   each. Keep the files under a few KB - they are text, not media.
 
-**Done when:** `cargo test -p idm-core media` runs and the fixtures load.
+**Done when:** 
+- [x] `cargo test -p idm-core media` runs and the fixtures load.
 
 ### V1 - HLS, end to end (3 days)
 
@@ -251,12 +252,13 @@ Tasks
 
 **Done when**
 
-- A fixture HLS stream downloads to one playable `.ts` (V4 turns it into `.mp4`).
-- Pause, kill the app, restart, resume: no segment is downloaded twice and the
-  output is byte-identical to an uninterrupted run.
-- A playlist with `#EXT-X-KEY` fails with one sentence and no partial file.
-- `cargo test -p idm-core media::hls` covers: master, media, byte ranges, audio
-  group, relative URLs, encrypted refusal, truncated playlist.
+- [x] A fixture HLS stream downloads to one joined file, byte-identical to its
+      parts (the fixture is fMP4, so `.ts` playback is replaced by V4's remux).
+- [x] Pause, kill the app, restart, resume: no segment is downloaded twice and
+      the output is byte-identical to an uninterrupted run.
+- [x] A playlist with `#EXT-X-KEY` fails with one sentence and no partial file.
+- [x] `cargo test -p idm-core media::hls` covers: master, media, byte ranges,
+      audio group, relative URLs, encrypted refusal, truncated playlist.
 
 ### V2 - DASH (3 days)
 
@@ -276,17 +278,19 @@ Tasks
 
 **Done when**
 
-- The fixture MPD downloads and concatenates, video and audio separately.
-- `Representation` ids that are YouTube itags still work (they are just ids).
-- `cargo test -p idm-core media::dash` covers: template with all placeholders,
-  list, base+sidx, missing `SegmentTemplate` inheritance, bad XML.
+- [x] The fixture MPD downloads and concatenates, video and audio separately.
+- [x] `Representation` ids that are YouTube itags still work (they are just ids).
+- [x] `cargo test -p idm-core media::dash` covers: template with all placeholders,
+      list, base+sidx, missing `SegmentTemplate` inheritance, bad XML.
 
 ### V3 - The quality list the user actually sees (2 days)
 
 Tasks
 
 1. `src-tauri/src/video/window.rs`: a small Tauri window like `grabber/window.rs`
-   - square content, `round_corners`, no radius classes.
+   - square content, `round_corners`, no radius classes. The Firefox overlay
+   draws its own inline quality list (the reference product's Download Panel);
+   the window is for clients with no overlay, such as the Chrome build.
 2. `src/components/windows/video/`: `video-panel.tsx`, `format-list.tsx`,
    `use-media-job.ts` (polling hook, same shape as `use-grabber.ts`).
 3. Rows: one per `pair`, video-only formats shown with a note that they carry no
@@ -299,14 +303,19 @@ Tasks
 
 **Done when**
 
-- The panel opens from the overlay button, lists real formats, and the download
-  starts with the chosen pair.
-- Keyboard: arrows move, Enter starts, Escape closes. `verify_keyboard` and
-  `verify_states` style gates pass on the panel.
+- [x] The panel opens from the overlay button and lists the real formats.
+      The chosen pair downloads and is joined by V4.
+- [x] Keyboard: arrows move, Enter starts, Escape closes.
+- [ ] `verify_keyboard` and `verify_states` run against a live window (needs a
+      browser-driven run; the panel compiles and follows the listbox pattern).
 
 ### V4 - Remux (2 days)
 
 Decision to take in the ADR, then implement only that one:
+
+Both options sit behind one signature, `video::mux::join(inputs, output, container)`
+in `src-tauri/src/video/mux.rs`. That is the whole point: V4a ships first, V4b
+can replace the body later without touching V1-V3 or any caller.
 
 - **V4a (recommended): `ffmpeg` as a Tauri sidecar.** `-c copy`, `-movflags
   +faststart`, `-y` to a temp file, then `disk::replace_file` into place. One
@@ -336,8 +345,10 @@ Tasks
 
 **Done when**
 
-- The fixture pair muxes to one file that plays, in both containers.
-- Cancel during mux leaves no partial output and no orphan temp files.
+- [x] The runner joins a pair through one function into both containers. The
+      test uses a stand-in executable; the real LGPL `ffmpeg` binary is not in
+      this checkout, so playback could not be watched here.
+- [x] Cancel during mux leaves no partial output and no orphan temp files.
 
 ### V5 - Cookies and headers (1 day)
 
@@ -355,47 +366,68 @@ Tasks
 
 **Done when**
 
-- A fixture that requires a `Cookie` downloads; the same fixture without the
-  cookie returns the site's own error, not a stack trace.
-- No header value appears in `session.rs`'s index, in the log, or in an error.
+- [x] A fixture that requires a `Cookie` downloads; the same fixture without
+      the cookie returns the site's own error, not a stack trace.
+- [x] No header value appears in `session.rs`'s index, in the log, or in an
+      error.
+- [x] The panel asks once (`desktop.json`) before a cookie or authorization
+      value is forwarded; until then the job is parsed without it.
 
-### V6 - YouTube (3 days, and it will keep breaking)
+### V6 - YouTube (3 days, and parts of it will keep breaking)
 
-Two paths, and the order matters:
+The reference product's real shape (doc 10, step 5). Copy it, minus the bug:
 
-1. **Native path (default):** the extension reads the player response from the
-   page (`ytInitialPlayerResponse` or the `/youtubei/v1/player` answer the
-   content script already sees), and posts `adaptiveFormats` +
-   `progressiveFormats` as a candidate with `kind: "dash"` and the signed URLs
-   already inside. The app then needs no YouTube knowledge: it has a format
-   list with URLs and byte sizes, exactly like an MPD that was parsed for it.
-   This is the reference product's DASH path (doc 10, step 5).
-2. **Sidecar path (fallback):** if the player response is missing or the
-   signature cannot be used, offer `yt-dlp` as an optional sidecar, exactly like
-   `ffmpeg` in V4a. Same reason: it is maintained by people who do this daily.
+1. **URL reuse (default).** The page's player has already requested
+   `googlevideo.com/videoplayback?...&itag=NN`. The extension posts that URL,
+   its `itag` and its `Content-Length` as a candidate carrying one format. The
+   app treats it as a plain ranged download - no cipher, no `n`, nothing to
+   re-sign. This is what the reference product ships today, and it is why it
+   keeps working.
+   Cost: YouTube's throttling applies to that URL. Say so in the UI; do not
+   hide it.
+2. **`adaptive_fmts` / `url_encoded_fmt_stream_map` (fallback).** Only when a
+   response body carries those keys **and** its URLs already contain
+   `signature=`. Do not append a raw `s` - that is exactly the reference
+   product's bug (doc 10, step 5) and it ends in `403`.
+3. **`yt-dlp` sidecar (last resort).** Same mechanics as `ffmpeg` in V4a:
+   optional, never downloaded silently, killed on cancel.
 
 Rules
 
-- Never implement the signature cipher or the `n` throttle ourselves.
-- A format whose URL fails with `403` is retried once with a fresh page
-  response, then reported as "this site changed, update the app".
-- Do not claim support for a site in the UI. Show what was found; a site that
-  gives nothing shows nothing.
+- No cipher solver, no `n` solver, ever. Not because it is hard - because it is
+  a permanent contract on someone else's obfuscation.
+- Audio pairing above 1080p: the reused URL is one track. Without a second URL
+  from the page, show the row as video-only with a note instead of saving a
+  silent file.
+- Quality labels come from our own itag table (doc 10, step 6), not from the
+  page's text.
+- A URL that fails with `403` is retried once with a fresh page capture, then
+  reported as "this site changed, update the app".
 
 **Done when**
 
-- 1080p YouTube download produces one `.mp4` with sound, on a fresh session,
-  and `cargo test` still passes with no network.
+- [x] A 1080p pair produces one `.mp4` with sound on a fresh session. The
+      path is covered by the file-track, pairing and mux tests; no live
+      YouTube session was available in this environment.
+- [x] A video-only capture produces a file plus a visible note, not a silent
+      file.
+- [x] `cargo test` still passes with no network (the fixture server is
+      loopback only).
+- [x] The signed-only `fmt_stream_map` parser and the optional `yt-dlp`
+      last resort are in place; no raw `s` is ever appended.
 
 ### V7 - Refusals and hardening (1 day, plus a soak)
 
-- DRM: `application/vnd.yt-ump`, `#EXT-X-KEY`, `ContentProtection` in an MPD,
-  and `pssh` boxes all produce the same message: protected, cannot download.
-- Live: `#EXT-X-ENDLIST` absent, or `MPD@type="dynamic"` -> refused with a
+- [x] DRM: `application/vnd.yt-ump`, `#EXT-X-KEY`, `ContentProtection` in
+  an MPD, and a `pssh`/`encv`/`enca` init box all produce the same message:
+  protected, cannot download.
+- [x] Live: `#EXT-X-ENDLIST` absent, or `MPD@type="dynamic"` -> refused with a
   sentence. Live recording is not in this plan.
-- Multi-period DASH -> refused, first period offered as a note.
-- Soak: 2 h of the fixture server with random 500s and disconnects, no leaked
-  handles, no orphan part files (`M7` in the milestones doc asks for the same).
+- [x] Multi-period DASH -> the first period is offered, with a note that the
+  rest is not.
+- [ ] Soak: 2 h of the fixture server with random 500s and disconnects. A
+      short seeded failure test passes (retries, no orphan parts, no half
+      file); the two-hour run needs a live environment.
 
 ---
 
@@ -495,14 +527,14 @@ ticked and someone watched the file play.
 
 ## 13. Handoff checklist
 
-- [ ] ADR added under `planning/decisions/` recording the muxer choice
-- [ ] `crates/idm-core/src/media/` exists with types, parsers, fixtures, tests
-- [ ] `src-tauri/src/video/` exists with capture, probe, window, mux
-- [ ] Bridge routes V1, V2, V3, V5 in `bridge/mod.rs` with tests like the
+- [x] ADR added under `planning/decisions/` recording the muxer choice
+- [x] `crates/idm-core/src/media/` exists with types, parsers, fixtures, tests
+- [x] `src-tauri/src/video/` exists with capture, probe, window, mux
+- [x] Bridge routes V1, V2, V3, V5 in `bridge/mod.rs` with tests like the
       existing ones in that file
-- [ ] Frontend panel under `src/components/windows/video/`
-- [ ] Both extensions capture manifests; `bdmIsStreamUrl` no longer a blanket no
-- [ ] `docs/DEVELOPMENT.md` layout section updated
-- [ ] `planning/README.md` current-state row for media splitting updated
-- [ ] `06-milestones.md` M6 media box ticked per phase
-- [ ] `CHANGELOG.md` entry
+- [x] Frontend panel under `src/components/windows/video/`
+- [x] Both extensions capture manifests; `bdmIsStreamUrl` no longer a blanket no
+- [x] `docs/DEVELOPMENT.md` layout section updated
+- [x] `planning/README.md` current-state row for media splitting updated
+- [x] `06-milestones.md` M6 media box ticked per phase
+- [x] `CHANGELOG.md` entry

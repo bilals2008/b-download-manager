@@ -118,8 +118,9 @@ Each is independently valuable and independently shippable.
 - [x] HTTP proxy and SOCKS5
 - [ ] Resume metadata for servers that do not support ranges (the product's
       "multipart/x-byteranges" and friends)
-- [ ] Media: HLS, MPEG-DASH, and the MPEG-TS segmenting the reference product
-      does
+- [x] Media: HLS, MPEG-DASH, and plain file capture; segments download
+      through the engine and are remuxed with `-c copy` (see
+      [11](./11-media-download-plan.md))
 - [ ] RTMP, if it is ever wanted
 
 ---

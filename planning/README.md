@@ -19,6 +19,8 @@ everything.
 | [08-risks-and-open-questions.md](./08-risks-and-open-questions.md) | what could go wrong and what is still unknown |
 | [10-video-capture-research.md](./10-video-capture-research.md) | how the reference manager captures video (HLS/DASH/YouTube), with evidence |
 | [11-media-download-plan.md](./11-media-download-plan.md) | the implementation plan for video capture: contracts, phases V0-V7, gates, risks |
+| [12-implementation-prompt.md](./12-implementation-prompt.md) | the copy-paste prompt to hand this work to an implementing agent |
+| [13-theme-and-icon-style-plan.md](./13-theme-and-icon-style-plan.md) | the proposal for more themes and for isometric icon styles; not started |
 | [decisions/](./decisions/) | architecture decision records |
 
 ## Where the evidence lives
@@ -39,7 +41,7 @@ everything.
 | Chunked transfer encoding | handled by `reqwest` |
 | FTP | not implemented |
 | Proxy / SOCKS | not implemented |
-| Media splitting (HLS / DASH / MPEG-TS) | not implemented, research in [10](./10-video-capture-research.md), plan in [11](./11-media-download-plan.md) |
+| Media capture (HLS / DASH / file) | implemented: parsers, quality panel, segment resume, remux behind `mux::join`; see [10](./10-video-capture-research.md) and [11](./11-media-download-plan.md) |
 | Speed limiting, scheduling, queue | not implemented |
 | Integrity verification of chunk heads | not implemented |
 | Graceful shutdown, disk space checks, retry backoff policy | partial |
