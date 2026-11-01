@@ -65,6 +65,8 @@ Closing the window stops nothing. The app carries on and its icon stays next to 
 
 To make closing the window quit the app instead, open **Options → General** and turn off **Keep the application in the tray when the window is closed**.
 
+The icon itself is yours to choose: **View → B Download Manager tray icon** switches it between the flat mark, a glossy 3D drawing and an outlined Classic one, takes it out of the notification area altogether, or lets it follow the app's light and dark appearance. **Customize URL List...** on the same menu says which kinds of address a copied link has to be before the app offers it. [Toolbar packs](/toolbars/#the-tray-icon) covers each row.
+
 ## Making it yours
 
 **Options → General** holds the theme — **Auto** follows Windows — and the font with its weight. Changes appear immediately in every open window.

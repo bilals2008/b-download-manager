@@ -26,6 +26,33 @@ Open **View → Toolbar** and pick a style. The choice is remembered.
 Each style keeps its own button order. Switching to another style and back
 does not undo your customization.
 
+## The tray icon
+
+The icon next to the clock is the same mark as the app's, in three drawings of
+its own. **View → B Download Manager tray icon** holds them:
+
+| Row | What it does |
+| --- | --- |
+| Default style | The flat amber arrow into a green tray. |
+| 3D style | The same mark with a ramp on every body and a bevel around it. |
+| Classic style | The same mark drawn flat under one heavy outline. |
+| Don't show | Takes the icon out of the notification area. |
+| Dark Mode support | The icon changes its inks with the appearance of the window. |
+| Customize URL List... | Which protocols a copied link has to start with. |
+
+**Don't show** is the one row that changes what else you can do: with no icon
+there is nothing to click to bring the window back, so closing the window
+quits the app instead of hiding it. Turn it back on in the same menu, or in
+**Settings → General**.
+
+**Dark Mode support** only matters on a light taskbar. Left off, the icon keeps
+the dark drawing it has always used.
+
+The URL list is the clipboard watch's, the one that offers a link you copied.
+It is turned on and off in **Settings → General**; the list decides which
+addresses are worth offering. What the browser hands over is a separate choice,
+on **Settings → Browser**.
+
 ## Install a custom toolbar
 
 1. Open **View → Toolbar → Look for new toolbars...**.
