@@ -11,6 +11,7 @@ pub mod ftp;
 pub mod http;
 pub mod limits;
 pub mod log;
+pub mod media;
 pub mod segmenter;
 pub mod session;
 pub mod transfer;

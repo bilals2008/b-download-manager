@@ -319,6 +319,22 @@ impl Download {
         proxy: Option<&str>,
         referer: Option<&str>,
     ) -> Result<Arc<Download>, String> {
+        Self::new_in_with_headers(id, url, dest, unfinished, connections, proxy, referer, &[])
+    }
+
+    /// Create a download that also carries the headers the page's browser
+    /// sent. The caller has already scoped them to the manifest's origin.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_in_with_headers(
+        id: u64,
+        url: String,
+        dest: PathBuf,
+        unfinished: Option<&Path>,
+        connections: u32,
+        proxy: Option<&str>,
+        referer: Option<&str>,
+        headers: &[(String, String)],
+    ) -> Result<Arc<Download>, String> {
         let finish = dest
             .parent()
             .filter(|p| !p.as_os_str().is_empty())
@@ -339,7 +355,7 @@ impl Download {
             .unwrap_or_else(|| format!("download{id}"));
         let manifest = dir.join(format!("{stem}.idm.json"));
 
-        let source = Source::parse(&url, proxy, referer)?;
+        let source = Source::parse_with_headers(&url, proxy, referer, headers)?;
         let referer = referer
             .map(|r| r.trim().to_string())
             .filter(|r| !r.is_empty());

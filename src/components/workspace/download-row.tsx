@@ -126,6 +126,11 @@ export function DownloadRow({
                 {item.fileName}
               </span>
             </Tooltip>
+            {!item.error && item.mediaStage && item.status !== "completed" ? (
+              <span className="mt-0.5 block truncate text-chrome-micro text-chrome-muted">
+                {item.mediaStage}
+              </span>
+            ) : null}
             {item.error ? (
               <Tooltip
                 content={`${item.error} — open the failure details`}

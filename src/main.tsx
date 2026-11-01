@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import { DownloadCompleteWindow } from "./components/windows/download-complete-window";
 import { GrabberWindow } from "./components/windows/grabber-window";
+import { VideoPanel } from "./components/windows/video/video-panel";
 import { DownloadProgressWindow } from "./components/windows/progress/download-progress-window";
 import { startAppearanceSync } from "./lib/appearance";
 import { DownloadProvider } from "./state/download-store";
@@ -28,11 +29,13 @@ const completed = (
 ).__BDM_COMPLETE__;
 const grabber = (window as Window & { __BDM_GRABBER__?: boolean })
   .__BDM_GRABBER__;
+const video = (window as Window & { __BDM_VIDEO__?: { job: number } })
+  .__BDM_VIDEO__;
 
-// The two small windows round their own corners. The page behind them has to
+// The small windows round their own corners. The page behind them has to
 // be the same surface, or the curve shows a sliver of the app canvas outside
 // it. The token is overridden here, before the first paint.
-if (progress || completed || grabber) {
+if (progress || completed || grabber || video) {
   document.documentElement.style.setProperty(
     "--background",
     "var(--chrome-popup)",
@@ -47,6 +50,8 @@ createRoot(document.getElementById("root")!).render(
       <DownloadCompleteWindow info={completed} />
     ) : grabber ? (
       <GrabberWindow />
+    ) : video ? (
+      <VideoPanel initialJob={video.job} />
     ) : (
       <DownloadProvider>
         <App />

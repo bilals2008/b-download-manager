@@ -10,6 +10,7 @@ use idm_core::limits::Limits;
 use idm_core::session::{Index, KnownDownload};
 
 use crate::prefs::{self, DesktopPreferences};
+use crate::video::{MediaJob, MediaState, SourcePlan};
 
 /// The capture rules the browser extension follows while the application is
 /// running. The extension keeps its own copy for when the app is closed.
@@ -87,6 +88,14 @@ pub struct CategoryRule {
 pub struct AppState {
     next_id: AtomicU64,
     downloads: Mutex<HashMap<u64, Arc<Download>>>,
+    /// The manifests the extension has asked about. They live beside the
+    /// downloads but are not downloads: a job becomes tracks only after the
+    /// user picks a quality.
+    next_media_id: AtomicU64,
+    media_jobs: Mutex<HashMap<u64, MediaJob>>,
+    /// Held while a file candidate is merged into an earlier one, so two
+    /// candidates from the same page cannot both find no target.
+    media_gate: Mutex<()>,
     limits: Limits,
     index: Mutex<Option<Index>>,
     /// Where a download handed over by the browser is saved. `None` means the
@@ -120,6 +129,9 @@ pub struct AppState {
     show_progress_on_start: AtomicBool,
     /// Whether the clipboard is watched for download links.
     clipboard_capture: AtomicBool,
+    /// Which appearance the window is drawn in, as the window last said. The
+    /// tray icon picks its inks from this when "Dark Mode support" is on.
+    appearance_is_light: AtomicBool,
     /// Where the parts and the manifest of a new download live. `None` keeps
     /// them beside the destination, which is what an older index expects.
     unfinished_dir: Mutex<Option<PathBuf>>,
@@ -135,6 +147,9 @@ impl Default for AppState {
         Self {
             next_id: AtomicU64::new(1),
             downloads: Mutex::new(HashMap::new()),
+            next_media_id: AtomicU64::new(1),
+            media_jobs: Mutex::new(HashMap::new()),
+            media_gate: Mutex::new(()),
             limits: Limits::default(),
             index: Mutex::new(None),
             browser_folder: Mutex::new(None),
@@ -150,6 +165,7 @@ impl Default for AppState {
             show_complete_dialog: AtomicBool::new(true),
             show_progress_on_start: AtomicBool::new(false),
             clipboard_capture: AtomicBool::new(false),
+            appearance_is_light: AtomicBool::new(false),
             unfinished_dir: Mutex::new(None),
             category_rules: Mutex::new(Vec::new()),
             start_gate: Mutex::new(()),
@@ -160,6 +176,89 @@ impl Default for AppState {
 impl AppState {
     pub fn next_id(&self) -> u64 {
         self.next_id.fetch_add(1, Ordering::SeqCst)
+    }
+
+    pub fn next_media_id(&self) -> u64 {
+        self.next_media_id.fetch_add(1, Ordering::SeqCst)
+    }
+
+    /// Keep a parsed (or parsing) manifest until its download is started.
+    pub fn insert_media_job(&self, job: MediaJob) {
+        self.media_jobs
+            .lock()
+            .expect("media jobs lock poisoned")
+            .insert(job.id, job);
+    }
+
+    /// A snapshot of every job, oldest first, for the home list.
+    pub fn media_jobs_snapshot(&self) -> Vec<MediaJob> {
+        let mut jobs: Vec<MediaJob> = self
+            .media_jobs
+            .lock()
+            .expect("media jobs lock poisoned")
+            .values()
+            .cloned()
+            .collect();
+        jobs.sort_by_key(|job| job.id);
+        jobs
+    }
+
+    pub fn media_job(&self, id: u64) -> Option<MediaJob> {
+        self.media_jobs
+            .lock()
+            .expect("media jobs lock poisoned")
+            .get(&id)
+            .cloned()
+    }
+
+    /// Change one job under the lock, so two updates cannot overwrite each
+    /// other. A job that is gone is not an error: the window may have been
+    /// closed while its parsing task was still running.
+    pub fn update_media_job(&self, id: u64, change: impl FnOnce(&mut MediaJob)) {
+        if let Some(job) = self
+            .media_jobs
+            .lock()
+            .expect("media jobs lock poisoned")
+            .get_mut(&id)
+        {
+            change(job);
+        }
+    }
+
+    /// Hold the merge check and the merge together.
+    pub fn media_gate(&self) -> std::sync::MutexGuard<'_, ()> {
+        self.media_gate.lock().expect("media gate lock poisoned")
+    }
+
+    /// The earlier ready file job that a new candidate from the same page
+    /// belongs to. Only plain-file jobs merge; a manifest is its own job.
+    pub fn merge_file_target(&self, except: u64, page_url: &str) -> Option<u64> {
+        let page_url = page_url.trim();
+        if page_url.is_empty() {
+            return None;
+        }
+        self.media_jobs
+            .lock()
+            .expect("media jobs lock poisoned")
+            .values()
+            .filter(|job| {
+                job.id != except
+                    && job.page_url == page_url
+                    && job.state == MediaState::Ready
+                    && !job.downloading
+                    && !job.done
+                    && matches!(job.source, Some(SourcePlan::Files { .. }))
+                    && job.manifest.is_some()
+            })
+            .map(|job| job.id)
+            .max()
+    }
+
+    pub fn remove_media_job(&self, id: u64) {
+        self.media_jobs
+            .lock()
+            .expect("media jobs lock poisoned")
+            .remove(&id);
     }
 
     pub fn insert(&self, download: Arc<Download>) {
@@ -476,9 +575,60 @@ impl AppState {
         self.clipboard_capture.store(on, Ordering::SeqCst);
     }
 
+    /// The protocols a copied address has to start with to be offered.
+    pub fn url_protocols(&self) -> Vec<String> {
+        self.preferences().url_protocols
+    }
+
+    /// Whether the window is drawn in the light appearance. Dark until the
+    /// window says otherwise, which is the surface the icon was made for.
+    pub fn appearance_is_light(&self) -> bool {
+        self.appearance_is_light.load(Ordering::SeqCst)
+    }
+
+    pub fn set_appearance_is_light(&self, on: bool) {
+        self.appearance_is_light.store(on, Ordering::SeqCst);
+    }
+
     /// The choices the tray and the close button follow.
     pub fn preferences(&self) -> DesktopPreferences {
-        *self.preferences.lock().expect("preferences lock poisoned")
+        self.preferences
+            .lock()
+            .expect("preferences lock poisoned")
+            .clone()
+    }
+
+    /// The last quality chosen for a host, in the panel's own words
+    /// (`1080p`). A host with no choice has none.
+    pub fn video_quality(&self, host: &str) -> Option<String> {
+        let host = host.trim().to_ascii_lowercase();
+        if host.is_empty() {
+            return None;
+        }
+        self.preferences().video_quality.get(&host).cloned()
+    }
+
+    /// Allow the browser's cookies to travel with media requests, once and
+    /// for every site. The panel asks before the first cookie is forwarded.
+    pub fn set_cookie_consent(&self, consent: bool) {
+        let mut preferences = self.preferences();
+        preferences.cookie_consent = consent;
+        self.set_preferences(preferences);
+        self.save_preferences();
+    }
+
+    /// Remember the quality chosen for a host and write the file. A failure
+    /// is logged rather than refused: the choice still applies this run.
+    pub fn remember_video_quality(&self, host: &str, quality: &str) {
+        let host = host.trim().to_ascii_lowercase();
+        let quality = quality.trim();
+        if host.is_empty() || quality.is_empty() {
+            return;
+        }
+        let mut preferences = self.preferences();
+        preferences.video_quality.insert(host, quality.to_string());
+        self.set_preferences(preferences);
+        self.save_preferences();
     }
 
     /// Replace the choices. The caller saves them when the change is worth a
@@ -684,6 +834,60 @@ mod tests {
             "a file the engine did not write stays"
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn file_candidates_from_one_page_find_their_target() {
+        use crate::video::{FileTrack, MediaJob, MediaKindHint, MediaState};
+        use idm_core::media::{Format, Manifest, MediaKind};
+
+        let state = AppState::default();
+        let mut job = MediaJob::new(
+            1,
+            "https://www.example.org/watch?v=1".to_string(),
+            "https://cdn.example.org/videoplayback?itag=137".to_string(),
+            MediaKindHint::File,
+            "Film".to_string(),
+            "https://www.example.org/watch?v=1".to_string(),
+            Vec::new(),
+            None,
+        );
+        job.state = MediaState::Ready;
+        job.manifest = Some(Manifest {
+            title: "Film".to_string(),
+            duration: None,
+            formats: vec![Format::new("137", MediaKind::Video, "mp4")],
+            pairs: Vec::new(),
+            container_hint: Some("file".to_string()),
+        });
+        job.source = Some(SourcePlan::Files {
+            tracks: vec![FileTrack {
+                format: Format::new("137", MediaKind::Video, "mp4"),
+                url: "https://cdn.example.org/videoplayback?itag=137".to_string(),
+            }],
+        });
+        state.insert_media_job(job);
+
+        assert_eq!(
+            state.merge_file_target(2, "https://www.example.org/watch?v=1"),
+            Some(1)
+        );
+        assert_eq!(
+            state.merge_file_target(2, "https://www.example.org/watch?v=2"),
+            None,
+            "a different video is a different job"
+        );
+        assert_eq!(
+            state.merge_file_target(1, "https://www.example.org/watch?v=1"),
+            None
+        );
+
+        state.update_media_job(1, |job| job.downloading = true);
+        assert_eq!(
+            state.merge_file_target(2, "https://www.example.org/watch?v=1"),
+            None,
+            "a running download takes no new tracks"
+        );
     }
 
     #[test]

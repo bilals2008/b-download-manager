@@ -65,6 +65,13 @@ export interface Download {
   resumable: boolean | null;
   /** A note kept with the download. */
   description: string | null;
+  /** The media job this row came from, when it did not come from the engine. */
+  mediaJob?: number;
+  /** The stage of a media coordinator: Video, Audio, Joining, Saved, ... */
+  mediaStage?: string | null;
+  /** Completed and total segments of a media job, for a stable percentage. */
+  mediaSegmentsDone?: number;
+  mediaSegmentsTotal?: number;
 }
 
 /** The categories pane filter. A category name filters to that category. */

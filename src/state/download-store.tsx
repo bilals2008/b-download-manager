@@ -65,6 +65,12 @@ import {
   type StartOutcome,
 } from "@/lib/ipc";
 import { describeError, isDesktop } from "@/lib/errors";
+import {
+  listMediaJobs,
+  mediaCancel as cancelMedia,
+  mediaForget,
+  type MediaJobView,
+} from "@/lib/media";
 import { nextMatch } from "@/lib/find";
 import { rangeIds } from "@/lib/selection";
 import { loadSettings } from "@/lib/settings";
@@ -246,6 +252,9 @@ export interface NewDownload {
 
 const DownloadContext = createContext<DownloadStore | null>(null);
 
+/** Media rows live above the engine's ids, so the two can share one list. */
+const MEDIA_ROW_BASE = -1_000_000_000;
+
 const ENGINE_STATUS: Record<EngineStatus, Download["status"]> = {
   queued: "queued",
   running: "downloading",
@@ -302,6 +311,9 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
   // Cancelled tasks can emit one last update after the row was removed. Their
   // ids are never reused, so a tombstone set is enough to keep them out.
   const removed = useRef(new Set<number>());
+  /** When each media row first appeared, so it does not jump in the order. */
+  const mediaAdded = useRef(new Map<number, number>());
+  const lastMediaSignature = useRef("");
   const latest = useRef(state);
   useEffect(() => {
     latest.current = state;
@@ -311,7 +323,8 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
     task.catch((failure: unknown) => setError(describeError(failure)));
   }, []);
 
-  const sampleFor = useCallback((info: DownloadInfo) => {
+  const sampleFor = useCallback(
+    (info: Pick<DownloadInfo, "id" | "downloaded" | "total" | "status">) => {
     const now = Date.now();
     const sample = nextSpeedSample(
       samples.current.get(info.id),
@@ -359,6 +372,54 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
         error: info.error,
         resumable: info.resumable,
         description: info.description,
+      };
+    },
+    [sampleFor],
+  );
+
+  const toMediaDownload = useCallback(
+    (job: MediaJobView, previous?: Download): Download => {
+      const id = MEDIA_ROW_BASE + job.job;
+      const now = Date.now();
+      const addedAt = mediaAdded.current.get(job.job) ?? now;
+      mediaAdded.current.set(job.job, addedAt);
+      const sample = sampleFor({
+        id,
+        downloaded: job.downloaded,
+        total: job.total,
+        status: job.downloading ? "running" : "paused",
+      });
+      const { dir, base } = splitPath(job.dest ?? "");
+      const fileName = base || job.title || `Media ${job.job}`;
+      const status: Download["status"] = job.done
+        ? "completed"
+        : job.error
+          ? "error"
+          : job.downloading
+            ? "downloading"
+            : job.stage === "Stopped"
+              ? "stopped"
+              : "paused";
+      return {
+        id,
+        mediaJob: job.job,
+        fileName,
+        url: job.pageUrl || job.title,
+        category: "Video",
+        size: job.total,
+        downloaded: job.downloaded,
+        status,
+        speed: sample.speed,
+        eta: etaSeconds(job.total, job.downloaded, sample.speed),
+        addedAt,
+        lastTryAt: job.downloading ? now : (previous?.lastTryAt ?? now),
+        savePath: dir,
+        dest: job.dest ?? "",
+        referer: null,
+        connections: 1,
+        error: job.error,
+        resumable: false,
+        description: job.stage,
       };
     },
     [sampleFor],
@@ -445,6 +506,71 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
       dispose?.();
     };
   }, [applyInfo, load]);
+
+  // Media jobs are a coordinator on top of the engine, so they are read as
+  // their own small list and shown as rows in the same table.
+  useEffect(() => {
+    if (!isDesktop()) {
+      return;
+    }
+    let cancelled = false;
+    let timer = 0;
+    const tick = async () => {
+      if (cancelled) {
+        return;
+      }
+      try {
+        const jobs = await listMediaJobs();
+        if (cancelled) {
+          return;
+        }
+        const shown = jobs.filter(
+          (job) =>
+            job.downloading ||
+            job.done ||
+            Boolean(job.error) ||
+            job.stage === "Stopped",
+        );
+        const signature = shown
+          .map(
+            (job) =>
+              `${job.job}:${job.state}:${job.downloaded}:${job.error ?? ""}:${job.stage ?? ""}`,
+          )
+          .join("|");
+        if (signature !== lastMediaSignature.current) {
+          lastMediaSignature.current = signature;
+          setState((current) => {
+            const previous = new Map(
+              current.downloads.map((item) => [item.id, item]),
+            );
+            const rows = shown.map((job) =>
+              toMediaDownload(job, previous.get(MEDIA_ROW_BASE + job.job)),
+            );
+            // A media row that is gone is gone; the engine rows are untouched.
+            const normal = current.downloads.filter((item) => !item.mediaJob);
+            const downloads = [...normal, ...rows];
+            return {
+              ...current,
+              downloads,
+              selected: current.selected.filter((id) =>
+                downloads.some((item) => item.id === id),
+              ),
+            };
+          });
+        }
+      } catch {
+        // The media job list is a convenience; a failed poll tries again.
+      }
+      if (!cancelled) {
+        timer = window.setTimeout(tick, 900);
+      }
+    };
+    void tick();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [toMediaDownload]);
 
   // A link that the browser extension handed over.
   useEffect(() => {
@@ -884,6 +1010,12 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
 
   /** Delete the file of a finished row, then drop the row it belongs to. */
   async function deleteFile(id: number) {
+    const item = latest.current.downloads.find((row) => row.id === id);
+    if (item?.mediaJob) {
+      await mediaForget(item.mediaJob, true);
+      forget(id);
+      return;
+    }
     await deleteDownloadFile(id);
     forget(id);
   }
@@ -893,6 +1025,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
     const changed = latest.current.downloads.filter(
       (item) =>
         ids.includes(item.id) &&
+        !item.mediaJob &&
         item.status !== "completed" &&
         item.status !== "queued",
     );
@@ -915,7 +1048,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
   /** Take queued rows out of the queue and leave them paused. */
   function dequeue(ids: number[]) {
     const changed = latest.current.downloads.filter(
-      (item) => ids.includes(item.id) && item.status === "queued",
+      (item) => ids.includes(item.id) && !item.mediaJob && item.status === "queued",
     );
     if (changed.length === 0) {
       return;
@@ -1136,6 +1269,12 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
           if (!ids.includes(item.id) || item.status === "completed") {
             return item;
           }
+          if (item.mediaJob) {
+            // The media coordinator has no pause or resume of its own.
+            return action === "stop"
+              ? { ...item, status: "stopped", speed: 0, eta: 0 }
+              : item;
+          }
           if (action === "pause") {
             return { ...item, status: "paused", speed: 0, eta: 0 };
           }
@@ -1148,6 +1287,12 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
 
       for (const item of items) {
         if (item.status === "completed") {
+          continue;
+        }
+        if (item.mediaJob) {
+          if (action === "stop") {
+            run(cancelMedia(item.mediaJob));
+          }
           continue;
         }
         if (action === "pause") {
@@ -1182,7 +1327,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
     cancelConflict: () => settleConflict(null),
     pauseAll: () => {
       const items = latest.current.downloads.filter(
-        (item) => item.status === "downloading",
+        (item) => item.status === "downloading" && !item.mediaJob,
       );
       if (items.length === 0) {
         return;
@@ -1190,7 +1335,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
       setState((current) => ({
         ...current,
         downloads: current.downloads.map((item) =>
-          item.status === "downloading"
+          item.status === "downloading" && !item.mediaJob
             ? { ...item, status: "paused", speed: 0, eta: 0 }
             : item,
         ),
@@ -1212,7 +1357,15 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
             : item,
         ),
       }));
-      run(Promise.all(items.map((item) => cancelDownload(item.id))));
+      run(
+        Promise.all(
+          items.map((item) =>
+            item.mediaJob
+              ? cancelMedia(item.mediaJob)
+              : cancelDownload(item.id),
+          ),
+        ),
+      );
     },
     redownloadSelected: () => {
       // A live row has to be stopped before it can start over, so it is left
@@ -1220,6 +1373,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
       const items = latest.current.downloads.filter(
         (item) =>
           latest.current.selected.includes(item.id) &&
+          !item.mediaJob &&
           item.status !== "downloading" &&
           item.status !== "queued",
       );
@@ -1249,7 +1403,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
     },
     deleteCompleted: () => {
       const ids = latest.current.downloads
-        .filter((item) => isFinished(item))
+        .filter((item) => isFinished(item) && !item.mediaJob)
         .map((item) => item.id);
       if (ids.length === 0) {
         return;
@@ -1261,9 +1415,10 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
     startQueue: () => {
       const resumable = latest.current.downloads.filter(
         (item) =>
-          item.status === "paused" ||
-          item.status === "queued" ||
-          item.status === "stopped",
+          !item.mediaJob &&
+          (item.status === "paused" ||
+            item.status === "queued" ||
+            item.status === "stopped"),
       );
       if (resumable.length === 0) {
         return;
@@ -1271,9 +1426,10 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
       setState((current) => ({
         ...current,
         downloads: current.downloads.map((item) =>
-          item.status === "paused" ||
-          item.status === "queued" ||
-          item.status === "stopped"
+          !item.mediaJob &&
+          (item.status === "paused" ||
+            item.status === "queued" ||
+            item.status === "stopped")
             ? { ...item, status: "downloading", speed: 0, error: null }
             : item,
         ),
@@ -1282,7 +1438,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
     },
     stopQueue: () => {
       const items = latest.current.downloads.filter(
-        (item) => item.status === "downloading",
+        (item) => item.status === "downloading" && !item.mediaJob,
       );
       if (items.length === 0) {
         return;
@@ -1290,7 +1446,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
       setState((current) => ({
         ...current,
         downloads: current.downloads.map((item) =>
-          item.status === "downloading"
+          item.status === "downloading" && !item.mediaJob
             ? { ...item, status: "paused", speed: 0, eta: 0 }
             : item,
         ),
@@ -1314,6 +1470,12 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
     run(
       Promise.all(
         ids.map(async (id) => {
+          const item = latest.current.downloads.find((row) => row.id === id);
+          if (item?.mediaJob) {
+            await mediaForget(item.mediaJob, false);
+            forget(id);
+            return;
+          }
           try {
             await cancelDownload(id);
           } catch {
@@ -1330,6 +1492,9 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
   function forget(id: number) {
     removed.current.add(id);
     samples.current.delete(id);
+    if (id >= MEDIA_ROW_BASE) {
+      mediaAdded.current.delete(id - MEDIA_ROW_BASE);
+    }
     setState((current) => ({
       ...current,
       downloads: current.downloads.filter((item) => item.id !== id),

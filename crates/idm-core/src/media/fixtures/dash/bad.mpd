@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MPD type="static" mediaPresentationDuration="PT10S">
+  <Period>
+    <AdaptationSet contentType="video" mimeType="video/mp4">
+      <Representation id="1" bandwidth="1000" width="640" height="360" codecs="avc1.4d401e">

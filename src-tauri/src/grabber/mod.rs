@@ -12,7 +12,7 @@
 
 mod crawl;
 mod extract;
-mod policy;
+pub(crate) mod policy;
 mod robots;
 mod window;
 

@@ -134,6 +134,21 @@ impl Source {
     /// a default header of the client, so every range carries it, the way the
     /// reference binary sends the page a file was linked from.
     pub fn parse(url: &str, proxy: Option<&str>, referer: Option<&str>) -> Result<Self, String> {
+        Self::parse_with_headers(url, proxy, referer, &[])
+    }
+
+    /// Read a URL, with extra headers the page's browser sent.
+    ///
+    /// The headers are already filtered by the caller: only the ones the page
+    /// sent for the manifest's own origin may travel here, and a value that
+    /// would start another header line has been dropped. An invalid header is
+    /// dropped again here rather than failing the download.
+    pub fn parse_with_headers(
+        url: &str,
+        proxy: Option<&str>,
+        referer: Option<&str>,
+        headers: &[(String, String)],
+    ) -> Result<Self, String> {
         if let Some(rest) = url.strip_prefix("ftp://") {
             return Self::parse_ftp(rest);
         }
@@ -156,14 +171,25 @@ impl Source {
                 builder = builder.proxy(proxy);
             }
 
+            let mut defaults = reqwest::header::HeaderMap::new();
             // The referer comes from the browser, so it is untrusted input.
             // `from_str` refuses a value that would start a new header line.
             if let Some(referer) = referer.map(str::trim).filter(|r| !r.is_empty()) {
                 let value = reqwest::header::HeaderValue::from_str(referer)
                     .map_err(|_| "the referer is not a usable header".to_string())?;
-                let mut headers = reqwest::header::HeaderMap::new();
-                headers.insert(reqwest::header::REFERER, value);
-                builder = builder.default_headers(headers);
+                defaults.insert(reqwest::header::REFERER, value);
+            }
+            for (name, value) in headers {
+                let Ok(name) = reqwest::header::HeaderName::from_bytes(name.as_bytes()) else {
+                    continue;
+                };
+                let Ok(value) = reqwest::header::HeaderValue::from_str(value) else {
+                    continue;
+                };
+                defaults.insert(name, value);
+            }
+            if !defaults.is_empty() {
+                builder = builder.default_headers(defaults);
             }
 
             let client = builder.build().map_err(|e| e.to_string())?;

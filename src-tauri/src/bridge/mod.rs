@@ -204,6 +204,7 @@ async fn route(app: &AppHandle, request: &Request) -> (u16, Value) {
         ("GET", "/v1/ping") => (200, ok(ping())),
         ("GET", "/v1/capture") => (200, ok(capture_policy(app))),
         ("GET", "/v1/video-button-settings") => (200, ok(video_button_settings(app))),
+        ("POST", "/v1/media") => crate::video::capture::register(app, &request.body).await,
         ("GET", "/v1/downloads") => (200, ok(downloads(app))),
         ("POST", "/v1/downloads") => add_download(app, &request.body).await,
         ("GET", "/v1/batch-options") => (200, ok(batch::options(app, &app.state::<AppState>()))),
@@ -212,9 +213,30 @@ async fn route(app: &AppHandle, request: &Request) -> (u16, Value) {
             crate::tray::show_window(app);
             (200, ok(json!({ "focused": true })))
         }
-        ("POST", _) => match control_route(path) {
-            Some((id, action)) => control(app, id, action),
-            None => (404, error_body("not_found", "no such route")),
+        ("POST", _) => match media_route(path) {
+            Some((id, Some("download"))) => {
+                crate::video::capture::download(app, id, &request.body).await
+            }
+            Some((id, Some("cancel"))) => crate::video::capture::cancel(app, id),
+            Some((id, Some("allow-cookies"))) => {
+                crate::video::capture::allow_cookies_bridge(app, id)
+            }
+            Some((_, Some(_))) => (404, error_body("not_found", "no such media action")),
+            Some((_, None)) => (
+                405,
+                error_body("method_not_allowed", "use GET for this route"),
+            ),
+            None => match control_route(path) {
+                Some((id, action)) => control(app, id, action),
+                None => (404, error_body("not_found", "no such route")),
+            },
+        },
+        ("GET", _) if media_route(path).is_some() => match media_route(path) {
+            Some((id, None)) => crate::video::capture::view(app, id),
+            _ => (
+                405,
+                error_body("method_not_allowed", "use POST for this route"),
+            ),
         },
         ("GET", _) if control_route(path).is_some() => (
             405,
@@ -490,6 +512,20 @@ fn control_route(path: &str) -> Option<(u64, &str)> {
     Some((id.parse().ok()?, action))
 }
 
+/// The id and the optional action of a `/v1/media/<id>[/<action>]` route.
+fn media_route(path: &str) -> Option<(u64, Option<&str>)> {
+    let rest = path.strip_prefix("/v1/media/")?;
+    match rest.split_once('/') {
+        Some((id, action)) => {
+            if action.is_empty() || action.contains('/') {
+                return None;
+            }
+            Some((id.parse().ok()?, Some(action)))
+        }
+        None => Some((rest.parse().ok()?, None)),
+    }
+}
+
 /// An extension origin. Firefox uses `moz-extension://`, Chromium
 /// `chrome-extension://`; the older extension build is still recognised.
 fn is_extension_origin(origin: &str) -> bool {
@@ -507,12 +543,12 @@ fn is_web_url(url: &str) -> bool {
 }
 
 /// A successful answer.
-fn ok(data: Value) -> Value {
+pub(crate) fn ok(data: Value) -> Value {
     json!({ "ok": true, "data": data })
 }
 
 /// A refusal.
-fn error_body(code: &str, message: impl Into<String>) -> Value {
+pub(crate) fn error_body(code: &str, message: impl Into<String>) -> Value {
     json!({ "ok": false, "error": { "code": code, "message": message.into() } })
 }
 
@@ -585,6 +621,19 @@ mod tests {
         assert_eq!(control_route("/v1/downloads/42/pause/extra"), None);
         assert_eq!(control_route("/v1/downloads/not-a-number/pause"), None);
         assert_eq!(control_route("/v1/other/42/pause"), None);
+    }
+
+    #[test]
+    fn a_media_route_names_a_job_and_an_action() {
+        assert_eq!(media_route("/v1/media/7"), Some((7, None)));
+        assert_eq!(
+            media_route("/v1/media/7/download"),
+            Some((7, Some("download")))
+        );
+        assert_eq!(media_route("/v1/media/7/cancel"), Some((7, Some("cancel"))));
+        assert_eq!(media_route("/v1/media/7/download/x"), None);
+        assert_eq!(media_route("/v1/media/nope"), None);
+        assert_eq!(media_route("/v1/downloads/7"), None);
     }
 
     #[test]

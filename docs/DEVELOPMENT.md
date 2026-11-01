@@ -49,6 +49,14 @@ src-tauri/src/
     http.rs        the HTTP/1.1 reader and writer
     dest.rs        safe, unique file names for hand-overs
     batch.rs       the Download all links batch: offered folders, per-link answer
+  video/         the media layer around the engine
+    capture.rs     the bridge handlers, job parsing, the panel commands
+    probe.rs       the manifest GET: redirect and size caps, origin headers
+    download.rs    the coordinator: tracks, then mux::join, then the file
+    mux.rs         join(inputs, output, container): the only remux entry
+    policy.rs      the headers a page may forward, scoped to its origin
+    ytdlp.rs       the optional last resort for an expired YouTube URL
+    window.rs      the quality panel window (`video`)
   grabber/       the Site Grabber
     mod.rs         the one run, its commands, and the hand-over to the engine
     crawl.rs       the walk: scope, limits, robots, redirects, cancellation
@@ -61,6 +69,7 @@ browser-extension/
 extension-firefox/
   manifest.json  the Firefox build; MV3 event page, video overlay, popup and settings
   lib/link-rules.js  what a link is, shared by the reader and the link window
+  lib/manifest.js    what a stream manifest is, and the playback headers
   content/page-links.js  the time-sliced reader of a page's links
   links/         the Download all links window (filters, selection, report)
 src/
@@ -74,7 +83,8 @@ src/
     workspace/   panes, tables, dialogs, the context menus (one file each)
     windows/     the completion window, progress/ for the live download
                  window (status tab, speed limiter tab, connections, meter),
-                 and grabber/ for the Site Grabber (form, results, hook)
+                 video/ for the quality panel (rows, polling hook), and
+                 grabber/ for the Site Grabber (form, results, hook)
     ui/          shadcn/ui primitives
 ```
 
@@ -112,7 +122,8 @@ in `lib.rs`, the download-complete window in `complete.rs`, each progress
 window in `progress.rs` and the Site Grabber in `grabber/window.rs`.
 
 A window label must also be in `src-tauri/capabilities/default.json`. The
-grabber is `grabber`; without it, dragging and the close button do nothing.
+grabber is `grabber` and the quality panel is `video`; without them, dragging
+and the close button do nothing.
 
 The frame owns the corners. Small windows must **not** put `rounded-lg` (or any
 other radius) on their root: a second, different radius inside the compositor's
@@ -176,6 +187,37 @@ Theme references:
   destroyed. The application's own tray icon in `lib.rs` stays a separate
   thing; do not rebuild it for progress windows.
 
+## Tray icon
+
+The application's own icon, its menu and the choices that go with them. Keep
+these invariants when changing it:
+
+- The four choices live in `desktop.json` (`src-tauri/src/prefs.rs`), not in
+  `localStorage`: the icon, the close button and the clipboard watch all work
+  before a page has read anything. The window reads them with
+  `desktop_preferences()` and writes each one with its own command.
+- `tray::set_visible()` is the only place that puts the icon up or takes it
+  down, and it is the only place that sets `tray_available`. The close and
+  minimize paths consult that flag and fall back to closing and minimizing
+  when it is false — never hide a window the reader cannot bring back.
+  `tray::refresh()` returns early while the icon is away, so a hidden icon does
+  not turn every progress report into a warning.
+- The six drawings come from `scripts/make-icons.py` and are compiled into the
+  binary with `include_image!`. Change the mark there, run the script, and
+  `tray::drawing()` keeps its six arms in step. They are the same 16 by 16
+  picture at three weights of ink; a new style is a new pair of PNGs, not a new
+  geometry.
+- The window owns the appearance and reports it with `set_tray_appearance`
+  (from `src/lib/appearance.ts`, so every window keeps the icon in step). The
+  backend ignores the report unless `trayDarkMode` is on; the default drawing is
+  the dark one, which is what the icon has always used.
+- The clipboard watch matches a copied address against `urlProtocols`. The
+  cleaning rules are written twice on purpose — `clean_url_protocols` in
+  `prefs.rs` and `normalizeUrlProtocols` in `src/lib/tray.ts` — and
+  `scripts/check-tray.mjs` (`pnpm run check:tray`) fails when the two drift
+  apart. An empty list falls back to the three defaults: a watch with nothing
+  to match offers nothing.
+
 ## Site Grabber
 
 The grabber is the only part of the application that reads pages it was not
@@ -204,6 +246,37 @@ handed. Keep these invariants when changing it:
 
 `docs/SITE-GRABBER.md` is the user-facing contract; update it with any rule or
 limit that changes.
+
+## Media capture
+
+The browser extension hands over a manifest or a playback address; the app
+parses it, shows the quality panel, downloads each track, and remuxes. Keep
+these invariants:
+
+- Parsing lives only in `crates/idm-core/src/media/`. The engine downloads
+  tracks; it does not know what a video is. A track is one ordinary download
+  per segment, with the existing resume state.
+- Every remux goes through `video::mux::join(inputs, output, container)`.
+  V4a runs an optional LGPL `ffmpeg` sidecar with `-c copy`; a native writer
+  may replace the body later without touching a caller. A transcode is a bug.
+- DRM is refused, never touched: `#EXT-X-KEY`, MPD `ContentProtection`,
+  `application/vnd.yt-ump` and a `pssh`/encrypted init all produce one
+  sentence. Live (`no #EXT-X-ENDLIST`, `MPD@type="dynamic"`) is refused too.
+- No cipher solver and no `n` solver. YouTube uses the signed URL the page
+  already requested; an expired URL is one `yt-dlp` attempt if the optional
+  binary exists, else one readable failure.
+- Headers are accepted only for `Cookie`, `User-Agent`, `Referer`,
+  `Origin` and `Authorization`, only on the manifest's own origin, never
+  persisted, never logged. A cookie or authorization value waits for the
+  one-time consent in the panel (`desktop.json`).
+- Firefox draws the quality list **inline** in its overlay, the way the
+  reference's Download Panel does. The `video` window remains for clients with
+  no overlay (the Chrome build) and lists the same pairings. The list follows
+  listbox semantics, never a native `<select>`; the last quality per host is
+  remembered in `desktop.json`.
+- A started media job is a row in the home list, driven by `media_jobs`. It
+  carries live progress, Stop and Remove; the engine's `Download` commands are
+  never sent for a media row.
 
 ## Skills
 

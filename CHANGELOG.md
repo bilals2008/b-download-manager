@@ -10,6 +10,22 @@ edit one before its release ships if a bullet needs better words.
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **media:** HLS, MPEG-DASH and plain-file capture with a quality window that pairs the picture with its sound
+- **media:** Segment downloads resume through the existing engine, then remux with `-c copy` behind one `mux::join` call
+- **media:** Origin-scoped cookies and authorization, forwarded only after one consent prompt and never stored
+- **media:** YouTube uses the signed URL the page already fetched; an expired URL falls back to an optional `yt-dlp`
+- **media:** DRM, live streams and protected init segments are refused with one sentence
+- **media:** Firefox shows the quality list on the page and in the toolbar popup, like the reference Download Panel, instead of opening an app window
+- **media:** A started media download appears in the home list with live progress, Stop and Remove
+- **ui:** The floating Download button loses the permanent progress ring and sits on the video corner with a soft shadow
+- **ui:** The tray icon menu works: three drawings of the mark, "Don't show", inks that follow the appearance, and a URL list for the clipboard watch
+
+---
+
 ## [0.2.0] - 31 October 2026
 
 ### Added
