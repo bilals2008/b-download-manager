@@ -191,12 +191,17 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         run: pnpm exec tauri build --bundles deb,appimage --config "$RUNNER_TEMP/bdm-ci.conf.json"
 
-      # The same verifier release.yml runs, against this build's key.
+      # The same verifier release.yml runs, against this build's key. The
+      # bundle folder keeps one subfolder per format; copy the payloads into
+      # one flat folder, which is the shape a release download has too.
       - name: Verify the installer and its signature
         shell: bash
         run: |
+          mkdir -p "$RUNNER_TEMP/linux-artifacts"
+          cp target/release/bundle/deb/* "$RUNNER_TEMP/linux-artifacts/"
+          cp target/release/bundle/appimage/* "$RUNNER_TEMP/linux-artifacts/"
           node scripts/check-release-artifacts.mjs \
-            --dir target/release/bundle \
+            --dir "$RUNNER_TEMP/linux-artifacts" \
             --platform linux \
             --pubkey "$RUNNER_TEMP/bdm-ci.key.pub"
 
