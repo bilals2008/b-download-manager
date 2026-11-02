@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "B Download Manager",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Send downloads and video from Firefox to B Download Manager.",
   "browser_specific_settings": {
     "gecko": {
@@ -34,6 +34,7 @@
         "lib/settings.js",
         "lib/icons.js",
         "content/page-media.js",
+        "content/page-sources.js",
         "content/video-registry.js",
         "content/overlay-style.js",
         "content/overlay.js",

@@ -298,10 +298,17 @@ async function startPage(options = {}) {
     "the panel says where the download went",
   );
 
-  // Leaving the player hides the button.
+  // Leaving the player keeps the open panel: the pointer has to cross the
+  // gap between the button and the panel, and the reader is still using it.
   page.dom.fire(page.dom.body, "pointerover", { clientX: 1180, clientY: 20 });
   await new Promise((resolve) => setTimeout(resolve, 520));
-  assert.equal(page.visible(), false, "the button leaves with the pointer");
+  assert.equal(page.visible(), true, "the button stays while the panel is open");
+  assert.equal(page.open(), true, "the panel stays while it is being read");
+
+  // A click outside is the deliberate way out.
+  page.dom.fire(page.dom.body, "pointerdown", { clientX: 1180, clientY: 20 });
+  await new Promise((resolve) => setTimeout(resolve, 520));
+  assert.equal(page.visible(), false, "the button leaves after an outside click");
   assert.equal(page.open(), false, "the panel closes with the button");
 
   page.close();

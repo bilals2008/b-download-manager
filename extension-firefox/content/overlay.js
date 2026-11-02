@@ -177,6 +177,9 @@
     qualitySelected: "",
     qualityTimer: 0,
     qualityBusy: false,
+    // The panel is showing the page's own complete files (Facebook HD/SD)
+    // instead of a quality list parsed by the application.
+    sourceMode: false,
     visible: false,
     open: false,
     fab: null,
@@ -303,6 +306,16 @@
     ui.fab.addEventListener("click", () => {
       if (state.open) {
         closePanel(true);
+        return;
+      }
+      // A page that names complete files (Facebook) lists them itself; asking
+      // the app to parse a fragment would only return one fake quality.
+      if (
+        typeof bdmPageHasFullFiles === "function" &&
+        bdmPageHasFullFiles()
+      ) {
+        state.sourceMode = true;
+        openPanel();
         return;
       }
       if (state.qualityView && state.qualityView.state !== "failed") {
@@ -545,7 +558,7 @@
     }
     observeVideoSize(video);
 
-    if (state.open && changed) renderSources();
+    if (state.open && changed) renderPanel();
     applyProgress();
     position();
   }
@@ -595,6 +608,7 @@
     closePanel(false);
     detachListeners();
     unobserveVideoSize();
+    state.sourceMode = false;
     if (state.host) {
       state.host.dataset.visible = "false";
       state.host.dataset.open = "false";
@@ -613,7 +627,8 @@
   /* --------------------------------------------------------------- panel */
 
   function openPanel() {
-    if (!state.qualityView && (!state.visible || !state.sources.length)) return;
+    if (!state.sourceMode && !state.qualityView && (!state.visible || !state.sources.length)) return;
+    if (state.sourceMode && !state.sources.length) return;
     ensureHost();
     if (!state.ui) return;
     state.open = true;
@@ -622,10 +637,10 @@
     state.ui.fab.setAttribute("aria-expanded", "true");
     setStatus("", "");
     setProgress(0, true);
-    renderQuality();
+    renderPanel();
     applyProgress();
     position();
-    pollQuality();
+    if (!state.sourceMode) pollQuality();
     const target = state.ui.list.querySelector(".row-action") || state.ui.close;
     target.focus({ preventScroll: true });
   }
@@ -633,6 +648,7 @@
   function closePanel(focusFab) {
     const wasOpen = state.open;
     state.open = false;
+    state.sourceMode = false;
     if (state.qualityTimer) {
       clearTimeout(state.qualityTimer);
       state.qualityTimer = 0;
@@ -659,8 +675,14 @@
   function qualityTargets() {
     const manifests = [...new Set(state.sources.filter((url) => bdmIsManifestUrl(url)))].slice(0, 4);
     if (manifests.length) return manifests;
-    const itags = [...new Set(state.sources.filter((url) => bdmItagOf(url)))];
-    if (itags.length) return itags;
+    // One address per itag: the page's scripts and the player's requests can
+    // name the same stream with different signatures.
+    const byItag = new Map();
+    for (const url of state.sources) {
+      const itag = bdmItagOf(url);
+      if (itag && !byItag.has(itag)) byItag.set(itag, url);
+    }
+    if (byItag.size) return [...byItag.values()];
     // A streamed player fetched picture and sound as two files. The app pairs
     // them when they arrive as one job, so both are registered together.
     if (state.sourcesCaptured) {
@@ -1088,6 +1110,15 @@
     if (state.open) closePanel(false);
   }
 
+  /** The list the panel is showing: page files, or the app's parsed qualities. */
+  function renderPanel() {
+    if (state.sourceMode) {
+      renderSources();
+      return;
+    }
+    renderQuality();
+  }
+
   function renderSources() {
     if (!state.ui) return;
     const list = state.ui.list;
@@ -1100,11 +1131,15 @@
 
       const tag = document.createElement("span");
       tag.className = "tag";
-      tag.textContent = bdmMediaLabel(url);
+      tag.textContent =
+        (typeof bdmPageSourceLabel === "function" && bdmPageSourceLabel(url)) ||
+        bdmMediaLabel(url);
 
       const name = document.createElement("span");
       name.className = "name";
-      name.textContent = bdmMediaName(url, "");
+      name.textContent =
+        (typeof bdmPageSourceName === "function" && bdmPageSourceName(url)) ||
+        bdmMediaName(url, "");
       name.title = url;
 
       const button = document.createElement("button");
@@ -1204,6 +1239,18 @@
       return;
     }
 
+    // A page that named a complete file (Facebook HD/SD) can hand it over
+    // directly. Sending it as a media job would only make the app parse one
+    // fragment and offer a single fake quality.
+    if (
+      typeof bdmPageSourceIsFullFile === "function" &&
+      bdmPageSourceIsFullFile(url)
+    ) {
+      await sendDirect(url, row, button);
+      state.sending = false;
+      return;
+    }
+
     // A media address (a YouTube stream, or a plain file) is read by the
     // application so its qualities can be chosen. YouTube picture and sound
     // are separate streams; the page's whole capture goes with the click.
@@ -1247,38 +1294,8 @@
       return;
     }
 
-    setStatus("Sending to B Download Manager…", "");
-
-    try {
-      const answer = await browser.runtime.sendMessage({
-        type: "bdm:send",
-        // A video is one of several streams; the dialog names it and picks the
-        // folder before anything starts.
-        mode: "ask",
-        payload: {
-          url,
-          name: bdmMediaFileName(url, bdmPageName()),
-          referer: location.href,
-        },
-      });
-
-      if (!answer || !answer.ok) {
-        setStatus(statusForError(answer?.error), "error");
-        button.disabled = false;
-        return;
-      }
-
-      row.dataset.sent = "true";
-      button.replaceChildren(bdmIcon("check"));
-      button.setAttribute("aria-label", "Sent to B Download Manager");
-
-      startTracking(url, answer.result);
-    } catch {
-      setStatus("B Download Manager is not running", "error");
-      button.disabled = false;
-    } finally {
-      state.sending = false;
-    }
+    await sendDirect(url, row, button);
+    state.sending = false;
   }
 
   /* ------------------------------------------------------------- tracking */
@@ -1448,6 +1465,37 @@
   /** Whether the tracked address is one of the sources the button offers. */
   function trackBelongsHere() {
     return Boolean(track.url) && state.sources.includes(track.url);
+  }
+
+  /** Hand a complete file to the app; the add dialog names it and picks a folder. */
+  async function sendDirect(url, row, button) {
+    setStatus("Sending to B Download Manager…", "");
+    try {
+      const answer = await browser.runtime.sendMessage({
+        type: "bdm:send",
+        mode: "ask",
+        payload: {
+          url,
+          name: bdmMediaFileName(url, bdmPageName()),
+          referer: location.href,
+        },
+      });
+
+      if (!answer || !answer.ok) {
+        setStatus(statusForError(answer?.error), "error");
+        button.disabled = false;
+        return;
+      }
+
+      row.dataset.sent = "true";
+      button.replaceChildren(bdmIcon("check"));
+      button.setAttribute("aria-label", "Sent to B Download Manager");
+
+      startTracking(url, answer.result);
+    } catch {
+      setStatus("B Download Manager is not running", "error");
+      button.disabled = false;
+    }
   }
 
   /**
@@ -1636,11 +1684,11 @@
     }
 
     // The pointer left every video; nothing may claim the next stream that
-    // arrives for it.
+    // arrives for it. An open panel stays where it is: the reader is reading
+    // it, and moving the pointer onto it must not make it vanish.
     state.hovered = null;
     state.pointerOverVideo = false;
-    if (state.open) closePanel(false);
-    if (state.visible) scheduleHide();
+    if (state.visible && !state.open) scheduleHide();
   }
 
   /**
@@ -1710,6 +1758,7 @@
     if (!bdmCaptureSyncPage()) return;
     stopTracking();
     clearQuality();
+    state.sourceMode = false;
     state.lastCount = -1;
     scheduleCountRefresh();
     if (state.hovered && state.hovered.isConnected) present(state.hovered);

@@ -103,9 +103,30 @@ function bdmCaptureSyncPage() {
 
 /** The whole-file address of every stream the page asked for. */
 function bdmCapturedSources() {
+  const pageSources =
+    typeof bdmPageSources === "function" ? bdmPageSources() : [];
+  const fullFiles =
+    typeof bdmPageHasFullFiles === "function" && bdmPageHasFullFiles();
+  const files = captured
+    .map((entry) => entry.url)
+    // A player that fetched a hundred pieces of one video would otherwise
+    // offer a hundred fragments. When the page names its complete files, only
+    // those are offered.
+    .filter(
+      (url) =>
+        !(
+          fullFiles &&
+          typeof bdmPageSourceIsFullFile === "function" &&
+          bdmIsMediaLink(url) &&
+          !bdmPageSourceIsFullFile(url)
+        ),
+    );
   return [
-    ...captured.map((entry) => entry.url),
-    ...capturedManifests.map((entry) => entry.url),
+    ...new Set([
+      ...files,
+      ...capturedManifests.map((entry) => entry.url),
+      ...pageSources.map((entry) => entry.url),
+    ]),
   ];
 }
 
@@ -126,6 +147,14 @@ function bdmRememberMediaRequest(url) {
   // what the application can fetch, and it is also the key two ranges share.
   const full = bdmFullMediaUrl(url);
   if (!bdmIsCapturedMedia(full)) return false;
+  if (
+    typeof bdmPageHasFullFiles === "function" &&
+    bdmPageHasFullFiles() &&
+    bdmIsMediaLink(full) &&
+    !(typeof bdmPageSourceIsFullFile === "function" && bdmPageSourceIsFullFile(full))
+  ) {
+    return false;
+  }
   const key = bdmMediaKey(full);
   if (capturedKeys.has(key)) return false;
 
@@ -228,8 +257,7 @@ function bdmPageMedia() {
 /** How many downloadable media this page offers. */
 function bdmMediaCount() {
   bdmCaptureSyncPage();
-  const keys = new Set(capturedKeys);
-  for (const entry of capturedManifests) keys.add(entry.url);
+  const keys = new Set(bdmCapturedSources());
   for (const element of document.querySelectorAll("video, audio")) {
     for (const url of bdmSourcesFor(element)) keys.add(bdmMediaKey(url));
   }
