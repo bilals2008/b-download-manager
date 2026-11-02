@@ -1,6 +1,6 @@
-// Self-check for the tray icon model: the three styles, the URL list rules,
-// and the two places the same list is written down. Node strips the types, so
-// the check runs against the same module the window imports.
+// Self-check for the tray icon model: the icon pair, the URL list rules, and
+// the two places the same list is written down. Node strips the types, so the
+// check runs against the same module the window imports.
 //
 // Run it with `pnpm run check:tray`.
 
@@ -12,10 +12,8 @@ import path from "node:path";
 const rootDir = fileURLToPath(new URL("../", import.meta.url));
 const {
   DEFAULT_TRAY_PREFERENCES,
-  DEFAULT_TRAY_STYLE,
   DEFAULT_URL_PROTOCOLS,
   MAX_URL_PROTOCOLS,
-  TRAY_STYLES,
   cleanUrlProtocol,
   normalizeUrlProtocols,
   trayPreferencesFrom,
@@ -28,42 +26,31 @@ function is(actual, expected, label) {
   checks += 1;
 }
 
-/* --------------------------------------------------------------- styles */
+/* ------------------------------------------------------------- the assets */
 
+for (const surface of ["dark", "light"]) {
+  const file = path.join(rootDir, "src-tauri", "icons", `tray-on-${surface}.png`);
+  is(
+    existsSync(file),
+    true,
+    `the tray logo for a ${surface} taskbar was packed by make-icons.py`,
+  );
+}
 is(
-  TRAY_STYLES.map((style) => style.value),
-  ["default", "3d", "classic"],
-  "the menu offers the three styles, in the order the reference product lists them",
+  DEFAULT_TRAY_PREFERENCES.hidden,
+  false,
+  "the icon is there until the reader takes it away",
 );
 is(
-  TRAY_STYLES.map((style) => style.label),
-  ["Default style", "3D style", "Classic style"],
-  "each style is named the way the menu names it",
+  DEFAULT_TRAY_PREFERENCES.darkMode,
+  false,
+  "the icon keeps its dark inks until the reader follows the window",
 );
-is(DEFAULT_TRAY_STYLE, "default", "the application starts on its own mark");
 is(
   DEFAULT_TRAY_PREFERENCES.urlProtocols,
   [...DEFAULT_URL_PROTOCOLS],
   "the defaults the menu opens on are the defaults the backend saves",
 );
-
-/* ------------------------------------------------------------- the assets */
-
-for (const style of TRAY_STYLES) {
-  for (const surface of ["dark", "light"]) {
-    const file = path.join(
-      rootDir,
-      "src-tauri",
-      "icons",
-      `tray-${style.value}-on-${surface}.png`,
-    );
-    is(
-      existsSync(file),
-      true,
-      `the ${style.value} icon for a ${surface} taskbar was drawn by make-icons.py`,
-    );
-  }
-}
 
 /* ------------------------------------------------------------ url list */
 
@@ -125,17 +112,15 @@ is(
 
 is(
   trayPreferencesFrom({
-    trayStyle: "3d",
     trayHidden: true,
     trayDarkMode: true,
     urlProtocols: ["HTTPS", "https", "mms"],
   }),
-  { style: "3d", hidden: true, darkMode: true, urlProtocols: ["https", "mms"] },
+  { hidden: true, darkMode: true, urlProtocols: ["https", "mms"] },
   "the saved file is read into the choices the menu shows",
 );
 is(
   trayPreferencesFrom({
-    trayStyle: "classic",
     trayHidden: false,
     trayDarkMode: false,
     urlProtocols: [],

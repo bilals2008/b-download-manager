@@ -154,13 +154,9 @@ export function buildMenus(
         ],
       },
       {
-        command: "tray-default",
+        command: "tray-menu",
         label: "B Download Manager tray icon",
         submenu: [
-          { command: "tray-default", label: "Default style", radio: true },
-          { command: "tray-3d", label: "3D style", radio: true },
-          { command: "tray-classic", label: "Classic style", radio: true },
-          "separator",
           { command: "tray-hidden", label: "Don't show", checkbox: true },
           { command: "tray-dark-mode", label: "Dark Mode support", checkbox: true },
           "separator",

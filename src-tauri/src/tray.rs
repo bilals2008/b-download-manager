@@ -6,12 +6,13 @@
 //! looking, what the downloads are doing; the tooltip follows the same
 //! `download://update` reports the lists use, so it needs no timer of its own.
 //!
-//! The reader chooses which of the three drawings it uses and whether it is
-//! there at all, in **View > B Download Manager tray icon**. The drawings come
-//! from `scripts/make-icons.py`, in a pair for every style: one for a dark
-//! taskbar and one for a light one. Following the appearance of the window is
-//! the "Dark Mode support" choice; without it the icon keeps the dark drawing
-//! it has always used.
+//! **View > B Download Manager tray icon** decides whether the icon is there
+//! and whether it follows the appearance of the window. The drawings come from
+//! `scripts/make-icons.py`, which packs the application logo into one pair: the
+//! plain mark for a light taskbar, and the same mark under a light rim so its
+//! charcoal half does not disappear into a dark one. Following the appearance
+//! is the "Dark Mode support" choice; without it the icon keeps the dark
+//! drawing.
 //!
 //! Each progress window owns a tray icon of its own (`progress.rs`). This one
 //! belongs to the application and outlives every window.
@@ -28,7 +29,6 @@ use idm_core::downloader::{DownloadInfo, Status};
 use idm_core::log;
 
 use crate::actions;
-use crate::prefs::TrayStyle;
 use crate::state::AppState;
 
 /// The id the rest of the application uses to find this icon.
@@ -172,16 +172,12 @@ fn forget_last_tip() {
     }
 }
 
-/// The drawing of one style on one surface. Both halves of the pair are the
-/// same mark; only the inks change.
-fn drawing(style: TrayStyle, on_light_surface: bool) -> Image<'static> {
-    match (style, on_light_surface) {
-        (TrayStyle::Default, false) => include_image!("./icons/tray-default-on-dark.png"),
-        (TrayStyle::Default, true) => include_image!("./icons/tray-default-on-light.png"),
-        (TrayStyle::ThreeD, false) => include_image!("./icons/tray-3d-on-dark.png"),
-        (TrayStyle::ThreeD, true) => include_image!("./icons/tray-3d-on-light.png"),
-        (TrayStyle::Classic, false) => include_image!("./icons/tray-classic-on-dark.png"),
-        (TrayStyle::Classic, true) => include_image!("./icons/tray-classic-on-light.png"),
+/// The drawing of the application on one surface. Both halves of the pair are
+/// the same logo; only the rim changes.
+fn drawing(on_light_surface: bool) -> Image<'static> {
+    match on_light_surface {
+        false => include_image!("./icons/tray-on-dark.png"),
+        true => include_image!("./icons/tray-on-light.png"),
     }
 }
 
@@ -191,7 +187,7 @@ fn current_drawing(app: &AppHandle) -> Image<'static> {
     let state = app.state::<AppState>();
     let preferences = state.preferences();
     let on_light_surface = preferences.tray_dark_mode && state.appearance_is_light();
-    drawing(preferences.tray_style, on_light_surface)
+    drawing(on_light_surface)
 }
 
 /// Build the application tray and its menu.
@@ -241,13 +237,17 @@ fn install(app: &AppHandle) -> tauri::Result<()> {
 }
 
 /// Repaint the icon that is already up, following the saved style.
+///
+/// The shell often keeps showing the old bitmap after `set_icon` alone, most
+/// visibly when the icon sits in the overflow area. Rebuilding the icon makes
+/// Windows take the new drawing at once; the menu and the tooltip are put back
+/// by the same path that creates them on a fresh start.
 pub fn repaint(app: &AppHandle) {
-    let Some(tray) = app.tray_by_id(TRAY_ID) else {
+    if app.tray_by_id(TRAY_ID).is_none() {
         return;
-    };
-    if let Err(error) = tray.set_icon(Some(current_drawing(app))) {
-        log::write("warn", &format!("the tray icon did not change: {error}"));
     }
+    remove(app);
+    let _ = set_visible(app, true);
 }
 
 /// Put the icon up or take it down, and say whether it is there afterwards.

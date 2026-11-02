@@ -43,12 +43,16 @@ import {
   setShowProgressOnStart,
   setSpeedLimit,
   setVideoButtonSettings,
+  onBrowserPolicy,
 } from "@/lib/ipc";
 import {
+  cleanCaptureType,
+  cleanSite,
   clearLastFolder,
   DEFAULT_SETTINGS,
   loadSettings,
   saveSettings,
+  syncEngineSettings,
   type Settings,
 } from "@/lib/settings";
 import { applyTheme } from "@/lib/theme";
@@ -120,18 +124,70 @@ export function SettingsDialog({
     if (!open) {
       return;
     }
-    const saved = loadSettings();
-    latest.current = saved;
-    setSettings(saved);
-    // The bridge serves the button appearance to the extension, so push what
-    // is saved so open tabs pick it up without reloading.
-    void setVideoButtonSettings({
-      style: saved.videoButtonStyle,
-      label: saved.videoButtonLabel,
-      hover: saved.videoButtonHover,
-    }).catch(() => {});
-    setError(null);
-    setNotice(null);
+    let active = true;
+    const adopt = (saved: Settings) => {
+      if (!active) return;
+      latest.current = saved;
+      setSettings(saved);
+      // The bridge serves the button appearance to the extension, so push
+      // what is saved so open tabs pick it up without reloading.
+      void setVideoButtonSettings({
+        style: saved.videoButtonStyle,
+        label: saved.videoButtonLabel,
+        hover: saved.videoButtonHover,
+      }).catch(() => {});
+      setError(null);
+      setNotice(null);
+    };
+    // The engine's file is the owner of the browser rules, the folders and
+    // the limits. The extension's options page may have changed them since
+    // this window started, so open on the file rather than the local cache.
+    void syncEngineSettings()
+      .then((synced) => adopt(synced ?? loadSettings()))
+      .catch(() => adopt(loadSettings()));
+    return () => {
+      active = false;
+    };
+  }, [open]);
+
+  // The extension can change the capture rules while this window is open.
+  // Its answer is what the app already stored, so the page follows it without
+  // waiting for a restart. A local change that is still being pushed owns the
+  // newer state and keeps the event from overwriting it.
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    let active = true;
+    let cancelled = false;
+    let unlisten: (() => void) | null = null;
+    void onBrowserPolicy((policy) => {
+      if (!active || pushTimer.current) return;
+      const next: Settings = {
+        ...latest.current,
+        browserCapture: policy.capture === true,
+        captureAsk: policy.ask === true,
+        captureTypes: policy.types.map(cleanCaptureType).filter(Boolean),
+        skipSites: policy.skipSites.map(cleanSite).filter(Boolean),
+      };
+      latest.current = next;
+      setSettings(next);
+      saveSettings(next);
+      broadcastSettings();
+    })
+      .then((off) => {
+        if (cancelled) off();
+        else unlisten = off;
+      })
+      .catch(() => {
+        // An older backend does not emit this event; the file is still read
+        // the next time this window opens.
+      });
+    return () => {
+      active = false;
+      cancelled = true;
+      unlisten?.();
+    };
   }, [open]);
 
   useEffect(

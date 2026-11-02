@@ -3,23 +3,10 @@
  *
  * They are saved by the backend, beside the close and minimize choices, in
  * `desktop.json`: the icon has to be right before a window has read anything.
- * This file only holds the model — the names the menu prints, and the rules
- * the URL list follows. `src-tauri/src/prefs.rs` applies the same rules to the
- * list before it is saved, so what the dialog shows is what the clipboard
- * watch matches.
+ * This file only holds the model — the rules the URL list follows.
+ * `src-tauri/src/prefs.rs` applies the same rules to the list before it is
+ * saved, so what the dialog shows is what the clipboard watch matches.
  */
-
-/** How the tray icon is drawn. */
-export type TrayStyle = "default" | "3d" | "classic";
-
-/** The three drawings, in the order the menu lists them. */
-export const TRAY_STYLES: readonly { value: TrayStyle; label: string }[] = [
-  { value: "default", label: "Default style" },
-  { value: "3d", label: "3D style" },
-  { value: "classic", label: "Classic style" },
-];
-
-export const DEFAULT_TRAY_STYLE: TrayStyle = "default";
 
 /**
  * The protocols a copied address has to start with to be offered as a
@@ -66,7 +53,6 @@ export function normalizeUrlProtocols(
 
 /** The tray choices, as the backend saved them. */
 export interface TrayPreferences {
-  style: TrayStyle;
   /** "Don't show" in the menu. */
   hidden: boolean;
   /** "Dark Mode support" in the menu. */
@@ -76,7 +62,6 @@ export interface TrayPreferences {
 }
 
 export const DEFAULT_TRAY_PREFERENCES: TrayPreferences = {
-  style: DEFAULT_TRAY_STYLE,
   hidden: false,
   darkMode: false,
   urlProtocols: [...DEFAULT_URL_PROTOCOLS],
@@ -89,13 +74,11 @@ export const DEFAULT_TRAY_PREFERENCES: TrayPreferences = {
  * reads the rest of `desktop.json`.
  */
 export function trayPreferencesFrom(saved: {
-  trayStyle: TrayStyle;
   trayHidden: boolean;
   trayDarkMode: boolean;
   urlProtocols: string[];
 }): TrayPreferences {
   return {
-    style: saved.trayStyle,
     hidden: saved.trayHidden,
     darkMode: saved.trayDarkMode,
     urlProtocols: normalizeUrlProtocols(saved.urlProtocols),

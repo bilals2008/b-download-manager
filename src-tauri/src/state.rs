@@ -9,8 +9,6 @@ use idm_core::downloader::{Download, DownloadInfo, Status};
 use idm_core::limits::Limits;
 use idm_core::session::{Index, KnownDownload};
 
-use crate::bridge::auth;
-use crate::pairing::{self, Pairing};
 use crate::prefs::{self, DesktopPreferences};
 use crate::queue::Queue;
 use crate::settings_store::{self, EngineSettings};
@@ -97,6 +95,10 @@ pub struct AppState {
     /// user picks a quality.
     next_media_id: AtomicU64,
     media_jobs: Mutex<HashMap<u64, MediaJob>>,
+    /// Old job ids and the job they were merged into. The extension may still
+    /// be watching the first id it was given, so it has to keep answering with
+    /// the merged job instead of "unknown media job".
+    media_aliases: Mutex<HashMap<u64, u64>>,
     /// Held while a file candidate is merged into an earlier one, so two
     /// candidates from the same page cannot both find no target.
     media_gate: Mutex<()>,
@@ -116,10 +118,6 @@ pub struct AppState {
     /// The last time the extension reached the bridge, in seconds since the
     /// Unix epoch. Zero means it has not reached it yet.
     last_extension_contact: AtomicU64,
-    /// The bridge's secret and the extension origin that first proved it knew
-    /// the secret. Kept in a file of its own, not in the settings file.
-    pairing: Mutex<Pairing>,
-    pairing_path: Mutex<Option<PathBuf>>,
     /// What the minimize and close buttons mean, and where that choice is
     /// kept. The file is loaded before the tray is built, so an early close
     /// already follows the user's choice.
@@ -170,6 +168,7 @@ impl Default for AppState {
             downloads: Mutex::new(HashMap::new()),
             next_media_id: AtomicU64::new(1),
             media_jobs: Mutex::new(HashMap::new()),
+            media_aliases: Mutex::new(HashMap::new()),
             media_gate: Mutex::new(()),
             limits: Limits::default(),
             index: Mutex::new(None),
@@ -179,8 +178,6 @@ impl Default for AppState {
             browser_connections: AtomicU32::new(8),
             bridge_running: AtomicBool::new(false),
             last_extension_contact: AtomicU64::new(0),
-            pairing: Mutex::new(Pairing::default()),
-            pairing_path: Mutex::new(None),
             preferences: Mutex::new(DesktopPreferences::default()),
             preferences_path: Mutex::new(None),
             engine_settings: Mutex::new(EngineSettings::default()),
@@ -232,6 +229,7 @@ impl AppState {
     }
 
     pub fn media_job(&self, id: u64) -> Option<MediaJob> {
+        let id = self.resolve_media_id(id);
         self.media_jobs
             .lock()
             .expect("media jobs lock poisoned")
@@ -239,10 +237,38 @@ impl AppState {
             .cloned()
     }
 
+    /// The live job a fresh registration for the same manifest belongs to.
+    ///
+    /// The extension asks for a manifest every time the reader opens the
+    /// quality list, so without this a second click would create a second job
+    /// for the same address and the merge below would retire the id the
+    /// extension is watching. Reusing the live job keeps every watcher on one
+    /// id. A finished or running job is left alone: it is not a list to merge
+    /// new tracks into.
+    pub fn media_job_for_manifest(&self, manifest_url: &str) -> Option<u64> {
+        let manifest_url = manifest_url.trim();
+        if manifest_url.is_empty() {
+            return None;
+        }
+        self.media_jobs
+            .lock()
+            .expect("media jobs lock poisoned")
+            .values()
+            .filter(|job| {
+                job.manifest_url == manifest_url
+                    && !job.downloading
+                    && !job.done
+                    && matches!(job.state, MediaState::Parsing | MediaState::Ready)
+            })
+            .map(|job| job.id)
+            .max()
+    }
+
     /// Change one job under the lock, so two updates cannot overwrite each
     /// other. A job that is gone is not an error: the window may have been
     /// closed while its parsing task was still running.
     pub fn update_media_job(&self, id: u64, change: impl FnOnce(&mut MediaJob)) {
+        let id = self.resolve_media_id(id);
         if let Some(job) = self
             .media_jobs
             .lock()
@@ -251,6 +277,48 @@ impl AppState {
         {
             change(job);
         }
+    }
+
+    /// Follow an id that was merged into another one to the job that now holds
+    /// the tracks. An id that was never merged resolves to itself.
+    pub fn resolve_media_id(&self, id: u64) -> u64 {
+        let aliases = self
+            .media_aliases
+            .lock()
+            .expect("media aliases lock poisoned");
+        let mut current = id;
+        // A chain cannot be longer than the number of merges it took to make
+        // it; the bound only keeps a hand-made cycle from looping forever.
+        for _ in 0..32 {
+            match aliases.get(&current) {
+                Some(next) => current = *next,
+                None => break,
+            }
+        }
+        current
+    }
+
+    /// Retire a merged job without breaking a watcher that still holds its id.
+    ///
+    /// The tracks themselves are copied into `target` before this is called;
+    /// every later request for `from` — a poll, a start, a cancel — is answered
+    /// by `target` instead of a 404.
+    pub fn alias_media_job(&self, from: u64, target: u64) {
+        let target = self.resolve_media_id(target);
+        self.media_jobs
+            .lock()
+            .expect("media jobs lock poisoned")
+            .remove(&from);
+        let mut aliases = self
+            .media_aliases
+            .lock()
+            .expect("media aliases lock poisoned");
+        for current in aliases.values_mut() {
+            if *current == from {
+                *current = target;
+            }
+        }
+        aliases.insert(from, target);
     }
 
     /// Hold the merge check and the merge together.
@@ -283,10 +351,15 @@ impl AppState {
     }
 
     pub fn remove_media_job(&self, id: u64) {
+        let id = self.resolve_media_id(id);
         self.media_jobs
             .lock()
             .expect("media jobs lock poisoned")
             .remove(&id);
+        self.media_aliases
+            .lock()
+            .expect("media aliases lock poisoned")
+            .retain(|_, target| *target != id);
     }
 
     pub fn insert(&self, download: Arc<Download>) {
@@ -598,99 +671,6 @@ impl AppState {
         match self.last_extension_contact.load(Ordering::SeqCst) {
             0 => None,
             seconds => Some(seconds),
-        }
-    }
-
-    /// Point the state at the pairing file and read it, making a token on the
-    /// spot when the file has none.
-    ///
-    /// Called once during setup, before the bridge binds: the bridge needs a
-    /// secret to compare against for the very first request, and the settings
-    /// page needs a real one to show rather than a blank field.
-    pub fn set_pairing_path(&self, path: PathBuf) {
-        let record = pairing::open(&path);
-        *self.pairing.lock().expect("pairing lock poisoned") = record;
-        *self
-            .pairing_path
-            .lock()
-            .expect("pairing path lock poisoned") = Some(path);
-    }
-
-    /// The bridge's secret and the extension origin it has been accepted from.
-    pub fn bridge_pairing(&self) -> Pairing {
-        self.pairing.lock().expect("pairing lock poisoned").clone()
-    }
-
-    /// The secret every authenticated bridge request has to carry. Empty until
-    /// a pairing file has been read, which leaves the bridge refusing
-    /// everything but its own ping.
-    pub fn bridge_token(&self) -> String {
-        self.pairing
-            .lock()
-            .expect("pairing lock poisoned")
-            .token
-            .clone()
-    }
-
-    /// The extension origin this token has already been accepted from, `None`
-    /// while the reader has not paired a browser yet.
-    pub fn paired_origin(&self) -> Option<String> {
-        let origin = self
-            .pairing
-            .lock()
-            .expect("pairing lock poisoned")
-            .origin
-            .clone();
-        (!origin.is_empty()).then_some(origin)
-    }
-
-    /// Remember the extension origin a matching token arrived from, once.
-    ///
-    /// The pairing is the reader's own act — they pasted the token into one
-    /// extension — so the first extension to present it is the one they chose,
-    /// and after that the bridge answers that origin and no other. An empty
-    /// origin is a local caller with no origin header at all, which is not
-    /// something worth pinning.
-    pub fn note_paired_origin(&self, origin: &str) {
-        let changed = {
-            let mut record = self.pairing.lock().expect("pairing lock poisoned");
-            if !record.origin.is_empty() || origin.is_empty() || !auth::is_extension_origin(origin)
-            {
-                false
-            } else {
-                record.origin = origin.to_string();
-                true
-            }
-        };
-        if changed {
-            self.save_pairing();
-        }
-    }
-
-    /// Take a fresh token and forget which extension was paired. The reader
-    /// uses this after a reinstall, a moved profile, or a pairing they no
-    /// longer recognise; the old token stops working at once.
-    pub fn rotate_pairing(&self) -> Pairing {
-        let record = Pairing::fresh();
-        *self.pairing.lock().expect("pairing lock poisoned") = record.clone();
-        self.save_pairing();
-        record
-    }
-
-    /// Write the pairing to its file, when one was chosen. A failure is logged
-    /// rather than refused: the token still works for this run.
-    pub fn save_pairing(&self) {
-        let record = self.bridge_pairing();
-        let Some(path) = self
-            .pairing_path
-            .lock()
-            .expect("pairing path lock poisoned")
-            .clone()
-        else {
-            return;
-        };
-        if let Err(error) = pairing::save(&path, &record) {
-            idm_core::log::write("warn", &error);
         }
     }
 
@@ -1124,6 +1104,85 @@ mod tests {
             "a file the engine did not write stays"
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn ready_job(id: u64, manifest_url: &str) -> MediaJob {
+        use crate::video::{MediaKindHint, MediaState};
+        use idm_core::media::{Format, Manifest, MediaKind};
+
+        let mut job = MediaJob::new(
+            id,
+            "https://www.example.org/watch?v=1".to_string(),
+            manifest_url.to_string(),
+            MediaKindHint::File,
+            "Film".to_string(),
+            "https://www.example.org/watch?v=1".to_string(),
+            Vec::new(),
+            None,
+        );
+        job.state = MediaState::Ready;
+        job.manifest = Some(Manifest {
+            title: "Film".to_string(),
+            duration: None,
+            formats: vec![Format::new("137", MediaKind::Video, "mp4")],
+            pairs: Vec::new(),
+            container_hint: Some("file".to_string()),
+        });
+        job
+    }
+
+    #[test]
+    fn a_merged_job_keeps_answering_for_the_id_the_extension_watches() {
+        let state = AppState::default();
+        state.insert_media_job(ready_job(1, "https://cdn.example.org/a.mp4"));
+        state.insert_media_job(ready_job(2, "https://cdn.example.org/b.mp4"));
+
+        state.alias_media_job(2, 1);
+
+        assert_eq!(
+            state.media_job(2).map(|job| job.id),
+            Some(1),
+            "the old id resolves to the job that now holds the tracks"
+        );
+        state.update_media_job(2, |job| job.title = "Changed".to_string());
+        assert_eq!(
+            state.media_job(1).map(|job| job.title),
+            Some("Changed".to_string()),
+            "a write through the old id lands on the merged job"
+        );
+        assert!(
+            state.media_jobs_snapshot().iter().all(|job| job.id != 2),
+            "the retired id is not a second row"
+        );
+
+        state.remove_media_job(2);
+        assert!(
+            state.media_job(1).is_none(),
+            "forget removes the merged job"
+        );
+        assert!(state.media_job(2).is_none(), "and every alias with it");
+    }
+
+    #[test]
+    fn a_manifest_that_is_already_open_reuses_its_job() {
+        let state = AppState::default();
+        state.insert_media_job(ready_job(4, "https://cdn.example.org/a.mp4"));
+
+        assert_eq!(
+            state.media_job_for_manifest("https://cdn.example.org/a.mp4"),
+            Some(4)
+        );
+        assert_eq!(
+            state.media_job_for_manifest("https://cdn.example.org/other.mp4"),
+            None
+        );
+
+        state.update_media_job(4, |job| job.done = true);
+        assert_eq!(
+            state.media_job_for_manifest("https://cdn.example.org/a.mp4"),
+            None,
+            "a finished job is not a list to open again"
+        );
     }
 
     #[test]

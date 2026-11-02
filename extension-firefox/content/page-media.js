@@ -41,8 +41,11 @@ function bdmSourcesFor(element) {
     if (!value) return;
     try {
       const url = new URL(value, location.href);
-      if (!bdmIsDownloadableSource(url.href)) return;
-      if (!urls.includes(url.href)) urls.push(url.href);
+      // An element can name one byte range of the file it plays; the app
+      // needs the whole-file address.
+      const href = bdmFullMediaUrl(url.href);
+      if (!bdmIsDownloadableSource(href)) return;
+      if (!urls.includes(href)) urls.push(href);
     } catch {
       // A malformed address is not worth showing.
     }
@@ -119,12 +122,15 @@ function bdmRememberMediaRequest(url) {
     }
     return true;
   }
-  if (!bdmIsCapturedMedia(url)) return false;
-  const key = bdmMediaKey(url);
+  // A player asks for one file a range at a time. The whole-file address is
+  // what the application can fetch, and it is also the key two ranges share.
+  const full = bdmFullMediaUrl(url);
+  if (!bdmIsCapturedMedia(full)) return false;
+  const key = bdmMediaKey(full);
   if (capturedKeys.has(key)) return false;
 
   capturedKeys.add(key);
-  captured.push({ url: bdmFullMediaUrl(url), key });
+  captured.push({ url: full, key });
   if (captured.length > BDM_CAPTURED_LIMIT) {
     capturedKeys.delete(captured.shift().key);
   }

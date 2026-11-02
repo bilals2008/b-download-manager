@@ -102,6 +102,15 @@ pub async fn register(app: &AppHandle, body: &[u8]) -> (u16, Value) {
     let state = app.state::<AppState>();
     let host = super::host_of(&page_url, &manifest_url);
     let preferred = state.video_quality(&host);
+    let inline = request.presentation.eq_ignore_ascii_case("inline");
+
+    // Opening the quality list again asks for the same manifest a second time.
+    // The live job already holds it, so it is returned instead of creating a
+    // twin that the merge below would then have to retire.
+    if let Some(existing) = state.media_job_for_manifest(&manifest_url) {
+        state.update_media_job(existing, |job| job.inline = inline);
+        return (202, ok(json!({ "job": existing })));
+    }
 
     // The headers are scoped here and nowhere else: allowed names only, the
     // manifest's origin only. A cookie or an authorization value waits for
@@ -130,7 +139,7 @@ pub async fn register(app: &AppHandle, body: &[u8]) -> (u16, Value) {
     job.offered_headers = scoped.headers;
     job.cookies_offered = sensitive;
     job.cookie_consent = consent;
-    job.inline = request.presentation.eq_ignore_ascii_case("inline");
+    job.inline = inline;
     state.insert_media_job(job);
 
     let handle = app.clone();
@@ -427,7 +436,11 @@ async fn parse_job(app: AppHandle, id: u64) {
                             merged = true;
                         });
                         if merged {
-                            state.remove_media_job(id);
+                            // The extension is still watching the id it was
+                            // given. Keep that id answerable by pointing it at
+                            // the merged job instead of letting the next poll
+                            // read "unknown media job".
+                            state.alias_media_job(id, target_id);
                             return;
                         }
                     }

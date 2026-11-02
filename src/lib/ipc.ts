@@ -8,7 +8,6 @@ import {
   type CategoryDefinition,
 } from "@/lib/categories";
 
-import type { TrayStyle } from "@/lib/tray";
 import type { DownloadInfo } from "@/types";
 
 export function onDownloadUpdate(
@@ -38,6 +37,15 @@ export function onBridgeDownload(
   handler: (payload: BridgeDownload) => void,
 ): Promise<UnlistenFn> {
   return listen<BridgeDownload>("bridge://download", (event) =>
+    handler(event.payload),
+  );
+}
+
+/** The capture rules the extension's options page just wrote. */
+export function onBrowserPolicy(
+  handler: (policy: BrowserPolicyInput) => void,
+): Promise<UnlistenFn> {
+  return listen<BrowserPolicyInput>("settings://browser-policy", (event) =>
     handler(event.payload),
   );
 }
@@ -370,8 +378,6 @@ export function setMaxConnections(max: number): Promise<number> {
 export interface DesktopPreferences {
   minimizeToTray: boolean;
   closeToTray: boolean;
-  /** Which of the three drawings the tray icon uses. */
-  trayStyle: TrayStyle;
   /** "Don't show": the icon is out of the notification area. */
   trayHidden: boolean;
   /** "Dark Mode support": the icon follows the appearance of the window. */
@@ -388,11 +394,6 @@ export function setMinimizeToTray(on: boolean): Promise<boolean> {
 /** Whether closing the window keeps the application in the tray. */
 export function setCloseToTray(on: boolean): Promise<boolean> {
   return invoke<boolean>("set_close_to_tray", { on });
-}
-
-/** Which drawing the tray icon uses. Resolves with the one now in force. */
-export function setTrayStyle(style: TrayStyle): Promise<TrayStyle> {
-  return invoke<TrayStyle>("set_tray_style", { style });
 }
 
 /** Take the tray icon out of the notification area, or put it back. */
@@ -564,33 +565,12 @@ export interface BrowserStatus {
   bridgeRunning: boolean;
   port: number;
   api: number;
-  /** The last authenticated extension request, in Unix milliseconds. */
+  /** The last extension request, in Unix milliseconds. */
   lastContactMs: number | null;
-  /** The extension that has used the pairing code, in its own origin. */
-  pairedExtension: string | null;
 }
 
 export function browserStatus(): Promise<BrowserStatus> {
   return invoke<BrowserStatus>("browser_status");
-}
-
-/** The pairing the Browser page shows: the code, the browser using it, and
- *  the file that keeps it. */
-export interface BridgePairing {
-  /** The code to paste into the extension. Empty when the app could not make
-   *  one, which leaves the bridge refusing everything but its ping. */
-  token: string;
-  pairedExtension: string | null;
-  filePath: string;
-}
-
-export function bridgePairing(): Promise<BridgePairing> {
-  return invoke<BridgePairing>("bridge_pairing");
-}
-
-/** Replace the pairing code. The old one stops working at once. */
-export function rotateBridgeToken(): Promise<BridgePairing> {
-  return invoke<BridgePairing>("rotate_bridge_token");
 }
 
 /** Whether a folder can hold a download, and how much room is left. */

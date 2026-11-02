@@ -50,12 +50,9 @@ export type ShellCommand =
   | "toolbar-new"
   /** `toolbar-pack:<id>` switches the button bar to an installed pack. */
   | `toolbar-pack:${string}`
-  // View > B Download Manager tray icon. The three styles are a group, the
-  // next two are switches, and the last one opens the dialog of protocols the
-  // clipboard watch offers.
-  | "tray-default"
-  | "tray-3d"
-  | "tray-classic"
+  // View > B Download Manager tray icon. Two switches, and the dialog of the
+  // protocols the clipboard watch offers.
+  | "tray-menu"
   | "tray-hidden"
   | "tray-customize-list"
   | "tray-dark-mode"

@@ -1,11 +1,13 @@
-//! The loopback bridge the Firefox extension talks to.
+//! The loopback bridge the browser extension talks to.
 //!
 //! The extension cannot call Tauri's IPC, so the application offers it a small
 //! JSON API on the loopback interface. Only this machine can reach the port,
-//! and every request has to carry the extension's client header, so a web page
-//! cannot start a download with an `<img>` tag. The endpoint the browser uses
-//! is also the one the extension's popup uses to read progress and to pause,
-//! resume or stop a download.
+//! only under its own address, and only a caller that presents an extension
+//! origin and the extension's client header, so a web page cannot start a
+//! download with an `<img>` tag. There is no code to copy and nothing to pair:
+//! install the app, install the extension, and they find each other. The
+//! endpoint the browser uses is also the one the extension's popup uses to read
+//! progress and to pause, resume or stop a download.
 //!
 //! The contract is versioned: the extension says which API it expects in the
 //! `X-BDM-Client` value and falls back to an offline state when the ping does
@@ -128,11 +130,7 @@ async fn serve(app: AppHandle, mut stream: tokio::net::TcpStream) -> std::io::Re
     };
 
     let state = app.state::<AppState>();
-    let gate = gate(
-        &request,
-        &state.bridge_token(),
-        state.paired_origin().as_deref(),
-    );
+    let gate = gate(&request);
 
     if let Some(denial) = gate.denial {
         log::write(
@@ -145,10 +143,7 @@ async fn serve(app: AppHandle, mut stream: tokio::net::TcpStream) -> std::io::Re
     if request.method == "OPTIONS" {
         let headers = [
             ("Access-Control-Allow-Methods", "GET, POST, OPTIONS"),
-            (
-                "Access-Control-Allow-Headers",
-                "Content-Type, X-BDM-Client, Authorization",
-            ),
+            ("Access-Control-Allow-Headers", "Content-Type, X-BDM-Client"),
             ("Access-Control-Max-Age", "600"),
         ];
         return http::write(
@@ -162,21 +157,13 @@ async fn serve(app: AppHandle, mut stream: tokio::net::TcpStream) -> std::io::Re
         .await;
     }
 
-    // The first extension to present the code is the one the reader paired, and
-    // from then on the bridge answers that origin and no other.
-    if let Some(origin) = gate.pin {
-        state.note_paired_origin(&origin);
-    }
-
-    // Only a request that carried the token counts as the extension having
-    // reached the application, so a stray page cannot make the window say it
-    // is connected. The ping is how an unpaired extension says it is there,
-    // but it is not a hand-over until it can prove it is the paired one.
-    if gate.paired {
+    // A request from an extension origin is the browser reaching the
+    // application, so the window can say it is connected without a guess.
+    if gate.extension {
         state.touch_extension();
     }
 
-    let (status, body) = route(&app, &request, gate.paired).await;
+    let (status, body) = route(&app, &request, gate.extension).await;
     let bytes = serde_json::to_vec(&body).unwrap_or_else(|_| {
         serde_json::to_vec(&error_body("internal", "the answer could not be written"))
             .unwrap_or_default()
@@ -194,61 +181,39 @@ async fn serve(app: AppHandle, mut stream: tokio::net::TcpStream) -> std::io::Re
 
 /// What the rule set says about one request, before any route runs.
 ///
-/// Kept apart from the socket so the whole matrix — the code, the origin, the
-/// host, the preflight, the ping — is testable as a plain function.
+/// Kept apart from the socket so the whole matrix — the origin, the host, the
+/// preflight — is testable as a plain function.
 struct Gate {
     /// The refusal to answer with, when the request does not pass.
     denial: Option<Denial>,
-    /// The caller presented the pairing code, so this is the paired extension.
-    paired: bool,
+    /// The caller carries an extension origin, so it is the browser.
+    extension: bool,
     /// The origin to echo back in the CORS header: the extension's, never a
     /// page's.
     cors: Option<String>,
-    /// The extension origin to remember as the paired one, when nothing is
-    /// pinned yet and this caller knows the code.
-    pin: Option<String>,
 }
 
-fn gate(request: &Request, token: &str, pinned: Option<&str>) -> Gate {
+fn gate(request: &Request) -> Gate {
     let cors = request
         .header("origin")
         .filter(|origin| is_extension_origin(origin))
         .map(str::to_string);
-    let ping = request.method == "GET" && request.path() == "/v1/ping";
-    let known = auth::is_authorized(request, token);
-    let mut denial = auth::check(request, token, !ping).err();
-
-    // The code is the proof, and one proof belongs to one extension: once an
-    // origin has used it, a second one that learned the same code is refused
-    // even though it passes every other rule.
-    if let (Some(pinned), Some(origin)) = (pinned, request.header("origin")) {
-        if known && pinned != origin {
-            denial = Some(Denial::FOREIGN_EXTENSION);
-        }
-    }
-
-    // Only a request that passed everything and is not a preflight can pin:
-    // a preflight carries no code, and a refusal has proved nothing.
-    let pin = if known && denial.is_none() && request.method != "OPTIONS" && pinned.is_none() {
-        cors.clone()
-    } else {
-        None
-    };
+    let denial = auth::check(request).err();
 
     Gate {
         denial,
-        paired: known && denial.is_none(),
+        extension: denial.is_none() && request.method != "OPTIONS" && cors.is_some(),
         cors,
-        pin,
     }
 }
 
 /// The routes of API version 1.
-async fn route(app: &AppHandle, request: &Request, paired: bool) -> (u16, Value) {
+async fn route(app: &AppHandle, request: &Request, connected: bool) -> (u16, Value) {
     let path = request.path();
     match (request.method.as_str(), path) {
-        ("GET", "/v1/ping") => (200, ok(ping(paired))),
+        ("GET", "/v1/ping") => (200, ok(ping(connected))),
         ("GET", "/v1/capture") => (200, ok(capture_policy(app))),
+        ("POST", "/v1/capture") => set_capture_policy(app, &request.body),
         ("GET", "/v1/video-button-settings") => (200, ok(video_button_settings(app))),
         ("POST", "/v1/media") => crate::video::capture::register(app, &request.body).await,
         ("GET", "/v1/downloads") => (200, ok(downloads(app))),
@@ -298,16 +263,16 @@ async fn route(app: &AppHandle, request: &Request, paired: bool) -> (u16, Value)
 
 type Request = http::Request;
 
-/// What the extension says about itself. `paired` tells an extension that
-/// reached the port whether the token it sent is the one the application
-/// generated, so the popup can say "not paired" instead of guessing.
-fn ping(paired: bool) -> Value {
+/// What the extension says about itself. `connected` tells a caller that the
+/// application heard the header that only the extension sends, so the popup can
+/// say "connected" instead of guessing.
+fn ping(connected: bool) -> Value {
     json!({
         "app": APP_ID,
         "api": API_VERSION,
         "version": env!("CARGO_PKG_VERSION"),
         "port": PORT,
-        "paired": paired,
+        "connected": connected,
     })
 }
 
@@ -323,6 +288,98 @@ fn capture_policy(app: &AppHandle) -> Value {
         "types": policy.types,
         "skipSites": policy.skip_sites,
     })
+}
+
+/// What the extension sends when the reader changes a capture rule there.
+///
+/// Every field is optional: an older extension that only knows two of them
+/// leaves the rest as the app has them instead of resetting them.
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+struct CaptureRequest {
+    capture: Option<bool>,
+    ask: Option<bool>,
+    types: Option<Vec<String>>,
+    skip_sites: Option<Vec<String>>,
+}
+
+/// The longest list of rules the bridge accepts. The app's own Settings page
+/// keeps the same ceiling.
+const MAX_CAPTURE_RULES: usize = 64;
+const MAX_CAPTURE_RULE: usize = 128;
+
+/// Lower-case, trimmed, without blanks or repeats. Junk is dropped rather than
+/// stored, because the app's Settings page shows this list back to the reader.
+fn clean_capture_rules(values: Vec<String>) -> Vec<String> {
+    let mut out = Vec::new();
+    for value in values {
+        let entry = value.trim().to_ascii_lowercase();
+        if entry.is_empty()
+            || entry.len() > MAX_CAPTURE_RULE
+            || entry
+                .chars()
+                .any(|character| character.is_whitespace() || character.is_control())
+        {
+            continue;
+        }
+        if !out.contains(&entry) {
+            out.push(entry);
+        }
+        if out.len() >= MAX_CAPTURE_RULES {
+            break;
+        }
+    }
+    out
+}
+
+/// `POST /v1/capture`
+///
+/// The extension's options page edits the same rules the app's Settings page
+/// does. Writing them here goes through the engine's settings file, so both
+/// pages, a restart and the next hand-over all see one answer.
+fn set_capture_policy(app: &AppHandle, body: &[u8]) -> (u16, Value) {
+    let request: CaptureRequest = match serde_json::from_slice(body) {
+        Ok(request) => request,
+        Err(error) => {
+            return (
+                400,
+                error_body(
+                    "bad_request",
+                    format!("the body could not be read: {error}"),
+                ),
+            )
+        }
+    };
+
+    let state = app.state::<AppState>();
+    let mut policy = state.browser_policy();
+    if let Some(capture) = request.capture {
+        policy.capture = capture;
+    }
+    if let Some(ask) = request.ask {
+        policy.ask = ask;
+    }
+    if let Some(types) = request.types {
+        policy.types = clean_capture_rules(types);
+    }
+    if let Some(sites) = request.skip_sites {
+        policy.skip_sites = clean_capture_rules(sites);
+    }
+
+    state.modify_settings(|settings| settings.browser_policy = policy.clone());
+    state.set_browser_policy(policy.clone());
+    // The settings window has the old rules open; tell it what the extension
+    // just wrote instead of leaving it to find out after a restart.
+    let _ = app.emit("settings://browser-policy", capture_policy(app));
+    log::write(
+        "info",
+        &format!(
+            "the extension set the capture rules: capture={}, ask={}",
+            policy.capture, policy.ask
+        ),
+    );
+
+    (200, ok(capture_policy(app)))
 }
 
 /// The list the popup polls, and the number the section caption shows.
@@ -632,8 +689,8 @@ pub(crate) fn error_body(code: &str, message: impl Into<String>) -> Value {
 }
 
 /// Answer a request with a JSON error. The origin is echoed only when it was
-/// the extension's, so a paired extension can read a 401 and say "not paired"
-/// instead of reporting the application as offline.
+/// the extension's, so a refusal can be read in the browser instead of looking
+/// like an application that is not running.
 async fn refuse(
     stream: &mut tokio::net::TcpStream,
     denial: Denial,
@@ -677,9 +734,7 @@ enum Mode {
 mod tests {
     use super::*;
 
-    const CODE: &str = "0123456789abcdef0123456789abcdef0123456789abcdef";
-    const PAIRED_ORIGIN: &str = "moz-extension://3c1e8f2a-1";
-    const OTHER_ORIGIN: &str = "chrome-extension://abcdef123456";
+    const EXTENSION_ORIGIN: &str = "moz-extension://3c1e8f2a-1";
 
     fn request(method: &str, path: &str, headers: &[(&str, &str)]) -> Request {
         let mut all = vec![("host", "127.0.0.1:27500")];
@@ -687,129 +742,69 @@ mod tests {
         Request::for_test(method, path, &all, b"")
     }
 
-    fn extension(path: &str, origin: &str) -> Request {
+    fn extension(method: &str, path: &str, origin: &str) -> Request {
         request(
-            "GET",
+            method,
             path,
-            &[
-                ("origin", origin),
-                ("x-bdm-client", auth::CLIENT_VALUE),
-                ("authorization", &format!("Bearer {CODE}")),
-            ],
+            &[("origin", origin), ("x-bdm-client", auth::CLIENT_VALUE)],
         )
     }
 
     #[test]
-    fn an_unpaired_download_request_is_refused_and_not_called_paired() {
-        let gate = gate(
-            &request(
-                "POST",
-                "/v1/downloads",
-                &[
-                    ("origin", PAIRED_ORIGIN),
-                    ("x-bdm-client", auth::CLIENT_VALUE),
-                ],
-            ),
-            CODE,
-            None,
-        );
-        assert_eq!(gate.denial.map(|denial| denial.status), Some(401));
-        assert!(!gate.paired);
-        assert_eq!(gate.pin, None);
-    }
-
-    #[test]
-    fn the_ping_is_open_but_does_not_claim_a_pairing() {
-        let gate = gate(
-            &request(
-                "GET",
-                "/v1/ping",
-                &[
-                    ("origin", PAIRED_ORIGIN),
-                    ("x-bdm-client", auth::CLIENT_VALUE),
-                ],
-            ),
-            CODE,
-            None,
-        );
-        assert_eq!(
-            gate.denial, None,
-            "an unpaired extension must get an answer"
-        );
-        assert!(!gate.paired, "so the popup says not paired, not connected");
-    }
-
-    #[test]
-    fn a_code_presented_for_the_first_time_pins_its_extension() {
-        let gate = gate(&extension("/v1/downloads", PAIRED_ORIGIN), CODE, None);
+    fn an_extension_is_recognised_without_any_code() {
+        let gate = gate(&extension("GET", "/v1/downloads", EXTENSION_ORIGIN));
         assert_eq!(gate.denial, None);
-        assert!(gate.paired);
-        assert_eq!(gate.pin.as_deref(), Some(PAIRED_ORIGIN));
+        assert!(gate.extension);
+        assert_eq!(gate.cors.as_deref(), Some(EXTENSION_ORIGIN));
     }
 
     #[test]
-    fn the_pinned_extension_is_the_only_one_the_code_unlocks() {
-        let same = gate(
-            &extension("/v1/downloads", PAIRED_ORIGIN),
-            CODE,
-            Some(PAIRED_ORIGIN),
-        );
-        assert_eq!(same.denial, None);
-        assert!(same.paired);
-        assert_eq!(same.pin, None, "nothing new to remember");
-
-        let thief = gate(
-            &extension("/v1/downloads", OTHER_ORIGIN),
-            CODE,
-            Some(PAIRED_ORIGIN),
-        );
-        assert_eq!(
-            thief.denial.map(|denial| denial.code),
-            Some(auth::Denial::FOREIGN_EXTENSION.code),
-            "another extension with the same code is refused"
-        );
-        assert!(!thief.paired);
-        assert_eq!(thief.pin, None);
+    fn a_download_without_the_extension_header_is_refused() {
+        let gate = gate(&request(
+            "POST",
+            "/v1/downloads",
+            &[("origin", EXTENSION_ORIGIN)],
+        ));
+        assert_eq!(gate.denial.map(|denial| denial.status), Some(403));
+        assert!(!gate.extension);
     }
 
     #[test]
-    fn a_preflight_never_pins_even_when_it_could_pass() {
-        let gate = gate(
-            &request("OPTIONS", "/v1/downloads", &[("origin", PAIRED_ORIGIN)]),
-            CODE,
-            None,
-        );
+    fn the_ping_is_open_and_still_names_the_application() {
+        let gate = gate(&extension("GET", "/v1/ping", EXTENSION_ORIGIN));
         assert_eq!(gate.denial, None);
-        assert_eq!(gate.pin, None, "a preflight carries no proof");
+        assert!(gate.extension, "the popup can say it is connected");
     }
 
     #[test]
-    fn a_local_caller_without_an_origin_is_not_pinned() {
-        let gate = gate(
-            &request(
-                "GET",
-                "/v1/downloads",
-                &[
-                    ("x-bdm-client", auth::CLIENT_VALUE),
-                    ("authorization", &format!("Bearer {CODE}")),
-                ],
-            ),
-            CODE,
-            Some(PAIRED_ORIGIN),
+    fn a_preflight_passes_but_does_not_count_as_a_contact() {
+        let gate = gate(&request(
+            "OPTIONS",
+            "/v1/downloads",
+            &[("origin", EXTENSION_ORIGIN)],
+        ));
+        assert_eq!(gate.denial, None);
+        assert!(
+            !gate.extension,
+            "a preflight is not the browser reaching us"
         );
-        assert_eq!(gate.denial, None, "no origin is nothing to compare");
-        assert!(gate.paired);
-        assert_eq!(gate.pin, None);
+    }
+
+    #[test]
+    fn a_local_caller_without_an_origin_is_answered_but_not_called_connected() {
+        let gate = gate(&request(
+            "GET",
+            "/v1/downloads",
+            &[("x-bdm-client", auth::CLIENT_VALUE)],
+        ));
+        assert_eq!(gate.denial, None, "no origin is nothing to refuse");
+        assert!(!gate.extension);
         assert_eq!(gate.cors, None, "and it gets no CORS header back");
     }
 
     #[test]
-    fn a_page_or_a_wrong_host_is_refused_before_the_code_matters() {
-        let page = gate(
-            &extension("/v1/downloads", "https://example.org"),
-            CODE,
-            None,
-        );
+    fn a_page_or_a_wrong_host_is_refused() {
+        let page = gate(&extension("GET", "/v1/downloads", "https://example.org"));
         assert_eq!(page.denial.map(|denial| denial.status), Some(403));
         assert_eq!(page.cors, None, "a page origin is never echoed back");
 
@@ -818,24 +813,13 @@ mod tests {
             "/v1/downloads",
             &[
                 ("host", "evil.example:27500"),
-                ("origin", PAIRED_ORIGIN),
+                ("origin", EXTENSION_ORIGIN),
                 ("x-bdm-client", auth::CLIENT_VALUE),
-                ("authorization", &format!("Bearer {CODE}")),
             ],
             b"",
         );
-        let gate = gate(&rebinding, CODE, Some(PAIRED_ORIGIN));
+        let gate = gate(&rebinding);
         assert_eq!(gate.denial.map(|denial| denial.status), Some(403));
-    }
-
-    #[test]
-    fn no_token_means_nothing_but_the_ping_gets_through() {
-        let gate = gate(&extension("/v1/downloads", PAIRED_ORIGIN), "", None);
-        assert_eq!(gate.denial.map(|denial| denial.status), Some(401));
-        assert!(
-            gate.cors.is_some(),
-            "the refusal still goes back with the extension's own origin"
-        );
     }
 
     #[test]
@@ -923,8 +907,8 @@ mod tests {
         assert_eq!(answer["app"], APP_ID);
         assert_eq!(answer["api"], API_VERSION);
         assert_eq!(answer["port"], PORT);
-        assert_eq!(answer["paired"], false);
-        assert_eq!(ping(true)["paired"], true);
+        assert_eq!(answer["connected"], false);
+        assert_eq!(ping(true)["connected"], true);
     }
 
     fn temp_dir(tag: &str) -> PathBuf {

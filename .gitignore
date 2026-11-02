@@ -47,3 +47,7 @@ desktop.ini
 
 # Misdirected build logs (a `>` with a mangled Windows path)
 C:*
+
+# Agent tooling notes (local only)
+.qoder/
+.claude/

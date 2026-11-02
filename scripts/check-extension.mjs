@@ -440,12 +440,6 @@ const downloadBehaviour = { refusedPause: new Map(), failedResume: new Set() };
 let bridgeMode = "online";
 let pingApp = "b-download-manager";
 let pingApi = 1;
-/** The pairing code the mocked application holds, and whether the extension is
- *  asking with it. A route refuses a request that does not carry the code, the
- *  way the real bridge does. */
-/** The pairing code the mocked application holds. Every route but the ping
- *  refuses a request that does not carry it, the way the real bridge does. */
-const PAIRING_CODE = "0123456789abcdef".repeat(4) + "0123456789ab";
 let listPayload = { downloads: [], active: 0 };
 let capturePolicy = { capture: true, ask: false, types: [], skipSites: [] };
 let videoButton = { style: "both", label: "Get it", hover: true };
@@ -501,11 +495,6 @@ async function fakeFetch(url, options = {}) {
   if (headers["X-BDM-Client"] !== "browser-extension") {
     return refusal(403, "forbidden", "the browser extension header is missing");
   }
-  const carriesCode = headers.Authorization === `Bearer ${PAIRING_CODE}`;
-  // The bridge is a paired one: everything but the ping wants the code.
-  if (!ping && !carriesCode) {
-    return refusal(401, "unauthorized", "the extension is not paired with the application");
-  }
 
   let data;
   if (ping) {
@@ -514,7 +503,7 @@ async function fakeFetch(url, options = {}) {
       api: pingApi,
       version: "0.1.0",
       port: 27500,
-      paired: carriesCode,
+      connected: true,
     };
   } else if (pathName === "/v1/video-button-settings") {
     data = videoButton;
@@ -557,9 +546,8 @@ const sentDownloads = () =>
 const setTimeoutShim = (fn, delay, ...args) =>
   delay >= 10_000 ? 0 : setTimeout(fn, delay, ...args);
 
-// The background page reads the pairing code out of storage when it loads, so
-// the mock has to hold the one the fake bridge expects.
-store.token = PAIRING_CODE;
+// The background page and the mock bridge agree on the client header alone;
+// there is no code to hold or to take away.
 
 const backgroundContext = vm.createContext({
   URL,
@@ -1008,34 +996,17 @@ bridgeMode = "online";
 pingApp = "b-download-manager";
 
 /*
-  Pairing, first: without the code the bridge answers the ping and nothing else,
-  and the extension has to say so in a kind the UI can turn into one line.
+  The connection, first: the client header is the whole contract, and a
+  request that carries it is answered without any code.
 */
-const unpairedPing = await bdmBridgePing();
-assert.equal(unpairedPing.paired, false, "a ping without the code is not a pairing");
-await assert.rejects(
-  requestContext.bdmBridgeCapturePolicy(),
-  (error) => error.kind === "unpaired" && error.status === 401,
-  "a route the code has not unlocked says so, and says which",
-);
-const unpairedHeaders = sandbox.calls.fetches.at(-1).options.headers;
-assert.ok(!unpairedHeaders.Authorization, "no code, no Authorization header");
-
-requestContext.bdmBridgeSetToken(PAIRING_CODE);
-assert.equal(requestContext.bdmBridgeGetToken(), PAIRING_CODE);
-
 const ping = await bdmBridgePing();
 assert.equal(ping.app, "b-download-manager");
 assert.equal(ping.api, 1);
-assert.equal(ping.paired, true, "the code this extension sends is the one the app holds");
+assert.equal(ping.connected, true, "the app recognises the extension without a code");
 
 const headers = sandbox.calls.fetches.at(-1).options.headers;
 assert.equal(headers["X-BDM-Client"], "browser-extension", "every request carries the client header");
-assert.equal(
-  headers.Authorization,
-  `Bearer ${PAIRING_CODE}`,
-  "and every request carries the pairing code",
-);
+assert.ok(!headers.Authorization, "and none carries a code");
 assert.equal(await requestContext.bdmBridgeVideoButton().then((data) => data.style), "both");
 
 listPayload = {
@@ -1161,26 +1132,9 @@ pingApp = "b-download-manager";
 const statusAnswer = await onMessage({ type: "bdm:status" }, {});
 assert.equal(statusAnswer.ok, true);
 assert.equal(statusAnswer.version, "0.1.0");
-assert.equal(statusAnswer.paired, true, "the background asks with the code in storage");
-assert.equal(statusAnswer.hasCode, true, "and says it has one to ask with");
-
-/*
-  The code taken away, before this page has ever read the button: the
-  application is still there and still answers a ping, so the extension has to
-  say "not paired" — and must not report its own default as though the
-  application had chosen it.
-*/
-backgroundContext.bdmBridgeSetToken("");
-const unpairedStatus = await onMessage({ type: "bdm:status" }, {});
-assert.equal(unpairedStatus.ok, true, "the ping is open to an extension that is not paired");
-assert.equal(unpairedStatus.paired, false);
-assert.equal(unpairedStatus.hasCode, false);
-const unpairedButton = await onMessage({ type: "bdm:video-button-settings" }, {});
-assert.equal(unpairedButton.ok, false, "a refusal is not a success with defaults");
-assert.equal(unpairedButton.error.kind, "unpaired");
-backgroundContext.bdmBridgeSetToken(PAIRING_CODE);
-const repaired = await onMessage({ type: "bdm:pairing-check" }, {});
-assert.equal(repaired.paired, true, "putting the code back pairs the extension again");
+assert.equal(statusAnswer.connected, true, "a reachable app is a working integration");
+const statusButton = await onMessage({ type: "bdm:video-button-settings" }, {});
+assert.equal(statusButton.ok, true, "the button settings come from the app");
 
 // An older or newer contract is a mismatch, which the popup has its own line for.
 pingApi = 2;

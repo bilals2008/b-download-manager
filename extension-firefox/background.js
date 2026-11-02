@@ -23,42 +23,14 @@ const mediaCounts = new Map();
 /** Downloads already handed over, so a repeated event cannot send twice. */
 const handedOver = new Set();
 
-/* ---------------------------------------------------------------- pairing */
-
-/*
-  The pairing code, and where it is kept.
-
-  The application makes the code up and the reader pastes it into the extension
-  settings page once. The background page is the only context that talks to the
-  bridge, so it is the only one that needs it, and it is stored apart from the
-  settings: the settings are the rules a page may read and re-save, and a secret
-  does not belong in either of those.
-*/
-const TOKEN_KEY = "token";
-
-/** The stored code, put in front of the bridge. Answers whether there is one. */
-async function applyPairingCode() {
-  let stored;
-  try {
-    stored = await browser.storage.local.get(TOKEN_KEY);
-  } catch {
-    // No storage means no code, which the bridge reports as not paired.
-    bdmBridgeSetToken("");
-    return false;
-  }
-  bdmBridgeSetToken(stored?.[TOKEN_KEY] || "");
-  return bdmBridgeGetToken() !== "";
-}
+/* --------------------------------------------------------------- contacts */
 
 /**
  * Tell the application the browser is here. A failed ping is normal: the
  * application may not be running, and nothing else depends on it.
- *
- * The code is read first, because the bridge only records a contact from a
- * request that carried it — a ping without one says nothing has been paired.
  */
 function announce() {
-  void applyPairingCode().then(() => bdmBridgePing().catch(() => {}));
+  void bdmBridgePing().catch(() => {});
 }
 
 /* ------------------------------------------------------------------ menus */
@@ -107,14 +79,6 @@ browser.runtime.onStartup.addListener(() => {
   followVideoButton();
   announce();
 });
-
-/**
- * Tell the application the browser is here. A failed ping is normal: the
- * application may not be running, and nothing else depends on it.
- */
-function announce() {
-  void bdmBridgePing().catch(() => {});
-}
 
 /* ------------------------------------------------------------ link window */
 
@@ -505,25 +469,7 @@ async function handleMessage(message, sender) {
           ok: true,
           version: data.version,
           api: data.api,
-          paired: data.paired === true,
-          // The app is answering, so the reader can be told the difference
-          // between "paste the code" and "the app is not running".
-          hasCode: bdmBridgeGetToken() !== "",
-        };
-      } catch (error) {
-        return { ...bridgeFailure(error), hasCode: bdmBridgeGetToken() !== "" };
-      }
-    }
-
-    case "bdm:pairing-check": {
-      // The settings page asks right after the reader pastes a code.
-      await applyPairingCode();
-      try {
-        const data = await bdmBridgePing();
-        return {
-          ok: true,
-          paired: data.paired === true,
-          hasCode: bdmBridgeGetToken() !== "",
+          connected: data.connected === true,
         };
       } catch (error) {
         return bridgeFailure(error);
@@ -534,6 +480,22 @@ async function handleMessage(message, sender) {
       try {
         const data = await bdmBridgeList();
         return { ok: true, ...data };
+      } catch (error) {
+        return bridgeFailure(error);
+      }
+    }
+
+    case "bdm:capture": {
+      try {
+        return { ok: true, policy: await bdmBridgeCapturePolicy() };
+      } catch (error) {
+        return bridgeFailure(error);
+      }
+    }
+
+    case "bdm:capture-save": {
+      try {
+        return { ok: true, policy: await bdmBridgeCaptureSave(message.policy || {}) };
       } catch (error) {
         return bridgeFailure(error);
       }
@@ -781,21 +743,4 @@ browser.runtime.onMessage.addListener((message, sender) => {
     return undefined;
   }
   return handleMessage(message, sender).catch((error) => bridgeFailure(error));
-});
-
-/*
-  The code, and what happens when it changes.
-
-  The settings page writes it to storage and this page picks it up, so the next
-  request carries it. The same change makes the extension introduce itself
-  again: that is the moment the application records which extension is paired,
-  and the reader gets an answer without opening the popup.
-*/
-void applyPairingCode();
-
-browser.storage.onChanged.addListener((changes, area) => {
-  if (area !== "local") return;
-  if (!Object.prototype.hasOwnProperty.call(changes, TOKEN_KEY)) return;
-  bdmBridgeSetToken(changes[TOKEN_KEY]?.newValue || "");
-  void bdmBridgePing().catch(() => {});
 });

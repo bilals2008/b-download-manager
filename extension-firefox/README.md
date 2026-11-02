@@ -74,12 +74,10 @@ bridge: no native messaging host, no registry entry, no extra executable to
 install, and no port exposed beyond loopback. The app starts the server with
 itself.
 
-Every request carries `X-BDM-Client: browser-extension`, and everything but the
-ping carries the **pairing code** as `Authorization: Bearer <code>`. The code is
-the control: a header is not a secret, so any program on this machine could send
-one, while the code is made up by the application and given to the browser by
-hand. The extension keeps it in `browser.storage.local` under `token`, apart
-from the settings object, and pastes it into the settings page from the app.
+Every request carries `X-BDM-Client: browser-extension`. That header and an
+extension `Origin` are the whole handshake: there is no code to copy, nothing to
+paste and no file to keep. The application and the extension find each other as
+soon as both are installed.
 
 The server checks the rest before it reads a body. A request whose `Host` is not
 `127.0.0.1:27500` or `localhost:27500` is refused — that is the shape a page
@@ -87,18 +85,14 @@ reaching loopback through a name takes. An `Origin` is refused unless it is a
 well-formed `moz-extension://` or `chrome-extension://` origin, and only such an
 origin is ever echoed back in `Access-Control-Allow-Origin`, so a web page gets
 neither an answer nor a permission. A POST body must say `application/json`.
-Requests without an `Origin` (a local test, for example) still need the header
-and the code.
-
-The first extension origin to present the code is the one the application
-remembers, in `browser-pairing.json` in its data folder, and a second extension
-carrying the same code is refused. *Make a new code* in the app's Settings
-replaces the code and forgets that pairing.
+Requests without an `Origin` (a local test, for example) still need the client
+header.
 
 | Request | Answer |
 | --- | --- |
-| `GET /v1/ping` | `{ app, api, version, port, paired }` — the one route that answers without the code |
+| `GET /v1/ping` | `{ app, api, version, port, connected }` |
 | `GET /v1/capture` | `{ capture, ask, types, skipSites }` |
+| `POST /v1/capture` | the same object, after the extension changed a rule |
 | `GET /v1/video-button-settings` | `{ style, label, hover }` |
 | `GET /v1/downloads` | `{ downloads, active }` |
 | `POST /v1/downloads` | `{ mode: "direct", id, name, dest }` or `{ mode: "ask" }` |
@@ -140,18 +134,18 @@ window per link.
 
 `GET /v1/capture` is the app-owned copy of the capture rules. While the app
 answers, its Settings page wins for the hand-over switch, the ask switch, the
-file types and the excluded sites. When the app is closed the request fails and
-the extension uses its own saved copy, so the rules still apply with the app
-gone.
+file types and the excluded sites. `POST /v1/capture` takes any of those fields
+(an absent field is left alone) and writes them through the app's settings file,
+so a change made in either settings page reaches the other. When the app is
+closed the request fails and the extension uses its own saved copy, so the rules
+still apply with the app off.
 
 The extension pings first. If nothing answers, the app is reported as not
 running. If something answers but does not identify itself as
 `b-download-manager` with API version `1`, the popup says the versions or the
-program do not match instead of guessing. If it answers `paired: false`, the
-popup and the settings page say **Not paired**: the app is there, and the code is
-the missing thing. A route that refused the code is reported as a refusal, never
-as a success with defaults — so a half-working bridge cannot look like an app
-that has no rules set.
+program do not match instead of guessing. A route that refused the extension is
+reported as a refusal, never as a success with defaults — so a half-working
+bridge cannot look like an app that has no rules set.
 
 `GET /v1/video-button-settings` is read by the background page, kept for a
 minute, and pushed to the pages that are already showing a button when the app's
@@ -199,18 +193,13 @@ Temporary add-ons are removed when Firefox closes, so repeat this after a
 restart. On a normal Firefox release, this is the only way to run an unsigned
 build.
 
-### 3. Pair it with the application
+### 3. Use it with the application
 
-1. Open the app: **Settings → Browser integration**.
-2. Copy the **Extension code** and save it with the extension's settings page
-   (right-click any page → *Extension settings*, or the popup's gear) — paste it
-   into **App pairing** and press **Save**.
-3. The page reports *Paired* once the app confirms this extension. Until then the
-   popup says **Not paired** and no hand-over is accepted.
-
-The code is kept in the extension's own storage, so a temporary add-on reload
-keeps it; a fresh profile does not. **Forget** takes it away again, and *Make a
-new code* in the app revokes the old one everywhere.
+1. Start the app. That is the whole setup: there is no code to paste and nothing
+   to pair. The popup and the settings page report **Connected** once the app
+   answers.
+2. If the page says **Not running**, start B Download Manager; if it says
+   **Version mismatch**, the extension and the app are from different releases.
 
 ### 4. Install permanently (optional)
 
@@ -251,7 +240,7 @@ npx web-ext build --source-dir extension-firefox --overwrite-dest
 | --- | --- |
 | `contextMenus` | the right-click entries |
 | `downloads` | see a browser download and cancel it after a successful hand-over |
-| `storage` | the settings, the theme, and the pairing code |
+| `storage` | the settings and the theme |
 | `cookies` | the site's own cookies for a stream the player needs them for, behind one consent question in the app |
 | `alarms` | one periodic read of the app's video-button choice, so open pages follow it without a reload |
 | `http://127.0.0.1:27500/*` | the loopback bridge |
@@ -283,17 +272,14 @@ npx web-ext lint --source-dir extension-firefox --self-hosted
 `check:extension` parses every script, resolves every file a page loads,
 checks the shared colour tokens, runs the settings, media, link-rule and
 page-list helpers in a sandbox, exercises the background against a mocked
-bridge — which refuses anything but the ping until the pairing code is in the
-request — runs the time-sliced link reader over a fake page and the link window
-against a small document, verifies that every icon name exists, and checks the
-Chrome build's hand-over contract too.
+bridge — which refuses a request without the extension header — runs the
+time-sliced link reader over a fake page and the link window against a small
+document, verifies that every icon name exists, and checks the Chrome build's
+hand-over contract too.
 
 Against the running application, `npm run probe:bridge` is the live version of
-the same contract: the code refused and the code accepted, a page origin, a
-borrowed `Host`, a non-JSON body, a second extension carrying the first one's
-secret, and one real hand-over whose bytes are read back off the disk. It pins
-its own origin while it runs, so press *Make a new code* afterwards if you want
-a browser paired again.
+the same contract: the extension header, a page origin, a borrowed `Host`, a
+non-JSON body, and one real hand-over whose bytes are read back off the disk.
 
 It also runs the content scripts in a fake page (`scripts/lib/fake-dom.mjs`):
 a YouTube-shaped player whose controls cover the picture, a stream that arrives

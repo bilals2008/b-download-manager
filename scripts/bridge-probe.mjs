@@ -7,23 +7,19 @@
   the probe serves one file of its own, hands its address to the application, and
   waits for the answer to say where the bytes went.
 
-  It needs the desktop application running, and it reads the pairing code from the
-  application's own file, so it must be run on the machine that has it.
+  It needs the desktop application running. There is no code to read or paste:
+  the probe presents an extension origin and the extension's client header, the
+  same two things the installed extension presents.
 
     pnpm probe:bridge            # the rule matrix and one download
     pnpm probe:bridge --keep     # leave the downloaded file where it landed
-
-  Pairing is trust-on-first-use: this probe presents its own extension origin, so
-  it is the first caller the running application pins. After a run, press "Make a
-  new code" in Settings > Browser integration, or start the probe before pairing a
-  browser, so the pin belongs to the browser and not to the probe.
 */
 
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { connect } from "node:net";
 import { existsSync, readFileSync, rmSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -32,28 +28,8 @@ const BRIDGE = `http://127.0.0.1:${PORT}`;
 /** The origin this probe asks with, as an installed extension would. */
 const PROBE_ORIGIN = "moz-extension://probe-0000-0000";
 const CLIENT = { "X-BDM-Client": "browser-extension" };
+const EXTENSION = { ...CLIENT, Origin: PROBE_ORIGIN };
 const keep = process.argv.includes("--keep");
-
-/** The application's identifier, read from its own config rather than guessed. */
-function appId() {
-  const config = JSON.parse(readFileSync(join(root, "src-tauri", "tauri.conf.json"), "utf8"));
-  return config.identifier;
-}
-
-/** Where the operating system keeps that application's files. */
-function dataDir() {
-  const id = appId();
-  if (process.platform === "win32") return join(process.env.APPDATA, id);
-  if (process.platform === "darwin") return join(process.env.HOME, "Library/Application Support", id);
-  return join(process.env.XDG_CONFIG_HOME || join(process.env.HOME, ".config"), id);
-}
-
-function code() {
-  const file = process.env.BDM_PAIRING_FILE || join(dataDir(), "browser-pairing.json");
-  const pairing = JSON.parse(readFileSync(file, "utf8"));
-  assert.ok(pairing.token?.length >= 32, `${file} holds no pairing code`);
-  return { file, token: pairing.token };
-}
 
 /* One request to the bridge. A socket that cannot be opened is answer 0. */
 async function call({ method = "GET", path, headers = {}, body } = {}) {
@@ -142,52 +118,36 @@ await new Promise((done) => server.listen(0, "127.0.0.1", done));
 const source = `http://127.0.0.1:${server.address().port}/probe.bin`;
 
 try {
-  const { file, token } = code();
-  console.log(`the app is on ${BRIDGE}, its pairing file is ${file}`);
+  console.log(`the app is on ${BRIDGE}`);
 
-  /* 1. The ping answers a caller that is not paired, and says so. */
-  const ping = await call({ path: "/v1/ping", headers: CLIENT });
+  /* 1. The ping names the app, and an extension is recognised at once. */
+  const ping = await call({ path: "/v1/ping", headers: EXTENSION });
   check(
     "the application is running on the bridge port",
     ping.payload?.data?.app === "b-download-manager",
     `it answered ${ping.status}`,
   );
-  check("ping without a code is answered", ping.status === 200, `got ${ping.status}`);
-  check("and says the caller is not paired", ping.payload?.data?.paired === false);
+  check("an extension is connected without any code", ping.payload?.data?.connected === true);
 
-  /* 2. Nothing else is. */
-  const noCode = await call({
+  const list = await call({ path: "/v1/downloads", headers: EXTENSION });
+  check("the extension can read the list", list.status === 200, `got ${list.status}`);
+
+  /* 2. A caller that is not the extension is refused. */
+  const noClient = await call({ path: "/v1/downloads", headers: { Origin: PROBE_ORIGIN } });
+  check("the client header is required", noClient.status === 403, `got ${noClient.status}`);
+
+  const handOverWithout = await call({
     method: "POST",
     path: "/v1/downloads",
-    headers: CLIENT,
+    headers: { Origin: PROBE_ORIGIN },
     body: { url: source },
   });
-  check("a hand-over without the code is refused", noCode.status === 401, `got ${noCode.status}`);
-  check("with the code the extension can read", noCode.payload?.error?.code === "unauthorized");
+  check("a hand-over without the header is refused", handOverWithout.status === 403);
 
-  const listWithout = await call({ path: "/v1/downloads", headers: CLIENT });
-  check("the list without the code is refused", listWithout.status === 401);
-
-  const focusWithout = await call({ method: "POST", path: "/v1/focus", headers: CLIENT, body: {} });
-  check("the window cannot be raised without the code", focusWithout.status === 401);
-
-  /* 3. A guessed code, and a header that is not the extension's. */
-  const guessed = await call({
-    path: "/v1/downloads",
-    headers: { ...CLIENT, Authorization: `Bearer ${"0".repeat(64)}` },
-  });
-  check("a guessed code is refused", guessed.status === 401);
-
-  const noClient = await call({
-    path: "/v1/downloads",
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  check("the client header is still required", noClient.status === 403, `got ${noClient.status}`);
-
-  /* 4. A page's origin, a borrowed host, a body that is not JSON. */
+  /* 3. A page's origin, a borrowed host, a body that is not JSON. */
   const page = await call({
     path: "/v1/downloads",
-    headers: { ...CLIENT, Origin: "https://example.org", Authorization: `Bearer ${token}` },
+    headers: { ...CLIENT, Origin: "https://example.org" },
   });
   check("a web page origin is refused", page.status === 403);
   check("and a page is never echoed as allowed", !page.headers["access-control-allow-origin"]);
@@ -203,7 +163,7 @@ try {
 
   const form = await fetch(`${BRIDGE}/v1/downloads`, {
     method: "POST",
-    headers: { ...CLIENT, Authorization: `Bearer ${token}`, "Content-Type": "text/plain" },
+    headers: { ...EXTENSION, "Content-Type": "text/plain" },
     body: JSON.stringify({ url: source }),
   });
   check("a body that is not JSON is refused", form.status === 415, `got ${form.status}`);
@@ -211,44 +171,7 @@ try {
   const preflight = await call({ method: "OPTIONS", path: "/v1/downloads", headers: { Origin: "https://example.org" } });
   check("a preflight from a page is refused", preflight.status === 403);
 
-  /* 5. The paired extension gets an answer, and its origin is the one pinned. */
-  const prePin = JSON.parse(readFileSync(file, "utf8")).origin || "";
-  if (prePin && prePin !== PROBE_ORIGIN) {
-    console.log(
-      `\nthe running app is already paired with ${prePin}; this probe will not be answered.\n` +
-        "Press \"Make a new code\" in Settings > Browser integration and run it again.",
-    );
-  }
-
-  const pairedPing = await call({
-    path: "/v1/ping",
-    headers: { ...CLIENT, Origin: PROBE_ORIGIN, Authorization: `Bearer ${token}` },
-  });
-  check(
-    "the code unlocks the ping",
-    pairedPing.payload?.data?.paired === true,
-    !prePin || prePin === PROBE_ORIGIN ? `it answered ${pairedPing.status}` : "another extension holds the pairing",
-  );
-
-  const otherOrigin = await call({
-    method: "POST",
-    path: "/v1/downloads",
-    headers: { ...CLIENT, Origin: "moz-extension://a-second-extension", Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: { url: source, name: "probe-second.bin" },
-  });
-  const pinned = await call({ path: "/v1/ping", headers: { ...CLIENT, Origin: PROBE_ORIGIN, Authorization: `Bearer ${token}` } });
-  const pinFile = JSON.parse(readFileSync(file, "utf8"));
-  check("the pairing file names one extension", pinFile.origin === PROBE_ORIGIN, `it says ${pinFile.origin}`);
-  if (pinFile.origin === PROBE_ORIGIN) {
-    check(
-      "a second extension with the same code is refused",
-      otherOrigin.status === 403,
-      `got ${otherOrigin.status}`,
-    );
-    check("and the paired one is not disturbed", pinned.payload?.data?.paired === true);
-  }
-
-  /* 6. A real hand-over, then the download itself.
+  /* 4. A real hand-over, then the download itself.
 
      A name of its own each run: a direct hand-over that finds the file already
      there is turned into a question for the window, which is right for a person
@@ -257,10 +180,10 @@ try {
   const send = await call({
     method: "POST",
     path: "/v1/downloads",
-    headers: { ...CLIENT, Origin: PROBE_ORIGIN, Authorization: `Bearer ${token}` },
+    headers: EXTENSION,
     body: { url: source, name, referer: "https://example.org/", mode: "direct" },
   });
-  check("the paired extension can hand a link over", send.status === 200, JSON.stringify(send.payload));
+  check("the extension can hand a link over", send.status === 200, JSON.stringify(send.payload));
   const handed = send.payload?.data || {};
   check("the app took the link directly", handed.mode === "direct", `it answered ${handed.mode}`);
   check("the app answered with a destination", typeof handed.dest === "string" && handed.dest.length > 0);
@@ -269,11 +192,8 @@ try {
   let row = null;
   for (let attempt = 0; attempt < 60 && !finished.test(row?.status || ""); attempt += 1) {
     await new Promise((done) => setTimeout(done, 250));
-    const list = await call({
-      path: "/v1/downloads",
-      headers: { ...CLIENT, Origin: PROBE_ORIGIN, Authorization: `Bearer ${token}` },
-    });
-    row = (list.payload?.data?.downloads || []).find((item) => item.id === handed.id) || row;
+    const listed = await call({ path: "/v1/downloads", headers: EXTENSION });
+    row = (listed.payload?.data?.downloads || []).find((item) => item.id === handed.id) || row;
   }
   check("the download finished", finished.test(row?.status || ""), `status was ${row?.status}`);
   check("and the engine says it wrote every byte", row?.downloaded === PAYLOAD.length, `it says ${row?.downloaded}`);
@@ -282,14 +202,14 @@ try {
     check("the file is on disk with the bytes it was given", bytes?.length === PAYLOAD.length, handed.dest);
   }
 
-  /* 7. Control over that download, which a stranger must not have. */
+  /* 5. Control over that download. */
   const pause = await call({
     method: "POST",
     path: `/v1/downloads/${handed.id}/pause`,
-    headers: { ...CLIENT, Origin: PROBE_ORIGIN, Authorization: `Bearer ${token}` },
+    headers: EXTENSION,
     body: {},
   });
-  check("a paired control is answered", pause.status === 200 || pause.status === 409, `got ${pause.status}`);
+  check("a control from the extension is answered", pause.status === 200 || pause.status === 409, `got ${pause.status}`);
 
   const strangerPause = await call({
     method: "POST",
@@ -297,7 +217,7 @@ try {
     headers: CLIENT,
     body: {},
   });
-  check("and the same control without the code is refused", strangerPause.status === 401);
+  check("and the same control without the header is refused", strangerPause.status === 403);
 
   if (handed.dest) {
     console.log(`\nthe file it wrote: ${handed.dest}`);

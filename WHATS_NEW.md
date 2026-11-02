@@ -10,11 +10,11 @@
 
 ## [Unreleased]
 
-### The browser connection is now a paired one
+### A browser connection that just works
 
-- The app makes a pairing code, and the browser extension needs it once before it can start any download.
-- Copy the code in Settings, then Browser integration, paste it into the extension's settings page and save.
+- The browser extension connects to the app on its own. There is no code to copy and nothing to set up.
 - The download button on videos now follows your choice in the app on pages that are already open, with no reload.
+- The tray icon and the app icon are now the B logo, in one drawing, on light and dark taskbars.
 
 ### A real download queue
 

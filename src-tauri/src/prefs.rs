@@ -25,21 +25,6 @@ pub const DEFAULT_URL_PROTOCOLS: &[&str] = &["http", "https", "ftp"];
 /// for the dialog that edits the list.
 pub const MAX_URL_PROTOCOLS: usize = 32;
 
-/// How the tray icon is drawn. The reference product offers these three, and
-/// the menu of the clone keeps them in the same order.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum TrayStyle {
-    /// The flat mark of the application.
-    #[default]
-    Default,
-    /// The same mark with a ramp on every body and a bevel around it.
-    #[serde(rename = "3d")]
-    ThreeD,
-    /// The same mark drawn flat under one heavy outline.
-    Classic,
-}
-
 /// Whether the minimize button hides the window into the tray, and what
 /// closing it means.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -52,8 +37,6 @@ pub struct DesktopPreferences {
     /// Keep the application running in the tray when the window is closed.
     /// On by default, which is what the tray icon is for.
     pub close_to_tray: bool,
-    /// The drawing the tray icon uses.
-    pub tray_style: TrayStyle,
     /// Take the tray icon out of the notification area. The window is then the
     /// only way back, so closing it leaves rather than hides.
     pub tray_hidden: bool,
@@ -82,7 +65,6 @@ impl Default for DesktopPreferences {
         Self {
             minimize_to_tray: false,
             close_to_tray: true,
-            tray_style: TrayStyle::default(),
             tray_hidden: false,
             tray_dark_mode: false,
             url_protocols: DEFAULT_URL_PROTOCOLS
@@ -223,7 +205,6 @@ mod tests {
             !prefs.minimize_to_tray,
             "minimizing is the window's own job unless the user asks otherwise"
         );
-        assert_eq!(prefs.tray_style, TrayStyle::Default);
         assert!(
             !prefs.tray_hidden,
             "the icon is there until the reader takes it away"
@@ -238,7 +219,6 @@ mod tests {
         let prefs = DesktopPreferences {
             minimize_to_tray: true,
             close_to_tray: false,
-            tray_style: TrayStyle::ThreeD,
             tray_hidden: true,
             tray_dark_mode: true,
             url_protocols: vec!["https".to_string(), "rtsp".to_string()],
@@ -249,30 +229,6 @@ mod tests {
 
         save(&path, &prefs).expect("a saved file");
         assert_eq!(load(&path), prefs);
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn the_three_styles_are_written_the_way_the_menu_names_them() {
-        let dir = temp_dir("styles");
-        let path = dir.join(FILE_NAME);
-        for (style, name) in [
-            (TrayStyle::Default, "default"),
-            (TrayStyle::ThreeD, "3d"),
-            (TrayStyle::Classic, "classic"),
-        ] {
-            let prefs = DesktopPreferences {
-                tray_style: style,
-                ..DesktopPreferences::default()
-            };
-            save(&path, &prefs).expect("a saved file");
-            let written = std::fs::read_to_string(&path).expect("a readable file");
-            assert!(
-                written.contains(&format!("\"trayStyle\": \"{name}\"")),
-                "{name} should be written as it is named: {written}"
-            );
-            assert_eq!(load(&path).tray_style, style);
-        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 

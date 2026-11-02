@@ -9,7 +9,7 @@ description: What to try when a download, the browser button or the window does 
 - **Is the app running?** The add-on cannot start B Download Manager, and without it the button has nothing to send the file to.
 - **Did Firefox restart?** Firefox forgets an add-on loaded by hand when it closes. Load it again the way [Building from source](/developers/#browser-extensions) describes.
 - **Chrome or Edge:** click the add-on's button. Its popup says whether it can see the app.
-- **Does it say "Not paired"?** The app keeps its browser door shut until the add-on shows a code it made. Open **Settings → Browser integration**, copy **Extension code**, paste it into the add-on's settings page (Firefox) or its popup (Chrome, Edge) and save. This is done once per computer. If you pressed **Make a new code**, the old one stopped working everywhere and the new one has to be pasted again.
+- **Does the add-on say "Not running"?** Start B Download Manager. There is no code to copy and nothing to pair: the add-on reports **Connected** as soon as the app is open. If it says **Version mismatch**, the add-on and the app are from different releases.
 - **Right-click a link, not empty page space.** Pictures, videos and sound files work too. A page that only shows a player, like most video sites, is not a link to a file.
 
 ## A download will not start

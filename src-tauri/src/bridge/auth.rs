@@ -1,15 +1,15 @@
-//! The pairing token and the request checks the loopback bridge applies.
+//! The request checks the loopback bridge applies.
 //!
-//! The extension is identified by a token the application generates and the
-//! reader pastes into the extension once. The token is the real control: the
-//! origin and client headers keep a web page out, but a local program can set
-//! any header it likes, so only the token proves the caller is the extension
-//! the reader paired.
+//! There is no code to copy and no pairing to remember: the bridge is reached
+//! only from this machine, only under its own address, and only by a caller that
+//! says it is the browser extension. A web page cannot do that — its `Origin` is
+//! the page's own address, which is refused, and a page cannot name an
+//! extension's origin. That is the whole rule set, and it is what lets an
+//! ordinary reader install the app, install the extension, and have them work
+//! together without a single setting.
 //!
 //! The checks are pure functions over one request, so the whole rule set is
 //! tested without opening a socket.
-
-use getrandom::fill;
 
 use super::http::Request;
 
@@ -20,13 +20,9 @@ pub const CLIENT_HEADER: &str = "x-bdm-client";
 pub const CLIENT_VALUE: &str = "browser-extension";
 
 /// The port the bridge listens on, which is the only port a `Host` header may
-/// name. A name that resolves to loopback but is not the app's own address is
-/// a DNS-rebinding attempt and is refused before the token is read.
+/// name. A name that resolves to loopback but is not the app's own address is a
+/// DNS-rebinding attempt and is refused at once.
 const HOSTS: [&str; 2] = ["127.0.0.1:27500", "localhost:27500"];
-
-/// A token is 32 random bytes written as hex.
-const TOKEN_BYTES: usize = 32;
-const TOKEN_LENGTH: usize = TOKEN_BYTES * 2;
 
 /// One reason a request was refused, with the status and code the extension
 /// turns into one short line.
@@ -46,23 +42,15 @@ impl Denial {
         }
     }
 
-    /// The token matched, but the extension that presented it is not the one
-    /// this pairing already belongs to. A second extension that learned the
-    /// secret gets this, and nothing else.
-    pub const FOREIGN_EXTENSION: Denial = Denial::new(
-        403,
-        "forbidden_extension",
-        "this extension is not the one paired with the application",
-    );
+    /// Nothing about this caller is the extension.
+    pub const FORBIDDEN: Denial = Denial::new(403, "forbidden", "this is not the extension");
 }
 
-/// Check everything that does not need the application's state.
+/// Check one request against the rules above.
 ///
-/// `needs_token` is false for the ping, which the extension calls before it is
-/// paired; every other route needs a matching bearer token. An `OPTIONS`
-/// preflight carries neither the client header nor the token, so it is let
-/// through here once its origin and host are known to be the extension's.
-pub fn check(request: &Request, token: &str, needs_token: bool) -> Result<(), Denial> {
+/// An `OPTIONS` preflight carries neither the client header nor a body, so it is
+/// let through once its origin and host are known to be the extension's.
+pub fn check(request: &Request) -> Result<(), Denial> {
     if !host_allowed(request.header("host")) {
         return Err(Denial::new(
             403,
@@ -73,11 +61,7 @@ pub fn check(request: &Request, token: &str, needs_token: bool) -> Result<(), De
 
     if let Some(origin) = request.header("origin") {
         if !is_extension_origin(origin) {
-            return Err(Denial::new(
-                403,
-                "forbidden",
-                "this origin is not the extension",
-            ));
+            return Err(Denial::FORBIDDEN);
         }
     }
 
@@ -93,14 +77,6 @@ pub fn check(request: &Request, token: &str, needs_token: bool) -> Result<(), De
         ));
     }
 
-    if needs_token && !is_authorized(request, token) {
-        return Err(Denial::new(
-            401,
-            "unauthorized",
-            "the extension is not paired with the application",
-        ));
-    }
-
     if request.method == "POST"
         && !request.body.is_empty()
         && !is_json(request.header("content-type"))
@@ -113,59 +89,6 @@ pub fn check(request: &Request, token: &str, needs_token: bool) -> Result<(), De
     }
 
     Ok(())
-}
-
-/// Whether the request carries the token the application generated.
-pub fn is_authorized(request: &Request, token: &str) -> bool {
-    let Some(provided) = bearer(request.header("authorization")) else {
-        return false;
-    };
-    token_matches(token, provided)
-}
-
-/// A fresh pairing token, written as lower-case hex. An empty answer means the
-/// operating system's random source failed; the bridge then refuses every
-/// authenticated request rather than fall back to a guessable token.
-pub fn new_token() -> String {
-    let mut bytes = [0u8; TOKEN_BYTES];
-    if fill(&mut bytes).is_err() {
-        idm_core::log::write(
-            "warn",
-            "the pairing token could not be generated: no random source",
-        );
-        return String::new();
-    }
-
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    let mut token = String::with_capacity(TOKEN_LENGTH);
-    for byte in bytes {
-        token.push(HEX[(byte >> 4) as usize] as char);
-        token.push(HEX[(byte & 0x0f) as usize] as char);
-    }
-    token
-}
-
-/// Compare two tokens without returning early on the first different byte, so
-/// the time taken does not say how much of a guess was right.
-pub fn token_matches(expected: &str, provided: &str) -> bool {
-    if expected.is_empty() || expected.len() != provided.len() {
-        return false;
-    }
-    let mut difference = 0u8;
-    for (left, right) in expected.as_bytes().iter().zip(provided.as_bytes()) {
-        difference |= left ^ right;
-    }
-    difference == 0
-}
-
-/// The token of an `Authorization: Bearer <token>` header.
-pub fn bearer(header: Option<&str>) -> Option<&str> {
-    let (scheme, value) = header?.split_once(' ')?;
-    if !scheme.eq_ignore_ascii_case("bearer") {
-        return None;
-    }
-    let value = value.trim();
-    (!value.is_empty() && !value.contains(' ')).then_some(value)
 }
 
 /// An extension origin. Firefox uses `moz-extension://<uuid>`, Chromium
@@ -213,44 +136,22 @@ mod tests {
         Request::for_test(method, "/v1/downloads", headers, body)
     }
 
-    fn paired(method: &str) -> Request {
+    fn extension(method: &str) -> Request {
         request(
             method,
             &[
                 ("host", "127.0.0.1:27500"),
                 ("origin", "moz-extension://3c1e8f2a"),
                 ("x-bdm-client", CLIENT_VALUE),
-                ("authorization", "Bearer secret"),
             ],
             b"",
         )
     }
 
     #[test]
-    fn a_fresh_token_is_hex_and_long_enough() {
-        let token = new_token();
-        assert_eq!(token.len(), TOKEN_LENGTH);
-        assert!(token.bytes().all(|byte| byte.is_ascii_hexdigit()));
-        assert_ne!(token, new_token(), "two tokens must differ");
-    }
-
-    #[test]
-    fn a_token_is_compared_whole() {
-        assert!(token_matches("secret", "secret"));
-        assert!(!token_matches("secret", "secreT"));
-        assert!(!token_matches("secret", "secret2"));
-        assert!(!token_matches("", ""));
-        assert!(!token_matches("secret", ""), "an empty token never matches");
-    }
-
-    #[test]
-    fn only_a_bearer_token_counts() {
-        assert_eq!(bearer(Some("Bearer abc")), Some("abc"));
-        assert_eq!(bearer(Some("bearer abc")), Some("abc"));
-        assert_eq!(bearer(Some("Basic abc")), None);
-        assert_eq!(bearer(Some("Bearer")), None);
-        assert_eq!(bearer(Some("Bearer ")), None);
-        assert_eq!(bearer(None), None);
+    fn an_extension_request_passes_every_check() {
+        assert_eq!(check(&extension("GET")), Ok(()));
+        assert_eq!(check(&extension("POST")), Ok(()));
     }
 
     #[test]
@@ -283,47 +184,37 @@ mod tests {
     }
 
     #[test]
-    fn a_paired_request_passes_every_check() {
-        assert_eq!(check(&paired("GET"), "secret", true), Ok(()));
-        assert_eq!(check(&paired("POST"), "secret", true), Ok(()));
-    }
-
-    #[test]
-    fn a_request_without_the_token_is_unauthorized() {
-        let request = request(
-            "GET",
-            &[("host", "127.0.0.1:27500"), ("x-bdm-client", CLIENT_VALUE)],
-            b"",
-        );
-        assert_eq!(check(&request, "secret", true).unwrap_err().status, 401);
-        assert_eq!(check(&request, "secret", false), Ok(()), "the ping is open");
-    }
-
-    #[test]
-    fn a_foreign_origin_or_host_is_refused() {
-        let origin = request(
+    fn a_page_origin_is_refused() {
+        let page = request(
             "GET",
             &[
                 ("host", "127.0.0.1:27500"),
                 ("origin", "https://example.org"),
                 ("x-bdm-client", CLIENT_VALUE),
-                ("authorization", "Bearer secret"),
             ],
             b"",
         );
-        assert_eq!(check(&origin, "secret", true).unwrap_err().status, 403);
+        assert_eq!(check(&page).unwrap_err().status, 403);
+    }
 
+    #[test]
+    fn a_rebinding_host_is_refused() {
         let host = request(
             "GET",
             &[
                 ("host", "evil.example:27500"),
                 ("origin", "moz-extension://3c1e8f2a"),
                 ("x-bdm-client", CLIENT_VALUE),
-                ("authorization", "Bearer secret"),
             ],
             b"",
         );
-        assert_eq!(check(&host, "secret", true).unwrap_err().status, 403);
+        assert_eq!(check(&host).unwrap_err().status, 403);
+    }
+
+    #[test]
+    fn the_extension_header_is_not_optional() {
+        let nameless = request("GET", &[("host", "127.0.0.1:27500")], b"");
+        assert_eq!(check(&nameless).unwrap_err().code, "forbidden");
     }
 
     #[test]
@@ -336,21 +227,18 @@ mod tests {
             ],
             b"",
         );
-        assert_eq!(check(&preflight, "secret", true), Ok(()));
+        assert_eq!(check(&preflight), Ok(()));
     }
 
     #[test]
     fn a_post_with_a_body_must_say_it_is_json() {
-        let request = request(
-            "POST",
-            &[
-                ("host", "127.0.0.1:27500"),
-                ("x-bdm-client", CLIENT_VALUE),
-                ("authorization", "Bearer secret"),
-                ("content-type", "text/plain"),
-            ],
-            b"{}",
-        );
-        assert_eq!(check(&request, "secret", true).unwrap_err().status, 415);
+        let headers = vec![
+            ("host", "127.0.0.1:27500"),
+            ("origin", "moz-extension://3c1e8f2a"),
+            ("x-bdm-client", CLIENT_VALUE),
+            ("content-type", "text/plain"),
+        ];
+        let request = request("POST", &headers, b"{}");
+        assert_eq!(check(&request).unwrap_err().status, 415);
     }
 }

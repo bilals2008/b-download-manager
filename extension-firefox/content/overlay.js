@@ -164,6 +164,10 @@
     video: null,
     hovered: null,
     sources: [],
+    // Whether those sources came from the page's own requests rather than a
+    // direct element address. A streamed player splits picture and sound into
+    // separate files; they belong to one video and are offered together.
+    sourcesCaptured: false,
     // The quality list the application parsed for this video. It belongs to
     // one page/video; a player that navigates inside the document clears it.
     qualityKey: "",
@@ -465,16 +469,6 @@
 
   /* --------------------------------------------------------------- showing */
 
-  /**
-   * What this video offers. A player that streams through MSE names no file of
-   * its own, so the addresses the page requested stand in for it.
-   */
-  function sourcesFor(video) {
-    if (video.mediaKeys) return [];
-    const direct = bdmSourcesFor(video);
-    return direct.length ? direct : bdmCapturedSources();
-  }
-
   function sameSources(a, b) {
     if (a.length !== b.length) return false;
     return a.every((url, index) => url === b[index]);
@@ -525,7 +519,8 @@
 
     state.hovered = video;
 
-    const sources = sourcesFor(video);
+    const direct = bdmSourcesFor(video);
+    const sources = direct.length ? direct : bdmCapturedSources();
     if (!sources.length) {
       // The pointer is still on the player, so the video stays the pointer's
       // video and the next stream brings the button back without a new hover.
@@ -536,6 +531,7 @@
     const changed = state.video !== video || !sameSources(state.sources, sources);
     state.video = video;
     state.sources = sources;
+    state.sourcesCaptured = direct.length === 0;
 
     ensureHost();
     if (!state.host) return;
@@ -665,6 +661,12 @@
     if (manifests.length) return manifests;
     const itags = [...new Set(state.sources.filter((url) => bdmItagOf(url)))];
     if (itags.length) return itags;
+    // A streamed player fetched picture and sound as two files. The app pairs
+    // them when they arrive as one job, so both are registered together.
+    if (state.sourcesCaptured) {
+      const files = [...new Set(state.sources.filter((url) => bdmIsCapturedMedia(url)))].slice(0, 4);
+      if (files.length > 1) return files;
+    }
     return state.sources.length ? [state.sources[0]] : [];
   }
 
@@ -794,8 +796,17 @@
           state.qualityView = best;
           renderQuality();
         } else {
-          const refused = answers.find((answer) => answer?.error);
-          if (refused) setQualityError(statusForError(refused.error));
+          // Several jobs can be watched at once. One that was merged into
+          // another answers with its old id no longer existing; that is not a
+          // failure while another job is still there to show.
+          const refused = answers.find(
+            (answer) => answer?.error && answer.error.code !== "not_found",
+          );
+          if (refused) {
+            setQualityError(statusForError(refused.error));
+          } else if (answers.some((answer) => answer?.error)) {
+            setQualityError("The app lost this video. Open it again.");
+          }
         }
       } catch {
         // The application is closed; the next tick can find it again.
@@ -1200,7 +1211,9 @@
     if (itag || bdmIsDownloadableSource(url)) {
       const targets = itag
         ? [...new Set(state.sources.filter((source) => bdmItagOf(source)))]
-        : [url];
+        : state.sourcesCaptured
+          ? [...new Set(state.sources.filter((source) => bdmIsCapturedMedia(source)))].slice(0, 4)
+          : [url];
       if (!targets.includes(url)) targets.unshift(url);
       setStatus("Reading the qualities…", "");
       try {

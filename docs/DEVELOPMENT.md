@@ -56,10 +56,9 @@ src-tauri/src/
   main.rs        process entry
   lib.rs         Tauri builder, commands, event wiring
   state.rs       the set of known downloads
-  pairing.rs     the bridge's pairing code and the extension it belongs to
   bridge/        the loopback server the browser extensions talk to
     mod.rs         routes, the versioned contract and its tests
-    auth.rs        the code, the origin and host rules, and their tests
+    auth.rs        the origin and host rules, and their tests
     http.rs        the HTTP/1.1 reader and writer
     dest.rs        safe, unique file names for hand-overs
     batch.rs       the Download all links batch: offered folders, per-link answer
@@ -236,7 +235,7 @@ the app.
 The application's own icon, its menu and the choices that go with them. Keep
 these invariants when changing it:
 
-- The four choices live in `desktop.json` (`src-tauri/src/prefs.rs`), not in
+- The tray choices live in `desktop.json` (`src-tauri/src/prefs.rs`), not in
   `localStorage`: the icon, the close button and the clipboard watch all work
   before a page has read anything. The window reads them with
   `desktop_preferences()` and writes each one with its own command.
@@ -246,11 +245,12 @@ these invariants when changing it:
   when it is false — never hide a window the reader cannot bring back.
   `tray::refresh()` returns early while the icon is away, so a hidden icon does
   not turn every progress report into a warning.
-- The six drawings come from `scripts/make-icons.py` and are compiled into the
-  binary with `include_image!`. Change the mark there, run the script, and
-  `tray::drawing()` keeps its six arms in step. They are the same 16 by 16
-  picture at three weights of ink; a new style is a new pair of PNGs, not a new
-  geometry.
+- The pair of drawings comes from `scripts/make-icons.py`, which packs
+  `src-tauri/icons/source.png` — the brand logo — into the app icons and into
+  `tray-on-dark.png` (the logo under a light rim) and `tray-on-light.png` (the
+  logo as it is). Change the logo, run the script, and `tray::drawing()` keeps
+  its two arms in step. The tray is the same picture as the app icon, never a
+  second interpretation of it.
 - The window owns the appearance and reports it with `set_tray_appearance`
   (from `src/lib/appearance.ts`, so every window keeps the icon in step). The
   backend ignores the report unless `trayDarkMode` is on; the default drawing is
@@ -320,12 +320,10 @@ is added:
 - `desktop.json` (`src-tauri/src/prefs.rs`) stays the owner of the tray, the
   close and minimize choices and the clipboard protocols — same rules, its own
   file. The engine settings file does not duplicate it.
-- `browser-pairing.json` (`src-tauri/src/pairing.rs`) holds the bridge's secret
-  and the extension origin that first used it. It is a third file on purpose:
-  `settings.json` is the file a reader exports or sends as a support file, and a
-  pairing code must not travel with it. The code is made during setup, before
-  `bridge::start` binds, and is never logged or written anywhere else. Deleting
-  the file is the same as un-pairing the browser.
+- There is no pairing file and no secret to copy. The bridge binds loopback
+  only, accepts the `Host` it owns, requires `X-BDM-Client: browser-extension`,
+  and refuses any `Origin` that is not an extension's. That is the whole door:
+  install the app and the extension and they work together.
 - Appearance, fonts, toolbar packs and layouts, tips, the last folder and the
   update-check stamp are read only by the webview and live only in
   `localStorage`. Pick the owner by who reads it without a window: if the

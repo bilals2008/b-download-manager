@@ -10,7 +10,10 @@ export default defineConfig({
   server: {
     port: 1420,
     strictPort: true,
-    watch: { ignored: ["**/src-tauri/**", "**/site/**"] },
+    // The Rust workspace puts its build tree at the repository root, so the
+    // watcher must stay out of it (cargo locks binaries while linking, which
+    // made Vite crash with EBUSY).
+    watch: { ignored: ["**/src-tauri/**", "**/site/**", "**/target/**"] },
   },
   resolve: {
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },

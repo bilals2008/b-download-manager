@@ -8,15 +8,8 @@ import {
   SettingsPage,
 } from "@/components/settings/settings-page";
 import { Switch } from "@/components/ui/switch";
-import { copyText } from "@/lib/clipboard";
 import { describeError, isDesktop } from "@/lib/errors";
-import {
-  bridgePairing,
-  browserStatus,
-  rotateBridgeToken,
-  type BridgePairing,
-  type BrowserStatus,
-} from "@/lib/ipc";
+import { browserStatus, type BrowserStatus } from "@/lib/ipc";
 import {
   cleanCaptureType,
   cleanSite,
@@ -35,18 +28,14 @@ interface BrowserSettingsProps {
  * follows while the application runs; a status line only says what the
  * application has actually observed, never that a browser is "connected".
  *
- * The pairing code is the real control over the bridge: a request has to carry
- * it, so a web page or another local program cannot start a download by
- * guessing the port. This page shows the code the application made and which
- * extension has used it.
+ * There is nothing to pair: the extension finds the application on its own as
+ * soon as both are installed. The code this page used to show is gone, because
+ * copying a 64-character secret is not a step a normal reader should meet.
  */
 export function BrowserSettings({ settings, onChange }: BrowserSettingsProps) {
   const [status, setStatus] = useState<BrowserStatus | null>(null);
-  const [pairing, setPairing] = useState<BridgePairing | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
-  const [rotating, setRotating] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [nonce, setNonce] = useState(0);
 
   useEffect(() => {
@@ -56,19 +45,15 @@ export function BrowserSettings({ settings, onChange }: BrowserSettingsProps) {
       return;
     }
     setChecking(true);
-    // Both answers come from the same check, so the page cannot show a bridge
-    // that is ready beside a pairing it has not looked at.
-    Promise.all([browserStatus(), bridgePairing()])
-      .then(([answer, pairingAnswer]) => {
+    browserStatus()
+      .then((answer) => {
         if (!active) return;
         setStatus(answer);
-        setPairing(pairingAnswer);
         setProblem(null);
       })
       .catch((failure: unknown) => {
         if (!active) return;
         setStatus(null);
-        setPairing(null);
         setProblem(describeError(failure));
       })
       .finally(() => {
@@ -81,35 +66,8 @@ export function BrowserSettings({ settings, onChange }: BrowserSettingsProps) {
     };
   }, [nonce]);
 
-  async function copyCode() {
-    if (!pairing?.token) return;
-    if (await copyText(pairing.token)) {
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1600);
-    } else {
-      setProblem("The code could not be copied. Select it and copy it by hand.");
-    }
-  }
-
-  async function makeNewCode() {
-    if (!isDesktop() || rotating) return;
-    setRotating(true);
-    try {
-      setPairing(await rotateBridgeToken());
-      setStatus(null);
-      setProblem(null);
-      setNonce((value) => value + 1);
-    } catch (failure: unknown) {
-      setProblem(describeError(failure));
-    } finally {
-      setRotating(false);
-    }
-  }
-
   const bridge = status?.bridgeRunning ?? false;
   const seen = status?.lastContactMs ?? null;
-  const paired = pairing?.pairedExtension ?? status?.pairedExtension ?? null;
-  const folder = pairing?.filePath ?? "";
 
   return (
     <SettingsPage
@@ -140,23 +98,8 @@ export function BrowserSettings({ settings, onChange }: BrowserSettingsProps) {
           />
         </SettingRow>
         <SettingRow
-          label="Browser extension"
-          hint="Only an extension with this page's code is answered."
-        >
-          <State
-            tone={paired ? "positive" : "neutral"}
-            label={
-              checking && !status
-                ? "Checking…"
-                : paired
-                  ? `Paired · ${shortOrigin(paired)}`
-                  : "Not paired yet."
-            }
-          />
-        </SettingRow>
-        <SettingRow
           label="Last link received"
-          hint="A link only counts once the code matches."
+          hint="Any request from the extension counts."
         >
           <span className="text-chrome-micro text-chrome-menu-text">
             {checking && !status ? "Checking…" : lastLinkLabel(seen)}
@@ -165,44 +108,6 @@ export function BrowserSettings({ settings, onChange }: BrowserSettingsProps) {
         {problem ? (
           <p role="alert" className="text-chrome-micro text-chrome-error">
             {problem}
-          </p>
-        ) : null}
-      </Section>
-
-      <Section title="Pairing">
-        <SettingRow
-          stacked
-          label="Extension code"
-          htmlFor="bridge-code"
-          hint="Paste it into the extension's settings page once. It is what lets the browser reach this app."
-        >
-          <CodeField
-            id="bridge-code"
-            value={pairing?.token ?? ""}
-            loading={checking && !pairing}
-            copied={copied}
-            onCopy={() => void copyCode()}
-          />
-        </SettingRow>
-        <SettingRow
-          label="New code"
-          hint={
-            folder
-              ? `Replaces this code at once, so the extension needs the new one. Saved in ${folder}.`
-              : "Replaces this code at once, so the extension needs the new one."
-          }
-        >
-          <SettingsButton
-            onClick={() => void makeNewCode()}
-            disabled={!pairing?.token || rotating || !isDesktop()}
-          >
-            {rotating ? "Making…" : "Make a new code"}
-          </SettingsButton>
-        </SettingRow>
-        {!pairing?.token && !checking ? (
-          <p role="alert" className="text-chrome-micro text-chrome-error">
-            The app has no code, so the bridge answers nothing but a ping.
-            Restart the app to make one.
           </p>
         ) : null}
       </Section>
@@ -267,6 +172,7 @@ export function BrowserSettings({ settings, onChange }: BrowserSettingsProps) {
             values={settings.skipSites}
             onChange={(values) => onChange("skipSites", values)}
             clean={cleanSite}
+            format={(value) => value}
             emptyText="No site is left out"
             invalidText="Enter a site name, for example example.org."
             max={MAX_RULE_ENTRIES}
@@ -275,8 +181,8 @@ export function BrowserSettings({ settings, onChange }: BrowserSettingsProps) {
       </Section>
 
       <p className="text-chrome-micro leading-4 text-chrome-muted">
-        The extension keeps its own copy of these rules for when this app is
-        closed.
+        The extension connects on its own: there is no code to paste. It keeps
+        its own copy of these rules for when this app is closed.
       </p>
     </SettingsPage>
   );
@@ -329,57 +235,4 @@ function lastLinkLabel(lastContactMs: number | null): string {
   }
   const days = Math.round(hours / 24);
   return `Last link ${days} days ago.`;
-}
-
-/** The origin is a long identifier; the row names it without owning the line. */
-function shortOrigin(origin: string): string {
-  const id = origin.split("//")[1] ?? origin;
-  return id.length > 18 ? `${id.slice(0, 8)}…${id.slice(-6)}` : id;
-}
-
-/**
- * The pairing code, in the shape the extension's settings page asks for:
- * selectable in one go, and copyable with one button.
- */
-function CodeField({
-  id,
-  value,
-  loading,
-  copied,
-  onCopy,
-}: {
-  id: string;
-  value: string;
-  loading: boolean;
-  copied: boolean;
-  onCopy: () => void;
-}) {
-  return (
-    <div className="flex items-start gap-2">
-      <textarea
-        id={id}
-        readOnly
-        rows={2}
-        value={loading && !value ? "…" : value}
-        aria-label="Extension pairing code"
-        onFocus={(event) => event.currentTarget.select()}
-        className="min-w-0 flex-1 resize-none rounded-chrome border border-chrome-line bg-chrome-canvas px-2 py-1.5 font-mono text-chrome-micro leading-4 break-all text-chrome-menu-text focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:outline-none"
-      />
-      <div className="flex shrink-0 flex-col items-end gap-1">
-        <SettingsButton onClick={onCopy} disabled={!value}>
-          Copy
-        </SettingsButton>
-        <span
-          role="status"
-          aria-live="polite"
-          className={cn(
-            "text-chrome-caption text-chrome-muted",
-            copied ? "opacity-100" : "opacity-0",
-          )}
-        >
-          Copied
-        </span>
-      </div>
-    </div>
-  );
 }

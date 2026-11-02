@@ -42,7 +42,6 @@ import {
   setSpeedLimit,
   setTrayDarkMode,
   setTrayHidden,
-  setTrayStyle,
   setUrlProtocols,
   shareToSystem,
 } from "@/lib/ipc";
@@ -60,7 +59,6 @@ import {
   DEFAULT_TRAY_PREFERENCES,
   normalizeUrlProtocols,
   type TrayPreferences,
-  type TrayStyle,
   trayPreferencesFrom,
 } from "@/lib/tray";
 import {
@@ -173,9 +171,6 @@ export default function App() {
       "toolbar-large": toolbarSize === "large",
       "toolbar-small": toolbarSize === "small",
       [`toolbar-pack:${activeToolbar.id}`]: true,
-      "tray-default": tray.style === "default",
-      "tray-3d": tray.style === "3d",
-      "tray-classic": tray.style === "classic",
       "tray-hidden": tray.hidden,
       "tray-dark-mode": tray.darkMode,
     }),
@@ -468,10 +463,6 @@ export default function App() {
     });
   }
 
-  function chooseTrayStyle(style: TrayStyle) {
-    changeTray({ ...tray, style }, () => setTrayStyle(style));
-  }
-
   // With no icon there is no way back from a hidden window, so closing the
   // window quits instead. `lifecycle::close_action` already decides that from
   // whether the icon is there.
@@ -697,15 +688,6 @@ export default function App() {
       case "toolbar-new":
         openToolbarManager();
         break;
-      case "tray-default":
-        chooseTrayStyle("default");
-        break;
-      case "tray-3d":
-        chooseTrayStyle("3d");
-        break;
-      case "tray-classic":
-        chooseTrayStyle("classic");
-        break;
       case "tray-hidden":
         chooseTrayHidden(!tray.hidden);
         break;
@@ -763,7 +745,6 @@ export default function App() {
         }}
         tray={{
           preferences: tray,
-          onStyle: chooseTrayStyle,
           onHidden: chooseTrayHidden,
           onDarkMode: chooseTrayDarkMode,
           onCustomizeUrlList: () => setUrlListOpen(true),

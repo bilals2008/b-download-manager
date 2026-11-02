@@ -66,10 +66,8 @@ function connectionText(error) {
       return "Not responding";
     case "protocol":
       return "Bridge version mismatch";
-    case "unpaired":
-      return "Not paired with the app";
     case "forbidden":
-      return "Another extension is the paired one";
+      return "The app refused this extension";
     case "offline":
       return "Not running";
     default:
@@ -79,20 +77,17 @@ function connectionText(error) {
 
 /**
  * Whether a failure means the app is not there, or is there and will not answer.
- *
- * The two ask for different fixes: one is a retry, the other is the pairing code
- * in the settings page, so they cannot share one line and one state.
+ * A refusal is worth a retry line, not the "start the app" one.
  */
 function connectionState(error) {
   const kind = error?.kind;
-  if (kind === "unpaired" || kind === "forbidden") return "warn";
+  if (kind === "forbidden") return "warn";
   return "offline";
 }
 
 function actionText(error) {
   if (error?.kind === "offline") return "Not running";
   if (error?.kind === "timeout") return "The app is not responding";
-  if (error?.kind === "unpaired") return "Paste the app's code into the extension settings";
   return error?.message || "The app refused it";
 }
 
@@ -573,10 +568,19 @@ async function pollQuality() {
     mediaQuality.view = best;
     renderQualities(best);
   } else {
-    const refused = answers.find((answer) => answer?.error);
+    // An id that was merged into another job is not a failure; only a real
+    // refusal should replace the list with an error.
+    const refused = answers.find(
+      (answer) => answer?.error && answer.error.code !== "not_found",
+    );
     if (refused) {
       refs.mediaList.textContent = "";
       refs.mediaList.append(messageRow(actionText(refused.error)));
+      return;
+    }
+    if (answers.some((answer) => answer?.error)) {
+      refs.mediaList.textContent = "";
+      refs.mediaList.append(messageRow("The app lost this video. Open it again."));
       return;
     }
   }

@@ -4,11 +4,10 @@ import {
   SettingRow,
   SettingsPage,
 } from "@/components/settings/settings-page";
-import { ListBox } from "@/components/ui/listbox";
 import { Switch } from "@/components/ui/switch";
 import { APP_NAME } from "@/lib/brand";
 import type { Settings } from "@/lib/settings";
-import { TRAY_STYLES, type TrayPreferences, type TrayStyle } from "@/lib/tray";
+import type { TrayPreferences } from "@/lib/tray";
 
 interface GeneralSettingsProps {
   settings: Settings;
@@ -20,7 +19,6 @@ interface GeneralSettingsProps {
 /** What the General page needs to drive the tray icon. */
 export interface TraySettingsProps {
   preferences: TrayPreferences;
-  onStyle: (style: TrayStyle) => void;
   onHidden: (hidden: boolean) => void;
   onDarkMode: (darkMode: boolean) => void;
   onCustomizeUrlList: () => void;
@@ -83,19 +81,6 @@ export function GeneralSettings({ settings, onChange, tray }: GeneralSettingsPro
             checked={settings.closeToTray}
             onChange={(checked) => onChange("closeToTray", checked)}
           />
-        </SettingRow>
-        <SettingRow
-          label="Icon style"
-          hint="The same mark, drawn flat, glossy or outlined."
-        >
-          <div className="w-40">
-            <ListBox
-              label="Tray icon style"
-              value={preferences.style}
-              onChange={(value) => tray.onStyle(value as TrayStyle)}
-              options={[...TRAY_STYLES]}
-            />
-          </div>
         </SettingRow>
         <SettingRow
           label="Show the tray icon"

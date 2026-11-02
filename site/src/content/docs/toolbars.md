@@ -28,14 +28,11 @@ does not undo your customization.
 
 ## The tray icon
 
-The icon next to the clock is the same mark as the app's, in three drawings of
-its own. **View → B Download Manager tray icon** holds them:
+The icon next to the clock is the same mark as the app's. **View → B Download
+Manager tray icon** holds its two choices:
 
 | Row | What it does |
 | --- | --- |
-| Default style | The flat amber arrow into a green tray. |
-| 3D style | The same mark with a ramp on every body and a bevel around it. |
-| Classic style | The same mark drawn flat under one heavy outline. |
 | Don't show | Takes the icon out of the notification area. |
 | Dark Mode support | The icon changes its inks with the appearance of the window. |
 | Customize URL List... | Which protocols a copied link has to start with. |

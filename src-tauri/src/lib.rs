@@ -6,7 +6,6 @@ mod conflict;
 mod dest;
 mod grabber;
 mod lifecycle;
-mod pairing;
 mod prefs;
 mod progress;
 mod queue;
@@ -26,7 +25,7 @@ use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
 use idm_core::downloader::{DownloadInfo, Status};
 use idm_core::session::Index;
 use idm_core::transfer::Source;
-use prefs::{DesktopPreferences, TrayStyle};
+use prefs::DesktopPreferences;
 use state::{AppState, BrowserPolicy};
 
 use actions::UPDATE_EVENT;
@@ -459,14 +458,6 @@ fn set_close_to_tray(state: State<'_, AppState>, on: bool) -> bool {
     rewrite_preferences(&state, |preferences| preferences.close_to_tray = on).close_to_tray
 }
 
-/// Which of the three drawings the tray icon uses.
-#[tauri::command]
-fn set_tray_style(app: AppHandle, state: State<'_, AppState>, style: TrayStyle) -> TrayStyle {
-    rewrite_preferences(&state, |preferences| preferences.tray_style = style);
-    tray::repaint(&app);
-    style
-}
-
 /// Take the tray icon out of the notification area, or put it back.
 ///
 /// The answer is the choice as saved. Whether the icon is really there is what
@@ -587,13 +578,9 @@ struct BrowserStatus {
     bridge_running: bool,
     port: u16,
     api: u32,
-    /// The last authenticated extension request, in milliseconds since the
-    /// Unix epoch. `None` means the extension has not reached it yet.
+    /// The last extension request, in milliseconds since the Unix epoch.
+    /// `None` means the extension has not reached it yet.
     last_contact_ms: Option<u64>,
-    /// The extension the pairing belongs to, in its own origin. `None` means
-    /// no browser has presented the code yet, so the window can say "not
-    /// paired" instead of guessing from a missing hand-over.
-    paired_extension: Option<String>,
 }
 
 #[tauri::command]
@@ -603,55 +590,7 @@ fn browser_status(state: State<'_, AppState>) -> BrowserStatus {
         port: bridge::PORT,
         api: bridge::API_VERSION,
         last_contact_ms: state.last_extension_contact().map(|seconds| seconds * 1000),
-        paired_extension: state.paired_origin(),
     }
-}
-
-/// The pairing the Browser settings page shows: the code to copy into the
-/// extension, which extension has used it, and the file that keeps it.
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct BridgePairing {
-    /// The code itself. Empty only when the operating system gave the
-    /// application no random bytes, which leaves the bridge refusing
-    /// everything it is supposed to protect.
-    token: String,
-    /// The extension origin this code has been accepted from.
-    paired_extension: Option<String>,
-    /// The file the pairing lives in, so the page can name what a reader has
-    /// to delete to un-pair the browser completely.
-    file_path: String,
-}
-
-/// The pairing as the window sees it, from either of the two commands below.
-fn pairing_view(app: &AppHandle, token: &str, origin: &str) -> BridgePairing {
-    BridgePairing {
-        token: token.to_string(),
-        paired_extension: (!origin.is_empty()).then(|| origin.to_string()),
-        file_path: app
-            .path()
-            .app_data_dir()
-            .map(|dir| dir.join(pairing::FILE_NAME).to_string_lossy().to_string())
-            .unwrap_or_default(),
-    }
-}
-
-#[tauri::command]
-fn bridge_pairing(app: AppHandle, state: State<'_, AppState>) -> BridgePairing {
-    let pairing = state.bridge_pairing();
-    pairing_view(&app, &pairing.token, &pairing.origin)
-}
-
-/// Take a new pairing code and forget which extension was paired.
-///
-/// The old code stops working at the next request, so a browser that is no
-/// longer the reader's own — a reinstalled extension, a moved profile, a
-/// pairing they do not recognise — has to be given the new one by hand.
-#[tauri::command]
-fn rotate_bridge_token(app: AppHandle, state: State<'_, AppState>) -> BridgePairing {
-    idm_core::log::write("info", "the browser pairing code was replaced");
-    let pairing = state.rotate_pairing();
-    pairing_view(&app, &pairing.token, &pairing.origin)
 }
 
 /// Whether a folder can hold a download, and how much room is left.
@@ -1224,11 +1163,6 @@ pub fn run() {
             // still does; that push is what repairs the file after an
             // upgrade, and the file wins after that.
             state.set_settings_path(dir.join(settings_store::FILE_NAME), dir.clone());
-            // The browser bridge needs its secret before it binds, and the
-            // settings page needs to show the real one, so the pairing file is
-            // read here — and made, on a first run — rather than on the first
-            // request that needs it.
-            state.set_pairing_path(dir.join(pairing::FILE_NAME));
             // The icon goes up unless the reader took it away in an earlier
             // run. Without it the close and minimize choices fall back to
             // closing and minimizing, which is what `tray_available` says.
@@ -1317,7 +1251,6 @@ pub fn run() {
             desktop_preferences,
             set_minimize_to_tray,
             set_close_to_tray,
-            set_tray_style,
             set_tray_hidden,
             set_tray_dark_mode,
             set_tray_appearance,
@@ -1335,8 +1268,6 @@ pub fn run() {
             set_download_folders,
             saved_settings,
             browser_status,
-            bridge_pairing,
-            rotate_bridge_token,
             folder_status,
             app_paths,
             validate_proxy,

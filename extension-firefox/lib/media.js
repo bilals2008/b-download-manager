@@ -43,7 +43,7 @@ function bdmIsMediaLink(url) {
 }
 
 /** Query parameters that describe one byte range of a whole media file. */
-const BDM_RANGE_PARAMS = ["range", "rn", "rbuf"];
+const BDM_RANGE_PARAMS = ["range", "rn", "rbuf", "bytestart", "byteend"];
 
 /**
  * The whole-file address behind a range request.

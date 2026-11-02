@@ -5,11 +5,11 @@
   versioned: the ping names the app and the API, so a stale process on the port
   is told apart from a missing application.
 
-  Two headers say who is asking. The client header keeps a web page out, but a
-  header is not a secret and any local program can send one — the pairing code
-  is the proof. The application makes it up, the reader pastes it into this
-  extension's settings page once, and every request after that carries it as a
-  bearer token. Until it is set, only the ping gets an answer.
+  One header says who is asking: the browser extension. A web page cannot put
+  it on a cross-origin request without a preflight, and the preflight is
+  refused unless the origin is an extension's. Nothing is pasted and there is no
+  pairing step: the extension and the app find each other as soon as both are
+  installed.
 
   Loaded by the background page, which is the only context that talks to the
   bridge. The popup and the content script ask the background for what they
@@ -22,19 +22,6 @@ const BDM_BRIDGE = Object.freeze({
   app: "b-download-manager",
   client: "browser-extension",
 });
-
-/** The pairing code, held by the background page and set from storage. */
-let bdmBridgeToken = "";
-
-/** Put the pairing code in place, or take it away with an empty string. */
-function bdmBridgeSetToken(token) {
-  bdmBridgeToken = String(token || "");
-}
-
-/** The code this extension is currently asking with. */
-function bdmBridgeGetToken() {
-  return bdmBridgeToken;
-}
 
 /** A bridge failure with a kind the UI can turn into one short line. */
 class BdmBridgeError extends Error {
@@ -59,7 +46,6 @@ async function bdmBridgeRequest(method, path, body, timeout = 4000) {
       credentials: "omit",
       headers: {
         "X-BDM-Client": BDM_BRIDGE.client,
-        ...(bdmBridgeToken ? { Authorization: `Bearer ${bdmBridgeToken}` } : {}),
         ...(body === undefined ? {} : { "Content-Type": "application/json" }),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -88,8 +74,6 @@ async function bdmBridgeRequest(method, path, body, timeout = 4000) {
       throw new BdmBridgeError(
         payload.error?.message || `The app refused the request (${response.status}).`,
         {
-          // A refusal that says the code is wrong is its own kind: the app is
-          // running and reachable, so the fix is pairing, not a retry.
           kind: bdmFailureKind(response.status),
           status: response.status,
           code: payload.error?.code || "",
@@ -111,7 +95,6 @@ async function bdmBridgeRequest(method, path, body, timeout = 4000) {
 
 /** What one status code means for what the user has to do next. */
 function bdmFailureKind(status) {
-  if (status === 401) return "unpaired";
   if (status === 403) return "forbidden";
   return "refused";
 }
@@ -119,9 +102,8 @@ function bdmFailureKind(status) {
 /**
  * The handshake. Confirms that the app, not another process, holds the port.
  *
- * The answer carries `paired`, so this one call says both that the application
- * is there and whether it knows the code this extension is sending — which is
- * the difference between "paste the code" and "start the app".
+ * The answer carries `connected`, so this one call says both that the
+ * application is there and that it heard the extension's own header.
  */
 async function bdmBridgePing() {
   const data = await bdmBridgeRequest("GET", "/v1/ping", undefined, 1200);
@@ -151,6 +133,27 @@ async function bdmBridgeList() {
  */
 async function bdmBridgeCapturePolicy() {
   return bdmBridgeRequest("GET", "/v1/capture", undefined, 1500);
+}
+
+/**
+ * Write capture rules to the application.
+ *
+ * The application's Settings page owns these while it runs, so a change made
+ * in this extension's options page has to go there too; otherwise the two
+ * pages would disagree and the app's copy would keep winning.
+ */
+async function bdmBridgeCaptureSave(policy) {
+  return bdmBridgeRequest(
+    "POST",
+    "/v1/capture",
+    {
+      capture: policy?.capture === true,
+      ask: policy?.ask === true,
+      types: Array.isArray(policy?.types) ? policy.types : [],
+      skipSites: Array.isArray(policy?.skipSites) ? policy.skipSites : [],
+    },
+    4000,
+  );
 }
 
 /**
