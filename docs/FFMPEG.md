@@ -21,8 +21,8 @@ Pinned builds:
 | `x86_64-pc-windows-msvc` | `ffmpeg-N-128227-g4811625b5f-win64-lgpl.zip` | `6550f7ab…d48734` |
 | `x86_64-unknown-linux-gnu` | `ffmpeg-N-128227-g4811625b5f-linux64-lgpl.tar.xz` | `f7ce163e…ee4b` |
 
-macOS has no pinned build yet; that leg falls back to an `ffmpeg` on `PATH` at
-runtime.
+macOS has no pinned build yet; that leg ships no sidecar and uses an `ffmpeg`
+on `PATH` at runtime (`src-tauri/tauri.macos.conf.json` clears `externalBin`).
 
 ## Licence
 
@@ -74,8 +74,9 @@ downloads are unaffected — they never invoke ffmpeg.
 - The media path locates ffmpeg by name prefix (`ffmpeg-`), so a future build
   with a different revision string is found without code changes, as long as
   the target-triple suffix is preserved.
-- macOS and Linux builds use their own pinned builds; Windows only uses the
-  Windows build. Cross-platform updates are not affected by the sidecar.
+- Windows and Linux builds use their own pinned builds; the macOS bundle ships
+  no sidecar and locates an `ffmpeg` on `PATH`. Cross-platform updates are not
+  affected by the sidecar.
 - If ffmpeg is missing at runtime (e.g. a partial install), the join returns
   `MuxError::NotFound` and the download reports failure. No file is written to
   the destination, and the UI never reports success for a missing file.
