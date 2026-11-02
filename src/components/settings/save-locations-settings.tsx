@@ -193,6 +193,7 @@ export function SaveLocationsSettings({
     >
       <Section title="Default folder">
         <SettingRow
+          settingId="setting-default-folder"
           stacked
           label="Save new downloads to"
           htmlFor="save-to-folder"
@@ -216,6 +217,7 @@ export function SaveLocationsSettings({
 
       <Section title="Unfinished downloads">
         <SettingRow
+          settingId="setting-unfinished-folder"
           stacked
           label="Keep unfinished downloads in"
           htmlFor="unfinished-folder"
@@ -241,6 +243,7 @@ export function SaveLocationsSettings({
 
       <Section title="Remembering">
         <SettingRow
+          settingId="setting-remember-folder"
           label="Start a new download in the last folder used"
           hint="The last folder you really downloaded to."
         >
@@ -251,6 +254,7 @@ export function SaveLocationsSettings({
           />
         </SettingRow>
         <SettingRow
+          settingId="setting-forget-folder"
           label="Forget the remembered folder"
           hint="Starts using the default again."
         >

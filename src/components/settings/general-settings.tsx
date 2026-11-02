@@ -37,6 +37,7 @@ export function GeneralSettings({ settings, onChange, tray }: GeneralSettingsPro
     >
       <Section title="Startup">
         <SettingRow
+          settingId="setting-launch-startup"
           label={`Launch ${APP_NAME} on startup`}
           hint="Adds an entry to Windows startup."
         >
@@ -50,6 +51,7 @@ export function GeneralSettings({ settings, onChange, tray }: GeneralSettingsPro
 
       <Section title="Clipboard">
         <SettingRow
+          settingId="setting-clipboard"
           label="Watch the clipboard for download links"
           hint="Opens the Add URL dialog first."
         >
@@ -63,6 +65,7 @@ export function GeneralSettings({ settings, onChange, tray }: GeneralSettingsPro
 
       <Section title="The tray">
         <SettingRow
+          settingId="setting-minimize-tray"
           label="Minimize the window to the tray"
           hint="The tray icon brings the window back."
         >
@@ -73,6 +76,7 @@ export function GeneralSettings({ settings, onChange, tray }: GeneralSettingsPro
           />
         </SettingRow>
         <SettingRow
+          settingId="setting-close-tray"
           label="Keep running in the tray when the window is closed"
           hint="Downloads carry on after the window closes."
         >
@@ -83,6 +87,7 @@ export function GeneralSettings({ settings, onChange, tray }: GeneralSettingsPro
           />
         </SettingRow>
         <SettingRow
+          settingId="setting-tray-icon"
           label="Show the tray icon"
           hint="Off leaves the window the only way back, so closing it exits."
         >
@@ -93,6 +98,7 @@ export function GeneralSettings({ settings, onChange, tray }: GeneralSettingsPro
           />
         </SettingRow>
         <SettingRow
+          settingId="setting-tray-dark-mode"
           label="Dark mode support"
           hint="The icon takes the inks of the appearance the window is in."
         >
@@ -103,6 +109,7 @@ export function GeneralSettings({ settings, onChange, tray }: GeneralSettingsPro
           />
         </SettingRow>
         <SettingRow
+          settingId="setting-url-list"
           label="Customize URL List"
           hint="The protocols a copied address has to start with."
         >

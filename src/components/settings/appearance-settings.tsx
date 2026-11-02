@@ -29,7 +29,12 @@ export function AppearanceSettings({
       description="Theme, font and weight."
     >
       <Section title="Theme">
-        <SettingRow label="Theme" hint="Auto follows your system." stacked>
+        <SettingRow
+          settingId="setting-theme"
+          label="Theme"
+          hint="Auto follows your system."
+          stacked
+        >
           <ThemeChoice
             value={settings.theme}
             onChange={(theme) => onChange("theme", theme)}
@@ -42,7 +47,11 @@ export function AppearanceSettings({
           value={settings.uiFont}
           onChange={(font) => onChange("uiFont", font)}
         />
-        <SettingRow label="Weight" hint={WEIGHT_HINT}>
+        <SettingRow
+          settingId="setting-weight"
+          label="Weight"
+          hint={WEIGHT_HINT}
+        >
           <Segmented
             label="Weight"
             value={settings.uiWeight}
@@ -125,7 +134,7 @@ function FontChoice({
     FONT_OPTIONS.find((option) => option.value === value) ?? FONT_OPTIONS[0];
 
   return (
-    <SettingRow label="Font" hint={current.note}>
+    <SettingRow settingId="setting-font" label="Font" hint={current.note}>
       <div className="w-44">
         <ListBox
           label="Font"

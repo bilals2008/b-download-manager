@@ -60,7 +60,7 @@ export function ToolbarSettings({
       title="Toolbar"
       description="The bar under the menu: its style, size and buttons."
     >
-      <Section title="Style">
+      <Section id="setting-toolbar-style" title="Style">
         <fieldset className="flex flex-col">
           <legend className="sr-only">Toolbar style</legend>
           {packs.map((choice) => {
@@ -117,6 +117,7 @@ export function ToolbarSettings({
 
       <Section title="Size and labels">
         <SettingRow
+          settingId="setting-toolbar-size"
           label="Large buttons"
           hint="Small buttons leave more room for the download list."
         >
@@ -127,6 +128,7 @@ export function ToolbarSettings({
           />
         </SettingRow>
         <SettingRow
+          settingId="setting-toolbar-labels"
           label="Show text labels"
           hint="The tooltip names the button either way."
         >
@@ -140,6 +142,7 @@ export function ToolbarSettings({
 
       <Section title="Buttons">
         <SettingRow
+          settingId="setting-toolbar-buttons"
           label="Customize buttons"
           hint={`${buttonCount} button${buttonCount === 1 ? "" : "s"} on this bar. Add, remove, reorder or group them.`}
         >
@@ -148,6 +151,7 @@ export function ToolbarSettings({
           </SettingsButton>
         </SettingRow>
         <SettingRow
+          settingId="setting-toolbar-manage"
           label="More toolbars"
           hint="Install a pack from a file, replace one or remove it."
         >

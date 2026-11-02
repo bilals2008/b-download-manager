@@ -83,6 +83,7 @@ export function BrowserSettings({ settings, onChange }: BrowserSettingsProps) {
         }
       >
         <SettingRow
+          settingId="setting-browser-ready"
           label="Ready to receive from the browser"
           hint={`This computer only · port ${status?.port ?? 27500}`}
         >
@@ -98,6 +99,7 @@ export function BrowserSettings({ settings, onChange }: BrowserSettingsProps) {
           />
         </SettingRow>
         <SettingRow
+          settingId="setting-browser-last-link"
           label="Last link received"
           hint="Any request from the extension counts."
         >
@@ -114,6 +116,7 @@ export function BrowserSettings({ settings, onChange }: BrowserSettingsProps) {
 
       <Section title="From the browser">
         <SettingRow
+          settingId="setting-browser-capture"
           label="Take over downloads from the browser"
           hint="These rules win while the app is running."
         >
@@ -124,6 +127,7 @@ export function BrowserSettings({ settings, onChange }: BrowserSettingsProps) {
           />
         </SettingRow>
         <SettingRow
+          settingId="setting-browser-ask"
           label="Ask before saving"
           hint="The link waits for you to press Download."
         >
@@ -138,6 +142,7 @@ export function BrowserSettings({ settings, onChange }: BrowserSettingsProps) {
 
       <Section title="File types">
         <SettingRow
+          settingId="setting-capture-types"
           stacked
           label="Take over only these types"
           htmlFor="capture-types"
@@ -160,6 +165,7 @@ export function BrowserSettings({ settings, onChange }: BrowserSettingsProps) {
 
       <Section title="Sites">
         <SettingRow
+          settingId="setting-skip-sites"
           stacked
           label="Leave these sites to the browser"
           htmlFor="capture-sites"

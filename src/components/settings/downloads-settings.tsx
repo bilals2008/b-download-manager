@@ -30,6 +30,7 @@ export function DownloadsSettings({ settings, onChange }: DownloadsSettingsProps
     >
       <Section title="Connections">
         <SettingRow
+          settingId="setting-default-connections"
           label="Default number of connections"
           htmlFor="download-connections"
           hint="For new downloads. Up to this many parts."
@@ -47,6 +48,7 @@ export function DownloadsSettings({ settings, onChange }: DownloadsSettingsProps
 
       <Section title="Existing files">
         <SettingRow
+          settingId="setting-duplicate-policy"
           label="When the file already exists"
           hint="What happens when the file is already there."
         >
@@ -65,6 +67,7 @@ export function DownloadsSettings({ settings, onChange }: DownloadsSettingsProps
 
       <Section title="While a download runs">
         <SettingRow
+          settingId="setting-progress-window"
           label="Open the progress window when a download starts"
           hint="Opens for every new download."
         >
@@ -78,6 +81,7 @@ export function DownloadsSettings({ settings, onChange }: DownloadsSettingsProps
 
       <Section title="When a download finishes">
         <SettingRow
+          settingId="setting-complete-dialog"
           label="Show the download complete dialog"
           hint="Names the file and where it went."
         >

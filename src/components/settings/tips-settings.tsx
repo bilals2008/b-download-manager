@@ -34,6 +34,7 @@ export function TipsSettings({ settings, onChange }: TipsSettingsProps) {
     >
       <Section title="Startup">
         <SettingRow
+          settingId="setting-tips-startup"
           label="Show a tip on startup"
           hint="One tip per start. Help > Tip of the Day opens them any time."
         >
@@ -44,6 +45,7 @@ export function TipsSettings({ settings, onChange }: TipsSettingsProps) {
           />
         </SettingRow>
         <SettingRow
+          settingId="setting-tip-order"
           label="Tip order"
           hint={
             reset

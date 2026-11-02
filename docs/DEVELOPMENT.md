@@ -348,6 +348,30 @@ is added:
   engine, the tray, or the bridge needs it, it belongs in one of the two
   backend files; otherwise `localStorage` is enough.
 
+## Settings search
+
+The field at the top of the options window filters a prepared catalogue, not
+the DOM. `src/lib/settings-search.ts` holds the pure index/search/group code;
+`src/components/settings/settings-search-data.ts` is the one catalogue of
+names, hints, synonyms and anchors. The index is built once at module load
+and reused for every query, and the query is deferred so typing never waits on
+a result render. Nothing here asks the engine or the network, so there is no
+loading state to fake.
+
+When a setting is added or renamed:
+
+- Give its `SettingRow` (or the `Section` for a whole group) a `settingId` that
+  matches an entry `id` in the catalogue.
+- Add or update that entry's title, description and keywords. Keep the words
+  a reader would actually use: "bandwidth" beside "speed", "autostart" beside
+  "startup".
+- The catalogue test (`settings-search-data.test.ts`) fails when an entry has
+  no rendered anchor or a duplicate id, so a broken jump cannot land silently.
+
+Shortcuts come from `src/lib/shortcuts.ts`, which both the Shortcuts page and
+the catalogue read; add a key there once. A result opens the page, scrolls the
+row into view, focuses it and leaves a short ring (`use-setting-reveal.ts`).
+
 ## Media capture
 
 

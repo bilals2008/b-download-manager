@@ -88,6 +88,7 @@ export function ProxySettings({ settings, onChange }: ProxySettingsProps) {
     >
       <Section title="Proxy address">
         <SettingRow
+          settingId="setting-proxy"
           stacked
           label="Proxy address"
           htmlFor="proxy-address"

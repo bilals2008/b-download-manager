@@ -32,17 +32,26 @@ export function SettingsPage({
  * things that separate one group from the next: no boxes, no rules.
  */
 export function Section({
+  id,
   title,
   action,
   children,
 }: {
+  /** The anchor a search result scrolls to, when it opens the whole group. */
+  id?: string;
   title: string;
   /** A control for the group as a whole, beside its caption. */
   action?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <section aria-label={title} className="flex flex-col">
+    <section
+      id={id}
+      tabIndex={id ? -1 : undefined}
+      data-setting-section={id ? "" : undefined}
+      aria-label={title}
+      className="flex flex-col rounded-chrome focus:outline-none"
+    >
       <div className="flex items-center justify-between gap-3 pb-1.5">
         <h3 className="text-xs font-medium text-chrome-muted">{title}</h3>
         {action}
@@ -62,6 +71,7 @@ export function SettingRow({
   label,
   hint,
   htmlFor,
+  settingId,
   stacked,
   children,
 }: {
@@ -69,6 +79,8 @@ export function SettingRow({
   hint?: ReactNode;
   /** Set when the control is a plain input, so the name becomes its label. */
   htmlFor?: string;
+  /** The anchor a settings search result scrolls to and highlights. */
+  settingId?: string;
   /** The control sits under the name: for a path or an address, which is wide. */
   stacked?: boolean;
   children: ReactNode;
@@ -77,8 +89,11 @@ export function SettingRow({
 
   return (
     <div
+      id={settingId}
+      tabIndex={settingId ? -1 : undefined}
+      data-setting-row={settingId ? "" : undefined}
       className={cn(
-        "gap-4 py-2",
+        "gap-4 py-2 rounded-chrome focus:outline-none",
         stacked ? "flex flex-col" : "flex items-center justify-between",
       )}
     >

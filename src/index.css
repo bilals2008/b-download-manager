@@ -891,6 +891,46 @@
   --swatch-accent: #e9e9e6;
 }
 
+/*
+  A setting a search result jumped to keeps a ring long enough for the eye to
+  find it after the page changes. Rows also carry a tinted fill; a whole
+  section only gets the ring, so a group heading does not paint a large block.
+*/
+[data-setting-row],
+[data-setting-section] {
+  scroll-margin-block: 4rem;
+}
+
+@keyframes setting-flash-row {
+  0%,
+  55% {
+    background-color: var(--chrome-menu-hover);
+    box-shadow: inset 0 0 0 1px var(--chrome-focus);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: inset 0 0 0 1px transparent;
+  }
+}
+
+@keyframes setting-flash-section {
+  0%,
+  55% {
+    box-shadow: inset 0 0 0 1px var(--chrome-focus);
+  }
+  100% {
+    box-shadow: inset 0 0 0 1px transparent;
+  }
+}
+
+.setting-flash[data-setting-row] {
+  animation: setting-flash-row 1.6s ease-out;
+}
+
+.setting-flash[data-setting-section] {
+  animation: setting-flash-section 1.6s ease-out;
+}
+
 @theme inline {
   /*
     The stack is a reference, not a value, so the appearance page can swap the

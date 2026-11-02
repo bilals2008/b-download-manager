@@ -24,6 +24,12 @@ import {
   type SettingsPageId,
 } from "@/components/settings/settings-nav";
 import { SettingsSidebar } from "@/components/settings/settings-sidebar";
+import { SettingsSearch } from "@/components/settings/settings-search";
+import type { SettingsCatalogEntry } from "@/components/settings/settings-search-data";
+import {
+  useSettingReveal,
+  type SettingTarget,
+} from "@/components/settings/use-setting-reveal";
 import { Dialog } from "@/components/ui/dialog";
 import { broadcastSettings } from "@/lib/app-events";
 import { describeError } from "@/lib/errors";
@@ -111,6 +117,10 @@ export function SettingsDialog({
 }: SettingsDialogProps) {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [page, setPage] = useState<SettingsPageId>("general");
+  // A search result asks for one anchor after the page has changed. The hook
+  // scrolls it into view, focuses it and flashes it once the page has drawn.
+  const [settingTarget, setSettingTarget] = useState<SettingTarget | null>(null);
+  useSettingReveal(settingTarget);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const pushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -198,6 +208,11 @@ export function SettingsDialog({
     },
     [],
   );
+
+  function openSetting(entry: SettingsCatalogEntry) {
+    setPage(entry.page);
+    setSettingTarget({ anchor: entry.id });
+  }
 
   function scheduleEngine(next: Settings) {
     if (pushTimer.current) {
@@ -420,13 +435,15 @@ export function SettingsDialog({
     >
       <div className="flex min-h-0 w-full flex-1">
         <SettingsSidebar page={page} onSelect={setPage} />
-        <div
-          role="region"
-          aria-label={`${settingsPageLabel(page)} settings`}
-          className="min-h-0 min-w-0 flex-1 overflow-y-auto"
-        >
-          {body()}
-        </div>
+        <SettingsSearch page={page} onNavigate={openSetting}>
+          <div
+            role="region"
+            aria-label={`${settingsPageLabel(page)} settings`}
+            className="min-h-full"
+          >
+            {body()}
+          </div>
+        </SettingsSearch>
       </div>
     </Dialog>
   );

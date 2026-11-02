@@ -33,6 +33,7 @@ export function VideoDownloadButtonSettings({
     >
       <Section title="Appearance">
         <SettingRow
+          settingId="setting-video-button-style"
           label="Button style"
           hint="Icon only, text only, or both."
         >
@@ -51,6 +52,7 @@ export function VideoDownloadButtonSettings({
           </div>
         </SettingRow>
         <SettingRow
+          settingId="setting-video-button-label"
           label="Button label"
           hint="Shown when the style includes text. Defaults to Download."
         >
@@ -65,6 +67,7 @@ export function VideoDownloadButtonSettings({
 
       <Section title="Behaviour">
         <SettingRow
+          settingId="setting-video-button-hover"
           label="Hover to show"
           hint="Only show the button while the pointer is on the video."
         >

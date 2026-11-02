@@ -101,7 +101,7 @@ export function AboutSettings({
           </div>
           <AuthorAvatar />
         </div>
-        <SettingRow label="Version">
+        <SettingRow settingId="setting-version" label="Version">
           <span className="font-mono text-chrome-micro text-chrome-menu-text">
             {versionLabel}
           </span>
@@ -119,12 +119,15 @@ export function AboutSettings({
           </SettingsButton>
         }
       >
-        <SettingRow label="Last check">
+        <SettingRow settingId="setting-last-check" label="Last check">
           <span className="text-chrome-micro text-chrome-muted">
             {formatCheckTime(settings.lastUpdateCheck)}
           </span>
         </SettingRow>
-        <SettingRow label="Check for updates when the application starts">
+        <SettingRow
+          settingId="setting-auto-update"
+          label="Check for updates when the application starts"
+        >
           <Switch
             label="Check for updates when the application starts"
             checked={settings.updateAutoCheck}

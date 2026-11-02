@@ -63,6 +63,7 @@ export function AdvancedSettings({ onReset }: AdvancedSettingsProps) {
     >
       <Section title="Application data">
         <SettingRow
+          settingId="setting-data-folder"
           stacked
           label="Data folder"
           hint="The download list and unfinished files."
@@ -86,6 +87,7 @@ export function AdvancedSettings({ onReset }: AdvancedSettingsProps) {
           </div>
         </SettingRow>
         <SettingRow
+          settingId="setting-log"
           stacked
           label="Log"
           hint="What happened, including failures."
@@ -115,7 +117,7 @@ export function AdvancedSettings({ onReset }: AdvancedSettingsProps) {
         ) : null}
       </Section>
 
-      <Section title="Reset">
+      <Section id="setting-reset" title="Reset">
         <p className="pb-2 text-xs leading-5 text-chrome-menu-text">
           Restores every setting on these pages, including the last folder used.
           Downloads and saved files are kept.
