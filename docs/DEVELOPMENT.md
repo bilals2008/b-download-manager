@@ -150,12 +150,12 @@ Windows 10, where the API is a no-op, all four corners are square together.
 Single source of truth: `src/index.css` (CSS variables + `@theme inline`), read
 by `scripts/check-palette.mjs`. Five appearances: the deep green-black Dark
 base, the neutral Light, and three fixed looks — Cyberpunk (near-black with a
-cyan accent), Volt (ink-black with a teal cast and lime accent) and Mica (the
-Windows 10 dark palette: #1f1f1f windows, #171717 panes and the #0078d4
-accent). Green only for finished work and red only for destruction in every
-appearance. Changing a colour means changing it there and re-running
-`pnpm check:palette`, which merges the base block with each
-`:root[data-theme="…"]` block and checks the WCAG pairs in all five.
+cyan accent), Volt (ink-black with a teal cast and lime accent) and Soft Black
+(one warm neutral black, off-white text and a monochrome action). Green only
+for finished work and red only for destruction in every appearance. Changing a
+colour means changing it there and re-running `pnpm check:palette`, which
+merges the base block with each `:root[data-theme="…"]` block and checks the
+WCAG pairs in all five.
 
 Adding an appearance takes five places, or it will silently fall back to the
 system light/dark look:

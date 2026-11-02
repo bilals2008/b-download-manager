@@ -435,7 +435,7 @@ export type ThemePreference =
   | "dark"
   | "cyberpunk"
   | "volt"
-  | "mica";
+  | "softblack";
 
 /** The saved values, in one place so the loader and the picker agree. */
 const THEME_PREFERENCES: readonly ThemePreference[] = [
@@ -444,7 +444,7 @@ const THEME_PREFERENCES: readonly ThemePreference[] = [
   "dark",
   "cyberpunk",
   "volt",
-  "mica",
+  "softblack",
 ];
 
 /**

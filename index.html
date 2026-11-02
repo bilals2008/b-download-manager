@@ -13,7 +13,7 @@
         var saved = JSON.parse(
           localStorage.getItem("idm-clone.settings.v1") || "{}",
         );
-        var fixed = ["light", "dark", "cyberpunk", "volt", "mica"];
+        var fixed = ["light", "dark", "cyberpunk", "volt", "softblack"];
         var root = document.documentElement;
         root.dataset.theme =
           fixed.indexOf(saved.theme) >= 0

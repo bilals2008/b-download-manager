@@ -10,7 +10,7 @@ export const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
   { value: "dark", label: "Dark" },
   { value: "cyberpunk", label: "Cyberpunk" },
   { value: "volt", label: "Volt" },
-  { value: "mica", label: "Mica" },
+  { value: "softblack", label: "Soft Black" },
 ];
 
 /**

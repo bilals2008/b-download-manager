@@ -202,8 +202,8 @@
 }
 
 /*
-  Auto follows the operating system; Light, Dark, Cyberpunk, Volt and Mica
-  override it.
+  Auto follows the operating system; Light, Dark, Cyberpunk, Volt and Soft
+  Black override it.
 
   The dark block below is the base every other block overrides: it holds the
   deep green-black view, and each `:root[data-theme="…"]` block after it
@@ -751,26 +751,26 @@
 }
 
 /*
-  Mica. The Windows 10 dark palette: #1f1f1f windows, #171717 secondary panes,
-  #2d2d2d hover surfaces, white text and the saturated #0078d4 accent.
+  Soft Black. One warm neutral black across the whole window: no blue, purple
+  or grey cast, off-white text and a monochrome action.
 */
-:root[data-theme="mica"] {
+:root[data-theme="softblack"] {
   color-scheme: dark;
 
-  --radius: 0.5rem;
+  --radius: 0.625rem;
 
-  --background: #1f1f1f;
-  --foreground: #ffffff;
-  --card: #1f1f1f;
-  --card-foreground: #ffffff;
-  --popover: #2d2d2d;
-  --popover-foreground: #ffffff;
+  --background: #0a0a0a;
+  --foreground: #f2f2f0;
+  --card: #111111;
+  --card-foreground: #f2f2f0;
+  --popover: #141414;
+  --popover-foreground: #f2f2f0;
 
-  --primary: #0078d4;
-  --primary-foreground: #ffffff;
-  --progress: #0078d4;
+  --primary: #e9e9e6;
+  --primary-foreground: #0a0a0a;
+  --progress: #e9e9e6;
 
-  --progress-track: rgb(255 255 255 / 0.1);
+  --progress-track: rgb(255 255 255 / 0.08);
   --progress-active-from: #34d399;
   --progress-active-via: #22d3ee;
   --progress-active-to: #60a5fa;
@@ -781,71 +781,71 @@
   --progress-failed-from: #f87171;
   --progress-failed-to: #ef4444;
 
-  --secondary: #171717;
-  --secondary-foreground: #ffffff;
+  --secondary: #141414;
+  --secondary-foreground: #e6e6e3;
 
-  --muted: #171717;
-  --muted-foreground: #a6a6a6;
+  --muted: #131313;
+  --muted-foreground: #9c9c98;
 
-  --accent: #2d2d2d;
-  --accent-foreground: #ffffff;
+  --accent: #1a1a1a;
+  --accent-foreground: #f2f2f0;
 
-  --success: #6ccb5f;
-  --success-foreground: #04240a;
+  --success: #2fd06b;
+  --success-foreground: #04130a;
 
-  --destructive: #e81123;
+  --destructive: #c2413a;
   --destructive-foreground: #ffffff;
 
-  --border: #333333;
-  --input: #8c8c8c;
-  --ring: #0078d4;
+  --border: #232323;
+  --input: #7a7a76;
+  --ring: #e9e9e6;
 
   --float-shadow:
-    0 18px 40px -18px rgb(0 0 0 / 0.7), 0 4px 12px -6px rgb(0 0 0 / 0.45);
+    0 18px 40px -18px rgb(0 0 0 / 0.75), 0 4px 12px -6px rgb(0 0 0 / 0.5);
 
-  --chrome-title: #1f1f1f;
-  --chrome-title-text: #ffffff;
-  --chrome-menu: #1f1f1f;
-  --chrome-menu-text: #ffffff;
-  --chrome-menu-hover: #2d2d2d;
-  --chrome-menu-active: #333333;
-  --chrome-toolbar: #1f1f1f;
-  --chrome-toolbar-text: #ffffff;
-  --chrome-toolbar-hover: #2d2d2d;
-  --chrome-toolbar-active: #333333;
-  --chrome-popup: #2d2d2d;
-  --chrome-popup-hover: #383838;
-  --chrome-row-alt: #171717;
-  --chrome-muted: #a6a6a6;
-  --chrome-canvas: #1f1f1f;
-  --chrome-panel: #171717;
-  --chrome-line: #333333;
-  --chrome-focus: #0078d4;
-  --chrome-danger: #e81123;
+  --chrome-title: #0a0a0a;
+  --chrome-title-text: #f2f2f0;
+  --chrome-menu: #0a0a0a;
+  --chrome-menu-text: #f2f2f0;
+  --chrome-menu-hover: #1a1a1a;
+  --chrome-menu-active: #222222;
+  --chrome-toolbar: #0a0a0a;
+  --chrome-toolbar-text: #f2f2f0;
+  --chrome-toolbar-hover: #1a1a1a;
+  --chrome-toolbar-active: #222222;
+  --chrome-popup: #111111;
+  --chrome-popup-hover: #1c1c1c;
+  --chrome-row-alt: #0d0d0d;
+  --chrome-muted: #9c9c98;
+  --chrome-canvas: #0a0a0a;
+  --chrome-panel: #111111;
+  --chrome-line: #232323;
+  --chrome-focus: #e9e9e6;
+  --chrome-danger: #c2413a;
   --chrome-danger-text: #ffffff;
-  --chrome-error: #ffb3b3;
+  --chrome-error: #ff9d90;
 
-  --icon-green: #6ccb5f;
-  --icon-green-bright: #8fdc7d;
-  --icon-green-deep: #3d7a33;
-  --icon-red: #ff5f6d;
-  --icon-red-bright: #ff99a4;
-  --icon-red-deep: #a3121c;
-  --icon-silver: #c8c8c8;
-  --icon-silver-bright: #f0f0f0;
-  --icon-silver-deep: #7a7a7a;
-  --icon-purple: #b4a0f0;
-  --icon-purple-bright: #cbb8ff;
-  --icon-purple-deep: #6a55a8;
-  --icon-blue: #60cdff;
-  --icon-blue-bright: #9adcff;
-  --icon-blue-deep: #2a6f93;
-  --icon-amber: #fce100;
-  --icon-amber-bright: #fff17a;
-  --icon-amber-deep: #9a8600;
+  --icon-green: #3fb950;
+  --icon-green-bright: #56d364;
+  --icon-green-deep: #1f7a33;
+  --icon-red: #c8382b;
+  --icon-red-bright: #e85a4d;
+  --icon-red-deep: #7c1f18;
+  --icon-silver: #b9c0c7;
+  --icon-silver-bright: #eef1f3;
+  --icon-silver-deep: #6f777f;
+  --icon-purple: #8f6fc9;
+  --icon-purple-bright: #b79ae8;
+  --icon-purple-deep: #4c3574;
+  --icon-blue: #7f92cc;
+  --icon-blue-bright: #b6c4ee;
+  --icon-blue-deep: #4f5f94;
+  --icon-amber: #d99a2b;
+  --icon-amber-bright: #f2bf62;
+  --icon-amber-deep: #7a4f07;
 
-  --file-paper: #f5f5f5;
-  --file-paper-edge: #8a8a8a;
+  --file-paper: #eef3f3;
+  --file-paper-edge: #7f8d8a;
   --file-mark: #ffffff;
 }
 
@@ -885,10 +885,10 @@
   --swatch-accent: #c8ff00;
 }
 
-[data-theme-swatch="mica"] {
-  --swatch-surface: #1f1f1f;
-  --swatch-line: #333333;
-  --swatch-accent: #0078d4;
+[data-theme-swatch="softblack"] {
+  --swatch-surface: #0a0a0a;
+  --swatch-line: #232323;
+  --swatch-accent: #e9e9e6;
 }
 
 @theme inline {

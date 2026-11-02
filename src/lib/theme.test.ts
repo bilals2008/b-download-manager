@@ -25,7 +25,7 @@ describe("resolveTheme", () => {
     expect(resolveTheme("dark")).toBe("dark");
     expect(resolveTheme("cyberpunk")).toBe("cyberpunk");
     expect(resolveTheme("volt")).toBe("volt");
-    expect(resolveTheme("mica")).toBe("mica");
+    expect(resolveTheme("softblack")).toBe("softblack");
   });
 
   it("follows the operating system in auto mode", () => {
@@ -46,7 +46,7 @@ describe("isLightTheme", () => {
     expect(isLightTheme("dark")).toBe(false);
     expect(isLightTheme("cyberpunk")).toBe(false);
     expect(isLightTheme("volt")).toBe(false);
-    expect(isLightTheme("mica")).toBe(false);
+    expect(isLightTheme("softblack")).toBe(false);
   });
 });
 
