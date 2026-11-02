@@ -8,21 +8,26 @@
   section for its own version, and the release page uses the same words.
 -->
 
-## [Unreleased]
+## 0.3.0 — 2 November 2026
 
-### A browser connection that just works
+### Find any setting
 
-- The browser extension connects to the app on its own. There is no code to copy and nothing to set up.
-- The download button on videos now follows your choice in the app on pages that are already open, with no reload.
-- The tray icon and the app icon are now the B logo, in one drawing, on light and dark taskbars.
+- The search box at the top of Settings finds any option by name, even when you are on another page.
+- Choose a result and the right page opens with the setting pointed out.
 
-### A real download queue
+### A look that's yours
 
-- Start Queue starts downloads one at a time, in the order you set, instead of starting every row at once.
-- Choose how many downloads may run together at once; the rest wait their turn.
-- Drag a queued download to change its position, or take it out of the queue.
-- The queue order and the simultaneous limit are saved, so a restart does not lose them.
-- A failed download does not hold up the ones behind it.
+- Pick Light, Dark, Cyberpunk, Volt or Soft Black, with a small preview of each before you choose.
+
+### A browser that just works
+
+- The browser extension connects to the app on its own, with no code to copy.
+- The video download button follows your choice on pages that are already open.
+- Start Queue runs downloads in your order, as many at a time as you choose.
+
+### Video downloads
+
+- Choose a picture quality, and the app joins the picture and sound into one finished file.
 
 ## 0.2.0 — 31 October 2026
 
