@@ -10,34 +10,45 @@ edit one before its release ships if a bullet needs better words.
 
 ---
 
-## [Unreleased]
+## [0.3.0] - 2 November 2026
 
 ### Added
 
-- **media:** HLS, MPEG-DASH and plain-file capture with a quality window that pairs the picture with its sound
-- **media:** Segment downloads resume through the existing engine, then remux with `-c copy` behind one `mux::join` call
-- **media:** Origin-scoped cookies and authorization, forwarded only after one consent prompt and never stored
-- **media:** YouTube uses the signed URL the page already fetched; an expired URL falls back to an optional `yt-dlp`
-- **media:** DRM, live streams and protected init segments are refused with one sentence
-- **media:** Firefox shows the quality list on the page and in the toolbar popup, like the reference Download Panel, instead of opening an app window
-- **media:** A started media download appears in the home list with live progress, Stop and Remove
-- **ui:** The floating Download button loses the permanent progress ring and sits on the video corner with a soft shadow
-- **ui:** The tray icon menu works: three drawings of the mark, "Don't show", inks that follow the appearance, and a URL list for the clipboard watch
+- **settings:** Add instant search across every settings page
+- **appearance:** Replace mica with a soft black theme
+- **appearance:** Add selectable cyberpunk, volt and mica themes
+- **bridge:** Connect the browser extension without a pairing code
+- **bridge:** Pair the extension with a code and refuse every other caller
+- **settings:** Persist engine settings in a versioned file
+- **extension:** Rework the options page
+- **video:** Join tracks with a pinned ffmpeg sidecar
+- **queue:** Start downloads one at a time in a saved order
+- **whats-new:** Show friendly notes once after an update
+- **tray:** Add icon styles, hide, dark mode and the clipboard URL list
+- **extension:** Show stream qualities in the browser overlay and popup
+- **media:** Capture HLS and DASH with a quality window
 
-### Security
+### Fixed
 
-- **bridge:** The loopback bridge is paired, not open: the app makes a secret of 32 random bytes (64 hex characters), every route but `/v1/ping` needs it as a bearer token, and a request whose `Host` is not the bridge's own address is refused (DNS rebinding)
-- **bridge:** The pairing pins the extension origin that first presented the code and refuses a second one carrying the same secret; `Origin` is validated as a real `moz-extension://`/`chrome-extension://` identifier instead of a prefix
-- **bridge:** Refusals are honest answers — 401 `unauthorized`, 403 `forbidden`/`forbidden_extension`, 415 for a non-JSON body — and only an extension origin is echoed back in `Access-Control-Allow-Origin`
-- **extension:** Both builds send the stored code, keep it apart from the synced settings, and report "not paired" instead of pretending the app is offline
-- **extension:** `bdm:video-button-settings` no longer answers `ok: true` with defaults when the bridge fails; the overlay keeps the last real answer and asks again later
-- **extension:** The app's video-button choice now reaches pages that are already open, through a periodic authenticated read in the background page and a push to the tabs, and it is put on the button when the button is built — which it previously never was
+- **window:** Create progress and grabber windows off the IPC thread
+- **video:** Keep the ytdlp test import on Windows only
+- **video:** Gate Windows-only test helpers behind cfg(windows)
+- **video:** Clear the two clippy failures CI treats as errors
 
 ### Changed
 
-- **extension:** `alarms` is requested for the periodic settings read; the bridge contract, the port and every route stay as they were
+- Copy only the Linux payload files for verification
+- Verify the Linux bundle from one flat artifact folder
+- Make the settings and verify checks platform independent
+- Satisfy the ffmpeg sidecar check in the compile jobs
+- **extension:** Check icon sizes and Firefox manifest keys
+- Run every workspace test and verify releases before publishing
+- **agents:** Keep a change in one commit
+- **agents:** Forbid co-author trailers in commits
+- **planning:** Record the media research, muxer decision and theme plan
+- **site:** Document the tray icon choices
+- Drop browser verification rule from AGENTS.md
 
----
 
 ## [0.2.0] - 31 October 2026
 
@@ -76,6 +87,7 @@ edit one before its release ships if a bullet needs better words.
   - The hero and the four feature rows now show the app itself, and the browser hand-off and tray rows are gone until those parts can be photographed.
 - Add a tip of the day and a startup update check
   - The Help menu and the first start share one cursor, so a tip already read does not come back, and a tip never opens over the add dialog. The one update check the reader agreed to runs after the window is up.
+
 ### Fixed
 
 - **scripts:** Keep chore commits out of the release notes
