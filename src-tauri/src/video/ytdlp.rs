@@ -228,14 +228,20 @@ fn find_output(work_dir: &Path, prefix: &str) -> Option<PathBuf> {
 mod tests {
     use super::*;
 
+    // The stand-in tool is a .cmd script, so these three helpers belong to
+    // the Windows tests only; gating them here keeps the Linux clippy leg
+    // free of dead-code warnings.
+    #[cfg(windows)]
     static TEST_LOCK: Mutex<()> = Mutex::new(());
 
+    #[cfg(windows)]
     fn lock() -> std::sync::MutexGuard<'static, ()> {
         TEST_LOCK
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
+    #[cfg(windows)]
     fn temp_dir(tag: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("bdm-ytdlp-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);

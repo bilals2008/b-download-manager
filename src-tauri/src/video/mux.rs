@@ -403,7 +403,10 @@ mod tests {
     use super::*;
 
     /// The tests point `BDM_FFMPEG` at a stand-in, and the module's cancel
-    /// flag is shared too.
+    /// flag is shared too. Only the Windows tests run a stand-in executable,
+    /// so the guard exists under the same cfg and does not read as dead code
+    /// on Linux.
+    #[cfg(windows)]
     fn lock() -> std::sync::MutexGuard<'static, ()> {
         super::super::tools::test_guard()
     }
