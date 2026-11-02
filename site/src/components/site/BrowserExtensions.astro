@@ -1,20 +1,24 @@
 ---
+import Icon from "./Icon.astro";
+import { FIREFOX_ADDON_URL } from "../../lib/releases";
+
 const browsers = [
   {
-    name: "Chrome",
-    logo: "https://thesvg.org/icons/google-chrome/default.svg",
+    name: "Firefox",
+    logo: "/icons/browsers/firefox.svg",
+    href: FIREFOX_ADDON_URL,
   },
   {
-    name: "Firefox",
-    logo: "https://thesvg.org/icons/firefox/default.svg",
+    name: "Chrome",
+    logo: "/icons/browsers/chrome.svg",
   },
   {
     name: "Edge",
-    logo: "https://thesvg.org/icons/microsoft-edge/default.svg",
+    logo: "/icons/browsers/edge.svg",
   },
   {
     name: "Brave",
-    logo: "https://thesvg.org/icons/brave/default.svg",
+    logo: "/icons/browsers/brave.svg",
   },
 ] as const;
 ---
@@ -22,12 +26,14 @@ const browsers = [
 <section id="extensions" class="extensions" aria-labelledby="extensions-title">
   <div class="container-page">
     <div class="extensions-head">
-      <p class="eyebrow">Browser Extension</p>
+      <p class="eyebrow">Browser extension</p>
       <h2 id="extensions-title" class="extensions-title">
         Hand off links from your browser.
       </h2>
       <p class="extensions-copy">
-        Chrome and Firefox extensions are coming soon.
+        The Firefox extension is available now. Send a link, a picture or a
+        video from any page, and the app picks it up on the same computer.
+        Chrome, Edge and Brave are on the way.
       </p>
     </div>
 
@@ -43,11 +49,28 @@ const browsers = [
               loading="lazy"
             />
             <span class="browser-name">{browser.name}</span>
-            <span class="browser-status">Coming Soon</span>
+            {browser.href ? (
+              <a
+                class="browser-link"
+                href={browser.href}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Add to Firefox
+                <Icon name="arrow-up-right" size={13} />
+              </a>
+            ) : (
+              <span class="browser-status">Coming soon</span>
+            )}
           </li>
         ))
       }
     </ul>
+
+    <p class="extensions-note">
+      The extension talks to the app only on this computer. There is no account
+      and no code to copy.
+    </p>
   </div>
 </section>
 
@@ -116,6 +139,35 @@ const browsers = [
     letter-spacing: 0.04em;
     white-space: nowrap;
     text-transform: uppercase;
+  }
+
+  .browser-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-height: 2rem;
+    padding: 0.35rem 0.7rem;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    color: var(--ink);
+    font-size: var(--type-micro);
+    font-weight: 600;
+    text-decoration: none;
+    transition:
+      border-color var(--duration-fast) var(--ease-out),
+      color var(--duration-fast) var(--ease-out);
+  }
+
+  .browser-link:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .extensions-note {
+    margin-top: 1.25rem;
+    color: var(--muted);
+    font-size: var(--type-caption);
+    line-height: 1.6;
   }
 
   @media (min-width: 40rem) {

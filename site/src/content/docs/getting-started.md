@@ -35,5 +35,5 @@ You can close the window and it keeps downloading. When a file finishes, a small
 ## Next
 
 - [Using the app](/usage/): every button, in plain words.
-- [Getting the app](/installation/): the file for each system, and when the browser extension arrives.
+- [Getting the app](/installation/): the file for each system, and the Firefox extension.
 - [Troubleshooting](/troubleshooting/): when something does not move.

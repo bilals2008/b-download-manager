@@ -1,10 +1,11 @@
 ---
 import TextLink from "./TextLink.astro";
+import { FIREFOX_ADDON_URL } from "../../lib/releases";
 
 type FaqItem = {
   question: string;
   answer: string;
-  link?: { href: string; label: string };
+  link?: { href: string; label: string; external?: boolean };
 };
 
 const faqs: FaqItem[] = [
@@ -22,7 +23,12 @@ const faqs: FaqItem[] = [
   {
     question: "Which browsers can send links to the app?",
     answer:
-      "Chrome and Firefox extensions are coming soon. They will hand links from the browser to the app over a local bridge.",
+      "Firefox, through the extension on Mozilla Add-ons. It hands links, videos and files to the app over a bridge that stays on your own computer. Chrome, Edge and Brave versions are still being finished.",
+    link: {
+      href: FIREFOX_ADDON_URL,
+      label: "Get the Firefox extension",
+      external: true,
+    },
   },
   {
     question: "Can I limit the download speed?",
@@ -63,7 +69,12 @@ const faqs: FaqItem[] = [
               <div class="faq-answer">
                 <p>{faq.answer}</p>
                 {faq.link && (
-                  <a class="faq-answer-link" href={faq.link.href}>
+                  <a
+                    class="faq-answer-link"
+                    href={faq.link.href}
+                    target={faq.link.external ? "_blank" : undefined}
+                    rel={faq.link.external ? "noreferrer" : undefined}
+                  >
                     {faq.link.label}
                   </a>
                 )}

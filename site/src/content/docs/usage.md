@@ -13,6 +13,12 @@ The app asks the website what the file really is before it starts, which is why 
 - <kbd>Esc</kbd> closes the window without starting anything.
 - Pressing Enter twice does nothing extra, and a link that is already in the list is pointed out rather than downloaded twice.
 
+## From your browser
+
+Install the [Firefox extension](/installation/#browser-extension), keep the app running, and right-click any link, picture, video or sound file to choose **Download with B Download Manager**. On supported videos a small button shows the qualities the page offers, and the toolbar popup shows the connection and the downloads already in the app.
+
+There is no code to copy and nothing to pair: the extension finds the app on your own computer. Chrome, Edge and Brave builds are still being finished.
+
 ## Pause, resume, stop
 
 Select a download, then use the buttons at the top or right-click it:

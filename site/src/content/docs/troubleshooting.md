@@ -5,10 +5,10 @@ description: What to try when a download, the browser button or the window does 
 
 ## The browser button does nothing
 
-- **Is the extension installed?** It is not in any browser's store yet, so a normal install has no button to click. [Getting the app](/installation/) says when that changes.
+- **Is the extension installed?** The Firefox extension is on [Mozilla Add-ons](https://addons.mozilla.org/en-US/firefox/addon/b-download-manager/). Chrome, Edge and Brave builds are not in a store yet.
 - **Is the app running?** The add-on cannot start B Download Manager, and without it the button has nothing to send the file to.
-- **Did Firefox restart?** Firefox forgets an add-on loaded by hand when it closes. Load it again the way [Building from source](/developers/#browser-extensions) describes.
-- **Chrome or Edge:** click the add-on's button. Its popup says whether it can see the app.
+- **Did you load Firefox's copy by hand?** A temporary add-on is forgotten when Firefox closes. Install the signed copy from Mozilla Add-ons instead, or load it again the way [Building from source](/developers/#browser-extensions) describes.
+- **Chrome or Edge:** these builds are not released yet; there is no add-on button to click.
 - **Does the add-on say "Not running"?** Start B Download Manager. There is no code to copy and nothing to pair: the add-on reports **Connected** as soon as the app is open. If it says **Version mismatch**, the add-on and the app are from different releases.
 - **Right-click a link, not empty page space.** Pictures, videos and sound files work too. A page that only shows a player, like most video sites, is not a link to a file.
 

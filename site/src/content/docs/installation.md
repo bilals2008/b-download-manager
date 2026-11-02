@@ -1,6 +1,6 @@
 ---
 title: Getting the app
-description: Where B Download Manager comes from, and when the browser extension arrives.
+description: Where B Download Manager comes from, and how to add the Firefox extension.
 ---
 
 ## Is there an installer yet?
@@ -21,8 +21,18 @@ Phones and tablets get the releases page, because there is no build for them.
 
 ## Browser extension
 
-There is no extension to install yet. The Chrome, Edge and Firefox versions are still being finished; when they are ready they will be in each browser's add-on store, and this page will link to them.
+The Firefox extension is published on
+[Mozilla Add-ons](https://addons.mozilla.org/en-US/firefox/addon/b-download-manager/).
+Install it, keep B Download Manager running, and it adds **Download with B
+Download Manager** to the right-click menu, a button on supported videos, and a
+toolbar popup that follows the downloads already in the app.
 
-Once installed, it adds **Download with B Download Manager** to the right-click menu and can take over the downloads your browser would otherwise start. It needs the app running, because the hand-off goes to the copy on your own computer.
+Chrome, Edge and Brave versions are still being finished; when they are ready
+they will be in each browser's add-on store and this page will link to them.
 
-If you build the app yourself, the extension is in the same repository and [Building from source](/developers/#browser-extensions) explains how to load it.
+The extension needs the app running, because the hand-off goes to the copy on
+your own computer. There is no code to copy and nothing to pair.
+
+If you build the app yourself, both extension sources are in the same
+repository and [Building from source](/developers/#browser-extensions) explains
+how to load them.
