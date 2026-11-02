@@ -8,7 +8,7 @@
   section for its own version, and the release page uses the same words.
 -->
 
-## 0.3.0 — 2 November 2026
+## 0.3.1 — 2 November 2026
 
 ### Find any setting
 

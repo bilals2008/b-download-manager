@@ -10,6 +10,16 @@ edit one before its release ships if a bullet needs better words.
 
 ---
 
+## [0.3.1] - 2 November 2026
+
+### Added
+
+- **site:** Point Firefox users at the published extension
+
+### Fixed
+
+- **release:** Keep the ffmpeg sidecar out of the macOS bundle
+
 ## [0.3.0] - 2 November 2026
 
 ### Added
@@ -48,7 +58,6 @@ edit one before its release ships if a bullet needs better words.
 - **planning:** Record the media research, muxer decision and theme plan
 - **site:** Document the tray icon choices
 - Drop browser verification rule from AGENTS.md
-
 
 ## [0.2.0] - 31 October 2026
 
@@ -96,7 +105,6 @@ edit one before its release ships if a bullet needs better words.
   - A tag push starts no workflow when the tagged commit says [skip ci], so v0.1.1 shipped a tag the Release job never saw. The release commit drops the marker and release.yml gains workflow_dispatch for a re-run from the tag.
 - **scripts:** Pass release git arguments as an array
   - ExecFileSync wants an argv array, so the clean-worktree check and the branch lookup threw ERR_INVALID_ARG_TYPE before any release could start.
-
 
 ## [0.1.0] - 27 October 2026
 
