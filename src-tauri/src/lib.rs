@@ -50,7 +50,10 @@ struct StartRequest {
     conflict: Option<conflict::Choice>,
 }
 
-#[tauri::command]
+/// Runs off the main thread on purpose: `show_progress_if_requested` hands the
+/// window to the event loop, and building a webview inside the IPC handler the
+/// main thread is already in would never finish.
+#[tauri::command(async)]
 fn start_download(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -78,7 +81,10 @@ fn start_download(
 /// Open the progress window of a start when the reader asked for it.
 ///
 /// A skipped start has no window: there is no download behind it. The window
-/// is built on the main thread, the one the window toolkit runs on.
+/// is built on the main thread, the one the window toolkit runs on, so this
+/// must be called off that thread: there `run_on_main_thread` runs the build
+/// inline, inside the webview's IPC handler, and the window never finishes
+/// being created.
 pub(crate) fn show_progress_if_requested(
     app: &AppHandle,
     state: &AppState,
@@ -133,7 +139,8 @@ fn retry_download(
 /// Start a finished or failed download again from the first byte. `conflict`
 /// is the answer to the File Exists question; the row stays as it is until
 /// that question is settled.
-#[tauri::command]
+/// Runs off the main thread for the same reason as `start_download`.
+#[tauri::command(async)]
 fn redownload_download(
     app: AppHandle,
     state: State<'_, AppState>,

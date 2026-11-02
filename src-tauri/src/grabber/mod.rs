@@ -275,7 +275,10 @@ fn build_client(proxy: Option<&str>) -> Result<reqwest::Client, String> {
 }
 
 /// Show the Site Grabber window.
-#[tauri::command]
+///
+/// Runs off the main thread so the window is built by the event loop rather
+/// than inside the IPC handler, which WebView2 will not create a webview from.
+#[tauri::command(async)]
 pub fn open_grabber_window(app: AppHandle) -> Result<(), String> {
     let handle = app.clone();
     app.run_on_main_thread(move || {

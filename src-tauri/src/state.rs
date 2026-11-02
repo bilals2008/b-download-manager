@@ -158,7 +158,9 @@ pub struct AppState {
     /// two starts cannot both find the same name free.
     start_gate: Mutex<()>,
     /// The download queue scheduler: order, running set, limit, active flag.
-    queue: Mutex<Queue>,
+    /// Its own fields are interior-mutable, so it needs no lock here; holding
+    /// one while it calls back into this state would deadlock.
+    queue: Queue,
 }
 
 impl Default for AppState {
@@ -193,7 +195,7 @@ impl Default for AppState {
             unfinished_dir: Mutex::new(None),
             category_rules: Mutex::new(Vec::new()),
             start_gate: Mutex::new(()),
-            queue: Mutex::new(Queue::default()),
+            queue: Queue::default(),
         }
     }
 }
@@ -410,17 +412,15 @@ impl AppState {
     }
 
     /// The download queue scheduler.
-    pub fn queue(&self) -> std::sync::MutexGuard<'_, Queue> {
-        self.queue.lock().expect("queue lock poisoned")
+    pub fn queue(&self) -> &Queue {
+        &self.queue
     }
 
     /// Called when a queue-managed download finishes. Removes it from the
     /// queue's running set and starts the next queued download if the queue is
     /// still active and below its simultaneous limit.
     pub fn queue_on_finished(&self, app: &tauri::AppHandle, id: u64) {
-        let was_queue = self.queue().on_finished(id);
-        drop(self.queue());
-        if was_queue {
+        if self.queue().on_finished(id) {
             Queue::try_start_next(app, self);
         }
     }
@@ -693,9 +693,7 @@ impl AppState {
 
     /// Persist the current queue order to preferences.
     pub fn save_queue(&self) {
-        let queue = self.queue();
-        let order = queue.snapshot().order;
-        drop(queue);
+        let order = self.queue().snapshot().order;
         let mut preferences = self.preferences();
         preferences.queue_order = order;
         self.set_preferences(preferences);
