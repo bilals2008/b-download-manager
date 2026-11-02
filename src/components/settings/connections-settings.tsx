@@ -27,16 +27,12 @@ export function ConnectionsSettings({
   );
 
   return (
-    <SettingsPage
-      title="Connections"
-      description="Total connections and speed."
-    >
+    <SettingsPage title="Connections">
       <Section title="Connections">
         <SettingRow
           settingId="setting-max-connections"
           label="Maximum number of connections"
           htmlFor="connection-max"
-          hint="Across all downloads at once."
         >
           <NumberInput
             id="connection-max"
@@ -53,7 +49,6 @@ export function ConnectionsSettings({
         <SettingRow
           settingId="setting-speed-limit-toggle"
           label="Limit the speed of all downloads"
-          hint="Shared by all downloads."
         >
           <Switch
             label="Limit the speed of all downloads"
@@ -65,7 +60,6 @@ export function ConnectionsSettings({
           settingId="setting-speed-limit"
           label="Speed limit"
           htmlFor="connection-speed"
-          hint="Kilobytes per second, all downloads."
         >
           <NumberInput
             id="connection-speed"

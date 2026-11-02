@@ -57,16 +57,12 @@ export function AdvancedSettings({ onReset }: AdvancedSettingsProps) {
   }
 
   return (
-    <SettingsPage
-      title="Advanced"
-      description="Data, reset and plans."
-    >
+    <SettingsPage title="Advanced">
       <Section title="Application data">
         <SettingRow
           settingId="setting-data-folder"
           stacked
           label="Data folder"
-          hint="The download list and unfinished files."
         >
           <div className="flex items-center gap-2">
             <Tooltip
@@ -90,7 +86,6 @@ export function AdvancedSettings({ onReset }: AdvancedSettingsProps) {
           settingId="setting-log"
           stacked
           label="Log"
-          hint="What happened, including failures."
         >
           <div className="flex items-center gap-2">
             <Tooltip

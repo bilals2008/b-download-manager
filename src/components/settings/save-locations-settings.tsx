@@ -187,17 +187,13 @@ export function SaveLocationsSettings({
   const unfinishedProblem = categoryFolderProblem(settings.unfinishedFolder);
 
   return (
-    <SettingsPage
-      title="Save locations"
-      description="Where files are saved."
-    >
+    <SettingsPage title="Save locations">
       <Section title="Default folder">
         <SettingRow
           settingId="setting-default-folder"
           stacked
           label="Save new downloads to"
           htmlFor="save-to-folder"
-          hint="Blank uses the Windows Downloads folder."
         >
           <FolderField
             id="save-to-folder"
@@ -221,7 +217,6 @@ export function SaveLocationsSettings({
           stacked
           label="Keep unfinished downloads in"
           htmlFor="unfinished-folder"
-          hint="Incomplete files and their resume state wait here, out of your finished folders, and are moved into place when a download completes."
         >
           <FolderField
             id="unfinished-folder"
@@ -245,7 +240,6 @@ export function SaveLocationsSettings({
         <SettingRow
           settingId="setting-remember-folder"
           label="Start a new download in the last folder used"
-          hint="The last folder you really downloaded to."
         >
           <Switch
             label="Start a new download in the last folder used"
@@ -256,7 +250,6 @@ export function SaveLocationsSettings({
         <SettingRow
           settingId="setting-forget-folder"
           label="Forget the remembered folder"
-          hint="Starts using the default again."
         >
           <SettingsButton onClick={forget} disabled={forgotten}>
             {forgotten ? "Forgotten" : "Forget"}

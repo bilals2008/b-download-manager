@@ -70,10 +70,7 @@ export function BrowserSettings({ settings, onChange }: BrowserSettingsProps) {
   const seen = status?.lastContactMs ?? null;
 
   return (
-    <SettingsPage
-      title="Browser integration"
-      description="Downloads from the browser."
-    >
+    <SettingsPage title="Browser integration">
       <Section
         title="Status"
         action={
@@ -84,8 +81,7 @@ export function BrowserSettings({ settings, onChange }: BrowserSettingsProps) {
       >
         <SettingRow
           settingId="setting-browser-ready"
-          label="Ready to receive from the browser"
-          hint={`This computer only · port ${status?.port ?? 27500}`}
+          label={`Ready to receive from the browser · port ${status?.port ?? 27500}`}
         >
           <State
             tone={bridge ? "positive" : "negative"}
@@ -101,7 +97,6 @@ export function BrowserSettings({ settings, onChange }: BrowserSettingsProps) {
         <SettingRow
           settingId="setting-browser-last-link"
           label="Last link received"
-          hint="Any request from the extension counts."
         >
           <span className="text-chrome-micro text-chrome-menu-text">
             {checking && !status ? "Checking…" : lastLinkLabel(seen)}
@@ -118,7 +113,6 @@ export function BrowserSettings({ settings, onChange }: BrowserSettingsProps) {
         <SettingRow
           settingId="setting-browser-capture"
           label="Take over downloads from the browser"
-          hint="These rules win while the app is running."
         >
           <Switch
             label="Take over downloads from the browser"
@@ -129,7 +123,6 @@ export function BrowserSettings({ settings, onChange }: BrowserSettingsProps) {
         <SettingRow
           settingId="setting-browser-ask"
           label="Ask before saving"
-          hint="The link waits for you to press Download."
         >
           <Switch
             label="Ask before saving"
@@ -146,7 +139,6 @@ export function BrowserSettings({ settings, onChange }: BrowserSettingsProps) {
           stacked
           label="Take over only these types"
           htmlFor="capture-types"
-          hint="Blank takes every type."
         >
           <RuleList
             id="capture-types"
@@ -169,7 +161,6 @@ export function BrowserSettings({ settings, onChange }: BrowserSettingsProps) {
           stacked
           label="Leave these sites to the browser"
           htmlFor="capture-sites"
-          hint="Covers the site and anything under it."
         >
           <RuleList
             id="capture-sites"

@@ -31,15 +31,11 @@ export interface TraySettingsProps {
 export function GeneralSettings({ settings, onChange, tray }: GeneralSettingsProps) {
   const { preferences } = tray;
   return (
-    <SettingsPage
-      title="General"
-      description="Startup, clipboard and tray."
-    >
+    <SettingsPage title="General">
       <Section title="Startup">
         <SettingRow
           settingId="setting-launch-startup"
           label={`Launch ${APP_NAME} on startup`}
-          hint="Adds an entry to Windows startup."
         >
           <Switch
             label={`Launch ${APP_NAME} on startup`}
@@ -53,7 +49,6 @@ export function GeneralSettings({ settings, onChange, tray }: GeneralSettingsPro
         <SettingRow
           settingId="setting-clipboard"
           label="Watch the clipboard for download links"
-          hint="Opens the Add URL dialog first."
         >
           <Switch
             label="Watch the clipboard for download links"
@@ -67,7 +62,6 @@ export function GeneralSettings({ settings, onChange, tray }: GeneralSettingsPro
         <SettingRow
           settingId="setting-minimize-tray"
           label="Minimize the window to the tray"
-          hint="The tray icon brings the window back."
         >
           <Switch
             label="Minimize the window to the tray"
@@ -78,7 +72,6 @@ export function GeneralSettings({ settings, onChange, tray }: GeneralSettingsPro
         <SettingRow
           settingId="setting-close-tray"
           label="Keep running in the tray when the window is closed"
-          hint="Downloads carry on after the window closes."
         >
           <Switch
             label="Keep running in the tray when the window is closed"
@@ -89,7 +82,6 @@ export function GeneralSettings({ settings, onChange, tray }: GeneralSettingsPro
         <SettingRow
           settingId="setting-tray-icon"
           label="Show the tray icon"
-          hint="Off leaves the window the only way back, so closing it exits."
         >
           <Switch
             label="Show the tray icon"
@@ -100,7 +92,6 @@ export function GeneralSettings({ settings, onChange, tray }: GeneralSettingsPro
         <SettingRow
           settingId="setting-tray-dark-mode"
           label="Dark mode support"
-          hint="The icon takes the inks of the appearance the window is in."
         >
           <Switch
             label="Dark mode support"
@@ -111,7 +102,6 @@ export function GeneralSettings({ settings, onChange, tray }: GeneralSettingsPro
         <SettingRow
           settingId="setting-url-list"
           label="Customize URL List"
-          hint="The protocols a copied address has to start with."
         >
           <SettingsButton
             aria-haspopup="dialog"

@@ -1,4 +1,3 @@
-import { useState } from "react";
 
 import {
   Section,
@@ -20,23 +19,16 @@ interface TipsSettingsProps {
  * popup, so the page does not repeat them.
  */
 export function TipsSettings({ settings, onChange }: TipsSettingsProps) {
-  const [reset, setReset] = useState(false);
-
   function forgetPosition() {
     resetTipCursor();
-    setReset(true);
   }
 
   return (
-    <SettingsPage
-      title="Tips"
-      description="What the window offers on startup."
-    >
+    <SettingsPage title="Tips">
       <Section title="Startup">
         <SettingRow
           settingId="setting-tips-startup"
           label="Show a tip on startup"
-          hint="One tip per start. Help > Tip of the Day opens them any time."
         >
           <Switch
             label="Show a tip on startup"
@@ -46,12 +38,7 @@ export function TipsSettings({ settings, onChange }: TipsSettingsProps) {
         </SettingRow>
         <SettingRow
           settingId="setting-tip-order"
-          label="Tip order"
-          hint={
-            reset
-              ? "The next tip will be the first one."
-              : "The next tip continues after the last one you saw."
-          }
+          label="Start from the first tip"
         >
           <SettingsButton onClick={forgetPosition}>
             Start from the first tip
@@ -61,3 +48,4 @@ export function TipsSettings({ settings, onChange }: TipsSettingsProps) {
     </SettingsPage>
   );
 }
+

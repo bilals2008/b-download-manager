@@ -43,7 +43,6 @@ const SAMPLE: readonly ToolbarCommand[] = ["add-download", "stop", "options"];
 export function ToolbarSettings({
   pack,
   packs,
-  layout,
   size,
   showLabels,
   onSelectPack,
@@ -53,13 +52,9 @@ export function ToolbarSettings({
   onManage,
 }: ToolbarSettingsProps) {
   const radioName = useId();
-  const buttonCount = layout.filter((token) => token !== "separator").length;
 
   return (
-    <SettingsPage
-      title="Toolbar"
-      description="The bar under the menu: its style, size and buttons."
-    >
+    <SettingsPage title="Toolbar">
       <Section id="setting-toolbar-style" title="Style">
         <fieldset className="flex flex-col">
           <legend className="sr-only">Toolbar style</legend>
@@ -119,7 +114,6 @@ export function ToolbarSettings({
         <SettingRow
           settingId="setting-toolbar-size"
           label="Large buttons"
-          hint="Small buttons leave more room for the download list."
         >
           <Switch
             label="Large buttons"
@@ -130,7 +124,6 @@ export function ToolbarSettings({
         <SettingRow
           settingId="setting-toolbar-labels"
           label="Show text labels"
-          hint="The tooltip names the button either way."
         >
           <Switch
             label="Show text labels"
@@ -144,7 +137,6 @@ export function ToolbarSettings({
         <SettingRow
           settingId="setting-toolbar-buttons"
           label="Customize buttons"
-          hint={`${buttonCount} button${buttonCount === 1 ? "" : "s"} on this bar. Add, remove, reorder or group them.`}
         >
           <SettingsButton aria-haspopup="dialog" onClick={onCustomize}>
             Customize...
@@ -153,7 +145,6 @@ export function ToolbarSettings({
         <SettingRow
           settingId="setting-toolbar-manage"
           label="More toolbars"
-          hint="Install a pack from a file, replace one or remove it."
         >
           <SettingsButton aria-haspopup="dialog" onClick={onManage}>
             Manage toolbars...

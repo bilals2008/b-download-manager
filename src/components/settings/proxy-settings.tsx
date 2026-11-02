@@ -82,17 +82,13 @@ export function ProxySettings({ settings, onChange }: ProxySettingsProps) {
   }
 
   return (
-    <SettingsPage
-      title="Proxy"
-      description="The proxy new downloads use."
-    >
+    <SettingsPage title="Proxy">
       <Section title="Proxy address">
         <SettingRow
           settingId="setting-proxy"
           stacked
           label="Proxy address"
           htmlFor="proxy-address"
-          hint="e.g. socks5://127.0.0.1:1080. Blank means direct."
         >
           <TextInput
             id="proxy-address"

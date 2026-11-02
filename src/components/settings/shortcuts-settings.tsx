@@ -1,3 +1,4 @@
+
 import {
   Section,
   SettingRow,
@@ -12,10 +13,7 @@ import { SHORTCUT_GROUPS } from "@/lib/shortcuts";
  */
 export function ShortcutsSettings() {
   return (
-    <SettingsPage
-      title="Shortcuts"
-      description="Keys that work in the main window."
-    >
+    <SettingsPage title="Shortcuts">
       {SHORTCUT_GROUPS.map((group) => (
         <Section key={group.title} title={group.title}>
           {group.rows.map((row) => (
@@ -23,7 +21,6 @@ export function ShortcutsSettings() {
               key={row.id}
               settingId={row.id}
               label={row.label}
-              hint={row.hint}
             >
               {row.soon ? (
                 <span className="text-chrome-micro text-chrome-muted">
@@ -39,3 +36,5 @@ export function ShortcutsSettings() {
     </SettingsPage>
   );
 }
+
+

@@ -15,24 +15,16 @@ interface AppearanceSettingsProps {
   onChange: <K extends keyof Settings>(key: K, value: Settings[K]) => void;
 }
 
-/**
- * The Appearance page. Every change lands in this window as it is made, and
- * the other windows follow the saved value when they are told it changed.
- */
 export function AppearanceSettings({
   settings,
   onChange,
 }: AppearanceSettingsProps) {
   return (
-    <SettingsPage
-      title="Appearance"
-      description="Theme, font and weight."
-    >
+    <SettingsPage title="Appearance">
       <Section title="Theme">
         <SettingRow
           settingId="setting-theme"
           label="Theme"
-          hint="Auto follows your system."
           stacked
         >
           <ThemeChoice
@@ -43,15 +35,13 @@ export function AppearanceSettings({
       </Section>
 
       <Section title="Typography">
-        <FontChoice
-          value={settings.uiFont}
-          onChange={(font) => onChange("uiFont", font)}
-        />
-        <SettingRow
-          settingId="setting-weight"
-          label="Weight"
-          hint={WEIGHT_HINT}
-        >
+        <SettingRow label="Font">
+          <FontChoice
+            value={settings.uiFont}
+            onChange={(font) => onChange("uiFont", font)}
+          />
+        </SettingRow>
+        <SettingRow label="Weight">
           <Segmented
             label="Weight"
             value={settings.uiWeight}
@@ -59,29 +49,11 @@ export function AppearanceSettings({
             options={WEIGHT_OPTIONS}
           />
         </SettingRow>
-        {/* Real UI text, so the face and its figures can be compared here. */}
-        <p className="flex items-baseline gap-2 truncate py-2 text-xs">
-          <span className="shrink-0 text-chrome-micro text-chrome-muted">
-            Preview
-          </span>
-          <span
-            aria-hidden="true"
-            className="truncate tabular-nums text-chrome-menu-text"
-          >
-            Downloading archive.zip · 12.4 MB of 48.0 MB at 2.3 MB/s
-          </span>
-        </p>
       </Section>
     </SettingsPage>
   );
 }
 
-const WEIGHT_HINT = "Every window at once.";
-
-/**
- * A row of exclusive choices. A fieldset of radios, so arrows move between
- * them and the group is announced as one choice.
- */
 function Segmented<T extends string>({
   label,
   value,
@@ -119,10 +91,6 @@ function Segmented<T extends string>({
   );
 }
 
-/**
- * The face the window is drawn in: the faces the application ships, and the
- * note under the picker says what the chosen one is like.
- */
 function FontChoice({
   value,
   onChange,
@@ -134,18 +102,14 @@ function FontChoice({
     FONT_OPTIONS.find((option) => option.value === value) ?? FONT_OPTIONS[0];
 
   return (
-    <SettingRow settingId="setting-font" label="Font" hint={current.note}>
-      <div className="w-44">
-        <ListBox
-          label="Font"
-          value={current.value}
-          onChange={(next) => onChange(next)}
-          options={FONT_OPTIONS.map((option) => ({
-            value: option.value,
-            label: option.label,
-          }))}
-        />
-      </div>
-    </SettingRow>
+    <ListBox
+      label="Font"
+      value={current.value}
+      onChange={(next) => onChange(next)}
+      options={FONT_OPTIONS.map((option) => ({
+        value: option.value,
+        label: option.label,
+      }))}
+    />
   );
 }

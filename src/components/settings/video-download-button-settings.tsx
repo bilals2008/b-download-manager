@@ -27,15 +27,11 @@ export function VideoDownloadButtonSettings({
   onChange,
 }: VideoDownloadButtonSettingsProps) {
   return (
-    <SettingsPage
-      title="Video download button"
-      description="The floating download button the extension shows on videos."
-    >
+    <SettingsPage title="Video download button">
       <Section title="Appearance">
         <SettingRow
           settingId="setting-video-button-style"
           label="Button style"
-          hint="Icon only, text only, or both."
         >
           <div className="w-64">
             <ListBox
@@ -54,7 +50,6 @@ export function VideoDownloadButtonSettings({
         <SettingRow
           settingId="setting-video-button-label"
           label="Button label"
-          hint="Shown when the style includes text. Defaults to Download."
         >
           <TextInput
             id="video-button-label"
@@ -69,7 +64,6 @@ export function VideoDownloadButtonSettings({
         <SettingRow
           settingId="setting-video-button-hover"
           label="Hover to show"
-          hint="Only show the button while the pointer is on the video."
         >
           <Switch
             label="Hover to show"

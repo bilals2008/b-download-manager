@@ -82,7 +82,7 @@ export function AboutSettings({
       : "Not available in the browser preview";
 
   return (
-    <SettingsPage title="About" description="This build and how it updates.">
+    <SettingsPage title="About">
       <Section
         title="Application"
         action={
@@ -101,7 +101,8 @@ export function AboutSettings({
           </div>
           <AuthorAvatar />
         </div>
-        <SettingRow settingId="setting-version" label="Version">
+        <SettingRow settingId="setting-version"          label="Version"
+        >
           <span className="font-mono text-chrome-micro text-chrome-menu-text">
             {versionLabel}
           </span>
@@ -119,7 +120,8 @@ export function AboutSettings({
           </SettingsButton>
         }
       >
-        <SettingRow settingId="setting-last-check" label="Last check">
+        <SettingRow settingId="setting-last-check"          label="Last check"
+        >
           <span className="text-chrome-micro text-chrome-muted">
             {formatCheckTime(settings.lastUpdateCheck)}
           </span>

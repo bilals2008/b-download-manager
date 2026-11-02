@@ -24,16 +24,12 @@ interface DownloadsSettingsProps {
  */
 export function DownloadsSettings({ settings, onChange }: DownloadsSettingsProps) {
   return (
-    <SettingsPage
-      title="Downloads"
-      description="New downloads and their windows."
-    >
+    <SettingsPage title="Downloads">
       <Section title="Connections">
         <SettingRow
           settingId="setting-default-connections"
           label="Default number of connections"
           htmlFor="download-connections"
-          hint="For new downloads. Up to this many parts."
         >
           <NumberInput
             id="download-connections"
@@ -50,7 +46,6 @@ export function DownloadsSettings({ settings, onChange }: DownloadsSettingsProps
         <SettingRow
           settingId="setting-duplicate-policy"
           label="When the file already exists"
-          hint="What happens when the file is already there."
         >
           <div className="w-52">
             <ListBox
@@ -69,7 +64,6 @@ export function DownloadsSettings({ settings, onChange }: DownloadsSettingsProps
         <SettingRow
           settingId="setting-progress-window"
           label="Open the progress window when a download starts"
-          hint="Opens for every new download."
         >
           <Switch
             label="Open the progress window when a download starts"
@@ -83,7 +77,6 @@ export function DownloadsSettings({ settings, onChange }: DownloadsSettingsProps
         <SettingRow
           settingId="setting-complete-dialog"
           label="Show the download complete dialog"
-          hint="Names the file and where it went."
         >
           <Switch
             label="Show the download complete dialog"
