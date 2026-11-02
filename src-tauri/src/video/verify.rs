@@ -425,7 +425,7 @@ fn atoms(bytes: &[u8]) -> Vec<Atom> {
     atoms
 }
 
-fn find<'a>(bytes: &'a [u8], wanted: &[&[u8; 4]]) -> Option<Atom> {
+fn find(bytes: &[u8], wanted: &[&[u8; 4]]) -> Option<Atom> {
     atoms(bytes).into_iter().find(|atom| {
         wanted
             .iter()

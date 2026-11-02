@@ -360,8 +360,10 @@ enum Outcome {
     Failed(String),
 }
 
-/// Why the finished file could not be delivered.
-enum DeliverError {
+/// Why the finished file could not be delivered. As visible as [`deliver`],
+/// which answers with it: a type a caller can receive cannot be more private
+/// than the function that returns it.
+pub(super) enum DeliverError {
     Cancelled,
     Failed(String),
 }
