@@ -214,16 +214,29 @@ mod tests {
         dir.join(FILE_NAME)
     }
 
+    /// An absolute folder that is valid on the host: the sanitizer drops a
+    /// path the platform cannot use, so a hard-coded Windows path would fail
+    /// these tests on Linux.
+    fn sample_folder(tag: &str) -> String {
+        std::env::temp_dir()
+            .join(format!("b-download-manager-{tag}-{}", std::process::id()))
+            .to_string_lossy()
+            .into_owned()
+    }
+
     #[test]
     fn settings_survive_a_save_and_a_load() {
         let path = temp_file("round-trip");
+        let downloads = sample_folder("downloads");
+        let parts = sample_folder("parts");
+        let films = sample_folder("films");
         let settings = EngineSettings {
-            default_folder: "C:\\downloads".to_string(),
-            unfinished_folder: "C:\\parts".to_string(),
+            default_folder: downloads,
+            unfinished_folder: parts,
             categories: vec![CategoryRule {
                 name: "Films".to_string(),
                 extensions: vec!["mp4".to_string()],
-                folder: "C:\\films".to_string(),
+                folder: films,
                 builtin: true,
                 fallback: false,
             }],
@@ -334,13 +347,20 @@ mod tests {
     #[test]
     fn an_older_version_of_the_file_still_reads() {
         let path = temp_file("version");
+        let folder = sample_folder("older");
         std::fs::write(
             &path,
-            br#"{"version":0,"defaultFolder":"C:\\dl","speedLimitEnabled":true,"speedLimitBytes":42}"#,
+            serde_json::json!({
+                "version": 0,
+                "defaultFolder": folder.clone(),
+                "speedLimitEnabled": true,
+                "speedLimitBytes": 42,
+            })
+            .to_string(),
         )
         .expect("a written file");
         let settings = load(&path);
-        assert_eq!(settings.default_folder, "C:\\dl");
+        assert_eq!(settings.default_folder, folder);
         assert!(settings.speed_limit_enabled);
         // A read is also what the next save version stamps: the file the app
         // hands over is always the current one.
@@ -354,13 +374,19 @@ mod tests {
     #[test]
     fn unknown_fields_from_a_later_version_are_ignored() {
         let path = temp_file("unknown");
+        let folder = sample_folder("newer");
         std::fs::write(
             &path,
-            br#"{"version":1,"futureSetting":"x","defaultFolder":"C:\\dl"}"#,
+            serde_json::json!({
+                "version": 1,
+                "futureSetting": "x",
+                "defaultFolder": folder.clone(),
+            })
+            .to_string(),
         )
         .expect("a written file");
         let settings = load(&path);
-        assert_eq!(settings.default_folder, "C:\\dl");
+        assert_eq!(settings.default_folder, folder);
         assert!(!settings.clipboard_capture);
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }

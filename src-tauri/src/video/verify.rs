@@ -838,12 +838,14 @@ mod tests {
     }
 
     #[test]
-    fn a_zero_duration_file_is_refused() {
-        // A join test may have pointed `BDM_FFMPEG` at a stand-in.
+    fn a_file_with_almost_no_time_is_refused() {
+        // A join test may have pointed `BDM_FFMPEG` at a stand-in. Ten
+        // milliseconds is stated by the index, so the refusal does not depend
+        // on whether a decoder happens to read the sample.
         let _guard = super::super::tools::test_guard();
         let dir = temp_dir("noduration");
         let path = dir.join("film.mp4");
-        std::fs::write(&path, sample_mp4(0)).expect("the file");
+        std::fs::write(&path, sample_mp4(10)).expect("the file");
         let error = check_finished(
             &path,
             Expect {
@@ -852,8 +854,8 @@ mod tests {
                 audio: false,
             },
         )
-        .expect_err("no duration");
-        assert!(!error.is_empty());
+        .expect_err("almost no time");
+        assert!(error.contains("no time long"), "{error}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
