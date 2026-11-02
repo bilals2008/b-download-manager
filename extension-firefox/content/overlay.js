@@ -147,8 +147,15 @@
     root: null,
     ui: null,
     // The appearance of the floating button, read from the application over
-    // the bridge when the overlay starts.
+    // the bridge when the overlay starts, and pushed again when the reader
+    // changes it while this page is already open.
     videoButton: { style: "icon", label: "Download", hover: false },
+    // Whether that appearance came from the application or is the extension's
+    // own, kept because the two are not the same promise.
+    videoButtonFromApp: false,
+    // When this page last asked the application for its look, so a page opened
+    // while the application was closed asks again without hammering it.
+    videoButtonAsked: 0,
     // Whether the pointer is over a video, used when hover-to-show is on.
     pointerOverVideo: false,
     // The video the button belongs to, and the one the pointer is on: a player
@@ -327,6 +334,11 @@
     state.root = root;
     state.ui = ui;
     state.progressStamp = "";
+    // The button is built from the page's own defaults, so the appearance the
+    // application asked for has to go on it now. Reading it at start-up before
+    // this existed only filled `state.videoButton`, and the button stayed on the
+    // styles that match no `data-style` at all.
+    applyButtonStyle();
     if (state.visible) host.dataset.visible = "true";
     if (state.open) host.dataset.open = "true";
   }
@@ -486,6 +498,17 @@
 
     // Hover-to-show: the button only appears while the pointer is on the video.
     if (state.videoButton.hover && !state.pointerOverVideo) return;
+
+    // The application was out of reach when this page started, so ask again for
+    // the video that is actually being shown — at most every few seconds, and
+    // the background page answers from its own minute of cache in between.
+    if (
+      !state.videoButtonFromApp &&
+      Date.now() - state.videoButtonAsked > 15000
+    ) {
+      state.videoButtonAsked = Date.now();
+      void loadVideoButtonSettings();
+    }
 
     // A player that navigated inside this document belongs to a new page now,
     // and the download of the previous one is not this video's.
@@ -1529,6 +1552,23 @@
     state.stopRegistry = null;
   }
 
+  /** Put one appearance onto the button, if the answer carries one. */
+  function applyVideoButton(answer) {
+    if (!answer || answer.ok !== true) return false;
+    state.videoButton = {
+      style:
+        answer.style === "text" || answer.style === "both" ? answer.style : "icon",
+      label: String(answer.label || "Download").slice(0, 40),
+      hover: Boolean(answer.hover),
+    };
+    // The background page answers `ok` only with what the application said, so
+    // this is the reader's own choice. A page that never heard from the
+    // application keeps its own default and asks again later.
+    state.videoButtonFromApp = true;
+    if (state.ui) applyButtonStyle();
+    return true;
+  }
+
   /** Read the button appearance the application serves over the bridge. */
   async function loadVideoButtonSettings() {
     let answer;
@@ -1539,18 +1579,7 @@
     } catch {
       answer = null;
     }
-    if (answer && answer.ok) {
-      state.videoButton = {
-        style: answer.style === "text" || answer.style === "both"
-          ? answer.style
-          : "icon",
-        label: String(answer.label || "Download").slice(0, 40),
-        hover: Boolean(answer.hover),
-      };
-      if (state.ui) {
-        applyButtonStyle();
-      }
-    }
+    applyVideoButton(answer);
   }
 
   /** A player asked for another stream: the button may now have an address. */
@@ -1766,7 +1795,22 @@
   browser.storage.onChanged.addListener(onSettingsChanged);
 
   browser.runtime.onMessage.addListener((message) => {
-    if (!message || message.type !== "bdm:media-list") return undefined;
+    if (!message || typeof message.type !== "string") return undefined;
+
+    // The reader changed the button in the application while this page was
+    // open: draw it now, without waiting for a reload. Only a real answer from
+    // the application is ever pushed here.
+    if (message.type === "bdm:video-button-changed") {
+      applyVideoButton({
+        ok: true,
+        style: message.style,
+        label: message.label,
+        hover: message.hover,
+      });
+      return undefined;
+    }
+
+    if (message.type !== "bdm:media-list") return undefined;
     // The popup can ask on a page whose overlay is switched off.
     bdmWatchMediaRequests();
     return Promise.resolve({

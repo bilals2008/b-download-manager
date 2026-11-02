@@ -24,6 +24,10 @@ futures-util = "0.3"
 tauri-plugin-autostart = "2"
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-updater = "2"
+# The pairing token of the browser bridge needs the operating system's random
+# source, not a seeded generator. Already in the dependency graph, so this adds
+# no build of its own.
+getrandom = "0.4"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem", "Win32_Foundation", "Win32_Graphics_Dwm"] }

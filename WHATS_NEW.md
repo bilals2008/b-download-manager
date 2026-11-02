@@ -10,6 +10,12 @@
 
 ## [Unreleased]
 
+### The browser connection is now a paired one
+
+- The app makes a pairing code, and the browser extension needs it once before it can start any download.
+- Copy the code in Settings, then Browser integration, paste it into the extension's settings page and save.
+- The download button on videos now follows your choice in the app on pages that are already open, with no reload.
+
 ### A real download queue
 
 - Start Queue starts downloads one at a time, in the order you set, instead of starting every row at once.

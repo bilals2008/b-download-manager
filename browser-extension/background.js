@@ -14,14 +14,30 @@ const BRIDGE = "http://127.0.0.1:27500";
 const CLIENT = "browser-extension";
 const APP = "b-download-manager";
 
-/** Downloads already handed over, so a repeated event cannot send twice. */
-const handedOver = new Set();
-/** Media addresses already reported, so a range request cannot report twice. */
-const seenMedia = new Set();
-/** The tab whose first manifest has been sent; later media playlists are its children. */
-const manifestTabs = new Set();
-chrome.tabs?.onUpdated?.addListener((tabId, change) => {
-  if (change.status === "loading") manifestTabs.delete(tabId);
+/*
+  The pairing code.
+
+  The application makes it up and the reader pastes it into this extension's
+  popup once; every request after that carries it as a bearer token. The client
+  header alone is not a secret — any program on this machine can send it — so the
+  code is what tells the bridge that the caller is the extension the reader
+  paired. Requests are refused until it is there.
+*/
+let pairingCode = "";
+
+/** The stored code, read again on every event-page wake. */
+async function loadPairingCode() {
+  const stored = await chrome.storage.local.get("token").catch(() => ({}));
+  pairingCode = String(stored?.token || "");
+  return pairingCode;
+}
+
+void loadPairingCode();
+
+chrome.storage.onChanged?.addListener((changes, area) => {
+  if (area === "local" && changes.token) {
+    pairingCode = String(changes.token.newValue || "");
+  }
 });
 
 async function request(method, path, body) {
@@ -31,6 +47,7 @@ async function request(method, path, body) {
     credentials: "omit",
     headers: {
       "X-BDM-Client": CLIENT,
+      ...(pairingCode ? { Authorization: `Bearer ${pairingCode}` } : {}),
       ...(body === undefined ? {} : { "Content-Type": "application/json" }),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -38,10 +55,23 @@ async function request(method, path, body) {
 
   const payload = await response.json().catch(() => null);
   if (!payload || !payload.ok) {
+    if (response.status === 401) {
+      throw new Error("Paste the app's pairing code into this extension's popup.");
+    }
     throw new Error(payload?.error?.message || `the app answered ${response.status}`);
   }
   return payload.data;
 }
+
+/** Downloads already handed over, so a repeated event cannot send twice. */
+const handedOver = new Set();
+/** Media addresses already reported, so a range request cannot report twice. */
+const seenMedia = new Set();
+/** The tab whose first manifest has been sent; later media playlists are its children. */
+const manifestTabs = new Set();
+chrome.tabs?.onUpdated?.addListener((tabId, change) => {
+  if (change.status === "loading") manifestTabs.delete(tabId);
+});
 
 async function handOver(url, referer, name, ask) {
   return request("POST", "/v1/downloads", {

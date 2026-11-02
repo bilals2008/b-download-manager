@@ -566,10 +566,31 @@ export interface BrowserStatus {
   api: number;
   /** The last authenticated extension request, in Unix milliseconds. */
   lastContactMs: number | null;
+  /** The extension that has used the pairing code, in its own origin. */
+  pairedExtension: string | null;
 }
 
 export function browserStatus(): Promise<BrowserStatus> {
   return invoke<BrowserStatus>("browser_status");
+}
+
+/** The pairing the Browser page shows: the code, the browser using it, and
+ *  the file that keeps it. */
+export interface BridgePairing {
+  /** The code to paste into the extension. Empty when the app could not make
+   *  one, which leaves the bridge refusing everything but its ping. */
+  token: string;
+  pairedExtension: string | null;
+  filePath: string;
+}
+
+export function bridgePairing(): Promise<BridgePairing> {
+  return invoke<BridgePairing>("bridge_pairing");
+}
+
+/** Replace the pairing code. The old one stops working at once. */
+export function rotateBridgeToken(): Promise<BridgePairing> {
+  return invoke<BridgePairing>("rotate_bridge_token");
 }
 
 /** Whether a folder can hold a download, and how much room is left. */

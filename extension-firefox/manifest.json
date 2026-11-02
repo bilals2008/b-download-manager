@@ -12,7 +12,7 @@
       }
     }
   },
-  "permissions": ["contextMenus", "cookies", "downloads", "storage"],
+  "permissions": ["contextMenus", "cookies", "downloads", "storage", "alarms"],
   "host_permissions": ["http://127.0.0.1:27500/*", "http://*/*", "https://*/*"],
   "background": {
     "scripts": [

@@ -145,6 +145,31 @@
         </div>
       </section>
 
+      <section class="group" aria-labelledby="pairing-heading">
+        <h2 id="pairing-heading">App pairing</h2>
+        <p class="hint" id="pairing-hint">
+          B Download Manager makes one code for this computer. Paste it here once
+          and only this extension can hand a download over; a web page or another
+          program on this machine cannot. The code is in the app under Settings,
+          then Browser integration.
+        </p>
+        <div class="add-row">
+          <input
+            class="input mono"
+            id="token-input"
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+            aria-describedby="pairing-hint"
+            placeholder="Paste the code from the app"
+            aria-label="Pairing code from B Download Manager"
+          />
+          <button class="button" id="token-save" type="button">Save</button>
+          <button class="text-button" id="token-clear" type="button">Forget</button>
+        </div>
+        <p class="note" id="token-note" role="status" aria-live="polite"></p>
+      </section>
+
       <footer class="foot">
         <span class="saved" id="saved" role="status" aria-live="polite"></span>
         <span class="bridge">127.0.0.1:27500 · API 1</span>

@@ -173,6 +173,9 @@ async function startPage(options = {}) {
       return { ok: true, result: { mode: "ask" } };
     }
     if (message.type === "bdm:list") return { ok: true, ...dom.list() };
+    // What the application says about the button, when a check wants an answer
+    // of its own rather than the plain "ok" everything else gets.
+    if (options.bridgeAnswer?.[message.type]) return options.bridgeAnswer[message.type];
     return { ok: true };
   };
 
@@ -300,6 +303,92 @@ async function startPage(options = {}) {
   await new Promise((resolve) => setTimeout(resolve, 520));
   assert.equal(page.visible(), false, "the button leaves with the pointer");
   assert.equal(page.open(), false, "the panel closes with the button");
+
+  page.close();
+}
+
+/* ------------------------------------- the appearance the application chose */
+
+/*
+  The overlay reads the button's look from the application over the bridge, and
+  the reader can change it in the app's Settings while this page is already
+  open. The background page pushes the new answer; a page that has to reload to
+  show it is the bug this block exists to keep away.
+*/
+
+{
+  const page = await startPage({
+    url: "https://www.youtube.com/watch?v=abc",
+    seed: [RANGED_1080, AUDIO_140],
+    bridgeAnswer: {
+      "bdm:video-button-settings": { ok: true, style: "both", label: "Get it", hover: false },
+    },
+  });
+  const { controls } = youTubePlayer(page.dom);
+  await page.dom.settle();
+
+  page.hover(controls, 600, 720);
+  await page.dom.settle();
+
+  const fab = page.shadow().querySelector(".fab");
+  const labelText = page.shadow().querySelector(".label-text");
+  assert.equal(fab.dataset.style, "both", "the button wears what the application chose");
+  assert.equal(labelText.textContent, "Get it");
+
+  // The reader changes it in the app.
+  await page.dom.messageListeners.at(-1)({
+    type: "bdm:video-button-changed",
+    ok: true,
+    style: "text",
+    label: "Save this",
+    hover: true,
+  });
+  await page.dom.settle();
+
+  assert.equal(fab.dataset.style, "text", "the open page follows without a reload");
+  assert.equal(fab.dataset.hover, "true", "and takes the hover rule at the same time");
+  assert.equal(labelText.textContent, "Save this");
+  assert.equal(page.visible(), true, "the pointer is still on the player, so it stays up");
+
+  page.close();
+}
+
+/* -------------------------------- when the application has not been reached */
+
+/*
+  A page that never got an answer from the application draws its own default and
+  does not claim the application chose it. This is the shape of the old bug the
+  background page used to hide: `ok: true` with defaults after a failed read.
+*/
+
+{
+  const page = await startPage({
+    url: "https://www.youtube.com/watch?v=abc",
+    seed: [RANGED_1080, AUDIO_140],
+    bridgeAnswer: {
+      "bdm:video-button-settings": {
+        ok: false,
+        error: { kind: "unpaired", message: "The extension is not paired." },
+      },
+    },
+  });
+  const { controls } = youTubePlayer(page.dom);
+  await page.dom.settle();
+
+  page.hover(controls, 600, 720);
+  await page.dom.settle();
+
+  const fab = page.shadow().querySelector(".fab");
+  assert.equal(
+    fab.dataset.style,
+    "icon",
+    "no answer from the app, so the extension's own look",
+  );
+  assert.equal(
+    page.shadow().querySelector(".label-text").textContent,
+    "Download",
+    "and its own words, not a label the app never sent",
+  );
 
   page.close();
 }

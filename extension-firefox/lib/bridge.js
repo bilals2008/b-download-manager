@@ -3,8 +3,13 @@
 
   The application listens on 127.0.0.1:27500 and answers JSON. The contract is
   versioned: the ping names the app and the API, so a stale process on the port
-  is told apart from a missing application. Every request carries the client
-  header, which a web page cannot add without a preflight the bridge refuses.
+  is told apart from a missing application.
+
+  Two headers say who is asking. The client header keeps a web page out, but a
+  header is not a secret and any local program can send one — the pairing code
+  is the proof. The application makes it up, the reader pastes it into this
+  extension's settings page once, and every request after that carries it as a
+  bearer token. Until it is set, only the ping gets an answer.
 
   Loaded by the background page, which is the only context that talks to the
   bridge. The popup and the content script ask the background for what they
@@ -17,6 +22,19 @@ const BDM_BRIDGE = Object.freeze({
   app: "b-download-manager",
   client: "browser-extension",
 });
+
+/** The pairing code, held by the background page and set from storage. */
+let bdmBridgeToken = "";
+
+/** Put the pairing code in place, or take it away with an empty string. */
+function bdmBridgeSetToken(token) {
+  bdmBridgeToken = String(token || "");
+}
+
+/** The code this extension is currently asking with. */
+function bdmBridgeGetToken() {
+  return bdmBridgeToken;
+}
 
 /** A bridge failure with a kind the UI can turn into one short line. */
 class BdmBridgeError extends Error {
@@ -41,6 +59,7 @@ async function bdmBridgeRequest(method, path, body, timeout = 4000) {
       credentials: "omit",
       headers: {
         "X-BDM-Client": BDM_BRIDGE.client,
+        ...(bdmBridgeToken ? { Authorization: `Bearer ${bdmBridgeToken}` } : {}),
         ...(body === undefined ? {} : { "Content-Type": "application/json" }),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -69,7 +88,9 @@ async function bdmBridgeRequest(method, path, body, timeout = 4000) {
       throw new BdmBridgeError(
         payload.error?.message || `The app refused the request (${response.status}).`,
         {
-          kind: "refused",
+          // A refusal that says the code is wrong is its own kind: the app is
+          // running and reachable, so the fix is pairing, not a retry.
+          kind: bdmFailureKind(response.status),
           status: response.status,
           code: payload.error?.code || "",
         },
@@ -88,7 +109,20 @@ async function bdmBridgeRequest(method, path, body, timeout = 4000) {
   }
 }
 
-/** The handshake. Confirms that the app, not another process, holds the port. */
+/** What one status code means for what the user has to do next. */
+function bdmFailureKind(status) {
+  if (status === 401) return "unpaired";
+  if (status === 403) return "forbidden";
+  return "refused";
+}
+
+/**
+ * The handshake. Confirms that the app, not another process, holds the port.
+ *
+ * The answer carries `paired`, so this one call says both that the application
+ * is there and whether it knows the code this extension is sending — which is
+ * the difference between "paste the code" and "start the app".
+ */
 async function bdmBridgePing() {
   const data = await bdmBridgeRequest("GET", "/v1/ping", undefined, 1200);
   if (data?.app !== BDM_BRIDGE.app) {
@@ -117,6 +151,17 @@ async function bdmBridgeList() {
  */
 async function bdmBridgeCapturePolicy() {
   return bdmBridgeRequest("GET", "/v1/capture", undefined, 1500);
+}
+
+/**
+ * The appearance the application gives the floating video button.
+ *
+ * The application's Settings page owns this; the overlay only draws what it
+ * reads. A failure is a failure — the caller keeps the last appearance it saw
+ * and says so, rather than reporting the app's choice as the default one.
+ */
+async function bdmBridgeVideoButton() {
+  return bdmBridgeRequest("GET", "/v1/video-button-settings", undefined, 2500);
 }
 
 /** Start a download in the app. `mode` is "direct" or "ask". */

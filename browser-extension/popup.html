@@ -30,6 +30,23 @@
         margin: 0.5rem 0 0;
         color: #4c5a45;
       }
+      /* The pairing code is one long run of characters. */
+      input[type="text"] {
+        width: 100%;
+        box-sizing: border-box;
+        margin-block-start: 0.25rem;
+        padding: 0.3rem 0.4rem;
+        border: 1px solid #cbd6c4;
+        border-radius: 5px;
+        font: 11px ui-monospace, Consolas, monospace;
+        color: inherit;
+        background: #fff;
+      }
+      .field {
+        display: block;
+        margin-block-start: 0.75rem;
+        color: #4c5a45;
+      }
     </style>
   </head>
   <body>
@@ -38,6 +55,17 @@
       <input type="checkbox" id="takeover" />
       <span>Take over the downloads the browser starts</span>
     </label>
+    <label class="field">
+      <span>Pairing code from the app</span>
+      <input
+        type="text"
+        id="token"
+        spellcheck="false"
+        autocomplete="off"
+        placeholder="Settings, Browser integration"
+      />
+    </label>
+    <p id="pair">Paste the code to pair this browser with the app.</p>
     <p id="state">The application has to be running.</p>
     <script src="popup.js"></script>
   </body>

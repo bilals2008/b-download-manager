@@ -42,6 +42,37 @@ the maintainer a reasonable window to ship a fix before disclosing publicly.
 - **Credential and header handling.** Leaking cookies, proxy credentials or
   authentication headers to a redirect target or into logs.
 
+## The browser bridge
+
+The app listens on `127.0.0.1:27500` for its browser extension. What the rules
+protect, and what they do not:
+
+- **The pairing code is the control.** The app makes 32 random bytes, keeps them
+  in `browser-pairing.json` in its own data folder, and every route but the ping
+  needs them as `Authorization: Bearer <code>`. Headers alone prove nothing: any
+  local program can send `X-BDM-Client`, so the header is a filter, not a secret.
+- **A request is refused before the code is read** when its `Host` is not
+  `127.0.0.1:27500` or `localhost:27500` (a page whose name resolves to loopback
+  is DNS rebinding), when an `Origin` is present and is not a well-formed
+  `moz-extension://` or `chrome-extension://` origin, or when a POST body is not
+  JSON.
+- **One code belongs to one extension.** The first extension origin that presents
+  the code is pinned in the pairing file; a different extension carrying the same
+  secret is refused with 403. Pressing *Make a new code* in Settings → Browser
+  integration replaces the secret and clears the pin, which is how an old browser
+  profile or a reinstalled extension is cut off.
+- **Refusals are refusals.** A route the caller may not use answers 401 or 403
+  with an error, and the extension shows "not paired" rather than "no download
+  rules". `Access-Control-Allow-Origin` echoes only an extension origin.
+
+The limits worth knowing: a process running as the same user on the same machine
+can read the pairing file and then drive the bridge, which is why the port stays
+on loopback, why the code is not a password to anything remote, and why
+proxy credentials are refused outright rather than stored. Closing the bridge to
+everything but the paired extension would need a per-connection identity that
+WebExtensions do not offer over plain HTTP; native messaging is the recorded
+alternative (see `docs/` and the extension README) and is not implemented.
+
 ## Out of scope
 
 - Issues in dependencies that are already public and have no exploit path in

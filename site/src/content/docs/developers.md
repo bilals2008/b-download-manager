@@ -57,13 +57,29 @@ pnpm tauri icon src/assets/brand/logo.png
 ## Browser extensions
 
 The app runs a small JSON API on `127.0.0.1:27500`. It starts and stops with the
-app, answers only requests carrying `X-BDM-Client: browser-extension`, and
-accepts an `Origin` only when it comes from an extension. There is no native
-messaging host to register and no registry entry to add, which is why the app
-must be running before the extension can do anything.
+app and is reachable only from this machine. There is no native messaging host
+to register and no registry entry to add, which is why the app must be running
+before the extension can do anything.
+
+Two things say who is asking. `X-BDM-Client: browser-extension` keeps a plain
+page request out, and the **pairing code** is the proof: the app writes 32 random
+bytes into `browser-pairing.json` in its own data folder, the reader pastes that
+code into the extension once, and every route but `GET /v1/ping` needs it as
+`Authorization: Bearer <code>`. A request whose `Host` is not the bridge's own
+address is refused (that is the shape of DNS rebinding), an `Origin` is refused
+unless it is a well-formed `moz-extension://` or `chrome-extension://` one, and
+only such an origin is ever echoed back in `Access-Control-Allow-Origin`. The
+first extension origin to present the code is pinned in that file, so a second
+extension with the same secret is refused; **Make a new code** in Settings →
+Browser integration replaces the code and clears the pin.
+
+```powershell
+npm run probe:bridge    # against the running app: the rules, and one real download
+```
 
 The extension treats `/v1/ping` as the handshake: a different program holding
-the port is reported as a mismatch, not as a connection.
+the port is reported as a mismatch, not as a connection, and an app that answers
+`paired: false` is reported as not paired rather than as working.
 
 - **Firefox** (`extension-firefox/`): Manifest V3 with an event page, the
   right-click hand-off, download takeover and a download button on each detected

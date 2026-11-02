@@ -45,8 +45,10 @@ src-tauri/src/
   main.rs        process entry
   lib.rs         Tauri builder, commands, event wiring
   state.rs       the set of known downloads
+  pairing.rs     the bridge's pairing code and the extension it belongs to
   bridge/        the loopback server the browser extensions talk to
     mod.rs         routes, the versioned contract and its tests
+    auth.rs        the code, the origin and host rules, and their tests
     http.rs        the HTTP/1.1 reader and writer
     dest.rs        safe, unique file names for hand-overs
     batch.rs       the Download all links batch: offered folders, per-link answer
@@ -307,6 +309,12 @@ is added:
 - `desktop.json` (`src-tauri/src/prefs.rs`) stays the owner of the tray, the
   close and minimize choices and the clipboard protocols — same rules, its own
   file. The engine settings file does not duplicate it.
+- `browser-pairing.json` (`src-tauri/src/pairing.rs`) holds the bridge's secret
+  and the extension origin that first used it. It is a third file on purpose:
+  `settings.json` is the file a reader exports or sends as a support file, and a
+  pairing code must not travel with it. The code is made during setup, before
+  `bridge::start` binds, and is never logged or written anywhere else. Deleting
+  the file is the same as un-pairing the browser.
 - Appearance, fonts, toolbar packs and layouts, tips, the last folder and the
   update-check stamp are read only by the webview and live only in
   `localStorage`. Pick the owner by who reads it without a window: if the

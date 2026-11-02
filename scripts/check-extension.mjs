@@ -36,8 +36,12 @@ assert.deepEqual(
 
 assert.deepEqual(
   [...manifest.permissions].sort(),
-  ["contextMenus", "cookies", "downloads", "storage"],
+  ["alarms", "contextMenus", "cookies", "downloads", "storage"],
   "the extension asks for the permissions it uses, and no more",
+);
+assert.ok(
+  read("background.js").includes("alarms.create("),
+  "the alarms permission is there for the settings check that reads it",
 );
 assert.deepEqual(
   manifest.host_permissions,
@@ -281,6 +285,7 @@ function mockBrowser() {
     tabs: [],
     sentToTab: [],
     relayed: [],
+    alarms: [],
     openedOptions: 0,
   };
 
@@ -352,10 +357,41 @@ function mockBrowser() {
     },
     storage: {
       local: {
-        get: async (defaults) => ({ ...defaults, ...store }),
+        // The real `get` answers the keys that were asked for, whether the
+        // caller passed an object of defaults, one key, or a list of them.
+        get: async (wanted) => {
+          const defaults =
+            wanted && typeof wanted === "object" && !Array.isArray(wanted) ? wanted : {};
+          const keys =
+            typeof wanted === "string"
+              ? [wanted]
+              : Array.isArray(wanted)
+                ? wanted
+                : Object.keys(defaults);
+          const answer = {};
+          for (const key of keys) {
+            if (key in store) answer[key] = store[key];
+            else if (key in defaults) answer[key] = defaults[key];
+          }
+          return answer;
+        },
         set: async (value) => Object.assign(store, value),
+        remove: async (key) => {
+          for (const name of typeof key === "string" ? [key] : Array.isArray(key) ? key : []) {
+            delete store[name];
+          }
+        },
       },
       onChanged: { addListener: add("storage") },
+    },
+    alarms: {
+      create: (name, info) => calls.alarms.push({ name, info }),
+      clear: async (name) => {
+        calls.alarms = calls.alarms.filter((alarm) => alarm.name !== name);
+        return true;
+      },
+      get: async (name) => calls.alarms.find((alarm) => alarm.name === name) || undefined,
+      onAlarm: { addListener: add("alarm") },
     },
   };
 
@@ -370,8 +406,16 @@ const sandbox = mockBrowser();
 const downloadBehaviour = { refusedPause: new Map(), failedResume: new Set() };
 let bridgeMode = "online";
 let pingApp = "b-download-manager";
+let pingApi = 1;
+/** The pairing code the mocked application holds, and whether the extension is
+ *  asking with it. A route refuses a request that does not carry the code, the
+ *  way the real bridge does. */
+/** The pairing code the mocked application holds. Every route but the ping
+ *  refuses a request that does not carry it, the way the real bridge does. */
+const PAIRING_CODE = "0123456789abcdef".repeat(4) + "0123456789ab";
 let listPayload = { downloads: [], active: 0 };
 let capturePolicy = { capture: true, ask: false, types: [], skipSites: [] };
+let videoButton = { style: "both", label: "Get it", hover: true };
 let tabAnswer = { ok: true, links: [], page: {}, stats: {} };
 let batchOptions = {
   folders: [
@@ -404,14 +448,43 @@ let batchAnswer = {
 const lastSend = { body: null };
 const lastBatch = { body: null };
 
+/** A refusal in the shape the bridge writes: one code and one sentence. */
+function refusal(status, code, message) {
+  return {
+    status,
+    async text() {
+      return JSON.stringify({ ok: false, error: { code, message } });
+    },
+  };
+}
+
 async function fakeFetch(url, options = {}) {
   sandbox.calls.fetches.push({ url, options });
   if (bridgeMode === "offline") throw new TypeError("Failed to fetch");
 
   const pathName = new URL(String(url)).pathname;
+  const ping = pathName === "/v1/ping";
+  const headers = options.headers || {};
+  if (headers["X-BDM-Client"] !== "browser-extension") {
+    return refusal(403, "forbidden", "the browser extension header is missing");
+  }
+  const carriesCode = headers.Authorization === `Bearer ${PAIRING_CODE}`;
+  // The bridge is a paired one: everything but the ping wants the code.
+  if (!ping && !carriesCode) {
+    return refusal(401, "unauthorized", "the extension is not paired with the application");
+  }
+
   let data;
-  if (pathName === "/v1/ping") {
-    data = { app: pingApp, api: 1, version: "0.1.0", port: 27500 };
+  if (ping) {
+    data = {
+      app: pingApp,
+      api: pingApi,
+      version: "0.1.0",
+      port: 27500,
+      paired: carriesCode,
+    };
+  } else if (pathName === "/v1/video-button-settings") {
+    data = videoButton;
   } else if (pathName === "/v1/capture") {
     data = capturePolicy;
   } else if (pathName === "/v1/downloads" && options.method === "GET") {
@@ -450,6 +523,10 @@ const sentDownloads = () =>
 // to keep the check alive for it.
 const setTimeoutShim = (fn, delay, ...args) =>
   delay >= 10_000 ? 0 : setTimeout(fn, delay, ...args);
+
+// The background page reads the pairing code out of storage when it loads, so
+// the mock has to hold the one the fake bridge expects.
+store.token = PAIRING_CODE;
 
 const backgroundContext = vm.createContext({
   URL,
@@ -896,12 +973,37 @@ const {
 
 bridgeMode = "online";
 pingApp = "b-download-manager";
+
+/*
+  Pairing, first: without the code the bridge answers the ping and nothing else,
+  and the extension has to say so in a kind the UI can turn into one line.
+*/
+const unpairedPing = await bdmBridgePing();
+assert.equal(unpairedPing.paired, false, "a ping without the code is not a pairing");
+await assert.rejects(
+  requestContext.bdmBridgeCapturePolicy(),
+  (error) => error.kind === "unpaired" && error.status === 401,
+  "a route the code has not unlocked says so, and says which",
+);
+const unpairedHeaders = sandbox.calls.fetches.at(-1).options.headers;
+assert.ok(!unpairedHeaders.Authorization, "no code, no Authorization header");
+
+requestContext.bdmBridgeSetToken(PAIRING_CODE);
+assert.equal(requestContext.bdmBridgeGetToken(), PAIRING_CODE);
+
 const ping = await bdmBridgePing();
 assert.equal(ping.app, "b-download-manager");
 assert.equal(ping.api, 1);
+assert.equal(ping.paired, true, "the code this extension sends is the one the app holds");
 
 const headers = sandbox.calls.fetches.at(-1).options.headers;
 assert.equal(headers["X-BDM-Client"], "browser-extension", "every request carries the client header");
+assert.equal(
+  headers.Authorization,
+  `Bearer ${PAIRING_CODE}`,
+  "and every request carries the pairing code",
+);
+assert.equal(await requestContext.bdmBridgeVideoButton().then((data) => data.style), "both");
 
 listPayload = {
   downloads: [{ id: 1, status: "running", downloaded: 10, total: 20 }],
@@ -957,6 +1059,11 @@ assert.equal(sandbox.calls.fetches.at(-1).url, "http://127.0.0.1:27500/v1/focus"
 pingApp = "something-else";
 await assert.rejects(bdmBridgePing(), (error) => error.kind === "protocol");
 pingApp = "b-download-manager";
+
+// An older or newer bridge contract is a mismatch, not a connection.
+pingApi = 2;
+await assert.rejects(bdmBridgePing(), (error) => error.kind === "protocol");
+pingApi = 1;
 
 bridgeMode = "offline";
 await assert.rejects(bdmBridgeList(), (error) => error.kind === "offline");
@@ -1021,6 +1128,81 @@ pingApp = "b-download-manager";
 const statusAnswer = await onMessage({ type: "bdm:status" }, {});
 assert.equal(statusAnswer.ok, true);
 assert.equal(statusAnswer.version, "0.1.0");
+assert.equal(statusAnswer.paired, true, "the background asks with the code in storage");
+assert.equal(statusAnswer.hasCode, true, "and says it has one to ask with");
+
+/*
+  The code taken away, before this page has ever read the button: the
+  application is still there and still answers a ping, so the extension has to
+  say "not paired" — and must not report its own default as though the
+  application had chosen it.
+*/
+backgroundContext.bdmBridgeSetToken("");
+const unpairedStatus = await onMessage({ type: "bdm:status" }, {});
+assert.equal(unpairedStatus.ok, true, "the ping is open to an extension that is not paired");
+assert.equal(unpairedStatus.paired, false);
+assert.equal(unpairedStatus.hasCode, false);
+const unpairedButton = await onMessage({ type: "bdm:video-button-settings" }, {});
+assert.equal(unpairedButton.ok, false, "a refusal is not a success with defaults");
+assert.equal(unpairedButton.error.kind, "unpaired");
+backgroundContext.bdmBridgeSetToken(PAIRING_CODE);
+const repaired = await onMessage({ type: "bdm:pairing-check" }, {});
+assert.equal(repaired.paired, true, "putting the code back pairs the extension again");
+
+// An older or newer contract is a mismatch, which the popup has its own line for.
+pingApi = 2;
+const mismatch = await onMessage({ type: "bdm:status" }, {});
+assert.equal(mismatch.ok, false);
+assert.equal(mismatch.error.kind, "protocol", "a different API version is not a connection");
+pingApi = 1;
+
+/* ---------------------------------------------------- the button and the tabs */
+
+/** The work the background page kicks off without being awaited. */
+async function until(predicate, tries = 60) {
+  for (let index = 0; index < tries; index += 1) {
+    if (predicate()) return true;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  return false;
+}
+
+const buttonAnswer = await onMessage({ type: "bdm:video-button-settings" }, {});
+assert.equal(buttonAnswer.ok, true);
+assert.equal(buttonAnswer.style, "both", "the application's look, not the extension default");
+assert.equal(buttonAnswer.label, "Get it");
+assert.equal(buttonAnswer.hover, true);
+
+sandbox.calls.fetches.length = 0;
+await onMessage({ type: "bdm:video-button-settings" }, {});
+assert.equal(sandbox.calls.fetches.length, 0, "a fresh answer is not asked for twice");
+
+// A page with a video on it is what starts the check the tabs are fed from.
+await onMessage({ type: "bdm:media-count", count: 3 }, { tab: { id: 9 } });
+assert.ok(
+  sandbox.calls.alarms.some((alarm) => alarm.name === "bdm-video-button"),
+  "a video page starts the periodic read of the application's settings",
+);
+
+videoButton = { style: "text", label: "Save", hover: false };
+sandbox.calls.relayed.length = 0;
+const onAlarm = sandbox.listeners.get("alarm")[0];
+assert.ok(onAlarm, "the background listens for its own alarm");
+await onAlarm({ name: "bdm-video-button" });
+const pushed = await until(() =>
+  sandbox.calls.relayed.find((message) => message.type === "bdm:video-button-changed"),
+);
+assert.ok(pushed, "the reader's change is pushed to the pages already open");
+const change = sandbox.calls.relayed.find((message) => message.type === "bdm:video-button-changed");
+assert.equal(change.style, "text");
+assert.equal(change.label, "Save");
+assert.equal(change.hover, false);
+const afterChange = await onMessage({ type: "bdm:video-button-settings" }, {});
+assert.equal(afterChange.style, "text", "a page that asks now gets the new look");
+
+const beforeOtherAlarm = sandbox.calls.fetches.length;
+await onAlarm({ name: "bdm-something-else" });
+assert.equal(sandbox.calls.fetches.length, beforeOtherAlarm, "an alarm nobody else owns is ignored");
 
 listPayload = { downloads: [], active: 0 };
 const listAnswer = await onMessage({ type: "bdm:list" }, {});

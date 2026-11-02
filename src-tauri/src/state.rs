@@ -9,6 +9,8 @@ use idm_core::downloader::{Download, DownloadInfo, Status};
 use idm_core::limits::Limits;
 use idm_core::session::{Index, KnownDownload};
 
+use crate::bridge::auth;
+use crate::pairing::{self, Pairing};
 use crate::prefs::{self, DesktopPreferences};
 use crate::queue::Queue;
 use crate::settings_store::{self, EngineSettings};
@@ -114,6 +116,10 @@ pub struct AppState {
     /// The last time the extension reached the bridge, in seconds since the
     /// Unix epoch. Zero means it has not reached it yet.
     last_extension_contact: AtomicU64,
+    /// The bridge's secret and the extension origin that first proved it knew
+    /// the secret. Kept in a file of its own, not in the settings file.
+    pairing: Mutex<Pairing>,
+    pairing_path: Mutex<Option<PathBuf>>,
     /// What the minimize and close buttons mean, and where that choice is
     /// kept. The file is loaded before the tray is built, so an early close
     /// already follows the user's choice.
@@ -173,6 +179,8 @@ impl Default for AppState {
             browser_connections: AtomicU32::new(8),
             bridge_running: AtomicBool::new(false),
             last_extension_contact: AtomicU64::new(0),
+            pairing: Mutex::new(Pairing::default()),
+            pairing_path: Mutex::new(None),
             preferences: Mutex::new(DesktopPreferences::default()),
             preferences_path: Mutex::new(None),
             engine_settings: Mutex::new(EngineSettings::default()),
@@ -590,6 +598,99 @@ impl AppState {
         match self.last_extension_contact.load(Ordering::SeqCst) {
             0 => None,
             seconds => Some(seconds),
+        }
+    }
+
+    /// Point the state at the pairing file and read it, making a token on the
+    /// spot when the file has none.
+    ///
+    /// Called once during setup, before the bridge binds: the bridge needs a
+    /// secret to compare against for the very first request, and the settings
+    /// page needs a real one to show rather than a blank field.
+    pub fn set_pairing_path(&self, path: PathBuf) {
+        let record = pairing::open(&path);
+        *self.pairing.lock().expect("pairing lock poisoned") = record;
+        *self
+            .pairing_path
+            .lock()
+            .expect("pairing path lock poisoned") = Some(path);
+    }
+
+    /// The bridge's secret and the extension origin it has been accepted from.
+    pub fn bridge_pairing(&self) -> Pairing {
+        self.pairing.lock().expect("pairing lock poisoned").clone()
+    }
+
+    /// The secret every authenticated bridge request has to carry. Empty until
+    /// a pairing file has been read, which leaves the bridge refusing
+    /// everything but its own ping.
+    pub fn bridge_token(&self) -> String {
+        self.pairing
+            .lock()
+            .expect("pairing lock poisoned")
+            .token
+            .clone()
+    }
+
+    /// The extension origin this token has already been accepted from, `None`
+    /// while the reader has not paired a browser yet.
+    pub fn paired_origin(&self) -> Option<String> {
+        let origin = self
+            .pairing
+            .lock()
+            .expect("pairing lock poisoned")
+            .origin
+            .clone();
+        (!origin.is_empty()).then_some(origin)
+    }
+
+    /// Remember the extension origin a matching token arrived from, once.
+    ///
+    /// The pairing is the reader's own act — they pasted the token into one
+    /// extension — so the first extension to present it is the one they chose,
+    /// and after that the bridge answers that origin and no other. An empty
+    /// origin is a local caller with no origin header at all, which is not
+    /// something worth pinning.
+    pub fn note_paired_origin(&self, origin: &str) {
+        let changed = {
+            let mut record = self.pairing.lock().expect("pairing lock poisoned");
+            if !record.origin.is_empty() || origin.is_empty() || !auth::is_extension_origin(origin)
+            {
+                false
+            } else {
+                record.origin = origin.to_string();
+                true
+            }
+        };
+        if changed {
+            self.save_pairing();
+        }
+    }
+
+    /// Take a fresh token and forget which extension was paired. The reader
+    /// uses this after a reinstall, a moved profile, or a pairing they no
+    /// longer recognise; the old token stops working at once.
+    pub fn rotate_pairing(&self) -> Pairing {
+        let record = Pairing::fresh();
+        *self.pairing.lock().expect("pairing lock poisoned") = record.clone();
+        self.save_pairing();
+        record
+    }
+
+    /// Write the pairing to its file, when one was chosen. A failure is logged
+    /// rather than refused: the token still works for this run.
+    pub fn save_pairing(&self) {
+        let record = self.bridge_pairing();
+        let Some(path) = self
+            .pairing_path
+            .lock()
+            .expect("pairing path lock poisoned")
+            .clone()
+        else {
+            return;
+        };
+        if let Err(error) = pairing::save(&path, &record) {
+            idm_core::log::write("warn", &error);
         }
     }
 

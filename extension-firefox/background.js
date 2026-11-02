@@ -23,6 +23,44 @@ const mediaCounts = new Map();
 /** Downloads already handed over, so a repeated event cannot send twice. */
 const handedOver = new Set();
 
+/* ---------------------------------------------------------------- pairing */
+
+/*
+  The pairing code, and where it is kept.
+
+  The application makes the code up and the reader pastes it into the extension
+  settings page once. The background page is the only context that talks to the
+  bridge, so it is the only one that needs it, and it is stored apart from the
+  settings: the settings are the rules a page may read and re-save, and a secret
+  does not belong in either of those.
+*/
+const TOKEN_KEY = "token";
+
+/** The stored code, put in front of the bridge. Answers whether there is one. */
+async function applyPairingCode() {
+  let stored;
+  try {
+    stored = await browser.storage.local.get(TOKEN_KEY);
+  } catch {
+    // No storage means no code, which the bridge reports as not paired.
+    bdmBridgeSetToken("");
+    return false;
+  }
+  bdmBridgeSetToken(stored?.[TOKEN_KEY] || "");
+  return bdmBridgeGetToken() !== "";
+}
+
+/**
+ * Tell the application the browser is here. A failed ping is normal: the
+ * application may not be running, and nothing else depends on it.
+ *
+ * The code is read first, because the bridge only records a contact from a
+ * request that carried it — a ping without one says nothing has been paired.
+ */
+function announce() {
+  void applyPairingCode().then(() => bdmBridgePing().catch(() => {}));
+}
+
 /* ------------------------------------------------------------------ menus */
 
 /*
@@ -61,10 +99,12 @@ async function createMenus() {
 
 browser.runtime.onInstalled.addListener(() => {
   void createMenus();
+  followVideoButton();
   announce();
 });
 browser.runtime.onStartup.addListener(() => {
   void createMenus();
+  followVideoButton();
   announce();
 });
 
@@ -127,6 +167,13 @@ function setBadge(tabId, count) {
   mediaCounts.set(tabId, count);
   const text = count > 9 ? "9+" : count > 0 ? String(count) : "";
   browser.action.setBadgeText({ tabId, text }).catch(() => {});
+  if (count > 0) {
+    // A page with a video on it is a page that wants the application's button
+    // appearance, so the check starts and, on the first video of the session,
+    // the answer is read straight away.
+    followVideoButton();
+    if (videoButton.readAt === 0) void readVideoButton(true);
+  }
 }
 
 /** A check or a warning over the toolbar button for a moment. */
@@ -329,6 +376,112 @@ browser.downloads.onCreated.addListener(async (item) => {
   await browser.downloads.erase({ id: item.id }).catch(() => {});
 });
 
+/* ------------------------------------------------------- the video button */
+
+/*
+  The application's video button appearance, kept for the tabs.
+
+  The overlay is drawn inside a page, and a page that polled the bridge for each
+  video would wake the application constantly. So the background reads it once a
+  minute, only while some tab has media to show, and tells the tabs when the
+  answer changed: the reader changes it in the application's Settings page and
+  the buttons on the open pages follow without a reload.
+
+  The capture rules are not cached here — every hand-over reads them again — so
+  this is the one value a page holds in memory.
+*/
+const VIDEO_BUTTON_ALARM = "bdm-video-button";
+const VIDEO_BUTTON_FRESH_MS = 60 * 1000;
+const VIDEO_BUTTON_DEFAULT = { style: "icon", label: "Download", hover: false };
+
+/** The last answer from the application, and when it arrived. */
+let videoButton = { ...VIDEO_BUTTON_DEFAULT, readAt: 0 };
+/** The last answer the tabs were told about, so none is left on the old look. */
+let videoButtonPushed = { ...VIDEO_BUTTON_DEFAULT };
+
+function sameVideoButton(value, other) {
+  return (
+    value.style === other.style &&
+    value.label === other.label &&
+    value.hover === Boolean(other.hover)
+  );
+}
+
+/** The three fields, cleaned the way the overlay expects them. */
+function cleanVideoButton(data) {
+  const style = data?.style === "text" || data?.style === "both" ? data.style : "icon";
+  return {
+    style,
+    label: String(data?.label || "Download").slice(0, 40),
+    hover: Boolean(data?.hover),
+  };
+}
+
+/**
+ * Read the appearance from the application, once.
+ *
+ * The answer is `ok` when it is what the application said — just now, or within
+ * the last minute — and a failure when it is not. A page that gets a failure
+ * keeps its own default rather than being told the application chose it.
+ */
+async function readVideoButton(force) {
+  const fresh = videoButton.readAt > 0 && Date.now() - videoButton.readAt < VIDEO_BUTTON_FRESH_MS;
+  if (!force && fresh) {
+    return { ...videoButton, ok: true };
+  }
+  try {
+    const next = cleanVideoButton(await bdmBridgeVideoButton());
+    videoButton = { ...next, readAt: Date.now() };
+    // Tell the tabs that already drew a button. The page that asked gets the
+    // answer from the return value, and a push it does not need is harmless:
+    // applying the same appearance twice looks the same as applying it once.
+    if (!sameVideoButton(next, videoButtonPushed)) {
+      videoButtonPushed = next;
+      notifyVideoButton();
+    }
+    return { ...videoButton, ok: true };
+  } catch (error) {
+    // A page can still be told what the app asked for last time; it cannot be
+    // told the app asked for the default.
+    return {
+      ok: false,
+      error: {
+        kind: error?.kind || "unknown",
+        message: error?.message || "The app could not be reached.",
+      },
+      ...videoButton,
+    };
+  }
+}
+
+/** Tell every tab that is showing an overlay that the appearance changed. */
+function notifyVideoButton() {
+  browser.runtime
+    .sendMessage({
+      type: "bdm:video-button-changed",
+      style: videoButton.style,
+      label: videoButton.label,
+      hover: videoButton.hover,
+    })
+    .catch(() => {
+      // No extension page is listening; the content scripts still got it.
+    });
+}
+
+/** The minute-by-minute check, kept alive only while a tab has media. */
+function followVideoButton() {
+  if (browser.alarms?.create) {
+    browser.alarms.create(VIDEO_BUTTON_ALARM, { periodInMinutes: 1 });
+  }
+}
+
+browser.alarms?.onAlarm?.addListener((alarm) => {
+  if (alarm?.name !== VIDEO_BUTTON_ALARM) return;
+  // Nothing to follow once no tab has a video on it.
+  if (mediaCounts.size === 0) return;
+  void readVideoButton(true);
+});
+
 /* --------------------------------------------------------------- messages */
 
 function bridgeFailure(error) {
@@ -348,7 +501,30 @@ async function handleMessage(message, sender) {
     case "bdm:status": {
       try {
         const data = await bdmBridgePing();
-        return { ok: true, version: data.version, api: data.api };
+        return {
+          ok: true,
+          version: data.version,
+          api: data.api,
+          paired: data.paired === true,
+          // The app is answering, so the reader can be told the difference
+          // between "paste the code" and "the app is not running".
+          hasCode: bdmBridgeGetToken() !== "",
+        };
+      } catch (error) {
+        return { ...bridgeFailure(error), hasCode: bdmBridgeGetToken() !== "" };
+      }
+    }
+
+    case "bdm:pairing-check": {
+      // The settings page asks right after the reader pastes a code.
+      await applyPairingCode();
+      try {
+        const data = await bdmBridgePing();
+        return {
+          ok: true,
+          paired: data.paired === true,
+          hasCode: bdmBridgeGetToken() !== "",
+        };
       } catch (error) {
         return bridgeFailure(error);
       }
@@ -580,17 +756,14 @@ async function handleMessage(message, sender) {
     }
 
     case "bdm:video-button-settings": {
-      try {
-        const data = await bdmBridgeRequest("GET", "/v1/video-button-settings", undefined, 2500);
-        return {
-          ok: true,
-          style: String(data?.style || "icon"),
-          label: String(data?.label || "Download"),
-          hover: Boolean(data?.hover),
-        };
-      } catch {
-        return { ok: true, style: "icon", label: "Download", hover: false };
-      }
+      const answer = await readVideoButton(false);
+      return {
+        ok: answer.ok === true,
+        style: answer.style,
+        label: answer.label,
+        hover: answer.hover,
+        ...(answer.ok === true ? {} : { error: answer.error }),
+      };
     }
 
     case "bdm:open-settings": {
@@ -608,4 +781,21 @@ browser.runtime.onMessage.addListener((message, sender) => {
     return undefined;
   }
   return handleMessage(message, sender).catch((error) => bridgeFailure(error));
+});
+
+/*
+  The code, and what happens when it changes.
+
+  The settings page writes it to storage and this page picks it up, so the next
+  request carries it. The same change makes the extension introduce itself
+  again: that is the moment the application records which extension is paired,
+  and the reader gets an answer without opening the popup.
+*/
+void applyPairingCode();
+
+browser.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local") return;
+  if (!Object.prototype.hasOwnProperty.call(changes, TOKEN_KEY)) return;
+  bdmBridgeSetToken(changes[TOKEN_KEY]?.newValue || "");
+  void bdmBridgePing().catch(() => {});
 });

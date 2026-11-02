@@ -66,14 +66,33 @@ function connectionText(error) {
       return "Not responding";
     case "protocol":
       return "Bridge version mismatch";
-    default:
+    case "unpaired":
+      return "Not paired with the app";
+    case "forbidden":
+      return "Another extension is the paired one";
+    case "offline":
       return "Not running";
+    default:
+      return error?.message || "The app refused it";
   }
+}
+
+/**
+ * Whether a failure means the app is not there, or is there and will not answer.
+ *
+ * The two ask for different fixes: one is a retry, the other is the pairing code
+ * in the settings page, so they cannot share one line and one state.
+ */
+function connectionState(error) {
+  const kind = error?.kind;
+  if (kind === "unpaired" || kind === "forbidden") return "warn";
+  return "offline";
 }
 
 function actionText(error) {
   if (error?.kind === "offline") return "Not running";
   if (error?.kind === "timeout") return "The app is not responding";
+  if (error?.kind === "unpaired") return "Paste the app's code into the extension settings";
   return error?.message || "The app refused it";
 }
 
@@ -691,7 +710,7 @@ async function refresh() {
   if (closed) return;
 
   if (!answer || !answer.ok) {
-    setConnection("offline", connectionText(answer?.error));
+    setConnection(connectionState(answer?.error), connectionText(answer?.error));
     renderDownloads([], { offline: true });
     schedule(OFFLINE_POLL_MS);
     return;

@@ -24,6 +24,19 @@ edit one before its release ships if a bullet needs better words.
 - **ui:** The floating Download button loses the permanent progress ring and sits on the video corner with a soft shadow
 - **ui:** The tray icon menu works: three drawings of the mark, "Don't show", inks that follow the appearance, and a URL list for the clipboard watch
 
+### Security
+
+- **bridge:** The loopback bridge is paired, not open: the app makes a secret of 32 random bytes (64 hex characters), every route but `/v1/ping` needs it as a bearer token, and a request whose `Host` is not the bridge's own address is refused (DNS rebinding)
+- **bridge:** The pairing pins the extension origin that first presented the code and refuses a second one carrying the same secret; `Origin` is validated as a real `moz-extension://`/`chrome-extension://` identifier instead of a prefix
+- **bridge:** Refusals are honest answers — 401 `unauthorized`, 403 `forbidden`/`forbidden_extension`, 415 for a non-JSON body — and only an extension origin is echoed back in `Access-Control-Allow-Origin`
+- **extension:** Both builds send the stored code, keep it apart from the synced settings, and report "not paired" instead of pretending the app is offline
+- **extension:** `bdm:video-button-settings` no longer answers `ok: true` with defaults when the bridge fails; the overlay keeps the last real answer and asks again later
+- **extension:** The app's video-button choice now reaches pages that are already open, through a periodic authenticated read in the background page and a push to the tabs, and it is put on the button when the button is built — which it previously never was
+
+### Changed
+
+- **extension:** `alarms` is requested for the periodic settings read; the bridge contract, the port and every route stay as they were
+
 ---
 
 ## [0.2.0] - 31 October 2026

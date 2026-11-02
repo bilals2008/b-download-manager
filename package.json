@@ -23,6 +23,7 @@
     "check:tray": "node scripts/check-tray.mjs",
     "check:settings": "node scripts/check-settings.mjs",
     "check:extension": "node scripts/check-extension.mjs",
+    "probe:bridge": "node scripts/bridge-probe.mjs",
     "check:grabber": "node scripts/check-grabber.mjs",
     "check:updates": "node scripts/check-updates.mjs",
     "check:tips": "node scripts/check-tips.mjs",

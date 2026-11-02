@@ -67,6 +67,20 @@ impl Request {
             .map(|(path, _)| path)
             .unwrap_or(&self.target)
     }
+
+    /// One request built by hand, for the rule tests that do not need a socket.
+    #[cfg(test)]
+    pub fn for_test(method: &str, target: &str, headers: &[(&str, &str)], body: &[u8]) -> Self {
+        Self {
+            method: method.to_ascii_uppercase(),
+            target: target.to_string(),
+            headers: headers
+                .iter()
+                .map(|(name, value)| (name.to_ascii_lowercase(), value.to_string()))
+                .collect(),
+            body: body.to_vec(),
+        }
+    }
 }
 
 /// Read one request. The caller closes the connection afterwards.
@@ -170,12 +184,14 @@ pub async fn write(
         200 => "OK",
         204 => "No Content",
         400 => "Bad Request",
+        401 => "Unauthorized",
         403 => "Forbidden",
         404 => "Not Found",
         405 => "Method Not Allowed",
         408 => "Request Timeout",
         409 => "Conflict",
         413 => "Payload Too Large",
+        415 => "Unsupported Media Type",
         500 => "Internal Server Error",
         _ => "Error",
     };

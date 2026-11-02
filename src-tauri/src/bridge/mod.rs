@@ -12,6 +12,7 @@
 //! not name this application. The Rust side of the contract is tested in this
 //! module.
 
+pub(crate) mod auth;
 pub(crate) mod batch;
 pub(crate) mod dest;
 mod http;
@@ -29,6 +30,8 @@ use idm_core::log;
 
 use crate::state::AppState;
 
+use auth::Denial;
+
 /// The port the extension talks to. It is on the loopback interface, so it is
 /// only reachable from this machine.
 pub const PORT: u16 = 27500;
@@ -41,12 +44,6 @@ pub const API_VERSION: u32 = 1;
 /// it, so the extension can tell "nothing is listening" from "something else
 /// is listening".
 pub const APP_ID: &str = "b-download-manager";
-
-/// The header every request has to carry. A web page cannot set it on a
-/// cross-origin request without a preflight, and the preflight is refused
-/// unless the origin is the extension's.
-const CLIENT_HEADER: &str = "x-bdm-client";
-const CLIENT_VALUE: &str = "browser-extension";
 
 /// The event the window listens to for a hand-over that asks the user first.
 const DOWNLOAD_EVENT: &str = "bridge://download";
@@ -130,27 +127,28 @@ async fn serve(app: AppHandle, mut stream: tokio::net::TcpStream) -> std::io::Re
         }
     };
 
-    let origin = request.header("origin").map(str::to_string);
+    let state = app.state::<AppState>();
+    let gate = gate(
+        &request,
+        &state.bridge_token(),
+        state.paired_origin().as_deref(),
+    );
 
-    // A page in the browser must not reach the bridge. An extension page may,
-    // and a local process without an origin may, which is what a native host
-    // or a test looks like.
-    if let Some(origin) = origin.as_deref() {
-        if !is_extension_origin(origin) {
-            return refuse(
-                &mut stream,
-                403,
-                "forbidden",
-                "this origin is not the extension",
-            )
-            .await;
-        }
+    if let Some(denial) = gate.denial {
+        log::write(
+            "warn",
+            &format!("the browser bridge refused a request: {}", denial.code),
+        );
+        return refuse(&mut stream, denial, gate.cors.as_deref()).await;
     }
 
     if request.method == "OPTIONS" {
         let headers = [
             ("Access-Control-Allow-Methods", "GET, POST, OPTIONS"),
-            ("Access-Control-Allow-Headers", "Content-Type, X-BDM-Client"),
+            (
+                "Access-Control-Allow-Headers",
+                "Content-Type, X-BDM-Client, Authorization",
+            ),
             ("Access-Control-Max-Age", "600"),
         ];
         return http::write(
@@ -158,30 +156,27 @@ async fn serve(app: AppHandle, mut stream: tokio::net::TcpStream) -> std::io::Re
             204,
             "text/plain",
             b"",
-            origin.as_deref(),
+            gate.cors.as_deref(),
             &headers,
         )
         .await;
     }
 
-    // The client header is the second lock: an `<img>` or a form can send a
-    // simple request without an origin, but it cannot add this header.
-    if request.header(CLIENT_HEADER) != Some(CLIENT_VALUE) {
-        return refuse(
-            &mut stream,
-            403,
-            "forbidden",
-            "the browser extension header is missing",
-        )
-        .await;
+    // The first extension to present the code is the one the reader paired, and
+    // from then on the bridge answers that origin and no other.
+    if let Some(origin) = gate.pin {
+        state.note_paired_origin(&origin);
     }
 
-    // Only an authenticated request counts as the extension having reached
-    // the application, so a stray page cannot make the window say it is
-    // connected.
-    app.state::<AppState>().touch_extension();
+    // Only a request that carried the token counts as the extension having
+    // reached the application, so a stray page cannot make the window say it
+    // is connected. The ping is how an unpaired extension says it is there,
+    // but it is not a hand-over until it can prove it is the paired one.
+    if gate.paired {
+        state.touch_extension();
+    }
 
-    let (status, body) = route(&app, &request).await;
+    let (status, body) = route(&app, &request, gate.paired).await;
     let bytes = serde_json::to_vec(&body).unwrap_or_else(|_| {
         serde_json::to_vec(&error_body("internal", "the answer could not be written"))
             .unwrap_or_default()
@@ -191,17 +186,68 @@ async fn serve(app: AppHandle, mut stream: tokio::net::TcpStream) -> std::io::Re
         status,
         "application/json",
         &bytes,
-        origin.as_deref(),
+        gate.cors.as_deref(),
         &[],
     )
     .await
 }
 
+/// What the rule set says about one request, before any route runs.
+///
+/// Kept apart from the socket so the whole matrix — the code, the origin, the
+/// host, the preflight, the ping — is testable as a plain function.
+struct Gate {
+    /// The refusal to answer with, when the request does not pass.
+    denial: Option<Denial>,
+    /// The caller presented the pairing code, so this is the paired extension.
+    paired: bool,
+    /// The origin to echo back in the CORS header: the extension's, never a
+    /// page's.
+    cors: Option<String>,
+    /// The extension origin to remember as the paired one, when nothing is
+    /// pinned yet and this caller knows the code.
+    pin: Option<String>,
+}
+
+fn gate(request: &Request, token: &str, pinned: Option<&str>) -> Gate {
+    let cors = request
+        .header("origin")
+        .filter(|origin| is_extension_origin(origin))
+        .map(str::to_string);
+    let ping = request.method == "GET" && request.path() == "/v1/ping";
+    let known = auth::is_authorized(request, token);
+    let mut denial = auth::check(request, token, !ping).err();
+
+    // The code is the proof, and one proof belongs to one extension: once an
+    // origin has used it, a second one that learned the same code is refused
+    // even though it passes every other rule.
+    if let (Some(pinned), Some(origin)) = (pinned, request.header("origin")) {
+        if known && pinned != origin {
+            denial = Some(Denial::FOREIGN_EXTENSION);
+        }
+    }
+
+    // Only a request that passed everything and is not a preflight can pin:
+    // a preflight carries no code, and a refusal has proved nothing.
+    let pin = if known && denial.is_none() && request.method != "OPTIONS" && pinned.is_none() {
+        cors.clone()
+    } else {
+        None
+    };
+
+    Gate {
+        denial,
+        paired: known && denial.is_none(),
+        cors,
+        pin,
+    }
+}
+
 /// The routes of API version 1.
-async fn route(app: &AppHandle, request: &Request) -> (u16, Value) {
+async fn route(app: &AppHandle, request: &Request, paired: bool) -> (u16, Value) {
     let path = request.path();
     match (request.method.as_str(), path) {
-        ("GET", "/v1/ping") => (200, ok(ping())),
+        ("GET", "/v1/ping") => (200, ok(ping(paired))),
         ("GET", "/v1/capture") => (200, ok(capture_policy(app))),
         ("GET", "/v1/video-button-settings") => (200, ok(video_button_settings(app))),
         ("POST", "/v1/media") => crate::video::capture::register(app, &request.body).await,
@@ -252,13 +298,16 @@ async fn route(app: &AppHandle, request: &Request) -> (u16, Value) {
 
 type Request = http::Request;
 
-/// What the extension says about itself.
-fn ping() -> Value {
+/// What the extension says about itself. `paired` tells an extension that
+/// reached the port whether the token it sent is the one the application
+/// generated, so the popup can say "not paired" instead of guessing.
+fn ping(paired: bool) -> Value {
     json!({
         "app": APP_ID,
         "api": API_VERSION,
         "version": env!("CARGO_PKG_VERSION"),
         "port": PORT,
+        "paired": paired,
     })
 }
 
@@ -527,19 +576,49 @@ fn media_route(path: &str) -> Option<(u64, Option<&str>)> {
 }
 
 /// An extension origin. Firefox uses `moz-extension://`, Chromium
-/// `chrome-extension://`; the older extension build is still recognised.
+/// `chrome-extension://`; the older extension build is still recognised. The
+/// real rule lives in [`auth`], where the token is checked beside it.
 fn is_extension_origin(origin: &str) -> bool {
-    origin.starts_with("moz-extension://") || origin.starts_with("chrome-extension://")
+    auth::is_extension_origin(origin)
 }
 
-/// A URL the engine may fetch.
+/// A URL the engine may fetch. It has to name a scheme the engine speaks and a
+/// non-empty host, so `http://` alone is not a download.
 fn is_download_url(url: &str) -> bool {
-    url.starts_with("http://") || url.starts_with("https://") || url.starts_with("ftp://")
+    is_url(url, &["http", "https", "ftp"])
 }
 
 /// A URL that is a web page, which is what a referrer may be.
 fn is_web_url(url: &str) -> bool {
-    url.starts_with("http://") || url.starts_with("https://")
+    is_url(url, &["http", "https"])
+}
+
+/// The largest address the bridge accepts. A real download link is far
+/// shorter; the limit stops a hand-over from carrying an unbounded string.
+const MAX_URL: usize = 8 * 1024;
+
+/// Whether `url` uses one of `schemes` and has a host to fetch.
+fn is_url(url: &str, schemes: &[&str]) -> bool {
+    if url.is_empty() || url.len() > MAX_URL {
+        return false;
+    }
+    if url
+        .chars()
+        .any(|character| character.is_whitespace() || character.is_control())
+    {
+        return false;
+    }
+    let Some((scheme, rest)) = url.split_once("://") else {
+        return false;
+    };
+    if !schemes
+        .iter()
+        .any(|known| scheme.eq_ignore_ascii_case(known))
+    {
+        return false;
+    }
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    !authority.is_empty() && !authority.starts_with(':')
 }
 
 /// A successful answer.
@@ -552,15 +631,24 @@ pub(crate) fn error_body(code: &str, message: impl Into<String>) -> Value {
     json!({ "ok": false, "error": { "code": code, "message": message.into() } })
 }
 
-/// Answer a request with a JSON error.
+/// Answer a request with a JSON error. The origin is echoed only when it was
+/// the extension's, so a paired extension can read a 401 and say "not paired"
+/// instead of reporting the application as offline.
 async fn refuse(
     stream: &mut tokio::net::TcpStream,
-    status: u16,
-    code: &str,
-    message: &str,
+    denial: Denial,
+    origin: Option<&str>,
 ) -> std::io::Result<()> {
-    let body = serde_json::to_vec(&error_body(code, message)).unwrap_or_default();
-    http::write(stream, status, "application/json", &body, None, &[]).await
+    let body = serde_json::to_vec(&error_body(denial.code, denial.message)).unwrap_or_default();
+    http::write(
+        stream,
+        denial.status,
+        "application/json",
+        &body,
+        origin,
+        &[],
+    )
+    .await
 }
 
 /// What the extension asks for when it starts a download.
@@ -589,6 +677,167 @@ enum Mode {
 mod tests {
     use super::*;
 
+    const CODE: &str = "0123456789abcdef0123456789abcdef0123456789abcdef";
+    const PAIRED_ORIGIN: &str = "moz-extension://3c1e8f2a-1";
+    const OTHER_ORIGIN: &str = "chrome-extension://abcdef123456";
+
+    fn request(method: &str, path: &str, headers: &[(&str, &str)]) -> Request {
+        let mut all = vec![("host", "127.0.0.1:27500")];
+        all.extend_from_slice(headers);
+        Request::for_test(method, path, &all, b"")
+    }
+
+    fn extension(path: &str, origin: &str) -> Request {
+        request(
+            "GET",
+            path,
+            &[
+                ("origin", origin),
+                ("x-bdm-client", auth::CLIENT_VALUE),
+                ("authorization", &format!("Bearer {CODE}")),
+            ],
+        )
+    }
+
+    #[test]
+    fn an_unpaired_download_request_is_refused_and_not_called_paired() {
+        let gate = gate(
+            &request(
+                "POST",
+                "/v1/downloads",
+                &[
+                    ("origin", PAIRED_ORIGIN),
+                    ("x-bdm-client", auth::CLIENT_VALUE),
+                ],
+            ),
+            CODE,
+            None,
+        );
+        assert_eq!(gate.denial.map(|denial| denial.status), Some(401));
+        assert!(!gate.paired);
+        assert_eq!(gate.pin, None);
+    }
+
+    #[test]
+    fn the_ping_is_open_but_does_not_claim_a_pairing() {
+        let gate = gate(
+            &request(
+                "GET",
+                "/v1/ping",
+                &[
+                    ("origin", PAIRED_ORIGIN),
+                    ("x-bdm-client", auth::CLIENT_VALUE),
+                ],
+            ),
+            CODE,
+            None,
+        );
+        assert_eq!(
+            gate.denial, None,
+            "an unpaired extension must get an answer"
+        );
+        assert!(!gate.paired, "so the popup says not paired, not connected");
+    }
+
+    #[test]
+    fn a_code_presented_for_the_first_time_pins_its_extension() {
+        let gate = gate(&extension("/v1/downloads", PAIRED_ORIGIN), CODE, None);
+        assert_eq!(gate.denial, None);
+        assert!(gate.paired);
+        assert_eq!(gate.pin.as_deref(), Some(PAIRED_ORIGIN));
+    }
+
+    #[test]
+    fn the_pinned_extension_is_the_only_one_the_code_unlocks() {
+        let same = gate(
+            &extension("/v1/downloads", PAIRED_ORIGIN),
+            CODE,
+            Some(PAIRED_ORIGIN),
+        );
+        assert_eq!(same.denial, None);
+        assert!(same.paired);
+        assert_eq!(same.pin, None, "nothing new to remember");
+
+        let thief = gate(
+            &extension("/v1/downloads", OTHER_ORIGIN),
+            CODE,
+            Some(PAIRED_ORIGIN),
+        );
+        assert_eq!(
+            thief.denial.map(|denial| denial.code),
+            Some(auth::Denial::FOREIGN_EXTENSION.code),
+            "another extension with the same code is refused"
+        );
+        assert!(!thief.paired);
+        assert_eq!(thief.pin, None);
+    }
+
+    #[test]
+    fn a_preflight_never_pins_even_when_it_could_pass() {
+        let gate = gate(
+            &request("OPTIONS", "/v1/downloads", &[("origin", PAIRED_ORIGIN)]),
+            CODE,
+            None,
+        );
+        assert_eq!(gate.denial, None);
+        assert_eq!(gate.pin, None, "a preflight carries no proof");
+    }
+
+    #[test]
+    fn a_local_caller_without_an_origin_is_not_pinned() {
+        let gate = gate(
+            &request(
+                "GET",
+                "/v1/downloads",
+                &[
+                    ("x-bdm-client", auth::CLIENT_VALUE),
+                    ("authorization", &format!("Bearer {CODE}")),
+                ],
+            ),
+            CODE,
+            Some(PAIRED_ORIGIN),
+        );
+        assert_eq!(gate.denial, None, "no origin is nothing to compare");
+        assert!(gate.paired);
+        assert_eq!(gate.pin, None);
+        assert_eq!(gate.cors, None, "and it gets no CORS header back");
+    }
+
+    #[test]
+    fn a_page_or_a_wrong_host_is_refused_before_the_code_matters() {
+        let page = gate(
+            &extension("/v1/downloads", "https://example.org"),
+            CODE,
+            None,
+        );
+        assert_eq!(page.denial.map(|denial| denial.status), Some(403));
+        assert_eq!(page.cors, None, "a page origin is never echoed back");
+
+        let rebinding = Request::for_test(
+            "GET",
+            "/v1/downloads",
+            &[
+                ("host", "evil.example:27500"),
+                ("origin", PAIRED_ORIGIN),
+                ("x-bdm-client", auth::CLIENT_VALUE),
+                ("authorization", &format!("Bearer {CODE}")),
+            ],
+            b"",
+        );
+        let gate = gate(&rebinding, CODE, Some(PAIRED_ORIGIN));
+        assert_eq!(gate.denial.map(|denial| denial.status), Some(403));
+    }
+
+    #[test]
+    fn no_token_means_nothing_but_the_ping_gets_through() {
+        let gate = gate(&extension("/v1/downloads", PAIRED_ORIGIN), "", None);
+        assert_eq!(gate.denial.map(|denial| denial.status), Some(401));
+        assert!(
+            gate.cors.is_some(),
+            "the refusal still goes back with the extension's own origin"
+        );
+    }
+
     #[test]
     fn an_extension_origin_is_recognised() {
         assert!(is_extension_origin("moz-extension://3c1e8f2a"));
@@ -600,6 +849,10 @@ mod tests {
     #[test]
     fn a_page_cannot_be_a_download_source() {
         assert!(is_download_url("https://example.org/a.bin"));
+        assert!(is_download_url("FTP://example.org/a.bin"));
+        assert!(!is_download_url("http://"));
+        assert!(!is_download_url("https:///a.bin"));
+        assert!(!is_download_url("https://example.org/a b.bin"));
         assert!(!is_download_url("blob:https://example.org/abc"));
         assert!(!is_download_url("javascript:alert(1)"));
         assert!(!is_download_url("file:///C:/Windows/notepad.exe"));
@@ -666,10 +919,12 @@ mod tests {
 
     #[test]
     fn the_ping_names_this_application() {
-        let answer = ping();
+        let answer = ping(false);
         assert_eq!(answer["app"], APP_ID);
         assert_eq!(answer["api"], API_VERSION);
         assert_eq!(answer["port"], PORT);
+        assert_eq!(answer["paired"], false);
+        assert_eq!(ping(true)["paired"], true);
     }
 
     fn temp_dir(tag: &str) -> PathBuf {
