@@ -134,7 +134,7 @@ if (!existsSync(changelogPath)) {
   writeFileSync(changelogPath, `${changelog.slice(0, at + marker.length)}\n${section}\n${changelog.slice(at + marker.length).replace(/^\n+/, "\n")}`);
 }
 
-git(["add", "package.json", "src-tauri/tauri.conf.json", "src-tauri/Cargo.toml", "src-tauri/Cargo.lock", "CHANGELOG.md", "WHATS_NEW.md"]);
+git(["add", "package.json", "src-tauri/tauri.conf.json", "src-tauri/Cargo.toml", "Cargo.lock", "README.md", "CHANGELOG.md", "WHATS_NEW.md"]);
 // No `[skip ci]`: a tag push whose commit says that starts no workflow, so the
 // Release build would never run.
 git(["commit", "-m", `chore: release v${next}`]);

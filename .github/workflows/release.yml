@@ -1,30 +1,42 @@
 name: Release
 
-# Publishing is automatic and starts with one command on your machine:
+# Publishing starts with one command on your machine:
 #
 #   pnpm release:patch   (or :minor / :major)
 #
-# That script bumps the version in every recorded file, generates the
-# CHANGELOG.md section from the conventional commits the release carries,
-# commits, tags vX.Y.Z and pushes both. This workflow fires on that tag and
-# is the whole rest of the pipeline: it builds the signed Windows installer,
-# the Linux deb + AppImage and the universal macOS dmg, creates the GitHub
-# release with the plain-language WHATS_NEW.md section as its body, and
-# uploads the update payloads (installers plus .sig) and latest.json.
+# That script bumps the version in every recorded file (including the README
+# badge), generates the CHANGELOG.md section from the conventional commits the
+# release carries, refuses to run without a WHATS_NEW.md section for the new
+# version, commits, tags vX.Y.Z and pushes both. This workflow fires on that
+# tag:
 #
-# The jobs run one at a time (max-parallel: 1) because each one merges its
-# platform entry into the same latest.json asset; running them in parallel
+#   1. verify          the gate. Version agreement, the updater key and
+#                      endpoint, the notes for this exact tag, the bridge
+#                      contract and every self-check run before anything is
+#                      built. Nothing here touches the network or a clock, so
+#                      a red run is a real problem, not flakiness.
+#   2. build           the signed Windows installer, the Linux deb +
+#                      AppImage, and the universal macOS dmg + updater
+#                      payload. The release is created as a DRAFT: the assets
+#                      and latest.json are uploaded, but installed apps cannot
+#                      see a draft (the updater only resolves published
+#                      releases), so nothing reaches a user yet.
+#   3. verify-artifacts  downloads the draft's own assets back and proves
+#                      every signature against the public key baked into the
+#                      build, plus latest.json's version and entries.
+#
+# A person publishes the draft on GitHub once verify-artifacts is green:
+# tag -> CI proves the draft -> human clicks "Publish release". A red run
+# means re-run the workflow and nothing public was ever exposed.
+#
+# The build jobs run one at a time (max-parallel: 1) because each one merges
+# its platform entry into the same latest.json asset; running them in parallel
 # would let one overwrite the other.
 #
 # The published release is what the in-app updater answers from: the app
 # reads releases/latest/download/latest.json, verifies every package against
 # the public key baked into the build, and never runs an update the key did
 # not sign. Only stable v tags release; -rc / -beta tags are ignored.
-#
-# The tag is published as-is (not a draft): the bump command is the deliberate
-# human action in the flow. To review before shipping instead, set
-# releaseDraft: true below — latest.json only ever resolves to published,
-# non-draft releases, so a draft cannot reach installed copies.
 #
 # Required repository secrets (Settings -> Secrets -> Actions):
 #   TAURI_SIGNING_PRIVATE_KEY           contents of ~/.tauri/bdownload.key
@@ -38,6 +50,11 @@ on:
   # release that missed its build is re-run from the tag:
   #   gh workflow run release.yml --ref vX.Y.Z
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "The vX.Y.Z tag to release (defaults to the ref this ran on)"
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -47,7 +64,59 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  verify:
+    name: Verify this tag
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - id: tag
+        shell: bash
+        run: |
+          tag="${{ inputs.tag || github.ref_name }}"
+          if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::$tag is not a stable vX.Y.Z tag"
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: "pnpm"
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Version, updater, notes and extension contracts
+        run: pnpm exec node scripts/check-release-integrity.mjs --tag "${{ steps.tag.outputs.tag }}"
+
+      - name: Typecheck
+        run: pnpm exec tsc --noEmit
+
+      - name: Frontend unit tests
+        run: pnpm test
+
+      - name: Every self-check script
+        run: pnpm check:all
+
+      # Advisory only: a hotfix tag may legitimately sit off main.
+      - name: Tag is on main
+        shell: bash
+        run: |
+          if ! git merge-base --is-ancestor "HEAD^{commit}" origin/main; then
+            echo "::warning::this tag is not an ancestor of main"
+          fi
+
   build:
+    name: Build ${{ matrix.platform }}
+    needs: verify
     strategy:
       fail-fast: false
       max-parallel: 1
@@ -58,11 +127,16 @@ jobs:
           - platform: ubuntu-22.04
             args: --bundles deb,appimage
           # One universal binary, so Intel and Apple Silicon both get a build.
+          # `app` is required as well: the updater payload on macOS is the
+          # .app tarball, and a dmg-only build leaves latest.json without a
+          # darwin entry, so Macs would never update.
           - platform: macos-latest
-            args: --target universal-apple-darwin --bundles dmg
+            args: --target universal-apple-darwin --bundles app,dmg
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.verify.outputs.tag }}
 
       - uses: pnpm/action-setup@v6
 
@@ -78,8 +152,6 @@ jobs:
         run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
       - uses: swatinem/rust-cache@v2
-        with:
-          workspaces: "./src-tauri -> target"
 
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
@@ -102,23 +174,46 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          body="$(node scripts/release-notes.mjs "${GITHUB_REF_NAME#v}")"
+          body="$(node scripts/release-notes.mjs "${{ needs.verify.outputs.tag }}" --strict)"
           {
             echo 'body<<EOF'
             echo "$body"
             echo 'EOF'
           } >> "$GITHUB_OUTPUT"
 
-      - name: Build, sign, and publish
+      - name: Build, sign, and upload to a draft release
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "B Download Manager ${{ github.ref_name }}"
+          tagName: ${{ needs.verify.outputs.tag }}
+          releaseName: "B Download Manager ${{ needs.verify.outputs.tag }}"
           releaseBody: ${{ steps.notes.outputs.body }}
-          releaseDraft: false
+          releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+  verify-artifacts:
+    name: Verify the draft's artifacts
+    needs: [verify, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.verify.outputs.tag }}
+
+      # Download from the draft itself, not from a CI copy: this is exactly
+      # the payload a person will publish.
+      - name: Download the draft's assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release download "${{ needs.verify.outputs.tag }}" --pattern '*' --dir artifacts
+
+      - name: Prove every signature and latest.json
+        run: |
+          node scripts/check-release-artifacts.mjs \
+            --dir artifacts \
+            --tag "${{ needs.verify.outputs.tag }}" \
+            --expect all

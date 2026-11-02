@@ -1,8 +1,9 @@
 // Write one version everywhere it is recorded.
 //
 // package.json is the source of truth; this copies its version into
-// tauri.conf.json, src-tauri/Cargo.toml and src-tauri/Cargo.lock so no file
-// can drift. Use the release script rather than calling this by hand.
+// tauri.conf.json, src-tauri/Cargo.toml, the workspace Cargo.lock and the
+// README badge so no file can drift. Use the release script rather than
+// calling this by hand.
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,7 +12,8 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const pkgPath = resolve(root, "package.json");
 const confPath = resolve(root, "src-tauri/tauri.conf.json");
 const cargoPath = resolve(root, "src-tauri/Cargo.toml");
-const lockPath = resolve(root, "src-tauri/Cargo.lock");
+const lockPath = resolve(root, "Cargo.lock");
+const readmePath = resolve(root, "README.md");
 
 export function currentVersion() {
   return JSON.parse(readFileSync(pkgPath, "utf8")).version;
@@ -50,8 +52,9 @@ export function syncVersion(next) {
   conf.version = next;
   writeFileSync(confPath, `${JSON.stringify(conf, null, 2)}\n`);
 
-  // Only the app crate carries the release version; the engine crates keep
-  // their own. The version line directly under `[package]` is the crate's.
+  // Only the app crate carries the release version; idm-core and idm-cli
+  // keep their own crate versions. The version line directly under
+  // `[package]` is the app crate's.
   const cargo = readFileSync(cargoPath, "utf8");
   const header = cargo.indexOf("[package]");
   if (header === -1) throw new Error("src-tauri/Cargo.toml has no [package] table");
@@ -68,9 +71,20 @@ export function syncVersion(next) {
     `$1${next}$2`,
   );
   if (!lock.includes(`name = "my-idm-clone"`)) {
-    throw new Error("the app package was not found in src-tauri/Cargo.lock");
+    throw new Error("the app package was not found in the workspace Cargo.lock");
   }
   writeFileSync(lockPath, lock);
+
+  // Keep the README's version badge honest; check-release-integrity.mjs
+  // asserts in CI that it still matches package.json.
+  const readme = readFileSync(readmePath, "utf8").replace(
+    /(badge\/version-)\d+\.\d+\.\d+(-)/,
+    `$1${next}$2`,
+  );
+  if (!readme.includes(`badge/version-${next}-`)) {
+    throw new Error("the version badge in README.md was not rewritten");
+  }
+  writeFileSync(readmePath, readme);
 
   return next;
 }

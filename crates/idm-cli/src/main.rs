@@ -102,7 +102,10 @@ fn main() {
     let destination = destination.unwrap_or_else(|| file_name_of(&url));
     let path = PathBuf::from(destination);
 
-    let runtime = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
+    let runtime = match tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+    {
         Ok(runtime) => runtime,
         Err(error) => {
             eprintln!("idm-cli: {error}");
@@ -114,8 +117,14 @@ fn main() {
         let limits = Limits::default();
         limits.set_proxy(proxy.as_deref());
 
-        let download = match Download::new(1, url.clone(), path, connections, limits.proxy().as_deref(), None)
-        {
+        let download = match Download::new(
+            1,
+            url.clone(),
+            path,
+            connections,
+            limits.proxy().as_deref(),
+            None,
+        ) {
             Ok(download) => download,
             Err(error) => {
                 eprintln!("idm-cli: {error}");

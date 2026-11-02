@@ -7,11 +7,12 @@ wired together; changing one without the other is the main way this can break.
 ## Versioning — one source of truth
 
 `package.json` holds the release version. `scripts/bump-version.mjs` copies it
-into `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` and
-`src-tauri/Cargo.lock`. Never edit those version fields by hand; run the
-release script instead. The running app reads its version from the bundle, so
-the About box, the installer, the GitHub release and `latest.json` always
-agree.
+into `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, the workspace
+`Cargo.lock` and the version badge in `README.md`. Never edit those version
+fields by hand; run the release script instead. The running app reads its
+version from the bundle, so the About box, the installer, the GitHub release
+and `latest.json` always agree. `scripts/check-release-integrity.mjs` asserts
+this on every pull request and again on the tag.
 
 ## Making a release
 
@@ -43,12 +44,28 @@ a missing `WHATS_NEW.md` section. It bumps, generates the technical
 `CHANGELOG.md` section from the conventional commits since the last tag
 (`feat:` Added, `fix:` Fixed, `perf:` Performance, `!` or `BREAKING CHANGE:`
 first under Breaking changes), commits, tags `vX.Y.Z` and pushes both. The
-pushed tag starts `.github/workflows/release.yml`, which builds the signed
-Windows NSIS installer, the Linux `deb` + AppImage and the universal macOS
-dmg, uploads them with their `.sig` files, merges all three platforms into
-`latest.json` and publishes the GitHub release with the What's New section as
-its body and its notes. The platform jobs run one after the other so the
-shared `latest.json` is not overwritten.
+pushed tag starts `.github/workflows/release.yml`, which runs the pipeline in
+three stages:
+
+1. **verify** — the same contracts CI enforces (version agreement in every
+   file, the updater key and endpoint, the `WHATS_NEW.md` section for this
+   exact tag, the bridge constants shared with both extensions), plus the
+   typecheck, the frontend unit tests and every self-check script. Nothing is
+   built if this job is red.
+2. **build** — the signed Windows NSIS installer, the Linux `deb` + AppImage
+   and the universal macOS `app` + `dmg`, uploaded with their `.sig` files and
+   a merged `latest.json`. The jobs run one after the other so the shared
+   `latest.json` is not overwritten, and the GitHub release is created as a
+   **draft** — installed apps cannot see a draft, because the updater only
+   resolves published releases.
+3. **verify-artifacts** — downloads the draft's own assets back and verifies
+   every signature against the public key baked into the build, and checks
+   that `latest.json` names those files for all three platforms.
+
+When `verify-artifacts` is green, open the draft on GitHub, read the notes and
+press **Publish release**. That click is the only thing that ships an update to
+installed copies. To re-run a release that failed, use
+`gh workflow run release.yml --ref vX.Y.Z`; `verify` runs again from the top.
 
 Check the words of a release before pushing one you care about: add the
 `WHATS_NEW.md` section, run `pnpm check:whats-new`, and read the rendered
@@ -111,26 +128,41 @@ with it — old installs would otherwise stop seeing updates.
 
 - One universal `.dmg` covers Apple silicon and Intel; the same binary is
   published under both `darwin-aarch64` and `darwin-x86_64` in `latest.json`.
+- The updater payload is the `.app.tar.gz` produced by the `app` bundle, so the
+  release workflow builds `--bundles app,dmg`. A dmg-only build leaves
+  `latest.json` without a darwin entry and Macs never update (v0.2.0 shipped
+  that way; the gate now fails a release that has no macOS payload).
 - The build is not signed with an Apple Developer ID and not notarised, so the
   first launch needs right-click → **Open**. Signing is the next step before a
   1.0; it needs a paid Apple Developer account.
 
 ## Verified / not verified
 
-Verified locally (October 2026, before v0.1.0):
+Verified locally (November 2026, CI/CD audit):
 
-- `cargo fmt --check`, `cargo clippy -D warnings`, full `cargo test`.
-- Frontend typecheck, `pnpm build`, all `check:*` scripts.
-- The signed release build produces `B Download Manager_0.1.0_x64-setup.exe`
-  plus its `.sig`, and a `latest.json`; the bundle identifier is
-  `com.bilal.bdownloadmanager`.
-- The built `.sig` was verified directly against the public key baked into
-  `tauri.conf.json`: the key ids match (`E7416FBE5836CDE6`) and an ed25519
-  verify over the BLAKE2b-512 digest of the installer succeeds. A single
-  flipped byte in the installer makes the same check fail, so the artifact on
-  disk is genuinely bound to its signature.
-- The plugin's own verifier suite (`tauri-plugin-updater`) passes, including
-  the vectors that assert a tampered package is refused.
+- `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`
+  and `cargo test --workspace --no-fail-fast`: 171 engine tests (2 ignored) and
+  265 application tests pass from one workspace.
+- The release profile survived the workspace move: a `--release` build carries
+  `lto`, `opt-level=s`, `codegen-units=1`, `panic=abort` and `strip`.
+- `pnpm test` (30 frontend tests), `pnpm check:all` (all 20 self-checks) and
+  `pnpm exec tsc --noEmit` pass, and the release-integrity gate rejects a
+  mismatched tag or version.
+- `scripts/check-release-artifacts.mjs` verified the **published** v0.2.0
+  Windows installer against the key baked into `tauri.conf.json` (key id
+  `488BA63203E8DB50`): the ed25519 check over the BLAKE2b-512 digest succeeds,
+  and flipping one byte of the installer makes it fail. The same script reads
+  the signatures inside `latest.json` and proves they match the assets.
+- The v0.2.0 release itself exposed two gaps this pipeline now closes: the
+  release body was the CHANGELOG fallback (no WHATS_NEW section at tag time),
+  and the macOS dmg shipped without an updater payload. `verify` refuses the
+  first and `build --bundles app,dmg` fixes the second.
+
+Not yet observed on GitHub:
+
+- This exact CI/release workflow has not run on a tag yet; the first release
+  after this change is the end-to-end proof. Publish it as a draft and check
+  `verify-artifacts` before pressing Publish.
 
 Needs a second machine (a clean Windows install without the dev app):
 
@@ -140,8 +172,5 @@ Needs a second machine (a clean Windows install without the dev app):
   the old list.
 - An update published from a *different* key is refused (the security gate
   itself).
-- The tag-triggered workflow ran end to end for v0.1.0: it published the
-  Windows NSIS installer and the Linux `deb` + AppImage, each with its `.sig`,
-  and a `latest.json` carrying the Windows and Linux platform entries.
 - A real "Check for updates" round trip from an installed copy to a higher
   published version still needs a second machine.

@@ -1,0 +1,19 @@
+# One workspace for the whole Rust side. Before this, src-tauri, idm-core and
+# idm-cli were standalone packages with their own lockfiles, so CI's
+# `cargo test --manifest-path src-tauri/Cargo.toml` silently skipped the
+# engine crate's tests and compiled it a second time as a path dependency.
+# `cargo test --workspace` now runs every test in the repository.
+[workspace]
+resolver = "2"
+members = ["src-tauri", "crates/idm-core", "crates/idm-cli"]
+
+# Cargo reads profiles only from the workspace root manifest. This block moved
+# here verbatim from src-tauri/Cargo.toml — leaving it there would have
+# silently dropped LTO, size optimisation, panic=abort and stripping from
+# every release bundle.
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

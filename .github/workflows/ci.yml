@@ -1,8 +1,15 @@
 name: CI
 
-# Every push and pull request against main: typecheck, frontend build, and a
-# Rust check/test pass. Releases are a separate workflow (release.yml), started
-# by the tag that `pnpm release:patch` pushes.
+# Every push and pull request against main:
+#   web            typecheck, the frontend unit tests, every self-check script
+#                  (including the release-integrity gate) and both web builds
+#   rust-linux     format, clippy and every Rust test in the workspace
+#   rust-windows   the same lints and tests on the primary target, so the
+#                  cfg(windows) code is compiled and exercised
+# Pushes to main additionally prove a real production bundle on Linux, with a
+# throwaway signing key, so the installer and the signature path are exercised
+# before a release tag exists. Releases are release.yml, started by the tag
+# that `pnpm release:patch` pushes.
 
 on:
   push:
@@ -19,13 +26,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  frontend:
+  web:
+    name: Frontend, unit tests and self-checks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
-      # Node 24 is the active LTS. pnpm comes from the packageManager field,
-      # which pnpm/action-setup reads when no version is given.
+      # Node 24 is the active LTS and the version release.yml builds with.
+      # pnpm comes from the packageManager field, which pnpm/action-setup reads.
       - uses: pnpm/action-setup@v6
 
       - uses: actions/setup-node@v7
@@ -35,16 +43,27 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: What's New content
-        run: pnpm check:whats-new
-
       - name: Typecheck
         run: pnpm exec tsc --noEmit
 
-      - name: Build frontend
-        run: pnpm build
+      - name: Frontend unit tests
+        run: pnpm test
 
-  backend:
+      # One runner for every check-*.mjs, including the release contract:
+      # versions, updater key and endpoint, installer settings and the bridge
+      # constants shared with both extensions.
+      - name: Every self-check script
+        run: pnpm check:all
+
+      # `pnpm build` runs tsc again; the typecheck above already gatekept it.
+      - name: Build the web bundle
+        run: pnpm exec vite build
+
+      - name: Build the site
+        run: pnpm site:build
+
+  rust-linux:
+    name: Rust workspace (Linux)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -59,14 +78,113 @@ jobs:
           components: rustfmt, clippy
 
       - uses: swatinem/rust-cache@v2
-        with:
-          workspaces: "./src-tauri -> target"
 
       - name: Format
-        run: cargo fmt --all --manifest-path src-tauri/Cargo.toml --check
+        run: cargo fmt --all --check
 
       - name: Clippy
-        run: cargo clippy --all-targets --manifest-path src-tauri/Cargo.toml -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      # The workspace covers the application and the engine crate, so the
+      # tests that used to be skipped now run.
+      - name: Test the application and the engine
+        run: cargo test --workspace --no-fail-fast
+
+  rust-windows:
+    name: Rust workspace (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      # The cache key includes the OS, so this is a tree of its own.
+      - uses: swatinem/rust-cache@v2
+
+      # Not a duplicate of the Linux lint: the cfg(windows) paths in the
+      # engine's disk code and in the app's win32 window and tray code are
+      # only compiled when the host target is Windows.
+      - name: Clippy
+        shell: bash
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Test
-        run: cargo test --manifest-path src-tauri/Cargo.toml
+        shell: bash
+        run: cargo test --workspace --no-fail-fast
+
+  package-linux:
+    name: Production bundle (Linux)
+    if: github.event_name != 'pull_request'
+    needs: [web, rust-linux]
+    # Ubuntu 22.04, like the release leg, so the AppImage keeps running on
+    # older glibc systems.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: "pnpm"
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+
+      - run: pnpm install --frozen-lockfile
+
+      # The bundle embeds the pinned, checksummed sidecar.
+      - name: Place the ffmpeg sidecar
+        shell: bash
+        run: node scripts/fetch-ffmpeg.mjs
+
+      # A throwaway key, generated for this build only. It proves the signing
+      # and the verification path on every push to main; release.yml keeps
+      # using the real key from the repository secrets.
+      - name: Create a throwaway signing key
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm exec tauri signer generate -w "$RUNNER_TEMP/bdm-ci.key" -p "" --ci
+          node -e '
+            const fs = require("node:fs");
+            const [conf, pub] = process.argv.slice(1);
+            fs.writeFileSync(conf, JSON.stringify({ plugins: { updater: { pubkey: pub } } }));
+          ' "$RUNNER_TEMP/bdm-ci.conf.json" "$(cat "$RUNNER_TEMP/bdm-ci.key.pub")"
+
+      - name: Build the deb and AppImage
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ runner.temp }}/bdm-ci.key
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+        run: pnpm exec tauri build --bundles deb,appimage --config "$RUNNER_TEMP/bdm-ci.conf.json"
+
+      # The same verifier release.yml runs, against this build's key.
+      - name: Verify the installer and its signature
+        shell: bash
+        run: |
+          node scripts/check-release-artifacts.mjs \
+            --dir target/release/bundle \
+            --platform linux \
+            --pubkey "$RUNNER_TEMP/bdm-ci.key.pub"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-deb
+          path: target/release/bundle/deb/*
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-appimage
+          path: target/release/bundle/appimage/*
+          if-no-files-found: error

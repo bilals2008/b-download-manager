@@ -35,10 +35,3 @@ windows = { version = "0.62", features = ["ApplicationModel_DataTransfer", "Foun
 # The `interface` macro expands to `windows_core::` paths, so the crate has to
 # be a direct dependency, not just a re-export of `windows`.
 windows-core = "0.62"
-
-[profile.release]
-codegen-units = 1
-lto = true
-opt-level = "s"
-panic = "abort"
-strip = true

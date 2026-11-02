@@ -9,6 +9,11 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check:all": "node scripts/check-all.mjs",
+    "check:release": "node scripts/check-release-integrity.mjs",
+    "verify": "node scripts/check-all.mjs && tsc --noEmit && vitest run",
     "check:palette": "node scripts/check-palette.mjs",
     "check:fonts": "node scripts/check-fonts.mjs",
     "check:selection": "node scripts/check-selection.mjs",
@@ -53,12 +58,16 @@
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",
     "@tauri-apps/cli": "^2.12.4",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.8",
     "@types/node": "^22.10.5",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.4",
+    "jsdom": "^30.1.3",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.2",
-    "vite": "^6.0.7"
+    "vite": "^6.0.7",
+    "vitest": "^5.0.5"
   }
 }

@@ -17,13 +17,24 @@ pnpm install
 pnpm tauri dev           # desktop app (the only way to see real window chrome)
 pnpm dev                 # UI only in a browser; IPC calls are no-ops
 pnpm build               # tsc --noEmit + vite build
-pnpm check:palette       # WCAG contrast gate for the colour tokens
-pnpm check:whats-new     # friendly release notes parse and match the version
-pnpm check:grabber       # the Site Grabber's window helpers
+pnpm test                # frontend unit tests (Vitest + Testing Library)
+pnpm verify              # check:all + typecheck + unit tests: the pre-push gate
+pnpm check:all           # every self-check script, one summary at the end
+pnpm check:release       # the release contract: versions, updater, bridge, notes
+cargo test --workspace   # the app and the engine crate together
+cargo test -p idm-core   # the engine only, without a window
+cargo clippy --workspace --all-targets -- -D warnings
 pnpm site:dev            # Astro docs site (site/)
-cd crates/idm-core && cargo test   # the engine, without a window
-cd src-tauri && cargo test         # the application
 ```
+
+The Rust side is one Cargo workspace (`Cargo.toml` at the root), so `target/`
+and `Cargo.lock` live at the root, not in `src-tauri/`. `[profile.release]`
+belongs in the root manifest — Cargo ignores profiles in member manifests.
+
+The `check:*` scripts and `check-release-integrity.mjs` are read-only and do
+not touch the network by contract; that is what lets CI run all of them on
+every pull request. `bridge-probe.mjs` is the exception: it drives a running
+desktop app, so it stays a local, manual check.
 
 ## Layout
 
