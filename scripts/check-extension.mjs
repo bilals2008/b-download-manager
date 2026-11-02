@@ -55,6 +55,19 @@ assert.ok(!manifest.permissions.includes("tabs"));
 assert.equal(manifest.browser_specific_settings.gecko.id, "idm-bridge@my-idm-clone.local");
 assert.ok(Number(manifest.version.split(".")[0]) >= 1, "the upgrade is a major version");
 
+// The add-on store and MV3 both reject or warn about these, so keep them out
+// of the Firefox build rather than discovering it at submission time.
+assert.equal(manifest.background.service_worker, undefined, "Firefox has no service worker");
+assert.equal(manifest.chrome_settings_overrides, undefined, "no Chrome-only settings key");
+assert.equal(manifest.event_pages, undefined, "no legacy event page key");
+const gecko = manifest.browser_specific_settings.gecko;
+assert.ok(
+  Number.parseInt(gecko.strict_min_version, 10) >= 121,
+  "MV3 Firefox needs strict_min_version 121 or newer",
+);
+assert.ok(gecko.data_collection_permissions, "declare data_collection_permissions");
+assert.ok(!(manifest.host_permissions ?? []).includes("<all_urls>"), "list explicit hosts");
+
 for (const file of [
   ...manifest.background.scripts,
   manifest.action.default_popup,
@@ -63,6 +76,26 @@ for (const file of [
   ...Object.values(manifest.icons),
 ]) {
   assert.ok(exists(file), `${file} is in the manifest but not in the folder`);
+}
+
+/** Width and height from a PNG's IHDR chunk. */
+function pngSize(buffer) {
+  assert.equal(buffer.subarray(1, 4).toString("ascii"), "PNG", "not a PNG file");
+  return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
+}
+
+// A resized or mis-keyed icon is a real submission failure; the file name is
+// not evidence, the bytes are.
+for (const [size, file] of Object.entries({
+  ...manifest.icons,
+  ...manifest.action.default_icon,
+})) {
+  const pixels = pngSize(readFileSync(new URL(file, rootUrl)));
+  assert.deepEqual(
+    pixels,
+    { width: Number(size), height: Number(size) },
+    `${file} should be ${size}x${size}`,
+  );
 }
 
 const contentScripts = manifest.content_scripts ?? [];
@@ -1567,6 +1600,18 @@ for (const file of [
   ...Object.values(chromeManifest.icons),
 ]) {
   assert.ok(existsSync(path.join(chromeRootDir, file)), `chrome: ${file} exists`);
+}
+
+for (const [size, file] of Object.entries({
+  ...chromeManifest.icons,
+  ...chromeManifest.action.default_icon,
+})) {
+  const pixels = pngSize(readFileSync(path.join(chromeRootDir, file)));
+  assert.deepEqual(
+    pixels,
+    { width: Number(size), height: Number(size) },
+    `chrome: ${file} should be ${size}x${size}`,
+  );
 }
 
 const chromeListeners = new Map();
