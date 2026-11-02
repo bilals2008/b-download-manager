@@ -196,6 +196,17 @@ check("bundle configuration", () => {
   }
 });
 
+check("macOS bundle sidecar", () => {
+  const path = "src-tauri/tauri.macos.conf.json";
+  assert.ok(existsSync(resolve(root, path)), `${path} is missing`);
+  const mac = readJson(path);
+  assert.deepEqual(
+    mac.bundle?.externalBin,
+    [],
+    "the macOS bundle must clear externalBin: no ffmpeg sidecar is pinned for macOS",
+  );
+});
+
 /* ---------------------------------------------------------- build wiring */
 
 check("build wiring", () => {
