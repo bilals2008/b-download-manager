@@ -226,6 +226,9 @@ fn find_output(work_dir: &Path, prefix: &str) -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
+    // Every test here drives a .cmd stand-in, so the whole module is Windows
+    // only and the import would be unused on Linux.
+    #[cfg(windows)]
     use super::*;
 
     // The stand-in tool is a .cmd script, so these three helpers belong to
