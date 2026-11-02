@@ -428,8 +428,24 @@ export function preferredFolder(): string {
 /** The size of the toolbar buttons, a View menu setting. */
 export type ToolbarSize = "large" | "small";
 
-/** How the appearance is chosen. */
-export type ThemePreference = "auto" | "light" | "dark";
+/** How the appearance is chosen. Auto follows the system; the rest are fixed. */
+export type ThemePreference =
+  | "auto"
+  | "light"
+  | "dark"
+  | "cyberpunk"
+  | "volt"
+  | "mica";
+
+/** The saved values, in one place so the loader and the picker agree. */
+const THEME_PREFERENCES: readonly ThemePreference[] = [
+  "auto",
+  "light",
+  "dark",
+  "cyberpunk",
+  "volt",
+  "mica",
+];
 
 /**
  * The faces the appearance page offers. System is the Windows face, so it
@@ -488,8 +504,8 @@ function text(value: unknown, fallback: string): string {
 }
 
 function theme(value: unknown, fallback: ThemePreference): ThemePreference {
-  return value === "auto" || value === "light" || value === "dark"
-    ? value
+  return THEME_PREFERENCES.includes(value as ThemePreference)
+    ? (value as ThemePreference)
     : fallback;
 }
 

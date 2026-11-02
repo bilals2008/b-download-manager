@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { applyTheme, resolveTheme } from "@/lib/theme";
+import { applyTheme, isLightTheme, resolveTheme } from "@/lib/theme";
 
 function preferLight(light: boolean) {
   window.matchMedia = ((query: string) => ({
@@ -23,6 +23,9 @@ describe("resolveTheme", () => {
   it("returns a fixed preference as it is", () => {
     expect(resolveTheme("light")).toBe("light");
     expect(resolveTheme("dark")).toBe("dark");
+    expect(resolveTheme("cyberpunk")).toBe("cyberpunk");
+    expect(resolveTheme("volt")).toBe("volt");
+    expect(resolveTheme("mica")).toBe("mica");
   });
 
   it("follows the operating system in auto mode", () => {
@@ -31,6 +34,19 @@ describe("resolveTheme", () => {
 
     preferLight(false);
     expect(resolveTheme("auto")).toBe("dark");
+  });
+});
+
+describe("isLightTheme", () => {
+  it("names the appearances drawn on pale surfaces", () => {
+    expect(isLightTheme("light")).toBe(true);
+  });
+
+  it("keeps the dark appearances off the light tray inks", () => {
+    expect(isLightTheme("dark")).toBe(false);
+    expect(isLightTheme("cyberpunk")).toBe(false);
+    expect(isLightTheme("volt")).toBe(false);
+    expect(isLightTheme("mica")).toBe(false);
   });
 });
 

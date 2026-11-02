@@ -3,7 +3,7 @@ import { isDesktop } from "@/lib/errors";
 import { applyFont, applyWeight } from "@/lib/fonts";
 import { setTrayAppearance } from "@/lib/ipc";
 import { loadSettings } from "@/lib/settings";
-import { applyTheme, resolveTheme } from "@/lib/theme";
+import { applyTheme, isLightTheme, resolveTheme } from "@/lib/theme";
 import { syncWindowBackground } from "@/lib/window";
 
 /**
@@ -24,7 +24,9 @@ function applySavedAppearance(): void {
   // the appearance, and only the window knows which one it settled on. The
   // backend ignores the report unless "Dark Mode support" is switched on.
   if (isDesktop()) {
-    void setTrayAppearance(resolveTheme(settings.theme) === "light").catch(() => {
+    void setTrayAppearance(
+      isLightTheme(resolveTheme(settings.theme)),
+    ).catch(() => {
       // The icon keeps the drawing it has until the next time the window is up.
     });
   }

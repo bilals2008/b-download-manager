@@ -202,18 +202,18 @@
 }
 
 /*
-  One theme, one source of truth, and the appearance is the user's choice:
-  Auto follows the operating system, Light and Dark override it.
+  Auto follows the operating system; Light, Dark, Cyberpunk, Volt and Mica
+  override it.
 
-  Two blocks define the same semantic tokens: the dark block below is the
-  deep green-black view, and the light block overrides the same names when the
-  root carries `data-theme="light"`. Components never ask which theme is
-  active; they read the tokens and `src/lib/theme.ts` does the switching.
+  The dark block below is the base every other block overrides: it holds the
+  deep green-black view, and each `:root[data-theme="…"]` block after it
+  redefines the same names for its own appearance. Components never ask which
+  theme is active; they read the tokens and `src/lib/theme.ts` does the
+  switching.
 
-  The accent is lime on deep green in both appearances; green marks finished
-  work and red destroys. The hex values are the ones the palette checker
-  (`npm run check:palette`) verifies for WCAG contrast in both themes, so
-  change them there and here together, or run the checker.
+  In every appearance green marks finished work and red destroys. The hex
+  values are the ones the palette checker (`npm run check:palette`) verifies for
+  WCAG contrast, so change them here and run the checker.
 */
 :root {
   color-scheme: dark;
@@ -441,7 +441,7 @@
 }
 
 /*
-  Light appearance. Same tokens, same names: the neutral light the Windows
+  Light appearance. Same tokens, same names: a neutral pale canvas the system
   shell uses, near-black text, and the lime accent kept for primary actions
   where it still carries dark text. Focus rings, borders and icon tints darken
   so they stay visible on light surfaces.
@@ -547,6 +547,348 @@
     --file-paper: #ffffff;
     --file-paper-edge: #66716e;
     --file-mark: #ffffff;
+}
+
+/*
+  Cyberpunk. The one appearance that is deliberately loud: a near-black canvas
+  with a cyan accent and violet hover tints, ported from the prompt-nest site's
+  palette. Every token keeps its meaning, so green still marks finished work and
+  red still destroys; only the inks change.
+*/
+:root[data-theme="cyberpunk"] {
+  color-scheme: dark;
+
+  /* Corners go sharp: the theme is a screen, not a window. */
+  --radius: 0.25rem;
+
+  --background: #06060c;
+  --foreground: #e2e2f5;
+  --card: #0c0c16;
+  --card-foreground: #e2e2f5;
+  --popover: #0c0c16;
+  --popover-foreground: #e2e2f5;
+
+  --primary: #00f0ff;
+  --primary-foreground: #06060c;
+  --progress: #00f0ff;
+
+  --progress-track: rgb(0 240 255 / 0.12);
+  --progress-active-from: #00f0ff;
+  --progress-active-via: #4d8bff;
+  --progress-active-to: #b14cff;
+  --progress-complete-from: #22e07a;
+  --progress-complete-to: #12b866;
+  --progress-paused-from: #7c8cff;
+  --progress-paused-to: #5b6bd8;
+  --progress-failed-from: #ff5c7a;
+  --progress-failed-to: #ff8095;
+
+  --secondary: #131326;
+  --secondary-foreground: #e2e2f5;
+
+  --muted: #101020;
+  --muted-foreground: #8a8ab0;
+
+  --accent: #171735;
+  --accent-foreground: #00f0ff;
+
+  --success: #22e07a;
+  --success-foreground: #04130a;
+
+  --destructive: #c81e4a;
+  --destructive-foreground: #ffffff;
+
+  --border: #181830;
+  --input: #6f6f96;
+  --ring: #00f0ff;
+
+  --float-shadow:
+    0 18px 40px -18px rgb(0 0 0 / 0.85), 0 4px 12px -6px rgb(0 0 0 / 0.6);
+
+  --chrome-title: #06060c;
+  --chrome-title-text: #e2e2f5;
+  --chrome-menu: #06060c;
+  --chrome-menu-text: #e2e2f5;
+  --chrome-menu-hover: #101026;
+  --chrome-menu-active: #171733;
+  --chrome-toolbar: #06060c;
+  --chrome-toolbar-text: #e2e2f5;
+  --chrome-toolbar-hover: #101026;
+  --chrome-toolbar-active: #1b1b3d;
+  --chrome-popup: #0c0c16;
+  --chrome-popup-hover: #17172e;
+  --chrome-row-alt: #0a0a14;
+  --chrome-muted: #9a9ac0;
+  --chrome-canvas: #06060c;
+  --chrome-panel: #0c0c16;
+  --chrome-line: #181830;
+  --chrome-focus: #00f0ff;
+  --chrome-danger: #c81e4a;
+  --chrome-danger-text: #ffffff;
+  --chrome-error: #ff8fa3;
+
+  --icon-green: #22e07a;
+  --icon-green-bright: #3dffa0;
+  --icon-green-deep: #0f7a45;
+  --icon-red: #ff5c7a;
+  --icon-red-bright: #ff8fa3;
+  --icon-red-deep: #a21235;
+  --icon-silver: #9a9ac0;
+  --icon-silver-bright: #d6d6f0;
+  --icon-silver-deep: #5c5c7e;
+  --icon-purple: #b47cff;
+  --icon-purple-bright: #d0aaff;
+  --icon-purple-deep: #6b3fa0;
+  --icon-blue: #5bc8ff;
+  --icon-blue-bright: #8fdcff;
+  --icon-blue-deep: #2a76a8;
+  --icon-amber: #ffc857;
+  --icon-amber-bright: #ffdf99;
+  --icon-amber-deep: #9a6a00;
+
+  --file-paper: #eef3ff;
+  --file-paper-edge: #6b7390;
+  --file-mark: #0b0b16;
+}
+
+/*
+  Volt. The QuickPrompt palette: an ink-black canvas with a teal cast, cool
+  cyan-grey text and an electric lime accent.
+*/
+:root[data-theme="volt"] {
+  color-scheme: dark;
+
+  --radius: 0.625rem;
+
+  --background: #03080a;
+  --foreground: #d4e4e8;
+  --card: #081216;
+  --card-foreground: #d4e4e8;
+  --popover: #081216;
+  --popover-foreground: #d4e4e8;
+
+  --primary: #c8ff00;
+  --primary-foreground: #03080a;
+  --progress: #c8ff00;
+
+  --progress-track: rgb(200 255 0 / 0.1);
+  --progress-active-from: #c8ff00;
+  --progress-active-via: #22d3ee;
+  --progress-active-to: #60a5fa;
+  --progress-complete-from: #34d399;
+  --progress-complete-to: #22c55e;
+  --progress-paused-from: #7f9fe0;
+  --progress-paused-to: #6a86c4;
+  --progress-failed-from: #f87171;
+  --progress-failed-to: #ef4444;
+
+  --secondary: #0c1a1f;
+  --secondary-foreground: #c4d8dc;
+
+  --muted: #0c1a1f;
+  --muted-foreground: #6b8c94;
+
+  --accent: #0e2028;
+  --accent-foreground: #c4d8dc;
+
+  --success: #2fd06b;
+  --success-foreground: #04130a;
+
+  --destructive: #cc2b2b;
+  --destructive-foreground: #ffffff;
+
+  --border: #122830;
+  --input: #5a7a82;
+  --ring: #c8ff00;
+
+  --float-shadow:
+    0 18px 40px -18px rgb(0 0 0 / 0.8), 0 4px 12px -6px rgb(0 0 0 / 0.55);
+
+  --chrome-title: #03080a;
+  --chrome-title-text: #d4e4e8;
+  --chrome-menu: #03080a;
+  --chrome-menu-text: #d4e4e8;
+  --chrome-menu-hover: #0c1a1f;
+  --chrome-menu-active: #0e2028;
+  --chrome-toolbar: #03080a;
+  --chrome-toolbar-text: #d4e4e8;
+  --chrome-toolbar-hover: #0c1a1f;
+  --chrome-toolbar-active: #0e2028;
+  --chrome-popup: #081216;
+  --chrome-popup-hover: #0e2028;
+  --chrome-row-alt: #060f13;
+  --chrome-muted: #6b8c94;
+  --chrome-canvas: #03080a;
+  --chrome-panel: #081216;
+  --chrome-line: #122830;
+  --chrome-focus: #c8ff00;
+  --chrome-danger: #cc2b2b;
+  --chrome-danger-text: #ffffff;
+  --chrome-error: #ff9d9d;
+
+  --icon-green: #34d399;
+  --icon-green-bright: #6ee7b7;
+  --icon-green-deep: #0f7a52;
+  --icon-red: #ff6b6b;
+  --icon-red-bright: #ff9d9d;
+  --icon-red-deep: #a31b1b;
+  --icon-silver: #9db4bc;
+  --icon-silver-bright: #d4e4e8;
+  --icon-silver-deep: #5f7a82;
+  --icon-purple: #b388ff;
+  --icon-purple-bright: #d0b0ff;
+  --icon-purple-deep: #6b46a8;
+  --icon-blue: #60cdff;
+  --icon-blue-bright: #9adcff;
+  --icon-blue-deep: #2a76a8;
+  --icon-amber: #ffd166;
+  --icon-amber-bright: #ffe09a;
+  --icon-amber-deep: #9a6a00;
+
+  --file-paper: #d9eef0;
+  --file-paper-edge: #4f6a70;
+  --file-mark: #03080a;
+}
+
+/*
+  Mica. The Windows 10 dark palette: #1f1f1f windows, #171717 secondary panes,
+  #2d2d2d hover surfaces, white text and the saturated #0078d4 accent.
+*/
+:root[data-theme="mica"] {
+  color-scheme: dark;
+
+  --radius: 0.5rem;
+
+  --background: #1f1f1f;
+  --foreground: #ffffff;
+  --card: #1f1f1f;
+  --card-foreground: #ffffff;
+  --popover: #2d2d2d;
+  --popover-foreground: #ffffff;
+
+  --primary: #0078d4;
+  --primary-foreground: #ffffff;
+  --progress: #0078d4;
+
+  --progress-track: rgb(255 255 255 / 0.1);
+  --progress-active-from: #34d399;
+  --progress-active-via: #22d3ee;
+  --progress-active-to: #60a5fa;
+  --progress-complete-from: #34d399;
+  --progress-complete-to: #22c55e;
+  --progress-paused-from: #7f9fe0;
+  --progress-paused-to: #6a86c4;
+  --progress-failed-from: #f87171;
+  --progress-failed-to: #ef4444;
+
+  --secondary: #171717;
+  --secondary-foreground: #ffffff;
+
+  --muted: #171717;
+  --muted-foreground: #a6a6a6;
+
+  --accent: #2d2d2d;
+  --accent-foreground: #ffffff;
+
+  --success: #6ccb5f;
+  --success-foreground: #04240a;
+
+  --destructive: #e81123;
+  --destructive-foreground: #ffffff;
+
+  --border: #333333;
+  --input: #8c8c8c;
+  --ring: #0078d4;
+
+  --float-shadow:
+    0 18px 40px -18px rgb(0 0 0 / 0.7), 0 4px 12px -6px rgb(0 0 0 / 0.45);
+
+  --chrome-title: #1f1f1f;
+  --chrome-title-text: #ffffff;
+  --chrome-menu: #1f1f1f;
+  --chrome-menu-text: #ffffff;
+  --chrome-menu-hover: #2d2d2d;
+  --chrome-menu-active: #333333;
+  --chrome-toolbar: #1f1f1f;
+  --chrome-toolbar-text: #ffffff;
+  --chrome-toolbar-hover: #2d2d2d;
+  --chrome-toolbar-active: #333333;
+  --chrome-popup: #2d2d2d;
+  --chrome-popup-hover: #383838;
+  --chrome-row-alt: #171717;
+  --chrome-muted: #a6a6a6;
+  --chrome-canvas: #1f1f1f;
+  --chrome-panel: #171717;
+  --chrome-line: #333333;
+  --chrome-focus: #0078d4;
+  --chrome-danger: #e81123;
+  --chrome-danger-text: #ffffff;
+  --chrome-error: #ffb3b3;
+
+  --icon-green: #6ccb5f;
+  --icon-green-bright: #8fdc7d;
+  --icon-green-deep: #3d7a33;
+  --icon-red: #ff5f6d;
+  --icon-red-bright: #ff99a4;
+  --icon-red-deep: #a3121c;
+  --icon-silver: #c8c8c8;
+  --icon-silver-bright: #f0f0f0;
+  --icon-silver-deep: #7a7a7a;
+  --icon-purple: #b4a0f0;
+  --icon-purple-bright: #cbb8ff;
+  --icon-purple-deep: #6a55a8;
+  --icon-blue: #60cdff;
+  --icon-blue-bright: #9adcff;
+  --icon-blue-deep: #2a6f93;
+  --icon-amber: #fce100;
+  --icon-amber-bright: #fff17a;
+  --icon-amber-deep: #9a8600;
+
+  --file-paper: #f5f5f5;
+  --file-paper-edge: #8a8a8a;
+  --file-mark: #ffffff;
+}
+
+/*
+  The Appearance page shows one miniature window per appearance before it is
+  chosen, so the cards cannot borrow the running theme's tokens: each one names
+  the surface, the line and the accent of the theme it stands for. Keep them in
+  step with the blocks above and the dark block at the top.
+*/
+[data-theme-swatch] {
+  --swatch-surface: #0b1416;
+  --swatch-line: #16302b;
+  --swatch-accent: #c8ff00;
+}
+
+[data-theme-swatch="auto"] {
+  --swatch-surface: #0b1416;
+  --swatch-line: #16302b;
+  --swatch-accent: #c8ff00;
+}
+
+[data-theme-swatch="light"] {
+  --swatch-surface: #f3f4f6;
+  --swatch-line: #d8dade;
+  --swatch-accent: #022c1e;
+}
+
+[data-theme-swatch="cyberpunk"] {
+  --swatch-surface: #06060c;
+  --swatch-line: #181830;
+  --swatch-accent: #00f0ff;
+}
+
+[data-theme-swatch="volt"] {
+  --swatch-surface: #03080a;
+  --swatch-line: #122830;
+  --swatch-accent: #c8ff00;
+}
+
+[data-theme-swatch="mica"] {
+  --swatch-surface: #1f1f1f;
+  --swatch-line: #333333;
+  --swatch-accent: #0078d4;
 }
 
 @theme inline {
@@ -667,6 +1009,12 @@
   --color-icon-blue-bright: var(--icon-blue-bright);
   --color-icon-purple-bright: var(--icon-purple-bright);
   --color-icon-silver: var(--icon-silver);
+
+  /* The cards on the Appearance page: the theme a choice stands for, not the
+     one that is running. */
+  --color-swatch-surface: var(--swatch-surface);
+  --color-swatch-line: var(--swatch-line);
+  --color-swatch-accent: var(--swatch-accent);
 }
 
 /* The track the meter of an unknown size sends its segment across. */

@@ -5,9 +5,10 @@ import {
   SettingRow,
   SettingsPage,
 } from "@/components/settings/settings-page";
+import { ThemeChoice } from "@/components/settings/theme-choice";
 import { ListBox } from "@/components/ui/listbox";
 import { FONT_OPTIONS, WEIGHT_OPTIONS } from "@/lib/fonts";
-import type { Settings, ThemePreference, UiFont } from "@/lib/settings";
+import type { Settings, UiFont } from "@/lib/settings";
 
 interface AppearanceSettingsProps {
   settings: Settings;
@@ -28,12 +29,10 @@ export function AppearanceSettings({
       description="Theme, font and weight."
     >
       <Section title="Theme">
-        <SettingRow label="Theme" hint="Auto follows Windows.">
-          <Segmented
-            label="Theme"
+        <SettingRow label="Theme" hint="Auto follows your system." stacked>
+          <ThemeChoice
             value={settings.theme}
             onChange={(theme) => onChange("theme", theme)}
-            options={THEMES}
           />
         </SettingRow>
       </Section>
@@ -67,13 +66,6 @@ export function AppearanceSettings({
     </SettingsPage>
   );
 }
-
-/** The three appearances, in the order the group shows them. */
-const THEMES: { value: ThemePreference; label: string }[] = [
-  { value: "auto", label: "Auto" },
-  { value: "light", label: "Light" },
-  { value: "dark", label: "Dark" },
-];
 
 const WEIGHT_HINT = "Every window at once.";
 

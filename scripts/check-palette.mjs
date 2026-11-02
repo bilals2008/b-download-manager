@@ -21,18 +21,35 @@ function tokensIn(text) {
   return map;
 }
 
-// The dark tokens are the base; the light block overrides a subset of them.
-const lightStart = css.indexOf(':root[data-theme="light"]');
-if (lightStart === -1) {
-  console.error('MISSING  :root[data-theme="light"] theme block');
+// The base `:root` block is the dark appearance; every `:root[data-theme="…"]`
+// block overrides a subset of it. Each selector is read on its own, so a block
+// that comes later can never leak its values into an earlier appearance.
+const blocks = [
+  ...css.matchAll(/:root(?:\[data-theme="([a-z0-9-]+)"\])?\s*\{([^}]*)\}/g),
+];
+const baseBlock = blocks.find(([, name]) => !name);
+if (!baseBlock) {
+  console.error("MISSING  :root theme block");
   process.exit(1);
 }
-const dark = tokensIn(css.slice(0, lightStart));
-const light = { ...dark, ...tokensIn(css.slice(lightStart)) };
-const THEMES = [
-  ["dark", dark],
-  ["light", light],
-];
+const base = tokensIn(baseBlock[2]);
+const overrides = new Map(
+  blocks
+    .filter(([, name]) => name)
+    .map(([, name, body]) => [name, tokensIn(body)]),
+);
+
+const APPEARANCES = ["dark", "light", "cyberpunk", "volt", "mica"];
+for (const name of APPEARANCES) {
+  if (name !== "dark" && !overrides.has(name)) {
+    console.error(`MISSING  :root[data-theme="${name}"] theme block`);
+    process.exit(1);
+  }
+}
+const THEMES = APPEARANCES.map((name) => [
+  name,
+  name === "dark" ? base : { ...base, ...overrides.get(name) },
+]);
 
 function channel(value) {
   const srgb = value / 255;
@@ -149,7 +166,7 @@ for (const [theme, tokens] of THEMES) {
 
 console.log(
   failed === 0
-    ? `\nall ${REQUIRED.length} pairs pass in both appearances`
+    ? `\nall ${REQUIRED.length} pairs pass in all ${THEMES.length} appearances`
     : `\n${failed} of ${REQUIRED.length * THEMES.length} pairs fail`,
 );
 process.exit(failed === 0 ? 0 : 1);

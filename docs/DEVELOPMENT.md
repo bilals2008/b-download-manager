@@ -148,17 +148,35 @@ Windows 10, where the API is a no-op, all four corners are square together.
 ## Theme
 
 Single source of truth: `src/index.css` (CSS variables + `@theme inline`), read
-by `scripts/check-palette.mjs`. Slate black chrome with the Windows accent blue
-for actions, a neutral light appearance that follows the system, and green only
-for finished work. Changing a colour means changing it there and re-running
-`pnpm check:palette`.
+by `scripts/check-palette.mjs`. Five appearances: the deep green-black Dark
+base, the neutral Light, and three fixed looks — Cyberpunk (near-black with a
+cyan accent), Volt (ink-black with a teal cast and lime accent) and Mica (the
+Windows 10 dark palette: #1f1f1f windows, #171717 panes and the #0078d4
+accent). Green only for finished work and red only for destruction in every
+appearance. Changing a colour means changing it there and re-running
+`pnpm check:palette`, which merges the base block with each
+`:root[data-theme="…"]` block and checks the WCAG pairs in all five.
+
+Adding an appearance takes five places, or it will silently fall back to the
+system light/dark look:
+
+- `src/index.css`: a `:root[data-theme="…"]` block with the full token set,
+  plus a `[data-theme-swatch="…"]` set for its card on the Appearance page.
+- `src/lib/settings.ts`: the `ThemePreference` union and the `THEME_PREFERENCES`
+  list the loader validates against.
+- `src/lib/theme.ts`: `isLightTheme` when the new canvas is pale, so the tray
+  icon picks the right inks.
+- `index.html`: the pre-paint `fixed` list, which mirrors the saved ids.
+- `scripts/check-palette.mjs`: the `APPEARANCES` list, so the gate fails when a
+  block or one of its pairs is missing.
 
 Surfaces are borderless: panes, bars and rows separate by surface colour and
 spacing, not by divider lines. Radii are `rounded-lg` (12px) for panes and
 popups, `rounded-chrome` (8px) for controls and rows, `rounded-sm` (6px) for
-checkboxes. Floating things only (menus, popups, dialogs) get `shadow-float`;
-panes are flat. The only visible borders left are on form fields and
-checkboxes, where they are the affordance.
+checkboxes; a fixed theme may change `--radius` (Cyberpunk is sharp). Floating
+things only (menus, popups, dialogs) get `shadow-float`; panes are flat. The
+only visible borders left are on form fields and checkboxes, where they are the
+affordance.
 
 Every window of the application is a separate document: the main window, each
 progress window, and the completion window. `src/main.tsx` calls

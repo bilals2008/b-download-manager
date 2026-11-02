@@ -13,9 +13,10 @@
         var saved = JSON.parse(
           localStorage.getItem("idm-clone.settings.v1") || "{}",
         );
+        var fixed = ["light", "dark", "cyberpunk", "volt", "mica"];
         var root = document.documentElement;
         root.dataset.theme =
-          saved.theme === "light" || saved.theme === "dark"
+          fixed.indexOf(saved.theme) >= 0
             ? saved.theme
             : matchMedia("(prefers-color-scheme: light)").matches
               ? "light"
