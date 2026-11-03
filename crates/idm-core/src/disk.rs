@@ -59,8 +59,15 @@ fn move_into_place(from: &Path, to: &Path) -> std::io::Result<()> {
             // A copy cannot replace a name atomically, so it goes beside the
             // destination first and is renamed over it once complete.
             let temporary = to.with_file_name(format!("{}.idmmove", name_of(to)));
+            // The copied bytes have to reach the disk before the name does.
+            // `sync_all` needs a writable handle on Windows: flushing a file
+            // that was opened for reading alone answers "Access is denied",
+            // which is how every cross-volume download failed.
             let copied = std::fs::copy(from, &temporary).and_then(|_| {
-                std::fs::File::open(&temporary)?.sync_all()?;
+                std::fs::OpenOptions::new()
+                    .write(true)
+                    .open(&temporary)?
+                    .sync_all()?;
                 std::fs::rename(&temporary, to)
             });
             if copied.is_err() {

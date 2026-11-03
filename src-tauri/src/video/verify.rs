@@ -120,7 +120,13 @@ pub struct Expect<'a> {
     /// The extension the file will be given.
     pub extension: &'a str,
     pub video: bool,
+    /// Sound was named as one of the tracks that were fetched, so its absence
+    /// is a broken download rather than a silent source.
     pub audio: bool,
+    /// The caller asked for an audio track on top of the picture. A source that
+    /// carries no sound at all — a silent stock clip, a video-only HLS
+    /// rendition — is still the file that was asked for, so it is not refused.
+    pub audio_selected: bool,
 }
 
 /// Read a file's container, tracks and duration from its own bytes.
@@ -192,8 +198,20 @@ pub fn check_finished(path: &Path, expect: Expect<'_>) -> Result<MediaInfo, Stri
         if expect.video && info.video_codec.is_none() {
             return Err("the finished file has no picture".to_string());
         }
-        if expect.audio && info.audio_codec.is_none() {
+        if expect.audio && info.audio_codec.is_none() && expect.audio_selected {
             return Err("the finished file has no sound".to_string());
+        }
+        if expect.audio && info.audio_codec.is_none() {
+            // A silent source. Stock footage sites carry clips with no audio
+            // track at all, and the picture the user asked for is complete, so
+            // the file is kept and only the log says what it is.
+            log::write(
+                "info",
+                &format!(
+                    "{} has no sound track; the source is silent",
+                    path.display()
+                ),
+            );
         }
     }
     if info.duration.is_some_and(|seconds| seconds <= 0.05) {
@@ -807,10 +825,58 @@ mod tests {
                 extension: "mp4",
                 video: true,
                 audio: false,
+                audio_selected: false,
             },
         )
         .expect_err("no picture");
         assert!(error.contains("picture"), "{error}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_selected_audio_track_that_is_lost_is_refused_but_a_silent_source_is_kept() {
+        // A join test may have pointed `BDM_FFMPEG` at a stand-in.
+        let _guard = super::super::tools::test_guard();
+        let dir = temp_dir("silent");
+        let path = dir.join("film.mp4");
+        let mut bytes = sample_mp4(5_000);
+        // Break the sound track's handler into a text track: the source itself
+        // carries no audio, which is a silent clip and not a broken download.
+        let at = bytes
+            .windows(4)
+            .position(|window| window == b"soun")
+            .expect("the audio handler");
+        bytes[at..at + 4].copy_from_slice(b"text");
+        std::fs::write(&path, bytes).expect("the file");
+
+        let kept = check_finished(
+            &path,
+            Expect {
+                extension: "mp4",
+                video: true,
+                audio: true,
+                audio_selected: false,
+            },
+        )
+        .err()
+        .unwrap_or_default();
+        // The fixture has no samples, so the playback check refuses it; what
+        // matters is that no sound is not what refused it.
+        assert!(!kept.contains("no sound"), "{kept}");
+
+        // The same file is a broken download when a separate audio track was
+        // fetched to be joined onto it.
+        let error = check_finished(
+            &path,
+            Expect {
+                extension: "mp4",
+                video: true,
+                audio: true,
+                audio_selected: true,
+            },
+        )
+        .expect_err("a lost audio track");
+        assert!(error.contains("no sound"), "{error}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -830,6 +896,7 @@ mod tests {
                 extension: "mp4",
                 video: true,
                 audio: false,
+                audio_selected: false,
             },
         )
         .expect_err("not a video");
@@ -852,6 +919,7 @@ mod tests {
                 extension: "mp4",
                 video: true,
                 audio: false,
+                audio_selected: false,
             },
         )
         .expect_err("almost no time");

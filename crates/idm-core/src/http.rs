@@ -16,7 +16,8 @@ use reqwest::header::{
 };
 
 use crate::transfer::{
-    ByteStream, FailureKind, Probe, TransferError, CHANGED_MESSAGE, RANGE_IGNORED_MESSAGE,
+    ByteStream, FailureKind, Probe, TransferError, CHANGED_MESSAGE, CHANGED_PREFIX,
+    RANGE_IGNORED_MESSAGE,
 };
 
 /// The reference binary asks for an identity encoding so that the byte
@@ -216,7 +217,7 @@ pub async fn open_range(
         if let (Some(expected), Some(actual)) = (expected_total, served_total) {
             if actual != expected {
                 return Err(TransferError::changed(format!(
-                    "the file changed on the server: it was {expected} bytes, it is {actual} now"
+                    "{CHANGED_PREFIX}: it was {expected} bytes, it is {actual} now"
                 )));
             }
         }

@@ -43,6 +43,11 @@ pub struct Delivery {
     /// The finished file must hold a picture and/or sound.
     pub video: bool,
     pub audio: bool,
+    /// An audio track was chosen alongside the picture, so a finished file
+    /// without sound means the join lost it. `audio` alone is not enough: a
+    /// progressive file is called muxed by the manifest and can still be a
+    /// silent clip, which is the file the user asked for.
+    pub audio_selected: bool,
 }
 
 /// Start the chosen track(s). The work is done on a task of its own; the
@@ -118,6 +123,7 @@ pub fn start(
     let delivery = Delivery {
         video: !audio_only,
         audio: audio_only || audio_format.is_some() || matches!(format.kind, MediaKind::Muxed),
+        audio_selected: audio_only || audio_format.is_some(),
         extension: extension.clone(),
         container,
     };
@@ -304,6 +310,7 @@ async fn run(
                             let extension = delivery.extension.clone();
                             let video = delivery.video;
                             let audio = delivery.audio;
+                            let audio_selected = delivery.audio_selected;
                             let checked = tokio::task::spawn_blocking(move || {
                                 verify::check_finished(
                                     &check_path,
@@ -311,6 +318,7 @@ async fn run(
                                         extension: &extension,
                                         video,
                                         audio,
+                                        audio_selected,
                                     },
                                 )
                             })
@@ -422,6 +430,7 @@ pub(super) fn deliver(
             extension: &delivery.extension,
             video: delivery.video,
             audio: delivery.audio,
+            audio_selected: delivery.audio_selected,
         },
     )
     .map_err(|error| {

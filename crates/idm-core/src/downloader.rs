@@ -38,7 +38,9 @@ use crate::http;
 use crate::limits::{Limits, SpeedLimiter};
 use crate::log;
 use crate::segmenter::{self, Segment, SegmentStatus, MIN_SPLIT, UNKNOWN_END};
-use crate::transfer::{FailureKind, Probe, Source, TransferError, RANGE_IGNORED_MESSAGE};
+use crate::transfer::{
+    FailureKind, Probe, Source, TransferError, CHANGED_PREFIX, RANGE_IGNORED_MESSAGE,
+};
 use crate::verify;
 
 /// Default `MaxConnectionsNumber` of the reference download manager, read
@@ -1719,6 +1721,15 @@ async fn drive(
     } else {
         1
     };
+    // A server that does not honour ranges must not be split: a range that
+    // starts past the first byte is answered with the whole file, and a new
+    // connection opened on the fly would poison the bytes on disk. Marking the
+    // download as degraded keeps `maybe_grow` from splitting it. This is the
+    // GitHub zip case: the probe is answered with `200` and no `Content-Range`,
+    // and splitting the plan turned a working download into "the file changed".
+    if !probe.ranges {
+        download.degraded.store(true, Ordering::SeqCst);
+    }
 
     check_free_space(download, probe.total)?;
 
@@ -1754,6 +1765,10 @@ async fn drive(
     }
 
     let mut failure: Option<String> = None;
+    // Set when the plan on disk was thrown away because the server serves a
+    // different file now. Only one restart is worth it: a server that changes
+    // on every request is not downloadable in pieces.
+    let mut restarted = false;
     let mut last_space_check = Instant::now();
     let mut last_manifest_save = Instant::now();
     loop {
@@ -1773,6 +1788,37 @@ async fn drive(
                                 if let Some(segment) =
                                     downgrade_to_one_connection(download, probe.total)
                                 {
+                                    set.spawn(segment_task(
+                                        reporter.clone(),
+                                        limits.clone(),
+                                        download.clone(),
+                                        segment.id,
+                                        epoch,
+                                    ));
+                                    continue;
+                                }
+                            }
+                        }
+                        // A resume that asked for a range the server no longer
+                        // serves from the copy on disk: the server answered the
+                        // whole file instead. Nothing on disk can be kept, so
+                        // the file is fetched again from the first byte, the
+                        // way the reference manager restarts a changed file
+                        // instead of failing it.
+                        if error.contains(CHANGED_PREFIX) && !restarted {
+                            restarted = true;
+                            if let Ok(fresh) = download.source.probe().await {
+                                download
+                                    .total
+                                    .store(fresh.total.unwrap_or(0), Ordering::SeqCst);
+                                download.set_validator(fresh.validator());
+                                if let Some(segment) =
+                                    downgrade_to_one_connection(download, fresh.total)
+                                {
+                                    log::write(
+                                        "warn",
+                                        "the file changed on the server, the download starts over",
+                                    );
                                     set.spawn(segment_task(
                                         reporter.clone(),
                                         limits.clone(),

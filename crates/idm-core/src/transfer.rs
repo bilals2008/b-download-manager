@@ -27,6 +27,9 @@ pub enum FailureKind {
     RangeIgnored,
 }
 
+/// How every message about a server-side change starts.
+pub const CHANGED_PREFIX: &str = "the file changed on the server";
+
 /// The message used when the copy on the server is not the copy on disk.
 pub const CHANGED_MESSAGE: &str =
     "the file changed on the server since the download started; start it again";

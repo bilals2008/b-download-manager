@@ -62,6 +62,38 @@ fn spawn_range_server(data: Vec<u8>) -> (String, mpsc::Receiver<String>) {
     (format!("http://127.0.0.1:{port}/file.bin"), rx)
 }
 
+/// A server that ignores Range requests and always answers with 200, slowly
+/// enough that the engine gets a chance to think about splitting the file.
+fn spawn_slow_ignoring_server(data: Vec<u8>) -> (String, mpsc::Receiver<String>) {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+    let port = listener.local_addr().expect("addr").port();
+    let (tx, rx) = mpsc::channel();
+
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { break };
+            let mut buf = [0u8; 4096];
+            let Ok(read) = stream.read(&mut buf) else {
+                break;
+            };
+            let _ = tx.send(String::from_utf8_lossy(&buf[..read]).to_string());
+
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                data.len()
+            );
+            let _ = stream.write_all(response.as_bytes());
+            for chunk in data.chunks(256 * 1024) {
+                let _ = stream.write_all(chunk);
+                std::thread::sleep(std::time::Duration::from_millis(80));
+            }
+            let _ = stream.flush();
+        }
+    });
+
+    (format!("http://127.0.0.1:{port}/file.bin"), rx)
+}
+
 /// A server that ignores Range requests and always answers with 200.
 fn spawn_ignoring_server(data: Vec<u8>) -> String {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
@@ -306,22 +338,31 @@ async fn a_resume_of_a_file_that_changed_starts_over() {
 }
 
 #[tokio::test]
-async fn a_changed_size_in_the_answer_is_refused() {
-    let data = sample_data();
+async fn a_changed_size_starts_the_file_over_instead_of_failing() {
+    let old: Vec<u8> = sample_data();
+    let new: Vec<u8> = sample_data().iter().chain(sample_data().iter()).copied().collect();
+    let served_old = old.clone();
+    let served_new = new.clone();
     let (url, requests) = spawn_scripted_server(move |head, seen| {
-        let (start, end) = requested_range(head, data.len());
-        if seen == 0 {
-            return Some(partial_response(&data, start, end, "ETag: \"v1\"\r\n"));
+        match seen {
+            // First question: the old copy, 1024 bytes.
+            0 => {
+                let (start, end) = requested_range(head, served_old.len());
+                Some(partial_response(&served_old, start, end, "ETag: \"v1\"\r\n"))
+            }
+            // The range is answered from a copy that is twice as big: the
+            // bytes on disk belong to a file that is not there any more.
+            1 => Some(
+                "HTTP/1.1 206 Partial Content\r\nContent-Length: 0\r\nContent-Range: bytes 0-1023/2048\r\nConnection: close\r\n\r\n"
+                    .as_bytes()
+                    .to_vec(),
+            ),
+            // The restart asks again: the new copy, 2048 bytes.
+            _ => {
+                let (start, end) = requested_range(head, served_new.len());
+                Some(partial_response(&served_new, start, end, "ETag: \"v2\"\r\n"))
+            }
         }
-        // The same range, from a file that is now twice as big.
-        Some(
-            format!(
-                "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {start}-{end}/{}\r\nConnection: close\r\n\r\n",
-                end - start + 1,
-                data.len() * 2
-            )
-            .into_bytes(),
-        )
     });
     let dir = temp_dir("changed-size");
     let dest = dir.join("out.bin");
@@ -329,18 +370,58 @@ async fn a_changed_size_in_the_answer_is_refused() {
 
     run(silent(), Limits::default(), download.clone()).await;
 
-    let info = download.info();
-    assert_eq!(info.status, Status::Failed);
-    let error = info.error.expect("a reason");
-    assert!(
-        error.contains("changed on the server"),
-        "the reason names the change: {error}"
-    );
-    assert!(!dest.exists(), "a refused file is not written");
     assert_eq!(
-        requests_so_far(&requests).len(),
-        2,
-        "a changed file is not asked for again"
+        download.info().status,
+        Status::Completed,
+        "error: {:?}",
+        download.info().error
+    );
+    assert_eq!(
+        std::fs::read(&dest).expect("destination"),
+        new,
+        "the bytes of the old copy are not mixed into the new one"
+    );
+    assert!(
+        requests_so_far(&requests).len() >= 4,
+        "the download asks the server again before it starts over"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn a_server_without_ranges_is_never_split() {
+    // Big enough that a split would be attempted, slow enough that the engine
+    // gets a chance to attempt it.
+    let data: Vec<u8> = (0..2 * 1024 * 1024u32)
+        .map(|i| (i % 251) as u8)
+        .collect();
+    let served = data.clone();
+    let (url, requests) = spawn_slow_ignoring_server(served);
+    let dir = temp_dir("no-ranges");
+    let dest = dir.join("out.bin");
+    let download = Download::new(54, url, dest.clone(), 8, None, None).expect("download");
+
+    run(silent(), Limits::default(), download.clone()).await;
+
+    assert_eq!(
+        download.info().status,
+        Status::Completed,
+        "error: {:?}",
+        download.info().error
+    );
+    assert_eq!(std::fs::read(&dest).expect("destination"), data);
+
+    // Every question after the probe asks for the file from its first byte. A
+    // range that starts later is answered with the whole file by such a server,
+    // and that answer is not the range that was asked for.
+    let heads = requests_so_far(&requests);
+    assert!(
+        heads.iter().all(|head| {
+            head.lines()
+                .find(|line| line.starts_with("range:"))
+                .is_none_or(|line| line.trim().starts_with("range: bytes=0-"))        }),
+        "a server without ranges must not be split: {heads:?}"
     );
 
     let _ = std::fs::remove_dir_all(&dir);
