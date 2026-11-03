@@ -152,9 +152,9 @@ export function SettingsSearch({
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <div className="shrink-0 border-b border-chrome-line px-4 py-2.5">
+      <div className="shrink-0 px-6 pt-4 pb-3">
         <div className="relative">
-          <SearchGlyph className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-chrome-muted" />
+          <SearchGlyph className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-chrome-muted" />
           <input
             ref={inputRef}
             data-autofocus
@@ -181,9 +181,9 @@ export function SettingsSearch({
             autoComplete="off"
             spellCheck={false}
             className={cn(
-              "h-8 w-full rounded-chrome border border-chrome-line bg-chrome-canvas pr-9 pl-8 text-xs text-chrome-menu-text outline-none transition-colors",
-              "placeholder:text-chrome-muted hover:border-chrome-muted",
-              "focus-visible:border-chrome-focus focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset",
+              "h-9 w-full rounded-chrome bg-chrome-menu-hover pr-10 pl-9 text-xs text-chrome-menu-text outline-none transition-colors",
+              "placeholder:text-chrome-muted",
+              "focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset",
               "[&::-webkit-search-cancel-button]:appearance-none",
             )}
           />
@@ -200,9 +200,9 @@ export function SettingsSearch({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
         {searching ? (
-          <div className="px-5 py-4">
+          <div className="px-6 pt-1 pb-6">
             {flat.length === 0 ? (
               <div className="flex flex-col items-center gap-1 py-14 text-center">
                 <p className="text-xs text-chrome-title-text">

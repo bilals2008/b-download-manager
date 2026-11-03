@@ -82,7 +82,7 @@ export function AboutSettings({
       : "Not available in the browser preview";
 
   return (
-    <SettingsPage title="About">
+    <SettingsPage page="about">
       <Section
         title="Application"
         action={
@@ -204,7 +204,7 @@ function UpdateAnswer({
         Version {update.version} is available.
       </p>
       {update.notes ? (
-        <div className="max-h-28 overflow-y-auto scrollbar-thin rounded-chrome border border-chrome-line bg-chrome-canvas p-2">
+        <div className="max-h-28 overflow-y-auto scrollbar-thin rounded-chrome bg-chrome-menu-hover p-2">
           <ReleaseNotes notes={update.notes} />
         </div>
       ) : null}

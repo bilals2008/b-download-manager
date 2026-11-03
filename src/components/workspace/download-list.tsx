@@ -71,7 +71,6 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
     reload,
     findOpen,
     closeFind,
-    applyToSelection,
   } = useDownloads();
   // The box the rows scroll in, so arrow keys can follow the selection and
   // Find Next can bring its match into view.
@@ -281,6 +280,8 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
         ref={viewportRef}
         tabIndex={0}
         aria-label="Download list"
+        data-shortcut-section="downloads"
+        data-shortcut-scope="list"
         className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto scrollbar-thin focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
         onClick={(event) => {
           // A click on the empty space under the rows drops the selection.
@@ -293,18 +294,15 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
           if (event.defaultPrevented) {
             return;
           }
-          if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a") {
-            event.preventDefault();
-            selectAll();
-          } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+          // The keys the registry owns — Ctrl+A, Delete, the rebiddable ones —
+          // reach the shell dispatcher instead. What stays here is the fixed
+          // navigation a list is expected to answer itself.
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
             event.preventDefault();
             moveCursor(event.key === "ArrowDown" ? "down" : "up", event.shiftKey);
           } else if (event.key === "Home" || event.key === "End") {
             event.preventDefault();
             moveCursor(event.key === "Home" ? "first" : "last", event.shiftKey);
-          } else if (event.key === "Delete") {
-            event.preventDefault();
-            applyToSelection("delete");
           } else if (event.key === "Escape") {
             event.preventDefault();
             clearSelection();

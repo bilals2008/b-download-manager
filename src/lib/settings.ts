@@ -96,7 +96,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showCompleteDialog: true,
   showProgressOnStart: false,
   tipsOnStartup: true,
-  theme: "auto",
+  theme: "ayu",
   uiFont: "googlesans",
   uiWeight: "medium",
   defaultFolder: "",
@@ -435,7 +435,8 @@ export type ThemePreference =
   | "dark"
   | "cyberpunk"
   | "volt"
-  | "softblack";
+  | "softblack"
+  | "ayu";
 
 /** The saved values, in one place so the loader and the picker agree. */
 const THEME_PREFERENCES: readonly ThemePreference[] = [
@@ -445,6 +446,7 @@ const THEME_PREFERENCES: readonly ThemePreference[] = [
   "cyberpunk",
   "volt",
   "softblack",
+  "ayu",
 ];
 
 /**

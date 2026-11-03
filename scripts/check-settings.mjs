@@ -152,7 +152,7 @@ store.set(
   }),
 );
 const clamped = loadSettings();
-is(clamped.theme, "auto", "an unknown theme is not stored");
+is(clamped.theme, "ayu", "an unknown theme is not stored");
 is(clamped.uiFont, DEFAULT_SETTINGS.uiFont, "an unknown font falls back");
 is(clamped.uiWeight, DEFAULT_SETTINGS.uiWeight, "an unknown weight falls back");
 is(clamped.duplicatePolicy, "ask", "an unknown duplicate policy falls back");

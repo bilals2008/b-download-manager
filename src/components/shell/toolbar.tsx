@@ -1,6 +1,7 @@
 import { useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 import { Tooltip } from "@/components/ui/tooltip";
+import { commandShortcutLabel } from "@/lib/shortcuts";
 import type { ToolbarSize } from "@/lib/settings";
 import {
   toolbarPackStyleVars,
@@ -185,7 +186,7 @@ export function Toolbar({
           <Tooltip
             key={key}
             content={item.note ? `${item.label} — ${item.note}` : item.label}
-            shortcut={item.shortcut}
+            shortcut={commandShortcutLabel(item.command) ?? undefined}
             side="bottom"
             className="shrink-0"
           >

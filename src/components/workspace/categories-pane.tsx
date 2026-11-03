@@ -307,6 +307,7 @@ export function CategoriesPane() {
   return (
     <nav
       aria-label="Categories"
+      data-shortcut-section="categories"
       className="flex w-48 shrink-0 flex-col overflow-hidden rounded-lg bg-chrome-panel sm:w-56 lg:w-64"
     >
       <div className="flex h-9 shrink-0 items-center justify-between pl-2.5 pr-1.5">

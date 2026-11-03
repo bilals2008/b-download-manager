@@ -221,8 +221,9 @@ function useArtIds(prefix: string): {
 }
 
 /**
- * The file type of a row, a picker or a dialog. A known extension is drawn as
- * the page itself, an unknown one as the category glyph.
+ * The file type of a row, a picker or a dialog. A file name is always drawn as
+ * the page itself, so a popup and the row it came from agree; only a control
+ * that names no file falls back to the category's glyph.
  */
 export function FileTypeIcon({
   category,
@@ -240,24 +241,11 @@ export function FileTypeIcon({
   mimeType?: string | null;
   className?: string;
 }) {
-  // A saved category icon is the user's choice outside filename-driven rows.
-  const kind = icon || name === undefined ? null : fileKind(name, mimeType);
-  if (kind) {
-    const source = fileIconSource(name ?? "", kind);
+  if (name !== undefined) {
+    const kind = fileKind(name, mimeType);
     return (
       <img
-        src={source}
-        className={className}
-        alt=""
-        aria-hidden="true"
-        draggable={false}
-      />
-    );
-  }
-  if (name !== undefined && !icon) {
-    return (
-      <img
-        src={fileIcon}
+        src={kind ? fileIconSource(name, kind) : fileIcon}
         className={className}
         alt=""
         aria-hidden="true"

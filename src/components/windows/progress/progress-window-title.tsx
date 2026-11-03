@@ -2,7 +2,9 @@ import {
   CloseGlyph,
   MinimizeToTrayGlyph,
 } from "@/components/icons/ui-icons";
+import { FileTypeIcon } from "@/components/icons/desktop-icons";
 import { Tooltip } from "@/components/ui/tooltip";
+import { categoryOfFile } from "@/lib/categories";
 import { hideWindow, windowAction } from "@/lib/window";
 
 const WINDOW_BUTTON =
@@ -33,6 +35,11 @@ export function ProgressWindowTitle({
       data-tauri-drag-region
       className="flex h-9 shrink-0 items-center gap-3 border-b border-chrome-line pr-1 pl-3.5"
     >
+      <FileTypeIcon
+        category={categoryOfFile(name)}
+        name={name}
+        className="size-4 shrink-0"
+      />
       <Tooltip content={path} side="bottom" className="min-w-0 flex-1">
         <span
           data-tauri-drag-region

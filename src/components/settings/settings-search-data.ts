@@ -10,7 +10,7 @@ import {
   type SettingsSearchGroup,
   type SettingsSearchHit,
 } from "@/lib/settings-search";
-import { SHORTCUT_GROUPS } from "@/lib/shortcuts";
+import { shortcutSearchRows } from "@/lib/shortcuts";
 
 export interface SettingsCatalogEntry extends SettingsSearchEntry {
   page: SettingsPageId;
@@ -563,34 +563,28 @@ const PAGE_ENTRIES: readonly SettingsCatalogEntry[] = [
 ];
 
 /**
- * Every shortcut row joins the same catalogue. The page and search read the
- * one `SHORTCUT_GROUPS` list, so a key can never exist on one and not the
- * other.
+ * Every shortcut row joins the same catalogue. The page and the search read
+ * the one registry, so a key can never exist on one and not the other.
  */
-const SHORTCUT_ENTRIES: readonly SettingsCatalogEntry[] = SHORTCUT_GROUPS.flatMap(
-  (group) =>
-    group.rows.map((row) => ({
-      id: row.id,
-      page: "shortcuts" as const,
-      section: group.title,
-      title: row.label,
-      description:
-        row.hint ??
-        (row.soon
-          ? "Coming soon."
-          : row.keys
-            ? `Keyboard shortcut ${row.keys}.`
-            : ""),
-      keywords: [
-        "shortcut",
-        "shortcuts",
-        "keyboard",
-        "hotkey",
-        "key",
-        ...(row.keys ? [row.keys] : []),
-        ...(row.soon ? ["coming soon", "planned"] : []),
-      ],
-    })),
+const SHORTCUT_ENTRIES: readonly SettingsCatalogEntry[] = shortcutSearchRows().map(
+  (row) => ({
+    id: row.id,
+    page: "shortcuts" as const,
+    section: "Keyboard shortcuts",
+    title: row.label,
+    description: row.keys
+      ? `${row.hint} The key is ${row.keys}.`
+      : row.hint,
+    keywords: [
+      "shortcut",
+      "shortcuts",
+      "keyboard",
+      "hotkey",
+      "key",
+      "bind",
+      ...(row.keys ? [row.keys] : []),
+    ],
+  }),
 );
 
 export const SETTINGS_SEARCH_ENTRIES: readonly SettingsCatalogEntry[] = [

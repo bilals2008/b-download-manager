@@ -41,12 +41,21 @@ describe("settings search catalogue", () => {
 
   it("gives every entry an element to scroll to", () => {
     const source = readSettingsSource();
-    const missing = SETTINGS_SEARCH_ENTRIES.filter(
-      (entry) =>
-        !source.includes(`settingId="${entry.id}"`) &&
-        !source.includes(`id="${entry.id}"`) &&
-        !source.includes(`id: "${entry.id}"`),
-    ).map((entry) => entry.id);
+    const missing = SETTINGS_SEARCH_ENTRIES.filter((entry) => {
+      if (
+        source.includes(`settingId="${entry.id}"`) ||
+        source.includes(`id="${entry.id}"`) ||
+        source.includes(`id: "${entry.id}"`)
+      ) {
+        return false;
+      }
+      // Registry rows carry their anchor as a template — `shortcut-` plus the
+      // command id the registry defines — so match that half in the source.
+      return !(
+        entry.id.startsWith("shortcut-") &&
+        source.includes(`id: "${entry.id.slice("shortcut-".length)}"`)
+      );
+    }).map((entry) => entry.id);
     expect(missing).toEqual([]);
   });
 
@@ -69,7 +78,7 @@ describe("settings search catalogue", () => {
       ["update", "setting-auto-update"],
       ["ctrl n", "shortcut-add-download"],
       ["f3", "shortcut-find-next"],
-      ["help", "shortcut-help"],
+      ["queue", "shortcut-start-queue"],
     ];
 
     for (const [query, id] of cases) {

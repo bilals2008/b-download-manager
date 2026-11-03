@@ -82,7 +82,7 @@ export function ProxySettings({ settings, onChange }: ProxySettingsProps) {
   }
 
   return (
-    <SettingsPage title="Proxy">
+    <SettingsPage page="proxy">
       <Section title="Proxy address">
         <SettingRow
           settingId="setting-proxy"

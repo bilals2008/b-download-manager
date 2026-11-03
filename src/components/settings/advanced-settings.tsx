@@ -57,7 +57,7 @@ export function AdvancedSettings({ onReset }: AdvancedSettingsProps) {
   }
 
   return (
-    <SettingsPage title="Advanced">
+    <SettingsPage page="advanced">
       <Section title="Application data">
         <SettingRow
           settingId="setting-data-folder"
@@ -131,20 +131,6 @@ export function AdvancedSettings({ onReset }: AdvancedSettingsProps) {
             </SettingsButton>
           </div>
         )}
-      </Section>
-
-      <Section title="Planned">
-        <p className="pb-1.5 text-xs leading-5 text-chrome-menu-text">
-          Not built yet.
-        </p>
-        <ul className="list-disc pl-4 text-chrome-micro leading-5 text-chrome-muted marker:text-chrome-muted">
-          <li>Sounds for a start, a finish and a failure.</li>
-          <li>A virus scan of a finished file.</li>
-          <li>A schedule and named queues.</li>
-          <li>Saved logins for sites that ask before they hand over a file.</li>
-          <li>A password for the proxy.</li>
-          <li>Joining separate video and audio streams.</li>
-        </ul>
       </Section>
     </SettingsPage>
   );

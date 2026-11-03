@@ -167,6 +167,7 @@ export function MenuBar({
     <nav
       ref={barRef}
       aria-label="Main menu"
+      data-shortcut-section="menu"
       className="relative z-40 h-6 bg-chrome-menu"
     >
       <ul role="menubar" className="flex h-full items-stretch px-1">

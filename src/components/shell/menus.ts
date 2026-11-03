@@ -1,7 +1,17 @@
 import type { FontOption } from "@/lib/fonts";
+import { commandShortcutLabel } from "@/lib/shortcuts";
 
 import type { MenuRow } from "./menu-popup";
 import type { ShellCommand } from "./commands";
+
+/**
+ * The key a menu row prints, taken from the shortcut registry so a rebind in
+ * Settings shows up on the menu the next time it opens. The `?? undefined`
+ * keeps a cleared row from printing "Not set" where a key should be.
+ */
+function key(command: ShellCommand): string | undefined {
+  return commandShortcutLabel(command) ?? undefined;
+}
 
 export interface MenuDefinition {
   id: string;
@@ -37,7 +47,7 @@ export function buildMenus(
     label: "Tasks",
     accessKey: "t",
     rows: [
-      { command: "add-download", label: "Add new download...", shortcut: "Ctrl+N" },
+      { command: "add-download", label: "Add new download...", shortcut: key("add-download") },
       { command: "add-batch", label: "Add batch download...", disabled: true },
       {
         command: "add-batch-clipboard",
@@ -72,9 +82,9 @@ export function buildMenus(
     label: "File",
     accessKey: "f",
     rows: [
-      { command: "stop", label: "Stop Download" },
-      { command: "delete", label: "Remove" },
-      { command: "resume", label: "Download Now" },
+      { command: "stop", label: "Stop Download", shortcut: key("stop") },
+      { command: "delete", label: "Remove", shortcut: key("delete") },
+      { command: "resume", label: "Download Now", shortcut: key("resume") },
       { command: "redownload", label: "Redownload" },
     ],
   },
@@ -83,24 +93,26 @@ export function buildMenus(
     label: "Downloads",
     accessKey: "d",
     rows: [
-      { command: "pause-all", label: "Pause All" },
-      { command: "stop-all", label: "Stop All" },
+      { command: "pause-all", label: "Pause All", shortcut: key("pause-all") },
+      { command: "stop-all", label: "Stop All", shortcut: key("stop-all") },
       { command: "delete-completed", label: "Delete All Completed" },
       "separator",
-      { command: "find", label: "Find", shortcut: "Ctrl-F" },
-      { command: "find-next", label: "Find Next", shortcut: "F3" },
+      { command: "find", label: "Find", shortcut: key("find") },
+      { command: "find-next", label: "Find Next", shortcut: key("find-next") },
       { command: "scheduler", label: "Scheduler and queues (coming soon)", disabled: true },
       "separator",
-      { command: "options", label: "Options..." },
+      { command: "options", label: "Options...", shortcut: key("options") },
       "separator",
       {
         command: "start-queue",
         label: "Start queue",
+        shortcut: key("start-queue"),
         submenu: [{ command: "start-queue", label: "Start" }],
       },
       {
         command: "stop-queue",
         label: "Stop queue",
+        shortcut: key("stop-queue"),
         submenu: [{ command: "stop-queue", label: "Stop" }],
       },
       {

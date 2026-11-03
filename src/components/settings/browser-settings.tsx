@@ -70,7 +70,7 @@ export function BrowserSettings({ settings, onChange }: BrowserSettingsProps) {
   const seen = status?.lastContactMs ?? null;
 
   return (
-    <SettingsPage title="Browser integration">
+    <SettingsPage page="browser">
       <Section
         title="Status"
         action={

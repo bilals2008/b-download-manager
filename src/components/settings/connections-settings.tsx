@@ -27,7 +27,7 @@ export function ConnectionsSettings({
   );
 
   return (
-    <SettingsPage title="Connections">
+    <SettingsPage page="connections">
       <Section title="Connections">
         <SettingRow
           settingId="setting-max-connections"

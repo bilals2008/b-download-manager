@@ -24,7 +24,7 @@ interface DownloadsSettingsProps {
  */
 export function DownloadsSettings({ settings, onChange }: DownloadsSettingsProps) {
   return (
-    <SettingsPage title="Downloads">
+    <SettingsPage page="downloads">
       <Section title="Connections">
         <SettingRow
           settingId="setting-default-connections"

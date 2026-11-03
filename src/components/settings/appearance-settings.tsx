@@ -5,10 +5,20 @@ import {
   SettingRow,
   SettingsPage,
 } from "@/components/settings/settings-page";
-import { ThemeChoice } from "@/components/settings/theme-choice";
 import { ListBox } from "@/components/ui/listbox";
 import { FONT_OPTIONS, WEIGHT_OPTIONS } from "@/lib/fonts";
-import type { Settings, UiFont } from "@/lib/settings";
+import type { Settings, ThemePreference, UiFont } from "@/lib/settings";
+
+/** The appearances in the order the page offers them. */
+const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
+  { value: "auto", label: "Auto" },
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark" },
+  { value: "cyberpunk", label: "Cyberpunk" },
+  { value: "volt", label: "Volt" },
+  { value: "softblack", label: "Soft Black" },
+  { value: "ayu", label: "Ayu Dark" },
+];
 
 interface AppearanceSettingsProps {
   settings: Settings;
@@ -20,28 +30,30 @@ export function AppearanceSettings({
   onChange,
 }: AppearanceSettingsProps) {
   return (
-    <SettingsPage title="Appearance">
+    <SettingsPage page="appearance">
       <Section title="Theme">
-        <SettingRow
-          settingId="setting-theme"
-          label="Theme"
-          stacked
-        >
-          <ThemeChoice
-            value={settings.theme}
-            onChange={(theme) => onChange("theme", theme)}
-          />
+        <SettingRow settingId="setting-theme" label="Theme">
+          <div className="w-52">
+            <ListBox
+              label="Theme"
+              value={settings.theme}
+              onChange={(theme) => onChange("theme", theme as ThemePreference)}
+              options={THEME_OPTIONS}
+            />
+          </div>
         </SettingRow>
       </Section>
 
       <Section title="Typography">
-        <SettingRow label="Font">
-          <FontChoice
-            value={settings.uiFont}
-            onChange={(font) => onChange("uiFont", font)}
-          />
+        <SettingRow settingId="setting-font" label="Font">
+          <div className="w-52">
+            <FontChoice
+              value={settings.uiFont}
+              onChange={(font) => onChange("uiFont", font)}
+            />
+          </div>
         </SettingRow>
-        <SettingRow label="Weight">
+        <SettingRow settingId="setting-weight" label="Weight">
           <Segmented
             label="Weight"
             value={settings.uiWeight}

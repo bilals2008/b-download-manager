@@ -73,7 +73,7 @@ export function RuleList({
           {values.map((value) => (
             <li
               key={value}
-              className="inline-flex items-center gap-1 rounded-chrome border border-chrome-line bg-chrome-canvas py-0.5 pr-0.5 pl-2 text-chrome-micro text-chrome-menu-text"
+              className="inline-flex items-center gap-1 rounded-chrome bg-chrome-menu-hover py-0.5 pr-0.5 pl-2 text-chrome-micro text-chrome-menu-text"
             >
               <span className="max-w-64 truncate font-mono">
                 {format(value)}
@@ -82,7 +82,7 @@ export function RuleList({
                 type="button"
                 aria-label={`Remove ${format(value)}`}
                 onClick={() => remove(value)}
-                className="flex size-5 items-center justify-center rounded-chrome text-chrome-muted transition-colors hover:bg-chrome-menu-hover hover:text-chrome-menu-text focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
+                className="flex size-5 items-center justify-center rounded-chrome text-chrome-muted transition-colors hover:bg-chrome-menu-active hover:text-chrome-menu-text focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
               >
                 <CloseGlyph className="size-3" />
               </button>

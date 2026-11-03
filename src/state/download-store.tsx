@@ -229,6 +229,8 @@ export interface DownloadStore {
   /** Dismiss the question; the start is abandoned. */
   cancelConflict: () => void;
   pauseAll: () => void;
+  /** Start again every download that is paused, stopped or failed. */
+  resumeAll: () => void;
   stopAll: () => void;
   redownloadSelected: () => void;
   deleteCompleted: () => void;
@@ -1343,6 +1345,32 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
         ),
       }));
       run(Promise.all(items.map((item) => pauseDownload(item.id))));
+    },
+    resumeAll: () => {
+      // The mirror of Pause All: everything that is holding, not the rows the
+      // queue is saving for later or the media jobs with no resume of their own.
+      const items = latest.current.downloads.filter(
+        (item) =>
+          !item.mediaJob &&
+          (item.status === "paused" ||
+            item.status === "stopped" ||
+            item.status === "error"),
+      );
+      if (items.length === 0) {
+        return;
+      }
+      setState((current) => ({
+        ...current,
+        downloads: current.downloads.map((item) =>
+          !item.mediaJob &&
+          (item.status === "paused" ||
+            item.status === "stopped" ||
+            item.status === "error")
+            ? { ...item, status: "downloading", speed: 0, eta: 0, error: null }
+            : item,
+        ),
+      }));
+      run(Promise.all(items.map((item) => resumeDownload(item.id))));
     },
     stopAll: () => {
       const items = latest.current.downloads.filter(

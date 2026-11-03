@@ -31,7 +31,7 @@ export interface TraySettingsProps {
 export function GeneralSettings({ settings, onChange, tray }: GeneralSettingsProps) {
   const { preferences } = tray;
   return (
-    <SettingsPage title="General">
+    <SettingsPage page="general">
       <Section title="Startup">
         <SettingRow
           settingId="setting-launch-startup"

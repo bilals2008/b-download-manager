@@ -850,45 +850,103 @@
 }
 
 /*
-  The Appearance page shows one miniature window per appearance before it is
-  chosen, so the cards cannot borrow the running theme's tokens: each one names
-  the surface, the line and the accent of the theme it stands for. Keep them in
-  step with the blocks above and the dark block at the top.
+  Ayu Dark. A deep blue-black canvas with Ayu's warm gold accent, the palette
+  the editor theme of the same name uses. Green still marks finished work and
+  red still destroys; only the inks change.
 */
-[data-theme-swatch] {
-  --swatch-surface: #0b1416;
-  --swatch-line: #16302b;
-  --swatch-accent: #c8ff00;
-}
+:root[data-theme="ayu"] {
+  color-scheme: dark;
 
-[data-theme-swatch="auto"] {
-  --swatch-surface: #0b1416;
-  --swatch-line: #16302b;
-  --swatch-accent: #c8ff00;
-}
+  --radius: 0.625rem;
 
-[data-theme-swatch="light"] {
-  --swatch-surface: #f3f4f6;
-  --swatch-line: #d8dade;
-  --swatch-accent: #022c1e;
-}
+  --background: #0b0e14;
+  --foreground: #bfbdb6;
+  --card: #0d1017;
+  --card-foreground: #bfbdb6;
+  --popover: #131721;
+  --popover-foreground: #bfbdb6;
 
-[data-theme-swatch="cyberpunk"] {
-  --swatch-surface: #06060c;
-  --swatch-line: #181830;
-  --swatch-accent: #00f0ff;
-}
+  --primary: #e6b450;
+  --primary-foreground: #0b0e14;
+  --progress: #e6b450;
 
-[data-theme-swatch="volt"] {
-  --swatch-surface: #03080a;
-  --swatch-line: #122830;
-  --swatch-accent: #c8ff00;
-}
+  --progress-track: rgb(230 180 80 / 0.12);
+  --progress-active-from: #34d399;
+  --progress-active-via: #22d3ee;
+  --progress-active-to: #60a5fa;
+  --progress-complete-from: #34d399;
+  --progress-complete-to: #22c55e;
+  --progress-paused-from: #7f9fe0;
+  --progress-paused-to: #6a86c4;
+  --progress-failed-from: #f87171;
+  --progress-failed-to: #ef4444;
 
-[data-theme-swatch="softblack"] {
-  --swatch-surface: #0a0a0a;
-  --swatch-line: #232323;
-  --swatch-accent: #e9e9e6;
+  --secondary: #131721;
+  --secondary-foreground: #bfbdb6;
+
+  --muted: #0d1017;
+  --muted-foreground: #9aa4b0;
+
+  --accent: #1a2029;
+  --accent-foreground: #bfbdb6;
+
+  --success: #7fd962;
+  --success-foreground: #0b0e14;
+
+  --destructive: #f07178;
+  --destructive-foreground: #0b0e14;
+
+  --border: #1c2230;
+  --input: #6b7688;
+  --ring: #e6b450;
+
+  --float-shadow:
+    0 18px 40px -18px rgb(0 0 0 / 0.8), 0 4px 12px -6px rgb(0 0 0 / 0.55);
+
+  --chrome-title: #0b0e14;
+  --chrome-title-text: #bfbdb6;
+  --chrome-menu: #0b0e14;
+  --chrome-menu-text: #bfbdb6;
+  --chrome-menu-hover: #131721;
+  --chrome-menu-active: #1c2230;
+  --chrome-toolbar: #0b0e14;
+  --chrome-toolbar-text: #bfbdb6;
+  --chrome-toolbar-hover: #131721;
+  --chrome-toolbar-active: #1c2230;
+  --chrome-popup: #0d1017;
+  --chrome-popup-hover: #1a2029;
+  --chrome-row-alt: #0e131b;
+  --chrome-muted: #9aa4b0;
+  --chrome-canvas: #0b0e14;
+  --chrome-panel: #0d1017;
+  --chrome-line: #1c2230;
+  --chrome-focus: #e6b450;
+  --chrome-danger: #f07178;
+  --chrome-danger-text: #0b0e14;
+  --chrome-error: #ff8f8f;
+
+  --icon-green: #7fd962;
+  --icon-green-bright: #aad94c;
+  --icon-green-deep: #4d9e3a;
+  --icon-red: #f07178;
+  --icon-red-bright: #ff9d9d;
+  --icon-red-deep: #a33a3a;
+  --icon-silver: #9aa5b1;
+  --icon-silver-bright: #c7d0d9;
+  --icon-silver-deep: #5f6b78;
+  --icon-purple: #d2a6ff;
+  --icon-purple-bright: #e3c6ff;
+  --icon-purple-deep: #7f57b0;
+  --icon-blue: #59c2ff;
+  --icon-blue-bright: #9adcff;
+  --icon-blue-deep: #2a76a8;
+  --icon-amber: #e6b450;
+  --icon-amber-bright: #ffd173;
+  --icon-amber-deep: #9a6a00;
+
+  --file-paper: #eef3f3;
+  --file-paper-edge: #7f8d8a;
+  --file-mark: #ffffff;
 }
 
 /*
@@ -1052,9 +1110,6 @@
 
   /* The cards on the Appearance page: the theme a choice stands for, not the
      one that is running. */
-  --color-swatch-surface: var(--swatch-surface);
-  --color-swatch-line: var(--swatch-line);
-  --color-swatch-accent: var(--swatch-accent);
 }
 
 /* The track the meter of an unknown size sends its segment across. */

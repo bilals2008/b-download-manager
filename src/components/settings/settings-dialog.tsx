@@ -404,11 +404,11 @@ export function SettingsDialog({
       open={open}
       title="Settings"
       onClose={onClose}
-      className="h-[min(44rem,calc(100dvh-2rem))] w-[min(56rem,calc(100vw-2rem))] max-w-none bg-chrome-panel"
-      headerClassName="border-b border-chrome-line pr-1.5"
+      className="h-[min(44rem,calc(100dvh-2rem))] w-[min(58rem,calc(100vw-2rem))] max-w-none border-0 bg-chrome-panel"
+      headerClassName="py-2.5 pr-1.5 pl-5"
       tooltips={false}
       bodyClassName="flex min-h-0 flex-1 flex-col gap-0 p-0"
-      footerClassName="items-center border-t border-chrome-line px-4 py-2.5"
+      footerClassName="items-center px-5 py-3"
       footer={
         <>
           {error ? (
@@ -426,7 +426,7 @@ export function SettingsDialog({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-chrome border border-chrome-line bg-chrome-canvas px-3 py-1.5 text-xs text-chrome-menu-text transition-colors hover:border-chrome-muted focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
+            className="rounded-chrome bg-chrome-menu-hover px-3 py-1.5 text-xs text-chrome-menu-text transition-colors hover:bg-chrome-menu-active focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
           >
             Close
           </button>

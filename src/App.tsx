@@ -8,6 +8,7 @@ import { TopBar } from "@/components/shell/top-bar";
 import { toolbarState } from "@/components/shell/toolbar-state";
 import { UrlListDialog } from "@/components/shell/url-list-dialog";
 import { useShellShortcuts } from "@/components/shell/use-shell-shortcuts";
+import { cycleSectionFocus } from "@/components/shell/section-focus";
 import { TipOfTheDayDialog } from "@/components/tips/tip-of-the-day-dialog";
 import { AboutDialog } from "@/components/workspace/about-dialog";
 import { AddDownloadDialog } from "@/components/workspace/add-download-dialog";
@@ -21,10 +22,12 @@ import { describeError, isDesktop } from "@/lib/errors";
 import { applyFont } from "@/lib/fonts";
 import { openGrabberWindow } from "@/lib/grabber";
 import {
+  defaultDestination,
   desktopPreferences,
   hideMainWindow,
   onClipboardLink,
   onCloseRequested,
+  openPath,
   openUrl,
   quitApp,
   pushDownloadFolders,
@@ -181,13 +184,40 @@ export default function App() {
   const addOpenRef = useRef(addDownloadOpen);
   addOpenRef.current = addDownloadOpen;
 
-  // The accelerators the menus print work anywhere in the shell, but not while
+  // The keys come from the shortcut registry, so a rebind in Settings takes
+  // effect on the next press. They work anywhere in the shell, but not while
   // a menu or a window of its own has the keyboard.
   useShellShortcuts({
-    onAddDownload: () => setAddDownloadOpen(true),
-    onFind: downloads.openFind,
-    onFindNext: downloads.findNext,
+    "add-download": () => setAddDownloadOpen(true),
+    find: downloads.openFind,
+    "find-next": () => downloads.findNext(1),
+    "find-previous": () => downloads.findNext(-1),
+    "open-downloads-folder": openDownloadsFolder,
+    "pause-all": downloads.pauseAll,
+    "resume-all": downloads.resumeAll,
+    "stop-all": downloads.stopAll,
+    "pause-selected": () => downloads.applyToSelection("pause"),
+    "resume-selected": () => downloads.applyToSelection("resume"),
+    "cancel-selected": () => downloads.applyToSelection("stop"),
+    "remove-selected": () => downloads.applyToSelection("delete"),
+    "select-all": downloads.selectAll,
+    "clear-selection": downloads.clearSelection,
+    "start-queue": downloads.startQueue,
+    "stop-queue": downloads.stopQueue,
+    "open-settings": () => setSettingsOpen(true),
+    "cycle-sections": () => cycleSectionFocus(1),
+    "cycle-sections-back": () => cycleSectionFocus(-1),
   });
+
+  /** Show the folder new downloads land in, the way Explorer would open it. */
+  function openDownloadsFolder() {
+    if (!isDesktop()) {
+      return;
+    }
+    void defaultDestination()
+      .then((folder) => openPath(folder))
+      .catch((failure: unknown) => downloads.reportError(describeError(failure)));
+  }
 
   // The settings the engine owns come back from its own file when the app
   // starts, so a proxy or a speed limit that was set yesterday is still in

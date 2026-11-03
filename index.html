@@ -13,19 +13,21 @@
         var saved = JSON.parse(
           localStorage.getItem("idm-clone.settings.v1") || "{}",
         );
-        var fixed = ["light", "dark", "cyberpunk", "volt", "softblack"];
+        var fixed = ["light", "dark", "cyberpunk", "volt", "softblack", "ayu"];
         var root = document.documentElement;
-        root.dataset.theme =
-          fixed.indexOf(saved.theme) >= 0
-            ? saved.theme
-            : matchMedia("(prefers-color-scheme: light)").matches
-              ? "light"
-              : "dark";
+        var theme = saved.theme;
+        if (theme === "auto") {
+          // Auto follows the operating system's light or dark appearance.
+          theme = matchMedia("(prefers-color-scheme: light)").matches
+            ? "light"
+            : "dark";
+        }
+        root.dataset.theme = fixed.indexOf(theme) >= 0 ? theme : "ayu";
         if (typeof saved.uiFont === "string") root.dataset.font = saved.uiFont;
         if (typeof saved.uiWeight === "string")
           root.dataset.weight = saved.uiWeight;
       } catch {
-        // Storage can be blocked; the defaults are the dark appearance.
+        // Storage can be blocked; the default is the Ayu appearance.
       }
     </script>
   </head>

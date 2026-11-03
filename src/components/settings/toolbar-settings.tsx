@@ -54,7 +54,7 @@ export function ToolbarSettings({
   const radioName = useId();
 
   return (
-    <SettingsPage title="Toolbar">
+    <SettingsPage page="toolbar">
       <Section id="setting-toolbar-style" title="Style">
         <fieldset className="flex flex-col">
           <legend className="sr-only">Toolbar style</legend>

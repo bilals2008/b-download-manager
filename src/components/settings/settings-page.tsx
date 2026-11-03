@@ -1,5 +1,10 @@
 import type { ReactNode } from "react";
 
+import {
+  settingsPageDescription,
+  settingsPageLabel,
+  type SettingsPageId,
+} from "@/components/settings/settings-nav";
 import { cn } from "@/lib/utils";
 
 /**
@@ -8,16 +13,22 @@ import { cn } from "@/lib/utils";
  * instead of a stack of cards.
  */
 export function SettingsPage({
-  title,
+  page,
   children,
 }: {
-  title: string;
+  /** The page this frame draws; its name and note come from the nav. */
+  page: SettingsPageId;
   children: ReactNode;
 }) {
   return (
-    <div className="flex w-full flex-col px-5">
-      <header className="pb-3">
-        <h2 className="text-sm font-medium text-chrome-title-text">{title}</h2>
+    <div className="flex w-full flex-col px-6 pt-4 pb-8">
+      <header className="pb-1">
+        <h2 className="text-base leading-6 font-medium text-chrome-title-text">
+          {settingsPageLabel(page)}
+        </h2>
+        <p className="max-w-prose text-xs leading-5 text-chrome-muted">
+          {settingsPageDescription(page)}
+        </p>
       </header>
       <div className="flex flex-col">{children}</div>
     </div>
@@ -26,7 +37,8 @@ export function SettingsPage({
 
 /**
  * A titled group of settings. The caption is the only thing that separates one
- * group from the next: no boxes, no rules, no extra spacing between rows.
+ * group from the next: no boxes, no rules. The space above it is what tells the
+ * eye a new group has begun.
  */
 export function Section({
   id,
@@ -47,11 +59,11 @@ export function Section({
       tabIndex={id ? -1 : undefined}
       data-setting-section={id ? "" : undefined}
       aria-label={title}
-      className="flex flex-col focus:outline-none"
+      className="flex flex-col pt-6 focus:outline-none"
     >
       <div className="flex items-center gap-3 pb-1">
         <h3 className="text-xs font-medium text-chrome-muted">{title}</h3>
-        {action}
+        {action ? <div className="ml-auto">{action}</div> : null}
       </div>
       <div className="flex flex-col">{children}</div>
     </section>
@@ -59,9 +71,9 @@ export function Section({
 }
 
 /**
- * One setting: the label on the left, the control that changes it on the
- * right. This is the row every desktop preferences window is made of, and it
- * keeps a page scannable down the left edge.
+ * One setting: the name on the left, the control that changes it on the right.
+ * This is the row every desktop preferences window is made of, and it keeps a
+ * page scannable down the left edge.
  */
 export function SettingRow({
   label,
@@ -87,8 +99,10 @@ export function SettingRow({
       tabIndex={settingId ? -1 : undefined}
       data-setting-row={settingId ? "" : undefined}
       className={cn(
-        "gap-4 py-2 focus:outline-none",
-        stacked ? "flex flex-col" : "flex items-center justify-between",
+        "gap-x-6 gap-y-2 focus:outline-none",
+        stacked
+          ? "flex flex-col py-2.5"
+          : "flex flex-wrap items-center justify-between py-2.5",
       )}
     >
       <div className="min-w-0">

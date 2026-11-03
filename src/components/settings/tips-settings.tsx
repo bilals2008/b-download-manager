@@ -24,7 +24,7 @@ export function TipsSettings({ settings, onChange }: TipsSettingsProps) {
   }
 
   return (
-    <SettingsPage title="Tips">
+    <SettingsPage page="tips">
       <Section title="Startup">
         <SettingRow
           settingId="setting-tips-startup"

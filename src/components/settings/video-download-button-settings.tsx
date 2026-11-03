@@ -27,7 +27,7 @@ export function VideoDownloadButtonSettings({
   onChange,
 }: VideoDownloadButtonSettingsProps) {
   return (
-    <SettingsPage title="Video download button">
+    <SettingsPage page="video-download-button">
       <Section title="Appearance">
         <SettingRow
           settingId="setting-video-button-style"

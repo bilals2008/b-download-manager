@@ -8,7 +8,7 @@
  */
 
 const CATALOG = [
-  { command: "add-download", label: "Add URL", shortcut: "Ctrl+N" },
+  { command: "add-download", label: "Add URL" },
   { command: "resume", label: "Resume" },
   { command: "stop", label: "Stop" },
   { command: "stop-all", label: "Stop All" },
@@ -31,8 +31,6 @@ export type ToolbarCommand = (typeof CATALOG)[number]["command"];
 export interface ToolbarItemMeta {
   command: ToolbarCommand;
   label: string;
-  /** An accelerator the tooltip can print on a key cap. */
-  shortcut?: string;
   /** Buttons whose screen is not built yet stay visible but inert. */
   disabled?: boolean;
   /** Why a button is inert, in the tooltip instead of a silent dead control. */

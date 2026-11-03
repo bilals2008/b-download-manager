@@ -39,7 +39,7 @@ const overrides = new Map(
     .map(([, name, body]) => [name, tokensIn(body)]),
 );
 
-const APPEARANCES = ["dark", "light", "cyberpunk", "volt", "softblack"];
+const APPEARANCES = ["dark", "light", "cyberpunk", "volt", "softblack", "ayu"];
 for (const name of APPEARANCES) {
   if (name !== "dark" && !overrides.has(name)) {
     console.error(`MISSING  :root[data-theme="${name}"] theme block`);

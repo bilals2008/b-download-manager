@@ -37,9 +37,9 @@ export function TipOfTheDayDialog({
       open={open}
       title="Tip of the Day"
       onClose={onClose}
-      className="w-[min(27rem,calc(100vw-2rem))]"
-      bodyClassName="pb-2"
-      footerClassName="items-center gap-2 border-t border-chrome-line px-4 py-2.5"
+      className="w-[min(26rem,calc(100vw-2rem))]"
+      bodyClassName="px-5 pt-1 pb-4"
+      footerClassName="items-center gap-1.5 px-5 pb-4 pt-1"
       footer={
         <>
           <Tooltip
@@ -65,22 +65,20 @@ export function TipOfTheDayDialog({
         </>
       }
     >
-      <div className="flex min-h-40 flex-col gap-2.5">
-        <div className="flex items-baseline justify-between gap-3">
+      <div className="flex min-h-28 flex-col gap-3">
+        <div className="flex items-center justify-between gap-3">
           <span className="text-chrome-micro text-chrome-muted">
             {tip.category}
           </span>
           <span className="shrink-0 text-chrome-micro tabular-nums text-chrome-muted">
-            {current + 1} of {TIPS.length}
+            {current + 1} / {TIPS.length}
           </span>
         </div>
         <div aria-live="polite" className="flex flex-col gap-1.5">
           <h2 className="text-sm leading-5 font-medium text-chrome-title-text">
             {tip.title}
           </h2>
-          <p className="text-xs leading-5 text-chrome-menu-text">
-            {tip.body}
-          </p>
+          <p className="text-xs leading-5 text-chrome-muted">{tip.body}</p>
           {tip.shortcut ? (
             <KeyCap className="mt-0.5 self-start">{tip.shortcut}</KeyCap>
           ) : null}

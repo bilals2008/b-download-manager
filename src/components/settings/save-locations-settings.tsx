@@ -187,7 +187,7 @@ export function SaveLocationsSettings({
   const unfinishedProblem = categoryFolderProblem(settings.unfinishedFolder);
 
   return (
-    <SettingsPage title="Save locations">
+    <SettingsPage page="save-locations">
       <Section title="Default folder">
         <SettingRow
           settingId="setting-default-folder"
