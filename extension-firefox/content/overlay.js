@@ -379,12 +379,6 @@
       signal: pageEvents.signal,
     });
     window.addEventListener("resize", schedulePosition, { signal: pageEvents.signal });
-    // Only used to keep the button alive; it costs nothing until a hide is due.
-    document.addEventListener("pointermove", onPointerMove, {
-      capture: true,
-      passive: true,
-      signal: pageEvents.signal,
-    });
   }
 
   function detachListeners() {
@@ -392,7 +386,6 @@
     state.listening = false;
     document.removeEventListener("scroll", schedulePosition, true);
     window.removeEventListener("resize", schedulePosition);
-    document.removeEventListener("pointermove", onPointerMove, true);
   }
 
   /** A player changes size without a window resize: watch the element too. */
@@ -1692,14 +1685,28 @@
   }
 
   /**
-   * The pointer moved while the button was on its way out.
+   * The pointer moved.
    *
-   * A player puts its own gradient, title and controls above the picture, so
-   * the pointer leaves the video element long before it leaves the player.
-   * Comparing the point with the boxes keeps the button where it belongs.
+   * Two things are read from it. While the button is drawn, a movement keeps it
+   * alive when a hide is due: a player puts its own gradient, title and
+   * controls above the picture, so the pointer leaves the video element long
+   * before it leaves the player. While nothing is drawn, a movement is what
+   * finds the video at all — a pointer that was already resting on the player
+   * when the stream arrived never crosses an element again, and waiting for a
+   * fresh `pointerover` would keep the button away until it left the player and
+   * came back.
    */
   function onPointerMove(event) {
-    if (!state.visible || state.open || !state.hideTimer) return;
+    if (!state.visible) {
+      if (!state.ready || !overlayAllowed()) return;
+      const video = bdmVideoAtPoint(event.clientX, event.clientY, [], null);
+      if (!video) return;
+      cancelHide();
+      state.pointerOverVideo = true;
+      present(video);
+      return;
+    }
+    if (state.open || !state.hideTimer) return;
     if (!state.video) return;
     const rect = state.video.getBoundingClientRect();
     const inVideo = within(rect, event.clientX, event.clientY, POINTER_SLACK);
@@ -1810,6 +1817,13 @@
 
   document.addEventListener("pointerover", onPointerOver, {
     capture: true,
+    signal: pageEvents.signal,
+  });
+  // Registered for the life of the page: a movement is what brings the button
+  // up on a pointer that is already on the player.
+  document.addEventListener("pointermove", onPointerMove, {
+    capture: true,
+    passive: true,
     signal: pageEvents.signal,
   });
   document.addEventListener("pointerdown", onPointerDown, {

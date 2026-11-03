@@ -206,6 +206,9 @@ async function startPage(options = {}) {
     hover(target, x, y) {
       return dom.fire(target, "pointerover", { clientX: x, clientY: y });
     },
+    move(x, y) {
+      return dom.fire(dom.document, "pointermove", { clientX: x, clientY: y });
+    },
     close() {
       dom.fire(dom.window, "pagehide", { persisted: false });
     },
@@ -417,6 +420,31 @@ async function startPage(options = {}) {
 
   assert.equal(page.visible(), true, "the first stream brings the button up");
   assert.equal(page.rows().length, 0, "the panel is closed, so no row is drawn yet");
+
+  page.close();
+}
+
+/* ---------------------- a pointer that was already on the player all along */
+
+/*
+  A cursor left on the player while the page loads never crosses an element, so
+  no `pointerover` ever names it. The stream arrives, and the button has to come
+  up on the next movement instead of waiting for the pointer to leave the player
+  and come back.
+*/
+
+{
+  const page = await startPage({ url: "https://www.youtube.com/watch?v=abc" });
+  youTubePlayer(page.dom);
+  await page.dom.settle();
+
+  page.dom.pushResource(RANGED_1080);
+  await page.dom.settle();
+  assert.equal(page.visible(), false, "a stream alone draws nothing");
+
+  page.move(400, 300);
+  await page.dom.settle();
+  assert.equal(page.visible(), true, "a movement over the player brings the button up");
 
   page.close();
 }
