@@ -33,7 +33,7 @@ export function CategoryIconPicker({
   return (
     <div>
       <span className="mb-1.5 block text-xs text-chrome-muted">Icon</span>
-      <div className="rounded-chrome border border-chrome-line bg-chrome-canvas p-1.5">
+      <div className="rounded-chrome bg-chrome-menu-hover p-1.5">
         <div
           role="group"
           aria-label="Icon shape"
@@ -71,7 +71,7 @@ export function CategoryIconPicker({
         <div
           role="group"
           aria-label="Icon colour"
-          className="mt-1.5 flex items-center gap-1 border-t border-chrome-line pt-1.5"
+          className="mt-2 flex items-center gap-1 pt-1"
         >
           {CATEGORY_PALETTE_IDS.map((id) => {
             const palette = CATEGORY_PALETTES[id];

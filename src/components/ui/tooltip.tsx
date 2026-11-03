@@ -229,11 +229,11 @@ export function Tooltip({
                   setMounted(false);
                 }
               }}
-              className="pointer-events-none fixed z-50 flex w-max max-w-64 items-center gap-2 rounded-md border border-chrome-line bg-chrome-popup px-2.5 py-1.5 text-xs leading-snug text-chrome-menu-text shadow-float select-none"
+              className="pointer-events-none fixed z-50 flex w-max max-w-64 items-center gap-2 rounded-md bg-chrome-popup px-2.5 py-1.5 text-xs leading-snug text-chrome-menu-text shadow-float select-none"
             >
               <span className="min-w-0 break-words">{content}</span>
               {shortcut ? (
-                <kbd className="shrink-0 rounded-sm border border-chrome-line bg-chrome-toolbar-active px-1.5 font-mono text-chrome-micro text-chrome-muted">
+                <kbd className="shrink-0 rounded-sm bg-chrome-menu-hover px-1.5 font-mono text-chrome-micro text-chrome-muted">
                   {shortcut}
                 </kbd>
               ) : null}
@@ -245,7 +245,7 @@ export function Tooltip({
                     : { top: spot?.arrow }
                 }
                 className={cn(
-                  "absolute size-2 rotate-45 border-chrome-line bg-chrome-popup",
+                  "absolute size-2 rotate-45 bg-chrome-popup",
                   CARET[placement],
                 )}
               />
@@ -259,8 +259,8 @@ export function Tooltip({
 
 /** The half of the caret that clears the tooltip, per side. */
 const CARET: Record<TooltipSide, string> = {
-  top: "-bottom-[5px] -translate-x-1/2 border-r border-b",
-  bottom: "-top-[5px] -translate-x-1/2 border-t border-l",
-  left: "-right-[5px] -translate-y-1/2 border-t border-r",
-  right: "-left-[5px] -translate-y-1/2 border-b border-l",
+  top: "-bottom-[5px] -translate-x-1/2",
+  bottom: "-top-[5px] -translate-x-1/2",
+  left: "-right-[5px] -translate-y-1/2",
+  right: "-left-[5px] -translate-y-1/2",
 };

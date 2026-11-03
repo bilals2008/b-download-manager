@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import { FileTypeIcon } from "@/components/icons/desktop-icons";
 import { CheckGlyph, CloseGlyph } from "@/components/icons/ui-icons";
 import { DialogAction } from "@/components/ui/dialog-action";
-import { Tooltip } from "@/components/ui/tooltip";
 import { categoryIcon, categoryOfFile, loadCategories } from "@/lib/categories";
 import { formatSize, splitPath } from "@/lib/downloads";
 import { describeError } from "@/lib/errors";
@@ -15,10 +14,10 @@ import type { DownloadInfo } from "@/types";
  * The window that opens when a file finishes.
  *
  * The wording follows the original product's messages: a completion line
- * naming the file, the size taken with the raw byte count in parentheses,
- * and the path the file was saved to, plus an "Open folder" button
- * (`ANALYSIS.md`, section 9.4). The download is handed in by the backend
- * through `window.__BDM_COMPLETE__` before this renders.
+ * naming the file and the size taken with the raw byte count in parentheses.
+ * The saved path is not printed: the footer opens the folder or the file
+ * itself (`ANALYSIS.md`, section 9.4). The download is handed in by the
+ * backend through `window.__BDM_COMPLETE__` before this renders.
  */
 export function DownloadCompleteWindow({ info }: { info: DownloadInfo }) {
   const [error, setError] = useState<string | null>(null);
@@ -75,7 +74,7 @@ export function DownloadCompleteWindow({ info }: { info: DownloadInfo }) {
         </button>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3 px-4 pb-1 text-xs">
+      <div className="flex min-h-0 flex-1 flex-col gap-2 px-4 pb-1 text-xs">
         <div className="flex items-start gap-3">
           <span className="relative shrink-0">
             <FileTypeIcon
@@ -96,19 +95,6 @@ export function DownloadCompleteWindow({ info }: { info: DownloadInfo }) {
               Downloaded {formatSize(bytes)} ({bytes} Bytes)
             </p>
           </div>
-        </div>
-
-        <div className="min-h-0 flex-1 rounded-chrome border border-chrome-line bg-chrome-canvas px-2.5 py-2">
-          <p className="text-chrome-micro text-chrome-muted">File saved as</p>
-          <Tooltip
-            content={info.dest}
-            side="top"
-            className="mt-0.5 block"
-          >
-            <p className="line-clamp-2 font-mono text-chrome-micro break-all text-chrome-menu-text">
-              {info.dest}
-            </p>
-          </Tooltip>
         </div>
 
         {error ? (

@@ -326,7 +326,7 @@ export function RemoveCategoryDialog({
         </>
       }
     >
-      <div className="flex items-center gap-2.5 rounded-chrome border border-chrome-line bg-chrome-canvas p-2.5">
+      <div className="flex items-center gap-2.5 rounded-chrome bg-chrome-menu-hover p-2.5">
         <CategoryFolderIcon
           category={category.name}
           icon={category.icon}

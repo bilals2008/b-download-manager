@@ -182,20 +182,20 @@ export function ToolbarsDialog({
       {error ? (
         <p
           role="alert"
-          className="mt-3 rounded-chrome border border-chrome-danger bg-chrome-danger px-2.5 py-2 text-xs text-chrome-danger-text"
+          className="mt-3 rounded-chrome bg-chrome-danger px-2.5 py-2 text-xs text-chrome-danger-text"
         >
           {error}
         </p>
       ) : null}
       {notice ? (
-        <p className="mt-3 rounded-chrome border border-chrome-line bg-chrome-menu-hover px-2.5 py-2 text-xs text-chrome-menu-text">
+        <p className="mt-3 rounded-chrome bg-chrome-menu-hover px-2.5 py-2 text-xs text-chrome-menu-text">
           {notice}
         </p>
       ) : null}
 
       <p className="mt-4 text-xs text-chrome-muted">Installed packs</p>
       {installed.length === 0 ? (
-        <p className="mt-1 rounded-chrome border border-dashed border-chrome-line px-2.5 py-3 text-xs text-chrome-muted">
+        <p className="mt-1 rounded-chrome bg-chrome-menu-hover px-2.5 py-3 text-xs text-chrome-muted">
           No toolbar packs are installed yet. Use Install from file... to add
           one.
         </p>
@@ -240,7 +240,7 @@ export function ToolbarsDialog({
       )}
 
       {replace ? (
-        <div className="mt-3 rounded-chrome border border-chrome-line bg-chrome-menu-hover px-2.5 py-2">
+        <div className="mt-3 rounded-chrome bg-chrome-menu-hover px-2.5 py-2">
           <p className="text-xs text-chrome-menu-text">
             A toolbar with this name is already installed
             {replace.name ? `: ${replace.name}` : ""}. Replace it with the file
@@ -268,7 +268,7 @@ export function ToolbarsDialog({
       {snapshot.problems.length > 0 ? (
         <div className="mt-4">
           <p className="text-xs text-chrome-muted">Files that could not be used</p>
-          <ul className="mt-1 max-h-28 overflow-y-auto rounded-chrome border border-chrome-line bg-chrome-canvas px-2.5 py-2 text-chrome-micro">
+          <ul className="mt-1 max-h-28 overflow-y-auto rounded-chrome bg-chrome-menu-hover px-2.5 py-2 text-chrome-micro">
             {snapshot.problems.map((problem, index) => (
               <li key={`${problem.file}-${index}`} className="py-0.5">
                 <span className="text-chrome-menu-text">{problem.file}</span>
@@ -290,7 +290,7 @@ interface PackRowProps {
 
 function PackRow({ pack, active, action }: PackRowProps) {
   return (
-    <li className="flex items-start gap-2.5 rounded-chrome border border-chrome-line bg-chrome-canvas px-2.5 py-2">
+    <li className="flex items-start gap-2.5 rounded-chrome bg-chrome-menu-hover px-2.5 py-2">
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="truncate text-xs text-chrome-title-text">{pack.name}</span>

@@ -147,7 +147,7 @@ export function UpdateDialog({ open, found, onClose }: UpdateDialogProps) {
               . You are on {stage.update.currentVersion}.
             </p>
             {stage.update.notes && (
-              <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin rounded-(--radius-sm) border border-chrome-border bg-chrome-panel p-2">
+              <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin rounded-(--radius-sm) bg-chrome-menu-hover p-2">
                 <ReleaseNotes
                   notes={stage.update.notes}
                   className="text-chrome-title-text"

@@ -32,7 +32,7 @@ export function WhatsNewDialog({
       onClose={onClose}
       className="w-[min(32rem,calc(100vw-2rem))]"
       bodyClassName="pb-1"
-      footerClassName="items-center gap-2 border-t border-chrome-line px-4 py-2.5"
+      footerClassName="items-center gap-2 px-4 py-2.5"
       footer={
         <>
           {manual ? null : (

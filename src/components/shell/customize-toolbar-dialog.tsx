@@ -300,7 +300,7 @@ function OptionList({
     <ul
       role="listbox"
       aria-label={label}
-      className="h-60 overflow-y-auto rounded-chrome border border-chrome-line bg-chrome-canvas p-1"
+      className="h-60 overflow-y-auto rounded-chrome bg-chrome-menu-hover p-1"
     >
       {items.length === 0 ? (
         <li className="px-2 py-1.5 text-xs text-chrome-muted">{empty}</li>

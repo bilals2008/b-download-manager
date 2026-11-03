@@ -357,8 +357,8 @@ export function DownloadPropertiesDialog({
           </p>
         ) : null}
 
-        <div className="border-t border-chrome-line pt-3.5">
-          <h3 className="mb-2 text-xs font-medium text-chrome-title-text">
+        <div className="pt-1">
+          <h3 className="mb-2 text-xs font-medium text-chrome-muted">
             Details
           </h3>
           <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-4 gap-y-1.5 text-xs">

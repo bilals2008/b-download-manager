@@ -206,7 +206,7 @@ export function MenuPopup<T extends string>({
       role="menu"
       aria-label={label}
       style={spot ? { left: spot.x, top: spot.y } : undefined}
-      className={`z-50 rounded-lg border border-chrome-line bg-chrome-popup p-1 shadow-float ${placement}`}
+      className={`z-50 rounded-lg bg-chrome-popup p-1 shadow-float ${placement}`}
     >
       {rows.map((row, index) =>
         row === "separator" ? (

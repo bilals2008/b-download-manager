@@ -5,7 +5,8 @@
 //! binary call it "Download complete" and give its body as "File %s download
 //! complete.\n\nDownloaded %s (%I64d
 //! Bytes)\nFile saved as %s"; the option that turns it on is "Show download
-//! complete dialog" (`ANALYSIS.md`, section 9.4).
+//! complete dialog" (`ANALYSIS.md`, section 9.4). This window keeps the first
+//! two lines and leaves the path out: Open folder and Open file reach it.
 //!
 //! The window is a second webview with its own title bar, so the main window
 //! stays usable while it is open. The download it reports rides in as an
@@ -52,7 +53,7 @@ pub fn show(app: &AppHandle, info: &DownloadInfo) {
 
     let _ = WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
         .title("Download complete")
-        .inner_size(500.0, 284.0)
+        .inner_size(500.0, 160.0)
         .resizable(false)
         .maximizable(false)
         .decorations(false)
