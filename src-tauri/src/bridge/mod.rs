@@ -989,16 +989,13 @@ mod tests {
         std::fs::write(films.join("film.mp4"), b"old").expect("write");
 
         let state = AppState::default();
-        state.set_download_folders(
-            None,
-            vec![crate::state::CategoryRule {
-                name: "Films".to_string(),
-                extensions: vec!["mp4".to_string()],
-                folder: films.to_string_lossy().to_string(),
-                builtin: false,
-                fallback: false,
-            }],
-        );
+        state.set_categories(vec![crate::state::CategoryRule {
+            name: "Films".to_string(),
+            extensions: vec!["mp4".to_string()],
+            folder: films.to_string_lossy().to_string(),
+            builtin: false,
+            fallback: false,
+        }]);
 
         // The Downloads folder is free; the folder the file's category saves
         // to is not. The question must be about the file that would really be

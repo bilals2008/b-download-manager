@@ -307,24 +307,6 @@ const PAGE_ENTRIES: readonly SettingsCatalogEntry[] = [
     ],
   },
   {
-    id: "setting-unfinished-folder",
-    page: "save-locations",
-    section: "Unfinished downloads",
-    title: "Keep unfinished downloads in",
-    description:
-      "Incomplete files and their resume state wait here until a download completes.",
-    keywords: [
-      "unfinished",
-      "temporary",
-      "temp",
-      "partial",
-      "incomplete",
-      "resume",
-      "folder",
-      "storage",
-    ],
-  },
-  {
     id: "setting-remember-folder",
     page: "save-locations",
     section: "Remembering",
@@ -505,6 +487,25 @@ const PAGE_ENTRIES: readonly SettingsCatalogEntry[] = [
     title: "Data folder",
     description: "The download list and unfinished files.",
     keywords: ["data", "folder", "storage", "appdata", "files", "open"],
+  },
+  {
+    id: "setting-staging-folder",
+    page: "advanced",
+    section: "Application data",
+    title: "Temporary files",
+    description:
+      "Where the parts of an unfinished download wait, out of your download folders.",
+    keywords: [
+      "temporary",
+      "temp",
+      "unfinished",
+      "partial",
+      "staging",
+      "parts",
+      "resume",
+      "storage",
+      "folder",
+    ],
   },
   {
     id: "setting-log",

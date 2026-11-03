@@ -45,9 +45,9 @@ pub struct KnownDownload {
     /// put its own finished file where the one it replaced still is.
     #[serde(default)]
     pub replace: bool,
-    /// The folder the parts and the manifest live in, when it is not the
-    /// folder of the destination. Older index files have none, and their
-    /// parts sit beside the file.
+    /// The folder the parts and the manifest live in. It is the
+    /// application's own storage for the bytes of an unfinished download;
+    /// older index files have none, and their parts sit beside the file.
     #[serde(default)]
     pub unfinished_dir: Option<String>,
 }

@@ -56,6 +56,8 @@ src-tauri/src/
   main.rs        process entry
   lib.rs         Tauri builder, commands, event wiring
   state.rs       the set of known downloads
+  staging.rs     the application's own storage for unfinished bytes
+  migrate.rs     the start-up move of older layouts into the staging tree
   bridge/        the loopback server the browser extensions talk to
     mod.rs         routes, the versioned contract and its tests
     auth.rs        the origin and host rules, and their tests
@@ -112,6 +114,46 @@ Rules:
 - Frontend: no IPC or file-system work inside presentational components.
 - No native `<select>`; use `components/ui/listbox.tsx`.
 - Colours come from tokens in `src/index.css`. No raw hex or palette classes.
+
+## Where the bytes live
+
+The folder the reader chooses holds finished files and nothing else. Every
+temporary of a transfer — the ranges, the manifest, the join temporary — stays
+inside the application's own storage, so the download folder is clean while a
+transfer runs.
+
+```
+<app data>/staging/
+    downloads/<id>/       one folder per unfinished download:
+                          its .part ranges and its .idm.json manifest
+    media/<job>-<name>/   the tracks and join files of a video job
+<volume root>/.bdm-staging/   the same, on the volume of a destination
+<app log dir>/idm-clone.log
+```
+
+Rules:
+
+- The staging tree is **application data**, not cache. A resumable download
+  must survive a restart and must never be cleared by a cache purge.
+- A start refuses when the tree cannot be made. Writing the ranges into the
+  reader's folder instead is never the fallback.
+- The tree is not a setting. There is one place for it, resolved in `setup`,
+  and the window has no way to change it.
+- A destination on another volume gets a folder on that volume, so the
+  finished file is put in place with a rename instead of a copy across a
+  disk. A volume that cannot hold the folder falls back to the one beside the
+  application data.
+- Folders are hidden (the hidden flag, where the platform has one). Files are
+  not: a file with that flag cannot be opened for writing on some systems,
+  and the copy still has to fill it. A temporary file therefore carries a
+  leading dot (`.name.idmmove`) instead.
+- The staging folder of a download is named by its id and is removed with the
+  download: when it finishes, when it is cancelled and forgotten, and when a
+  start-up sweep finds a folder no row claims.
+- `migrate.rs` moves the resume state of older releases into the tree at
+  start-up: the bytes are **copied** and measured, the index is written, and
+  only then does the old copy go. A move that cannot be verified leaves the
+  download exactly where it was, still resumable.
 
 ## Window chrome — the fix that must not regress
 

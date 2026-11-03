@@ -109,7 +109,10 @@ impl Taken {
         paths.extend(state.work_bases_except(except));
         Self {
             paths,
-            unfinished: state.unfinished_dir(),
+            // A new start keeps its temporaries in a folder named by its own
+            // id, which no other row can be writing; the work bases of the
+            // older flat layouts still travel in `paths`.
+            unfinished: None,
         }
     }
 

@@ -344,8 +344,6 @@ export interface EngineSettings {
   version: number;
   /** An absolute folder, or empty for the system Downloads folder. */
   defaultFolder: string;
-  /** An absolute folder for unfinished parts, or empty for the engine's own. */
-  unfinishedFolder: string;
   categories: CategoryFolderRule[];
   defaultConnections: number;
   maxConnections: number;
@@ -521,35 +519,30 @@ export interface CategoryFolderRule {
 }
 
 /**
- * Give the engine the unfinished folder and the folder each category saves
- * to. The unfinished folder may be blank: the engine then uses a folder of
- * its own. The answer is the unfinished folder it will really use.
+ * Give the engine the folder each category saves to.
+ *
+ * The folder for unfinished bytes is not a setting: the application owns it
+ * and resolved it before this command can be reached, so a download's parts
+ * never land in the folder the reader chose for finished files.
  */
-export function setDownloadFolders(
-  unfinishedFolder: string,
+export function setCategoryRules(
   categories: CategoryFolderRule[],
-): Promise<string> {
-  return invoke<string>("set_download_folders", {
-    unfinishedFolder,
-    categories,
-  });
+): Promise<CategoryFolderRule[]> {
+  return invoke<CategoryFolderRule[]>("set_category_rules", { categories });
 }
 
 /**
- * Hand the engine where unfinished files wait and where each category saves.
+ * Hand the engine where each category saves.
  *
- * The engine has to know both without a window: a hand-over from the browser
- * reads neither, and the parts of a download are placed the moment it starts.
- * The categories are the saved ones when none are given. The answer is the
- * unfinished folder the engine will really use.
+ * The engine has to know this without a window: a hand-over from the browser
+ * reads nothing, and the folder of a start is decided the moment it begins.
+ * The categories are the saved ones when none are given.
  */
-export async function pushDownloadFolders(
-  unfinishedFolder: string,
+export async function pushCategoryRules(
   categories?: readonly CategoryDefinition[],
-): Promise<string> {
+): Promise<CategoryFolderRule[]> {
   const known = categories ?? loadCategories();
-  return setDownloadFolders(
-    unfinishedFolder.trim(),
+  return setCategoryRules(
     known.map((category) => ({
       name: category.name,
       extensions: [...category.extensions],
@@ -591,10 +584,12 @@ export function validateProxy(url: string): Promise<string> {
   return invoke<string>("validate_proxy", { url });
 }
 
-/** Where the log and the saved download index live. */
+/** Where the log, the saved download index and the staging folder live. */
 export interface AppPaths {
   dataDir: string;
   logPath: string;
+  /** The application's own folder for the bytes of unfinished downloads. */
+  stagingDir: string;
 }
 
 export function appPaths(): Promise<AppPaths> {

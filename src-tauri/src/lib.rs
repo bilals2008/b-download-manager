@@ -6,11 +6,13 @@ mod conflict;
 mod dest;
 mod grabber;
 mod lifecycle;
+mod migrate;
 mod prefs;
 mod progress;
 mod queue;
 mod settings_store;
 mod share;
+mod staging;
 mod state;
 mod toolbars;
 mod tray;
@@ -662,22 +664,51 @@ fn folder_status(app: AppHandle, folder: String) -> FolderStatus {
     }
 }
 
+/// The log used to sit in the data folder next to the index. One rename
+/// carries the history over to the log folder the operating system assigns,
+/// and never deletes anything: if the new log already exists, the old file is
+/// left where it is.
+fn carry_log_over_from_data_dir(data: &std::path::Path, logs: &std::path::Path) {
+    if data == logs {
+        return;
+    }
+    let old = data.join("idm-clone.log");
+    if !old.is_file() {
+        return;
+    }
+    let landed = logs.join("idm-clone.log");
+    if landed.exists() {
+        return;
+    }
+    let _ = std::fs::rename(&old, &landed);
+}
+
 /// Where the log and the saved download index live.
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct AppPaths {
     data_dir: String,
     log_path: String,
+    /// The application's own storage for the bytes of unfinished downloads.
+    staging_dir: String,
 }
 
 #[tauri::command]
-fn app_paths(app: AppHandle) -> AppPaths {
+fn app_paths(app: AppHandle, state: State<'_, AppState>) -> AppPaths {
     let dir = app
         .path()
         .app_data_dir()
         .unwrap_or_else(|_| PathBuf::from("."));
+    let log_dir = app
+        .path()
+        .app_log_dir()
+        .unwrap_or_else(|_| dir.join("logs"));
     AppPaths {
-        log_path: dir.join("idm-clone.log").to_string_lossy().to_string(),
+        log_path: log_dir.join("idm-clone.log").to_string_lossy().to_string(),
+        staging_dir: state
+            .staging()
+            .map(|staging| staging.root().to_string_lossy().to_string())
+            .unwrap_or_default(),
         data_dir: dir.to_string_lossy().to_string(),
     }
 }
@@ -809,44 +840,23 @@ fn set_browser_folder(state: State<'_, AppState>, folder: String) -> String {
     trimmed
 }
 
-/// The unfinished folder and the folder each category saves to.
+/// The folder each category saves to.
 ///
-/// The options window owns both lists. The backend keeps the resolved answer,
-/// because a browser hand-over has no window to read and a start needs the work
-/// folder before it creates its first part. An empty unfinished folder means the
-/// application's own data folder, so a fresh install still keeps the parts away
-/// from the finished files. Both are written to the engine's settings file, so
-/// a restart restores them before any window opens.
+/// The options window owns this list; the backend applies it, so a browser
+/// hand-over lands where the reader expects. The folders for temporary,
+/// staged bytes are not a setting: the application owns them and setup
+/// resolved them before this command can be reached, so the window cannot
+/// send a download's parts back into the user's way. The category rules are
+/// written to the engine's settings file, so a restart restores them before
+/// any window opens.
 #[tauri::command]
-fn set_download_folders(
-    app: AppHandle,
+fn set_category_rules(
     state: State<'_, AppState>,
-    unfinished_folder: String,
     categories: Vec<state::CategoryRule>,
-) -> Result<String, String> {
-    let trimmed = unfinished_folder.trim().to_string();
-    if !trimmed.is_empty() {
-        let folder = PathBuf::from(&trimmed);
-        if folder.exists() && !folder.is_dir() {
-            return Err(format!("{} is a file, not a folder.", folder.display()));
-        }
-        std::fs::create_dir_all(&folder)
-            .map_err(|error| format!("the unfinished folder could not be created: {error}"))?;
-    }
-    state.modify_settings(|settings| {
-        settings.unfinished_folder = trimmed;
-        settings.categories = normalize_category_rules(categories);
-    });
-    let fallback = app
-        .path()
-        .app_data_dir()
-        .unwrap_or_else(|_| PathBuf::from("."))
-        .join("unfinished");
-    Ok(state
-        .unfinished_dir()
-        .unwrap_or(fallback)
-        .to_string_lossy()
-        .to_string())
+) -> Vec<state::CategoryRule> {
+    let rules = normalize_category_rules(categories);
+    state.modify_settings(|settings| settings.categories = rules.clone());
+    rules
 }
 
 /// The engine's settings as the settings file holds them, for a window that
@@ -1137,26 +1147,54 @@ pub fn run() {
                 .path()
                 .app_data_dir()
                 .unwrap_or_else(|_| std::path::PathBuf::from("."));
-            // The log of what the downloads did. Opened first so a start that
-            // goes wrong anywhere below has somewhere to be written down.
-            idm_core::log::open(dir.join("idm-clone.log"));
-            // The downloads of an earlier run are brought back, so the list is
-            // still there after a restart.
-            state.set_index(Index::new(dir.join("downloads.json")));
+            // The diagnostics log lives in the log folder the operating
+            // system assigns to the application, with the data folder as the
+            // fallback. Opened first so a start that goes wrong anywhere
+            // below has somewhere to be written down.
+            let log_dir = app
+                .path()
+                .app_log_dir()
+                .unwrap_or_else(|_| dir.join("logs"));
+            let _ = std::fs::create_dir_all(&log_dir);
+            idm_core::log::open(log_dir.join("idm-clone.log"));
+            carry_log_over_from_data_dir(&dir, &log_dir);
+            // The staging tree is the only place an unfinished download may
+            // write. Without it a start refuses rather than letting its bytes
+            // land beside the finished file.
+            let staging = match staging::Staging::resolve(&dir) {
+                Ok(tree) => Some(tree),
+                Err(error) => {
+                    idm_core::log::write(
+                        "error",
+                        &format!("the staging folder could not be made: {error}"),
+                    );
+                    None
+                }
+            };
+            // The downloads of an earlier run are brought back, so the list
+            // is still there after a restart. The migration runs first: a
+            // restored row then points at the staging tree instead of the
+            // folder an older release left its parts in.
+            let index = Index::new(dir.join("downloads.json"));
+            if let Some(tree) = staging.as_ref() {
+                let report = migrate::run(&index, tree);
+                if report.moved > 0 || report.failed > 0 {
+                    idm_core::log::write(
+                        "info",
+                        &format!(
+                            "the storage migration moved {} download(s), left {} where they are",
+                            report.moved, report.failed
+                        ),
+                    );
+                }
+            }
+            state.set_index(index);
             state.restore_downloads();
             state.restore_queue();
-            // Parts and manifests have a folder of their own from the very
-            // first moment: a hand-over from the tray or the browser can
-            // arrive before the window has read its settings, and its parts
-            // must not land beside the finished file. The window pushes the
-            // folder the reader chose over this default when it opens.
-            let unfinished = dir.join("unfinished");
-            match std::fs::create_dir_all(&unfinished) {
-                Ok(()) => state.set_download_folders(Some(unfinished), Vec::new()),
-                Err(error) => idm_core::log::write(
-                    "warn",
-                    &format!("the unfinished folder could not be made: {error}"),
-                ),
+            // The sweep of abandoned staging folders waits until the restored
+            // rows exist: a resumable download claims its own folder.
+            if let Some(tree) = staging {
+                state.set_staging(tree);
             }
             // The tray and the close button follow a file of their own: they
             // are consulted before a page has loaded, and a webview that has
@@ -1272,7 +1310,7 @@ pub fn run() {
             set_browser_policy,
             set_video_button_settings,
             video_button_settings,
-            set_download_folders,
+            set_category_rules,
             saved_settings,
             browser_status,
             folder_status,

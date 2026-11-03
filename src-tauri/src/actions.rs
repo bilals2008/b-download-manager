@@ -20,6 +20,14 @@ use crate::state::AppState;
 /// Event carrying the state of one download to the UI.
 pub const UPDATE_EVENT: &str = "download://update";
 
+/// The sentence a start answers with when the application's own storage for
+/// unfinished bytes could not be created. The alternative — parts in the
+/// user's download folder — is never taken, so this reaches the window as a
+/// refusal the reader can act on.
+const THE_STORAGE_IS_NOT_READY: &str = "the application's storage folder is not available. \
+                                        Free some space on the disk where the application keeps \
+                                        its data, and start again.";
+
 /// What a new download carries besides its address and destination.
 #[derive(Default)]
 pub struct StartOptions {
@@ -169,11 +177,18 @@ pub fn start(
         conflict::Resolved::Start { dest, replace } => (dest, replace),
     };
 
+    // The application's staging tree is the only place a download may keep
+    // its unfinished bytes. Without it the start is refused: the alternative
+    // is part files in the folder the user chose for finished files.
+    let id = state.next_id();
+    let work_dir = state
+        .work_dir(id, &dest)
+        .ok_or_else(|| refused("storage", THE_STORAGE_IS_NOT_READY.to_string(), &dest))?;
     let download = Download::new_in(
-        state.next_id(),
+        id,
         url,
         dest.clone(),
-        state.unfinished_dir().as_deref(),
+        Some(&work_dir),
         options
             .connections
             .unwrap_or(DEFAULT_CONNECTIONS)
@@ -185,7 +200,6 @@ pub fn start(
     download.set_meta(category, options.description);
     download.set_allow_replace(replace);
 
-    let id = download.id;
     state.insert(download.clone());
     state.save_index();
 
@@ -302,11 +316,15 @@ pub fn redownload(
     };
 
     let previous = old.info();
+    let fresh_id = state.next_id();
+    let work_dir = state
+        .work_dir(fresh_id, &dest)
+        .ok_or_else(|| refused("storage", THE_STORAGE_IS_NOT_READY.to_string(), &dest))?;
     let fresh = Download::new_in(
-        state.next_id(),
+        fresh_id,
         previous.url.clone(),
         dest.clone(),
-        state.unfinished_dir().as_deref(),
+        Some(&work_dir),
         old.max_connections,
         state.limits().proxy().as_deref(),
         old.referer.as_deref(),
@@ -484,11 +502,15 @@ fn moved_download(
     replace: bool,
 ) -> Result<Arc<Download>, String> {
     let previous = old.info();
+    // The row keeps its id, and its id is the name of its staging folder: a
+    // move changes the file, not where the application keeps the bytes. A row
+    // of the older layout is taken into the tree as it moves.
+    let work_dir = state.work_dir(old.id, &dest);
     let moved = Download::new_in(
         old.id,
         old.url.clone(),
         dest,
-        state.unfinished_dir().as_deref(),
+        work_dir.as_deref(),
         old.max_connections,
         state.limits().proxy().as_deref(),
         old.referer.as_deref(),
@@ -720,9 +742,11 @@ fn delete_file_of(state: &AppState, id: u64) -> Result<(), String> {
     }
     std::fs::remove_file(&download.dest)
         .map_err(|error| format!("the file could not be deleted: {error}"))?;
-    // A finished download has no parts left; remove a manifest that survived
-    // an earlier version instead of leaving it beside a file that is gone.
-    let _ = std::fs::remove_file(&download.manifest);
+    // A finished download has no parts left; forget the whole temporary set,
+    // including a manifest that survived an earlier version and the staging
+    // folder that goes with it, rather than leaving either beside a file
+    // that is gone.
+    download.forget_progress();
     state.remove(id);
     state.save_index();
     Ok(())
@@ -1089,32 +1113,29 @@ mod tests {
         let dir = temp_dir("category-folder");
         let films = dir.join("Films");
         let state = AppState::default();
-        state.set_download_folders(
-            Some(dir.join("unfinished")),
-            vec![
-                crate::state::CategoryRule {
-                    name: "Video".to_string(),
-                    extensions: vec!["mp4".to_string(), "mkv".to_string()],
-                    folder: String::new(),
-                    builtin: true,
-                    fallback: false,
-                },
-                crate::state::CategoryRule {
-                    name: "Films".to_string(),
-                    extensions: vec!["mp4".to_string()],
-                    folder: films.to_string_lossy().to_string(),
-                    builtin: false,
-                    fallback: false,
-                },
-                crate::state::CategoryRule {
-                    name: "Relative".to_string(),
-                    extensions: vec!["zip".to_string()],
-                    folder: "parts\\nowhere".to_string(),
-                    builtin: false,
-                    fallback: false,
-                },
-            ],
-        );
+        state.set_categories(vec![
+            crate::state::CategoryRule {
+                name: "Video".to_string(),
+                extensions: vec!["mp4".to_string(), "mkv".to_string()],
+                folder: String::new(),
+                builtin: true,
+                fallback: false,
+            },
+            crate::state::CategoryRule {
+                name: "Films".to_string(),
+                extensions: vec!["mp4".to_string()],
+                folder: films.to_string_lossy().to_string(),
+                builtin: false,
+                fallback: false,
+            },
+            crate::state::CategoryRule {
+                name: "Relative".to_string(),
+                extensions: vec!["zip".to_string()],
+                folder: "parts\\nowhere".to_string(),
+                builtin: false,
+                fallback: false,
+            },
+        ]);
 
         // No category was named, so the file type decides — and a rule the
         // reader wrote wins over the built-in one claiming the same type.

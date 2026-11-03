@@ -133,13 +133,18 @@ pub fn start(
         .file_stem()
         .map(|stem| stem.to_string_lossy().to_string())
         .unwrap_or_else(|| format!("video-{}", job.id));
-    let unfinished = app
+    // The tracks wait in the application's own media folder, never in the
+    // destination: a video job that dies halfway leaves nothing in the folder
+    // the user reads as theirs.
+    let work_dir = app
         .state::<AppState>()
-        .unfinished_dir()
-        .unwrap_or_else(|| folder.clone());
-    let work_dir = unfinished.join(format!("video-{}-{}", job.id, safe_component(&stem)));
+        .media_work_dir(job.id, &dest, &safe_component(&stem))
+        .ok_or_else(|| {
+            "the application's storage folder is not available. Free some space and try again."
+                .to_string()
+        })?;
     std::fs::create_dir_all(&work_dir)
-        .map_err(|error| format!("the unfinished folder could not be made: {error}"))?;
+        .map_err(|error| format!("the application's storage folder could not be made: {error}"))?;
 
     let control = TrackControl::new();
     let dest_text = dest.to_string_lossy().to_string();
@@ -253,8 +258,9 @@ async fn run(
             let stage = stage_sink(app, job.id);
             let destination = dest.clone();
             let plan = delivery.clone();
+            let staging = work_dir.clone();
             let finished = tokio::task::spawn_blocking(move || {
-                deliver(&destination, inputs, &plan, stage.as_ref())
+                deliver(&destination, inputs, &staging, &plan, stage.as_ref())
             })
             .await;
 
@@ -298,8 +304,12 @@ async fn run(
                     let page = job.page_url.clone();
                     let selector = ytdlp_selector(&job, &request);
                     let destination = dest.clone();
+                    // The tool writes into the job's staging folder, not into
+                    // the destination: its own temporaries must not appear in
+                    // the folder the user chose.
+                    let staging = work_dir.clone();
                     let fallback = tokio::task::spawn_blocking(move || {
-                        super::ytdlp::download(&page, selector.as_deref(), &destination)
+                        super::ytdlp::download(&page, selector.as_deref(), &destination, &staging)
                     })
                     .await;
                     match fallback {
@@ -382,10 +392,12 @@ pub(super) enum DeliverError {
 /// WebM, a fragmented `.m4a`) is moved; everything else is copied into and
 /// checked against that container. Either way the bytes are verified before
 /// the caller is told the download succeeded, so a file that is not what it
-/// claims can never be reported as Saved.
+/// claims can never be reported as Saved. The join temporary lives in
+/// `work_dir`, the job's own staging folder.
 pub(super) fn deliver(
     dest: &Path,
     inputs: Vec<PathBuf>,
+    work_dir: &Path,
     delivery: &Delivery,
     stage: &dyn Fn(&str),
 ) -> Result<PathBuf, DeliverError> {
@@ -410,7 +422,7 @@ pub(super) fn deliver(
         })?;
     } else if let Some(container) = container {
         stage("Joining");
-        mux::join(&inputs, dest, container).map_err(|error| match error {
+        mux::join(&inputs, dest, work_dir, container).map_err(|error| match error {
             mux::MuxError::Cancelled => DeliverError::Cancelled,
             other => DeliverError::Failed(other.to_string()),
         })?;

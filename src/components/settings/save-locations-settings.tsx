@@ -8,7 +8,6 @@ import {
   SettingsPage,
 } from "@/components/settings/settings-page";
 import { Switch } from "@/components/ui/switch";
-import { categoryFolderProblem } from "@/lib/categories";
 import { formatSize } from "@/lib/downloads";
 import { describeError, isDesktop } from "@/lib/errors";
 import { chooseFolder, folderStatus, type FolderStatus } from "@/lib/ipc";
@@ -25,10 +24,7 @@ interface SaveLocationsSettingsProps {
  * A folder that does not exist yet is allowed: it is created with the first
  * download that needs it.
  */
-function useFolderStatus(
-  folder: string,
-  checkWhenBlank = true,
-): {
+function useFolderStatus(folder: string): {
   status: FolderStatus | null;
   checking: boolean;
 } {
@@ -37,10 +33,8 @@ function useFolderStatus(
 
   useEffect(() => {
     // A blank field can mean anything. The default folder falls back to the
-    // Downloads folder of the system, which is worth showing; the unfinished
-    // one falls back to a folder of the application's own, which the note
-    // below already describes.
-    if (!isDesktop() || (!checkWhenBlank && !folder.trim())) {
+    // Downloads folder of the system, which is worth showing.
+    if (!isDesktop()) {
       setStatus(null);
       setChecking(false);
       return;
@@ -69,7 +63,7 @@ function useFolderStatus(
       active = false;
       clearTimeout(timer);
     };
-  }, [folder, checkWhenBlank]);
+  }, [folder]);
 
   return { status, checking };
 }
@@ -168,7 +162,7 @@ function FolderField({
 /**
  * The Save locations page: where downloads land, where the unfinished ones
  * wait while they are still being written, whether the last folder is
- * remembered, and what the engine says about each chosen folder before a file
+ * remembered, and what the engine says about the chosen folder before a file
  * is written to it.
  */
 export function SaveLocationsSettings({
@@ -176,15 +170,12 @@ export function SaveLocationsSettings({
   onChange,
 }: SaveLocationsSettingsProps) {
   const save = useFolderStatus(settings.defaultFolder);
-  const unfinished = useFolderStatus(settings.unfinishedFolder, false);
   const [forgotten, setForgotten] = useState(false);
 
   function forget() {
     clearLastFolder();
     setForgotten(true);
   }
-
-  const unfinishedProblem = categoryFolderProblem(settings.unfinishedFolder);
 
   return (
     <SettingsPage page="save-locations">
@@ -212,28 +203,12 @@ export function SaveLocationsSettings({
       </Section>
 
       <Section title="Unfinished downloads">
-        <SettingRow
-          settingId="setting-unfinished-folder"
-          stacked
-          label="Keep unfinished downloads in"
-          htmlFor="unfinished-folder"
-        >
-          <FolderField
-            id="unfinished-folder"
-            value={settings.unfinishedFolder}
-            placeholder="A folder inside this application's data folder"
-            status={unfinished.status}
-            checking={unfinished.checking}
-            blankNote="Blank uses a folder inside this application's data folder."
-            invalid={Boolean(unfinishedProblem)}
-            onChange={(value) => onChange("unfinishedFolder", value)}
-          />
-          {unfinishedProblem ? (
-            <p role="alert" className="mt-1 text-chrome-micro text-chrome-error">
-              {unfinishedProblem}
-            </p>
-          ) : null}
-        </SettingRow>
+        <p className="text-chrome-micro text-chrome-muted">
+          The parts of a download that is still running are kept in the
+          application&rsquo;s own storage, not in this folder. Only the finished
+          file is written here, so the folder stays clean while a transfer runs
+          and a stopped download can still be resumed.
+        </p>
       </Section>
 
       <Section title="Remembering">

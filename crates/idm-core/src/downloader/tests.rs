@@ -340,7 +340,11 @@ async fn a_resume_of_a_file_that_changed_starts_over() {
 #[tokio::test]
 async fn a_changed_size_starts_the_file_over_instead_of_failing() {
     let old: Vec<u8> = sample_data();
-    let new: Vec<u8> = sample_data().iter().chain(sample_data().iter()).copied().collect();
+    let new: Vec<u8> = sample_data()
+        .iter()
+        .chain(sample_data().iter())
+        .copied()
+        .collect();
     let served_old = old.clone();
     let served_new = new.clone();
     let (url, requests) = spawn_scripted_server(move |head, seen| {
@@ -393,9 +397,7 @@ async fn a_changed_size_starts_the_file_over_instead_of_failing() {
 async fn a_server_without_ranges_is_never_split() {
     // Big enough that a split would be attempted, slow enough that the engine
     // gets a chance to attempt it.
-    let data: Vec<u8> = (0..2 * 1024 * 1024u32)
-        .map(|i| (i % 251) as u8)
-        .collect();
+    let data: Vec<u8> = (0..2 * 1024 * 1024u32).map(|i| (i % 251) as u8).collect();
     let served = data.clone();
     let (url, requests) = spawn_slow_ignoring_server(served);
     let dir = temp_dir("no-ranges");
@@ -420,7 +422,8 @@ async fn a_server_without_ranges_is_never_split() {
         heads.iter().all(|head| {
             head.lines()
                 .find(|line| line.starts_with("range:"))
-                .is_none_or(|line| line.trim().starts_with("range: bytes=0-"))        }),
+                .is_none_or(|line| line.trim().starts_with("range: bytes=0-"))
+        }),
         "a server without ranges must not be split: {heads:?}"
     );
 
@@ -2373,14 +2376,21 @@ async fn a_real_download_finishes_in_the_final_folder_and_leaves_nothing_behind(
     assert_eq!(std::fs::read(&dest).expect("the finished file"), data);
 
     let mut in_unfinished: Vec<String> = std::fs::read_dir(&unfinished)
-        .expect("read the unfinished folder")
-        .flatten()
-        .map(|entry| entry.file_name().to_string_lossy().to_string())
-        .collect();
+        .map(|entries| {
+            entries
+                .flatten()
+                .map(|entry| entry.file_name().to_string_lossy().to_string())
+                .collect()
+        })
+        .unwrap_or_default();
     in_unfinished.sort();
     assert!(
         in_unfinished.is_empty(),
         "nothing of the transfer is left unfinished: {in_unfinished:?}"
+    );
+    assert!(
+        !unfinished.exists(),
+        "the folder the download owned goes with it"
     );
     let mut in_final: Vec<String> = std::fs::read_dir(&final_folder)
         .expect("read the final folder")
@@ -2452,6 +2462,267 @@ async fn a_download_restored_from_the_unfinished_folder_resumes_where_it_stopped
     assert!(
         !final_folder.join("setup.bin.idm.json").exists(),
         "the manifest never sits in the finished folder"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A download whose parts live in a staging folder of their own takes that
+/// folder with it when it leaves the list, and never takes the folder of the
+/// user with it.
+#[test]
+fn a_staged_download_leaves_no_folder_behind_and_keeps_the_users_folder() {
+    let dir = temp_dir("staged-folder");
+    let staging = dir.join("staging").join("downloads").join("7");
+    let final_folder = dir.join("Downloads");
+
+    let download = Download::new_in(
+        7,
+        "https://example.com/film.mp4".to_string(),
+        final_folder.join("film.mp4"),
+        Some(&staging),
+        2,
+        None,
+        None,
+    )
+    .expect("download");
+    assert!(
+        download.staged,
+        "the folder of the parts is the application's"
+    );
+
+    std::fs::write(segmenter::part_path(&staging, &download.stem, 0), b"half").expect("part");
+    download.save_manifest();
+    assert!(download.manifest.exists());
+
+    download.forget_progress();
+
+    assert!(
+        !staging.exists(),
+        "the folder the download owned goes with it"
+    );
+    assert!(
+        final_folder.is_dir(),
+        "the folder of the user stays where it is"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A download whose parts sit beside the file keeps the user's folder: only
+/// its own files are removed.
+#[test]
+fn a_download_beside_the_file_leaves_the_folder_alone() {
+    let dir = temp_dir("beside-folder");
+    let final_folder = dir.join("Downloads");
+    std::fs::create_dir_all(&final_folder).expect("folder");
+
+    let download = Download::new(
+        8,
+        "https://example.com/film.mp4".to_string(),
+        final_folder.join("film.mp4"),
+        2,
+        None,
+        None,
+    )
+    .expect("download");
+    assert!(!download.staged, "the folder belongs to the user");
+
+    std::fs::write(
+        segmenter::part_path(&final_folder, &download.stem, 0),
+        b"half",
+    )
+    .expect("part");
+    download.save_manifest();
+
+    download.forget_progress();
+
+    assert!(final_folder.is_dir(), "the folder of the user stays");
+    assert!(!final_folder.join("film.mp4.part0").exists());
+    assert!(!download.manifest.exists());
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The resume state of a download can be moved into another folder, and the
+/// manifest that records it travels with the bytes it describes.
+#[test]
+fn the_resume_state_can_be_moved_into_another_folder() {
+    let dir = temp_dir("relocate");
+    let old_folder = dir.join("Downloads");
+    let new_folder = dir.join("staging").join("downloads").join("7");
+    std::fs::create_dir_all(&old_folder).expect("folder");
+
+    let part = segmenter::part_path(&old_folder, "film.mp4", 0);
+    std::fs::write(&part, b"12345678").expect("part");
+    let manifest_path = old_folder.join("film.mp4.idm.json");
+    let manifest = Manifest {
+        url: "https://example.com/film.mp4".to_string(),
+        total: 16,
+        segments: vec![Segment {
+            id: 0,
+            start: 0,
+            end: 16,
+            downloaded: 8,
+            part: part.clone(),
+            status: SegmentStatus::Pending,
+        }],
+        validator: None,
+    };
+    std::fs::write(
+        &manifest_path,
+        serde_json::to_string(&manifest).expect("manifest"),
+    )
+    .expect("write the manifest");
+
+    let moved = relocate_resume_state(&manifest_path, &new_folder).expect("a move");
+
+    assert!(
+        manifest_path.exists(),
+        "the old manifest stays until the index points at the new folder"
+    );
+    assert!(part.exists(), "and so do the old bytes");
+    let moved_manifest = new_folder.join("film.mp4.idm.json");
+    assert!(
+        moved_manifest.is_file(),
+        "the manifest is in the new folder"
+    );
+    assert_eq!(
+        std::fs::read(new_folder.join("film.mp4.part0")).expect("the moved part"),
+        b"12345678"
+    );
+
+    let read: Manifest =
+        serde_json::from_str(&std::fs::read_to_string(&moved_manifest).expect("read back"))
+            .expect("the manifest reads back");
+    assert_eq!(
+        read.segments[0].downloaded, 8,
+        "the bytes are still recorded"
+    );
+    assert_eq!(
+        read.segments[0].part,
+        new_folder.join("film.mp4.part0"),
+        "the part path points at the new folder"
+    );
+
+    // The index is written here; only then does the old state go.
+    discard_relocated(&moved);
+    assert!(!manifest_path.exists());
+    assert!(!part.exists());
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A move that cannot be checked leaves everything where it was: a recorded
+/// range without its bytes is a broken state, not a state to move.
+#[test]
+fn a_move_without_the_bytes_it_records_refuses() {
+    let dir = temp_dir("relocate-missing");
+    let old_folder = dir.join("Downloads");
+    let new_folder = dir.join("staging").join("downloads").join("7");
+    std::fs::create_dir_all(&old_folder).expect("folder");
+
+    let part = segmenter::part_path(&old_folder, "film.mp4", 0);
+    let manifest_path = old_folder.join("film.mp4.idm.json");
+    let manifest = Manifest {
+        url: "https://example.com/film.mp4".to_string(),
+        total: 16,
+        segments: vec![Segment {
+            id: 0,
+            start: 0,
+            end: 16,
+            downloaded: 8,
+            part: part.clone(),
+            status: SegmentStatus::Pending,
+        }],
+        validator: None,
+    };
+    std::fs::write(
+        &manifest_path,
+        serde_json::to_string(&manifest).expect("manifest"),
+    )
+    .expect("write the manifest");
+
+    let error = relocate_resume_state(&manifest_path, &new_folder).expect_err("a refusal");
+    assert!(error.contains("missing"), "the error was: {error}");
+    assert!(manifest_path.exists(), "the resume state was not destroyed");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// While a download is running, the folder the reader chose holds nothing.
+/// The bytes wait in the application's own storage; only the finished file
+/// arrives at the destination, and a stopped download leaves nothing but its
+/// resume state behind.
+#[tokio::test]
+async fn a_running_download_leaves_the_destination_folder_empty() {
+    let data: Vec<u8> = (0..64 * 1024u32).map(|i| (i % 251) as u8).collect();
+    let url = spawn_slow_server(data.clone());
+    let dir = temp_dir("running-clean");
+    let staging = dir.join("staging").join("downloads").join("9");
+    let final_folder = dir.join("Downloads");
+    let dest = final_folder.join("film.bin");
+
+    let download =
+        Download::new_in(9, url, dest.clone(), Some(&staging), 2, None, None).expect("download");
+    let task = tokio::spawn(run(silent(), Limits::default(), download.clone()));
+
+    // Let the transfer get going, then look at the folder of the reader.
+    tokio::time::sleep(Duration::from_millis(150)).await;
+
+    let in_final: Vec<String> = std::fs::read_dir(&final_folder)
+        .map(|entries| {
+            entries
+                .flatten()
+                .map(|entry| entry.file_name().to_string_lossy().to_string())
+                .collect()
+        })
+        .unwrap_or_default();
+    assert!(
+        in_final.is_empty(),
+        "the folder of the reader holds nothing while the transfer runs: {in_final:?}"
+    );
+    assert!(
+        !dest.exists(),
+        "the file is not there before it is finished"
+    );
+
+    let in_staging: Vec<String> = std::fs::read_dir(&staging)
+        .map(|entries| {
+            entries
+                .flatten()
+                .map(|entry| entry.file_name().to_string_lossy().to_string())
+                .collect()
+        })
+        .unwrap_or_default();
+    assert!(
+        in_staging.iter().any(|name| name.contains(".part")),
+        "the bytes wait in the application's storage: {in_staging:?}"
+    );
+
+    download.cancel();
+    tokio::time::timeout(Duration::from_secs(5), task)
+        .await
+        .expect("a cancelled download must let its task go")
+        .expect("the task must not panic");
+
+    assert_eq!(download.info().status, Status::Cancelled);
+    assert!(!dest.exists(), "a stopped download leaves no file behind");
+    assert!(
+        download.manifest.exists(),
+        "the resume state is kept for the next start"
+    );
+    let after: Vec<String> = std::fs::read_dir(&final_folder)
+        .map(|entries| {
+            entries
+                .flatten()
+                .map(|entry| entry.file_name().to_string_lossy().to_string())
+                .collect()
+        })
+        .unwrap_or_default();
+    assert!(
+        after.is_empty(),
+        "the folder of the reader is still empty after the stop: {after:?}"
     );
 
     let _ = std::fs::remove_dir_all(&dir);

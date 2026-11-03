@@ -6,11 +6,13 @@
 //! future native writer may replace the body of [`join`] without touching a
 //! caller.
 //!
-//! The output is written to a temporary file beside the destination, then put
-//! in place with [`idm_core::disk::replace_file`]. A cancelled or failed join
-//! therefore leaves either the old file or no file, never half of one. The
-//! tracks are the caller's to delete, and only after this function returned
-//! successfully **and** the file was checked by [`super::verify`].
+//! The output is written to a join temporary inside the application's
+//! staging folder — never beside the destination, where a half joined file
+//! would sit in the user's way — then put in place with
+//! [`idm_core::disk::replace_file`]. A cancelled or failed join therefore
+//! leaves either the old file or no file, never half of one. The tracks are
+//! the caller's to delete, and only after this function returned successfully
+//! **and** the file was checked by [`super::verify`].
 //!
 //! `ffmpeg` is located by [`super::tools`]: `BDM_FFMPEG` (a test/override
 //! hook), a sidecar beside the executable, then `PATH`. It is run with
@@ -170,11 +172,18 @@ impl Drop for CancelFlag<'_> {
 
 /// Join the tracks in order into `output` in `container`. **No re-encode.**
 ///
-/// This is the only remux entry point in the application. An empty input list
+/// This is the only remux entry point in the application. The join temporary
+/// lives in `work_dir`, the staging folder the caller's job already owns, so
+/// no half file is ever written beside the destination. An empty input list
 /// is refused; the caller never has nothing to join. A join that produced no
 /// usable file is an error, so the caller never puts a zero-byte file in
 /// place.
-pub fn join(inputs: &[PathBuf], output: &Path, container: Container) -> Result<(), MuxError> {
+pub fn join(
+    inputs: &[PathBuf],
+    output: &Path,
+    work_dir: &Path,
+    container: Container,
+) -> Result<(), MuxError> {
     if inputs.is_empty() {
         return Err(MuxError::Io("there is nothing to join".to_string()));
     }
@@ -194,7 +203,9 @@ pub fn join(inputs: &[PathBuf], output: &Path, container: Container) -> Result<(
     let _cancel_flag = CancelFlag(output);
 
     let ffmpeg = Tool::Ffmpeg.locate().ok_or(MuxError::NotFound)?;
-    let temporary = temporary_path(output);
+    std::fs::create_dir_all(work_dir)
+        .map_err(|error| MuxError::Io(format!("the storage folder could not be made: {error}")))?;
+    let temporary = temporary_path(work_dir, output);
     let mut command = build_command(&ffmpeg, inputs, &temporary, container);
     let started = Instant::now();
     let mut child = command
@@ -342,12 +353,15 @@ fn codec_has(format: &Format, names: &[&str]) -> bool {
     names.iter().any(|name| codec.contains(name))
 }
 
-fn temporary_path(output: &Path) -> PathBuf {
+/// The join temporary: inside the job's staging folder, named after the
+/// destination it will become. The dot prefix keeps it out of the default
+/// listing even on platforms that hide by name.
+fn temporary_path(work_dir: &Path, output: &Path) -> PathBuf {
     let name = output
         .file_name()
         .map(|name| name.to_string_lossy().to_string())
         .unwrap_or_else(|| "video".to_string());
-    output.with_file_name(format!(".{name}.idmmux"))
+    work_dir.join(format!(".{name}.idmmux"))
 }
 
 fn take(text: &str, limit: usize) -> String {
@@ -506,9 +520,12 @@ mod tests {
     #[test]
     fn a_missing_track_is_refused_before_the_tool_runs() {
         let output = std::env::temp_dir().join(format!("bdm-mux-missing-{}", std::process::id()));
+        let work =
+            std::env::temp_dir().join(format!("bdm-mux-missing-work-{}", std::process::id()));
         let error = join(
             &[PathBuf::from("there-is-no-such-track.track")],
             &output,
+            &work,
             Container::Mp4,
         )
         .expect_err("a missing track");
@@ -539,9 +556,17 @@ mod tests {
         let input = dir.join("video.track");
         std::fs::write(&input, b"track").expect("the track");
         let output = dir.join("film.mp4");
-        join(&[input], &output, Container::Mp4).expect("a join");
+        // The join temporary lives in the application's staging folder, not
+        // beside the file the reader is waiting for.
+        let work = dir.join("staging");
+        std::fs::create_dir_all(&work).expect("the staging folder");
+        join(&[input], &output, &work, Container::Mp4).expect("a join");
         assert_eq!(std::fs::read(&output).expect("the file"), b"MUXED\r\n");
-        assert!(!temporary_path(&output).exists());
+        assert!(!temporary_path(&work, &output).exists());
+        assert!(
+            !dir.join(".film.mp4.idmmux").exists(),
+            "no temporary is left in the folder of the destination"
+        );
 
         std::env::remove_var("BDM_FFMPEG");
         let _ = std::fs::remove_dir_all(&dir);
@@ -565,7 +590,9 @@ mod tests {
         std::fs::write(&video, b"v").expect("the video");
         std::fs::write(&audio, b"a").expect("the audio");
         let output = dir.join("film.mkv");
-        join(&[video, audio], &output, Container::Mkv).expect("a join");
+        let work = dir.join("staging");
+        std::fs::create_dir_all(&work).expect("the staging folder");
+        join(&[video, audio], &output, &work, Container::Mkv).expect("a join");
         assert_eq!(std::fs::read(&output).expect("the file"), b"MKV\r\n");
 
         std::env::remove_var("BDM_FFMPEG");
@@ -585,10 +612,12 @@ mod tests {
         let input = dir.join("video.track");
         std::fs::write(&input, b"track").expect("the track");
         let output = dir.join("film.mp4");
-        let error = join(&[input], &output, Container::Mp4).expect_err("a refusing ffmpeg");
+        let work = dir.join("staging");
+        std::fs::create_dir_all(&work).expect("the staging folder");
+        let error = join(&[input], &output, &work, Container::Mp4).expect_err("a refusing ffmpeg");
         assert_eq!(error, MuxError::Failed(Some(3)));
         assert!(!output.exists());
-        assert!(!temporary_path(&output).exists());
+        assert!(!temporary_path(&work, &output).exists());
 
         std::env::remove_var("BDM_FFMPEG");
         let _ = std::fs::remove_dir_all(&dir);
@@ -610,10 +639,12 @@ mod tests {
         let input = dir.join("video.track");
         std::fs::write(&input, b"track").expect("the track");
         let output = dir.join("film.mp4");
-        let error = join(&[input], &output, Container::Mp4).expect_err("an empty join");
+        let work = dir.join("staging");
+        std::fs::create_dir_all(&work).expect("the staging folder");
+        let error = join(&[input], &output, &work, Container::Mp4).expect_err("an empty join");
         assert_eq!(error, MuxError::Empty);
         assert!(!output.exists());
-        assert!(!temporary_path(&output).exists());
+        assert!(!temporary_path(&work, &output).exists());
 
         std::env::remove_var("BDM_FFMPEG");
         let _ = std::fs::remove_dir_all(&dir);
@@ -637,8 +668,16 @@ mod tests {
         let output = dir.join("film.mp4");
         let output_for_thread = output.clone();
         let input_for_thread = input.clone();
+        let work = dir.join("staging");
+        std::fs::create_dir_all(&work).expect("the staging folder");
+        let work_for_thread = work.clone();
         let handle = std::thread::spawn(move || {
-            join(&[input_for_thread], &output_for_thread, Container::Mp4)
+            join(
+                &[input_for_thread],
+                &output_for_thread,
+                &work_for_thread,
+                Container::Mp4,
+            )
         });
         std::thread::sleep(Duration::from_millis(300));
         cancel(&output);
@@ -648,7 +687,7 @@ mod tests {
             .expect_err("cancelled");
         assert_eq!(error, MuxError::Cancelled);
         assert!(!output.exists());
-        assert!(!temporary_path(&output).exists());
+        assert!(!temporary_path(&work, &output).exists());
 
         std::env::remove_var("BDM_FFMPEG");
         let _ = std::fs::remove_dir_all(&dir);

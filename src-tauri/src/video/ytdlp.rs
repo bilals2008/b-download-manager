@@ -93,9 +93,16 @@ pub fn available() -> bool {
 /// Download `page_url` with the chosen format, into `output`.
 ///
 /// `selector` is a yt-dlp format expression (`137+bestaudio/137/best`), or
-/// `None` for the tool's own choice. The finished file is moved into place
-/// only after the tool succeeded.
-pub fn download(page_url: &str, selector: Option<&str>, output: &Path) -> Result<(), YtDlpError> {
+/// `None` for the tool's own choice. The tool writes into `work_dir`, the
+/// job's own staging folder, and the finished file is moved into place only
+/// after the tool succeeded — so nothing of the tool's making ever appears
+/// in the folder the user chose.
+pub fn download(
+    page_url: &str,
+    selector: Option<&str>,
+    output: &Path,
+    work_dir: &Path,
+) -> Result<(), YtDlpError> {
     if !page_url.starts_with("http://") && !page_url.starts_with("https://") {
         return Err(YtDlpError::Io(
             "the page address is not a web address".to_string(),
@@ -108,10 +115,6 @@ pub fn download(page_url: &str, selector: Option<&str>, output: &Path) -> Result
     let _cancel_flag = CancelFlag(output);
 
     let tool = Tool::YtDlp.locate().ok_or(YtDlpError::NotFound)?;
-    let work_dir = output
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-        .unwrap_or_else(|| Path::new("."));
     std::fs::create_dir_all(work_dir).map_err(|error| YtDlpError::Io(error.to_string()))?;
 
     let stem = output
@@ -264,7 +267,11 @@ mod tests {
     fn a_finished_fallback_moves_the_file_into_place() {
         let _guard = lock();
         let dir = temp_dir("ok");
-        std::env::set_var("BDM_YTDLP_OUT", &dir);
+        // The tool writes into the staging folder; the destination folder only
+        // ever receives the finished file.
+        let work = dir.join("staging");
+        std::fs::create_dir_all(&work).expect("the staging folder");
+        std::env::set_var("BDM_YTDLP_OUT", &work);
         let tool = fake(
             "yt-dlp",
             "> \"%BDM_YTDLP_OUT%\\ytdlp-film.mp4\" echo YTDLP",
@@ -277,10 +284,11 @@ mod tests {
             "https://www.youtube.com/watch?v=abc",
             Some("137+bestaudio/137/best"),
             &output,
+            &work,
         )
         .expect("a download");
         assert_eq!(std::fs::read(&output).expect("the file"), b"YTDLP\r\n");
-        let leftovers: Vec<String> = std::fs::read_dir(&dir)
+        let leftovers: Vec<String> = std::fs::read_dir(&work)
             .expect("the folder")
             .flatten()
             .map(|entry| entry.file_name().to_string_lossy().to_string())
@@ -301,8 +309,8 @@ mod tests {
         let tool = fake("yt-dlp", "exit /b 4", &dir);
         std::env::set_var("BDM_YTDLP", &tool);
         let output = dir.join("film.mp4");
-        let error =
-            download("https://www.youtube.com/watch?v=abc", None, &output).expect_err("a refusal");
+        let error = download("https://www.youtube.com/watch?v=abc", None, &output, &dir)
+            .expect_err("a refusal");
         assert_eq!(error, YtDlpError::Failed(Some(4)));
         assert!(!output.exists());
 
@@ -315,7 +323,9 @@ mod tests {
     fn a_cancelled_fallback_is_killed() {
         let _guard = lock();
         let dir = temp_dir("cancel");
-        std::env::set_var("BDM_YTDLP_OUT", &dir);
+        let work = dir.join("staging");
+        std::fs::create_dir_all(&work).expect("the staging folder");
+        std::env::set_var("BDM_YTDLP_OUT", &work);
         let tool = fake(
             "yt-dlp",
             "ping -n 20 127.0.0.1 >nul\r\n> \"%BDM_YTDLP_OUT%\\ytdlp-film.mp4\" echo YTDLP",
@@ -324,11 +334,13 @@ mod tests {
         std::env::set_var("BDM_YTDLP", &tool);
         let output = dir.join("film.mp4");
         let output_for_thread = output.clone();
+        let work_for_thread = work.clone();
         let handle = std::thread::spawn(move || {
             download(
                 "https://www.youtube.com/watch?v=abc",
                 None,
                 &output_for_thread,
+                &work_for_thread,
             )
         });
         std::thread::sleep(Duration::from_millis(300));

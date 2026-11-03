@@ -24,7 +24,11 @@ pub const FILE_NAME: &str = "settings.json";
 /// The version of the file this build reads. A file with a smaller version is
 /// read field by field the way the current reader can; a bigger one has
 /// settings this build has never heard of, which are ignored.
-pub const VERSION: u32 = 1;
+///
+/// Version 2 dropped `unfinishedFolder`: the application owns the folder for
+/// unfinished bytes now, and a reader's old choice is read by the start-up
+/// migration only to move what is left in it, never to store it again.
+pub const VERSION: u32 = 2;
 
 /// The largest connection count the engine accepts, also the clamps's top.
 pub const MAX_CONNECTIONS: u32 = 32;
@@ -42,9 +46,6 @@ pub struct EngineSettings {
     /// An absolute folder new downloads default to, empty for the system
     /// Downloads folder. This is the value a browser hand-over uses.
     pub default_folder: String,
-    /// An absolute folder for the parts of an unfinished download, empty for
-    /// the engine's own folder beside the application data.
-    pub unfinished_folder: String,
     /// The folder each category saves to, in the order a file name is matched.
     pub categories: Vec<CategoryRule>,
     /// Connections a browser hand-over gets, since it has no dialog to ask.
@@ -77,7 +78,6 @@ impl Default for EngineSettings {
         Self {
             version: VERSION,
             default_folder: String::new(),
-            unfinished_folder: String::new(),
             categories: Vec::new(),
             default_connections: 8,
             max_connections: 32,
@@ -155,11 +155,6 @@ pub fn sanitize(mut settings: EngineSettings) -> EngineSettings {
         // was started.
         settings.default_folder = String::new();
     }
-    if !settings.unfinished_folder.trim().is_empty()
-        && !Path::new(&settings.unfinished_folder.trim()).is_absolute()
-    {
-        settings.unfinished_folder = String::new();
-    }
     settings.default_connections =
         bounded(settings.default_connections, MAX_CONNECTIONS).unwrap_or(8);
     settings.max_connections =
@@ -228,11 +223,9 @@ mod tests {
     fn settings_survive_a_save_and_a_load() {
         let path = temp_file("round-trip");
         let downloads = sample_folder("downloads");
-        let parts = sample_folder("parts");
         let films = sample_folder("films");
         let settings = EngineSettings {
             default_folder: downloads,
-            unfinished_folder: parts,
             categories: vec![CategoryRule {
                 name: "Films".to_string(),
                 extensions: vec!["mp4".to_string()],
@@ -295,14 +288,38 @@ mod tests {
     #[test]
     fn a_relative_folder_is_not_kept() {
         let path = temp_file("folders");
+        std::fs::write(&path, br#"{"version":2,"defaultFolder":"downloads"}"#)
+            .expect("a written file");
+        let settings = load(&path);
+        assert_eq!(settings.default_folder, "");
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn a_file_from_version_one_loses_its_unfinished_folder_gently() {
+        // The setting is gone: the application owns that folder now. An old
+        // file that still names one must read without an error, and the next
+        // save must not keep the key.
+        let path = temp_file("v1-parts");
+        let downloads = sample_folder("v1-downloads");
         std::fs::write(
             &path,
-            br#"{"version":1,"defaultFolder":"downloads","unfinishedFolder":"parts"}"#,
+            serde_json::json!({
+                "version": 1,
+                "defaultFolder": downloads.clone(),
+                "unfinishedFolder": "C:\\Users\\me\\Downloads",
+            })
+            .to_string(),
         )
         .expect("a written file");
         let settings = load(&path);
-        assert_eq!(settings.default_folder, "");
-        assert_eq!(settings.unfinished_folder, "");
+        assert_eq!(settings.default_folder, downloads);
+        save(&path, &settings).expect("a saved file");
+        let written = std::fs::read_to_string(&path).expect("read back");
+        assert!(
+            !written.contains("unfinishedFolder"),
+            "the dropped setting is not written again: {written}"
+        );
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 

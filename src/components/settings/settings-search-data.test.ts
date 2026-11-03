@@ -68,7 +68,7 @@ describe("settings search catalogue", () => {
       ["throttle", "setting-speed-limit-toggle"],
       ["bandwidth", "setting-speed-limit"],
       ["folder", "setting-default-folder"],
-      ["temporary", "setting-unfinished-folder"],
+      ["temporary", "setting-staging-folder"],
       ["notification", "setting-complete-dialog"],
       ["storage", "setting-default-folder"],
       ["browser", "setting-browser-capture"],

@@ -35,7 +35,7 @@ import { broadcastSettings } from "@/lib/app-events";
 import { describeError } from "@/lib/errors";
 import { applyFont, applyWeight } from "@/lib/fonts";
 import {
-  pushDownloadFolders,
+  pushCategoryRules,
   setBrowserConnections,
   setBrowserFolder,
   setBrowserPolicy,
@@ -90,7 +90,6 @@ const ENGINE_KEYS: readonly (keyof Settings)[] = [
   "showProgressOnStart",
   "clipboardCapture",
   "defaultFolder",
-  "unfinishedFolder",
   "defaultConnections",
   "browserCapture",
   "captureAsk",
@@ -464,9 +463,9 @@ async function applyEngine(next: Settings): Promise<void> {
     setShowProgressOnStart(next.showProgressOnStart),
     setClipboardCapture(next.clipboardCapture),
     setBrowserFolder(next.defaultFolder),
-    // The unfinished folder and the category folders decide where a start
-    // writes, so the engine needs them before the next download begins.
-    pushDownloadFolders(next.unfinishedFolder),
+    // The category folders decide where a start writes, so the engine needs
+    // them before the next download begins.
+    pushCategoryRules(),
     setBrowserConnections(next.defaultConnections),
     setBrowserPolicy({
       capture: next.browserCapture,

@@ -27,11 +27,6 @@ export interface Settings {
   uiWeight: UiWeight;
   /** Where a new download is saved when the user does not say. */
   defaultFolder: string;
-  /**
-   * Where the parts and the resume state of an unfinished download wait.
-   * Blank uses a folder inside the application's own data folder.
-   */
-  unfinishedFolder: string;
   /** Open on the folder of the last download instead of the default. */
   rememberLastFolder: boolean;
   /** Connections one download gets by default. */
@@ -100,7 +95,6 @@ export const DEFAULT_SETTINGS: Settings = {
   uiFont: "googlesans",
   uiWeight: "medium",
   defaultFolder: "",
-  unfinishedFolder: "",
   rememberLastFolder: true,
   defaultConnections: 8,
   maxConnections: 32,
@@ -191,10 +185,6 @@ export function loadSettings(): Settings {
       uiFont: font(value.uiFont, DEFAULT_SETTINGS.uiFont),
       uiWeight: weight(value.uiWeight, DEFAULT_SETTINGS.uiWeight),
       defaultFolder: text(value.defaultFolder, DEFAULT_SETTINGS.defaultFolder),
-      unfinishedFolder: text(
-        value.unfinishedFolder,
-        DEFAULT_SETTINGS.unfinishedFolder,
-      ),
       rememberLastFolder: boolean(
         value.rememberLastFolder,
         DEFAULT_SETTINGS.rememberLastFolder,
@@ -285,10 +275,8 @@ export async function syncEngineSettings(): Promise<Settings | null> {
   }
   const settings = loadSettings();
   settings.defaultFolder = text(saved.defaultFolder, settings.defaultFolder);
-  settings.unfinishedFolder = text(
-    saved.unfinishedFolder,
-    settings.unfinishedFolder,
-  );
+  // The folder for the bytes of an unfinished download is not a setting:
+  // the application owns it, and the file of the engine no longer names it.
   settings.defaultConnections = number(
     saved.defaultConnections,
     settings.defaultConnections,

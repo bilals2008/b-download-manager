@@ -81,7 +81,7 @@ export const SETTINGS_GROUPS: readonly {
         id: "save-locations",
         label: "Save locations",
         glyph: "save-to",
-        description: "Where files are written, and where they wait unfinished.",
+        description: "Where finished files are written.",
       },
       {
         id: "browser",

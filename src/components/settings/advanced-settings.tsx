@@ -83,6 +83,29 @@ export function AdvancedSettings({ onReset }: AdvancedSettingsProps) {
           </div>
         </SettingRow>
         <SettingRow
+          settingId="setting-staging-folder"
+          stacked
+          label="Temporary files"
+        >
+          <div className="flex items-center gap-2">
+            <Tooltip
+              content={paths?.stagingDir ?? "Reading the folder…"}
+              side="top"
+              className="block min-w-0 flex-1"
+            >
+              <p className="truncate font-mono text-chrome-micro text-chrome-menu-text">
+                {paths?.stagingDir ?? "Reading the folder…"}
+              </p>
+            </Tooltip>
+            <SettingsButton
+              onClick={() => reveal(paths?.stagingDir)}
+              disabled={!paths}
+            >
+              Open
+            </SettingsButton>
+          </div>
+        </SettingRow>
+        <SettingRow
           settingId="setting-log"
           stacked
           label="Log"

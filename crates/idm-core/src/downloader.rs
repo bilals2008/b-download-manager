@@ -233,6 +233,11 @@ pub struct Download {
     pub dir: PathBuf,
     pub stem: String,
     pub manifest: PathBuf,
+    /// Whether the parts live in a folder of their own rather than beside the
+    /// destination. A staged download owns its folder: when the last byte of
+    /// it is joined the folder goes too. Beside the destination the folder is
+    /// the user's and is never removed.
+    pub staged: bool,
     pub total: AtomicU64,
     pub max_connections: u32,
     pub segments: Mutex<Vec<Segment>>,
@@ -346,6 +351,9 @@ impl Download {
             .filter(|p| !p.as_os_str().is_empty())
             .map(PathBuf::from)
             .unwrap_or_else(|| finish.clone());
+        // The download owns its work folder only when it is not the folder
+        // the finished file lands in.
+        let staged = dir != finish;
         std::fs::create_dir_all(&finish)
             .map_err(|e| format!("cannot create {}: {e}", finish.display()))?;
         std::fs::create_dir_all(&dir)
@@ -373,6 +381,7 @@ impl Download {
             dir,
             stem,
             manifest,
+            staged,
             total: AtomicU64::new(0),
             max_connections: connections.max(1),
             segments: Mutex::new(Vec::new()),
@@ -524,6 +533,8 @@ impl Download {
             return Err("the download is still running".to_string());
         }
         remove_orphan_parts(&self.dir, &self.stem, &[]);
+        let _ = std::fs::remove_file(join_temp_path(&self.dir, &self.stem));
+        let _ = std::fs::remove_file(manifest_temp_path(&self.manifest));
         let _ = std::fs::remove_file(&self.manifest);
         self.segments
             .lock()
@@ -542,11 +553,26 @@ impl Download {
     ///
     /// A row that no window can show has nothing left to resume, so its bytes
     /// go with it. A task that is still winding down writes the manifest back
-    /// at its end; the flag makes it clean up there instead.
+    /// at its end; the flag makes it clean up there instead. A staged
+    /// download also loses the folder it owned, when nothing is left in it.
     pub fn forget_progress(&self) {
         self.discarded.store(true, Ordering::SeqCst);
         remove_orphan_parts(&self.dir, &self.stem, &[]);
+        let _ = std::fs::remove_file(join_temp_path(&self.dir, &self.stem));
+        let _ = std::fs::remove_file(manifest_temp_path(&self.manifest));
         let _ = std::fs::remove_file(&self.manifest);
+        self.prune_staged_dir();
+    }
+
+    /// Remove this download's work folder, when it owns one and it is empty.
+    ///
+    /// The folder is the application's only when it is not the destination's;
+    /// `remove_dir` refuses a folder that still holds bytes or files, so a
+    /// task winding down late keeps its own folder until it is done.
+    fn prune_staged_dir(&self) {
+        if self.staged {
+            let _ = std::fs::remove_dir(&self.dir);
+        }
     }
 
     /// The epoch of the newest task of this download.
@@ -987,7 +1013,7 @@ pub fn save_manifest(download: &Download) {
 
     // The manifest is written to a temporary file and renamed into place: a
     // crash in the middle of the write must not destroy the resume state.
-    let temp = download.manifest.with_extension("json.tmp");
+    let temp = manifest_temp_path(&download.manifest);
     if std::fs::write(&temp, text).is_ok() {
         let _ = std::fs::rename(&temp, &download.manifest);
     }
@@ -1462,7 +1488,7 @@ async fn assemble(download: &Arc<Download>) -> Result<(), String> {
         .expect("segments lock poisoned")
         .clone();
     let dest = download.dest.clone();
-    let tmp = download.dir.join(format!("{}.idmtmp", download.stem));
+    let tmp = join_temp_path(&download.dir, &download.stem);
 
     // A file whose size the server never told us is held in one part file
     // from the first byte to the end, so there is nothing to join.
@@ -1597,9 +1623,176 @@ fn remove_orphan_parts(dir: &Path, stem: &str, keep: &[Segment]) {
 }
 
 /// Remove the part files and the manifest of a finished download.
+///
+/// Everything the engine wrote for this download goes: the ranges, the
+/// joined temporary that became the file, the manifest and its write
+/// temporary. A staged download then loses the folder it owned, once it is
+/// empty.
 fn cleanup(download: &Arc<Download>) {
     remove_orphan_parts(&download.dir, &download.stem, &[]);
+    let _ = std::fs::remove_file(join_temp_path(&download.dir, &download.stem));
+    let _ = std::fs::remove_file(manifest_temp_path(&download.manifest));
     let _ = std::fs::remove_file(&download.manifest);
+    download.prune_staged_dir();
+}
+
+/// The temporary file the joined parts are written to before they become the
+/// destination file.
+pub fn join_temp_path(dir: &Path, stem: &str) -> PathBuf {
+    dir.join(format!("{stem}.idmtmp"))
+}
+
+/// The temporary file a manifest is written to and renamed from.
+fn manifest_temp_path(manifest: &Path) -> PathBuf {
+    manifest.with_extension("json.tmp")
+}
+
+/// What a relocation of a download's resume state produced.
+#[derive(Debug, Clone)]
+pub struct Relocated {
+    /// The manifest that now describes the state, in its new folder.
+    pub manifest: PathBuf,
+    /// The files of the old folder that were copied. They may be removed
+    /// once the index points at the new folder.
+    pub old_files: Vec<PathBuf>,
+}
+
+/// Copy a download's whole resume state into `to_dir`, rewriting the part
+/// paths the manifest records.
+///
+/// This is how an unfinished download survives a change of the application's
+/// storage layout. The bytes are **copied**, not moved, and every copy is
+/// measured in its new folder before it counts: a part that recorded bytes
+/// must hold at least as many there. The old files stay where they are until
+/// the caller has pointed its index at the new folder, so a crash anywhere in
+/// between leaves one complete copy of the state and nothing is ever deleted
+/// before its copy is verified. Files the old folder holds under this
+/// download's own names — the ranges of an earlier plan, a join temporary, a
+/// manifest temporary — travel with it rather than being dropped.
+pub fn relocate_resume_state(manifest: &Path, to_dir: &Path) -> Result<Relocated, String> {
+    let from_dir = manifest
+        .parent()
+        .filter(|dir| !dir.as_os_str().is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."));
+    if from_dir == to_dir {
+        return Ok(Relocated {
+            manifest: manifest.to_path_buf(),
+            old_files: Vec::new(),
+        });
+    }
+
+    let text = std::fs::read_to_string(manifest)
+        .map_err(|error| format!("{}: {error}", manifest.display()))?;
+    let mut plan: Manifest =
+        serde_json::from_str(&text).map_err(|error| format!("{}: {error}", manifest.display()))?;
+
+    std::fs::create_dir_all(to_dir).map_err(|error| format!("{}: {error}", to_dir.display()))?;
+
+    let mut old_files = vec![manifest.to_path_buf()];
+
+    // A range that recorded bytes must still have them; a range that recorded
+    // none has no part yet and needs no copy.
+    for segment in &mut plan.segments {
+        if segment.part.parent() == Some(to_dir) {
+            continue;
+        }
+        if !segment.part.exists() {
+            if segment.downloaded > 0 {
+                return Err(format!(
+                    "the part {} of {} is missing",
+                    segment.part.display(),
+                    manifest.display()
+                ));
+            }
+            continue;
+        }
+        let name = segment
+            .part
+            .file_name()
+            .map(|name| name.to_string_lossy().to_string())
+            .unwrap_or_else(|| format!("part{}", segment.id));
+        let target = to_dir.join(name);
+        std::fs::copy(&segment.part, &target)
+            .map_err(|error| format!("cannot copy {}: {error}", segment.part.display()))?;
+        let stored = target
+            .metadata()
+            .map_err(|error| format!("cannot check {}: {error}", target.display()))?
+            .len();
+        if stored < segment.downloaded {
+            return Err(format!(
+                "{} holds {stored} bytes, the manifest recorded {}",
+                target.display(),
+                segment.downloaded
+            ));
+        }
+        old_files.push(segment.part.clone());
+        segment.part = target;
+    }
+
+    // Anything else the engine wrote for this file name travels too: the
+    // bytes of a range an older plan dropped, a join that died, a manifest
+    // write that never finished. They are not trusted, but they are not
+    // deleted on the way out of the user's folder either.
+    let stem = manifest
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .and_then(|name| name.strip_suffix(".idm.json").map(str::to_string))
+        .unwrap_or_default();
+    if !stem.is_empty() {
+        if let Ok(entries) = std::fs::read_dir(&from_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if !path.is_file() || path == manifest {
+                    continue;
+                }
+                let name = entry.file_name().to_string_lossy().to_string();
+                let ours = name == format!("{stem}.idmtmp")
+                    || name == format!("{stem}.idm.json.tmp")
+                    || name
+                        .strip_prefix(&format!("{stem}.part"))
+                        .is_some_and(|id| {
+                            !id.is_empty() && id.bytes().all(|byte| byte.is_ascii_digit())
+                        });
+                if ours {
+                    let target = to_dir.join(&name);
+                    if std::fs::copy(&path, &target).is_ok() {
+                        old_files.push(path);
+                    }
+                }
+            }
+        }
+    }
+
+    // The rewritten manifest lands atomically and is read back: the entry the
+    // index will point at must parse.
+    let landing = manifest
+        .file_name()
+        .map(|name| to_dir.join(name))
+        .ok_or("the manifest has no file name")?;
+    let patched = serde_json::to_string_pretty(&plan)
+        .map_err(|error| format!("the manifest could not be written: {error}"))?;
+    let temp = manifest_temp_path(&landing);
+    std::fs::write(&temp, patched).map_err(|error| format!("{}: {error}", temp.display()))?;
+    std::fs::rename(&temp, &landing).map_err(|error| format!("{}: {error}", landing.display()))?;
+    let reread = std::fs::read_to_string(&landing)
+        .map_err(|error| format!("{}: {error}", landing.display()))?;
+    serde_json::from_str::<Manifest>(&reread)
+        .map_err(|_| format!("{} does not read back", landing.display()))?;
+
+    Ok(Relocated {
+        manifest: landing,
+        old_files,
+    })
+}
+
+/// Remove the files a relocation copied, once the index points at the new
+/// folder. A file that is already gone is not an error: the state it
+/// described lives in the new folder either way.
+pub fn discard_relocated(state: &Relocated) {
+    for file in &state.old_files {
+        let _ = std::fs::remove_file(file);
+    }
 }
 
 /// Check that the volume the bytes land on has room for the download.

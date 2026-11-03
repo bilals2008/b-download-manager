@@ -23,10 +23,12 @@ fn directory_of(path: &Path) -> std::path::PathBuf {
 ///
 /// The old file is moved aside first, because Windows will not rename over an
 /// existing file, and it is only removed once the new file is in place. A
-/// failure therefore leaves the old file, never a half written one.
+/// failure therefore leaves the old file, never a half written one. The file
+/// moved aside carries a leading dot and the hidden flag, so even the brief
+/// swap does not leave a strange name in the folder the user reads as theirs.
 pub fn replace_file(from: &Path, to: &Path) -> std::io::Result<()> {
     let backup = match to.file_name() {
-        Some(name) => to.with_file_name(format!("{}.idmold", name.to_string_lossy())),
+        Some(name) => to.with_file_name(format!(".{}.idmold", name.to_string_lossy())),
         None => to.with_extension("idmold"),
     };
 
@@ -55,28 +57,38 @@ pub fn replace_file(from: &Path, to: &Path) -> std::io::Result<()> {
 fn move_into_place(from: &Path, to: &Path) -> std::io::Result<()> {
     match std::fs::rename(from, to) {
         Ok(()) => Ok(()),
-        Err(_) => {
-            // A copy cannot replace a name atomically, so it goes beside the
-            // destination first and is renamed over it once complete.
-            let temporary = to.with_file_name(format!("{}.idmmove", name_of(to)));
-            // The copied bytes have to reach the disk before the name does.
-            // `sync_all` needs a writable handle on Windows: flushing a file
-            // that was opened for reading alone answers "Access is denied",
-            // which is how every cross-volume download failed.
-            let copied = std::fs::copy(from, &temporary).and_then(|_| {
-                std::fs::OpenOptions::new()
-                    .write(true)
-                    .open(&temporary)?
-                    .sync_all()?;
-                std::fs::rename(&temporary, to)
-            });
-            if copied.is_err() {
-                let _ = std::fs::remove_file(&temporary);
-                return copied;
-            }
-            std::fs::remove_file(from)
-        }
+        Err(_) => copy_into_place(from, to),
     }
+}
+
+/// Copy a file into place through a temporary beside the destination.
+///
+/// The copy cannot replace a name atomically, so the bytes go to a temporary
+/// first and that temporary is renamed over the destination once complete.
+/// The temporary carries a leading dot: that is the name the shell's default
+/// view hides on Unix, and on Windows it reads as a temporary even where it
+/// is shown. The hidden flag is deliberately not set on it — a file with that
+/// flag cannot be opened for writing on some systems, and this file still has
+/// to be filled.
+fn copy_into_place(from: &Path, to: &Path) -> std::io::Result<()> {
+    let temporary = to.with_file_name(format!(".{}.idmmove", name_of(to)));
+    let _ = std::fs::remove_file(&temporary);
+    // The copied bytes have to reach the disk before the name does.
+    // `sync_all` needs a writable handle on Windows: flushing a file
+    // that was opened for reading alone answers "Access is denied",
+    // which is how every cross-volume download failed.
+    let copied = std::fs::copy(from, &temporary).and_then(|_| {
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(&temporary)?
+            .sync_all()?;
+        std::fs::rename(&temporary, to)
+    });
+    if copied.is_err() {
+        let _ = std::fs::remove_file(&temporary);
+        return copied;
+    }
+    std::fs::remove_file(from)
 }
 
 fn name_of(path: &Path) -> String {
@@ -172,5 +184,35 @@ mod tests {
         let free = free_space(&std::env::temp_dir());
         assert!(free.is_some(), "the temp volume must report its free space");
         assert!(free.unwrap() > 0);
+    }
+
+    /// The copy path of a move across volumes: the bytes go through a
+    /// temporary beside the destination, and that temporary is hidden and
+    /// gone when the move ends.
+    #[test]
+    fn a_move_through_a_temporary_leaves_only_the_file() {
+        let dir = std::env::temp_dir().join(format!("bdm-disk-move-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("the test folder");
+        let from = dir.join("source.bin");
+        let to = dir.join("target.bin");
+        std::fs::write(&from, b"the bytes").expect("the source");
+
+        copy_into_place(&from, &to).expect("a copy through a temporary");
+
+        assert_eq!(std::fs::read(&to).expect("the file"), b"the bytes");
+        assert!(!from.exists(), "the source went with it");
+        let leftovers: Vec<String> = std::fs::read_dir(&dir)
+            .expect("the folder")
+            .flatten()
+            .map(|entry| entry.file_name().to_string_lossy().to_string())
+            .collect();
+        assert_eq!(
+            leftovers,
+            vec!["target.bin".to_string()],
+            "no temporary is left"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

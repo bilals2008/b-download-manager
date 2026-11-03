@@ -12,6 +12,7 @@ use idm_core::session::{Index, KnownDownload};
 use crate::prefs::{self, DesktopPreferences};
 use crate::queue::Queue;
 use crate::settings_store::{self, EngineSettings};
+use crate::staging::Staging;
 use crate::video::{MediaJob, MediaState, SourcePlan};
 
 /// The capture rules the browser extension follows while the application is
@@ -131,8 +132,8 @@ pub struct AppState {
     /// Whether the settings file was on disk when the app opened. A first run
     /// or an upgrade has none, so the webview's copy seeds it.
     settings_file: AtomicBool,
-    /// The application's own data folder, where a blank unfinished folder
-    /// resolves to. Held so a settings change can re-resolve it.
+    /// The application's own data folder, held so the staging tree can be
+    /// re-resolved and the legacy folders swept.
     data_directory: Mutex<Option<PathBuf>>,
     /// Whether the main tray icon exists. Without it, hiding the window would
     /// strand the application with no way back.
@@ -149,9 +150,11 @@ pub struct AppState {
     /// Which appearance the window is drawn in, as the window last said. The
     /// tray icon picks its inks from this when "Dark Mode support" is on.
     appearance_is_light: AtomicBool,
-    /// Where the parts and the manifest of a new download live. `None` keeps
-    /// them beside the destination, which is what an older index expects.
-    unfinished_dir: Mutex<Option<PathBuf>>,
+    /// Where the parts and the manifest of a new download live: the
+    /// application's managed staging tree, never the user's download folder.
+    /// `None` until setup has resolved it, which refuses to start downloads
+    /// rather than letting their bytes land beside the finished file.
+    staging: Mutex<Option<Staging>>,
     /// The category folders, in the order a file name is matched against them.
     category_rules: Mutex<Vec<CategoryRule>>,
     /// Held while a start checks its destination and inserts the download, so
@@ -192,7 +195,7 @@ impl Default for AppState {
             show_progress_on_start: AtomicBool::new(false),
             clipboard_capture: AtomicBool::new(false),
             appearance_is_light: AtomicBool::new(false),
-            unfinished_dir: Mutex::new(None),
+            staging: Mutex::new(None),
             category_rules: Mutex::new(Vec::new()),
             start_gate: Mutex::new(()),
             queue: Queue::default(),
@@ -445,10 +448,10 @@ impl AppState {
     /// The part files and the manifests the downloads in the list write to,
     /// minus one row.
     ///
-    /// All of a download's temporaries share one unfinished folder and are
-    /// named after the destination file, so a new start has to know which of
-    /// those names are taken even when the destinations themselves are all
-    /// different files. As with the destinations, a finished row holds
+    /// A staged download keeps its temporaries in a folder named by its id,
+    /// so a new start cannot collide with it; a row of the older layout keeps
+    /// them beside the file or in one shared flat folder, named after the
+    /// destination file. As with the destinations, a finished row holds
     /// nothing and a row being started again is not a conflict with itself.
     pub fn work_bases_except(&self, except: Option<u64>) -> Vec<PathBuf> {
         self.list()
@@ -486,46 +489,172 @@ impl AppState {
             .expect("browser folder lock poisoned") = folder;
     }
 
-    /// Where the parts and the manifest of a new download live. `None` keeps
-    /// them beside the destination, which is what an older index expects.
-    pub fn unfinished_dir(&self) -> Option<PathBuf> {
-        self.unfinished_dir
-            .lock()
-            .expect("unfinished folder lock poisoned")
-            .clone()
+    /// Where the parts and the manifest of a new download live. `None` until
+    /// setup has resolved the staging tree; a start without it fails rather
+    /// than writing the user's download folder full of temporaries.
+    pub fn staging(&self) -> Option<Staging> {
+        self.staging.lock().expect("staging lock poisoned").clone()
     }
 
-    /// Point new downloads at the unfinished folder and give every category
-    /// its own destination.
+    /// The folder one download owns for its ranges and manifest, for a
+    /// destination at `dest`. The folder is on the volume of the destination
+    /// when that volume can hold it, so the finished file is renamed into
+    /// place rather than copied across a disk.
+    pub fn work_dir(&self, id: u64, dest: &Path) -> Option<PathBuf> {
+        self.staging().map(|staging| staging.download_dir(dest, id))
+    }
+
+    /// The folder one media job owns for its tracks and join files.
+    pub fn media_work_dir(&self, job_id: u64, dest: &Path, name: &str) -> Option<PathBuf> {
+        self.staging()
+            .map(|staging| staging.media_dir(dest, job_id, name))
+    }
+
+    /// Point the state at the staging tree and sweep what no row claims.
     ///
-    /// The window owns both values; the backend only applies them, so a
-    /// browser hand-over lands where the options window says. Temporaries no
-    /// row claims are cleared from the folder that is being left as well as
-    /// from the one being taken, so a change does not strand them.
-    ///
-    /// The start gate is taken first and the folder lock second, the same
-    /// order a start uses, so pushing a folder while one starts cannot
-    /// deadlock.
-    pub fn set_download_folders(&self, unfinished: Option<PathBuf>, rules: Vec<CategoryRule>) {
+    /// Called from setup once the tree is created. The sweep runs under the
+    /// start gate's order (gate first, staging second) so it cannot race a
+    /// start into deleting fresh files.
+    pub fn set_staging(&self, staging: Staging) {
         let _gate = self.start_gate();
-        let previous = {
-            let mut slot = self
-                .unfinished_dir
-                .lock()
-                .expect("unfinished folder lock poisoned");
-            let previous = slot.take();
-            *slot = unfinished;
-            previous
-        };
+        {
+            let mut slot = self.staging.lock().expect("staging lock poisoned");
+            *slot = Some(staging);
+        }
+        self.sweep_staging();
+    }
+
+    /// Give every category its own destination.
+    ///
+    /// The window owns the list; the backend only applies it, so a browser
+    /// hand-over lands where the options window says.
+    pub fn set_categories(&self, rules: Vec<CategoryRule>) {
+        let _gate = self.start_gate();
         *self
             .category_rules
             .lock()
             .expect("category rules lock poisoned") = rules;
-        if let Some(folder) = previous {
-            self.clean_folder(&folder);
+    }
+
+    /// Remove the staging folders no row in the list claims.
+    ///
+    /// A per-download folder is named by its id: one no row carries is the
+    /// leftover of a deleted row or of a run whose files outlived the record,
+    /// and by the recovery policy its bytes go with the row. Only numeric
+    /// folders are touched — anything else in the tree was not written by a
+    /// download. The same sweep covers the flat layout of the earlier
+    /// releases, where files sat loose in the old unfinished folder.
+    fn sweep_staging(&self) {
+        let Some(staging) = self.staging() else {
+            return;
+        };
+        // A finished row holds nothing: its ranges were joined and its folder
+        // is left over from a run that ended before the cleanup. An unfinished
+        // row claims its folder.
+        let rows = self.list();
+        // A row claims the folder it writes in, not merely its id: a
+        // download whose folder moved to another volume leaves the old one
+        // behind, and that one is empty and goes.
+        let claimed: Vec<PathBuf> = rows
+            .iter()
+            .filter(|download| download.status() != Status::Completed)
+            .map(|download| download.dir.clone())
+            .collect();
+
+        // The folders that hold the per-download folders: the one beside the
+        // application data, and the one on every other volume a row uses.
+        let mut roots: Vec<PathBuf> = vec![staging.downloads_root().to_path_buf()];
+        for download in &rows {
+            if let Some(parent) = download.dir.parent() {
+                if !roots.iter().any(|root| root == parent) {
+                    roots.push(parent.to_path_buf());
+                }
+            }
         }
-        if let Some(folder) = self.unfinished_dir() {
-            self.clean_folder(&folder);
+
+        for root in roots {
+            let Ok(entries) = std::fs::read_dir(&root) else {
+                continue;
+            };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if claimed.iter().any(|dir| dir == &path) {
+                    continue;
+                }
+                if path.is_dir() {
+                    let _ = std::fs::remove_dir_all(&path);
+                }
+            }
+            // A volume that holds nothing of ours any more keeps no folder:
+            // the hidden folder at its root would only be litter.
+            let _ = std::fs::remove_dir(&root);
+            if let Some(volume) = root.parent() {
+                let _ = std::fs::remove_dir(volume);
+            }
+        }
+
+        // The flat layout of the earlier releases: loose part and manifest
+        // files in the old unfinished folder beside the application data.
+        let legacy = staging
+            .root()
+            .parent()
+            .map(|data| data.join(crate::staging::LEGACY_ROOT_NAME));
+        if let Some(legacy) = legacy.filter(|dir| dir.exists() && !dir.eq(&staging.root())) {
+            self.clean_flat_folder(&legacy);
+        }
+        // A media job lives in the memory of the application, not in a file:
+        // a folder in the media tree that no running job claims is the
+        // leftover of a job that died with the last run.
+        let claimed_media: Vec<String> = self
+            .media_jobs_snapshot()
+            .into_iter()
+            .filter_map(|job| job.work_dir.clone())
+            .collect();
+        if let Ok(entries) = std::fs::read_dir(staging.media_root()) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if !path.is_dir() {
+                    continue;
+                }
+                let name = path.to_string_lossy().to_string();
+                if claimed_media.iter().any(|claimed| claimed == &name) {
+                    continue;
+                }
+                let _ = std::fs::remove_dir_all(&path);
+            }
+        }
+    }
+
+    /// Remove the parts and manifests in one old flat folder that no row in
+    /// the list claims.
+    ///
+    /// The caller holds the start gate, so a download cannot be inserting its
+    /// row while its fresh files are read as abandoned. Only the engine's own
+    /// names are touched: anything else in the folder is the user's.
+    fn clean_flat_folder(&self, folder: &std::path::Path) {
+        let claimed: Vec<String> = self
+            .list()
+            .into_iter()
+            .filter(|download| same_folder(&download.dir, folder))
+            .map(|download| download.stem.clone())
+            .collect();
+        let Ok(entries) = std::fs::read_dir(folder) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            let Some(stem) = unfinished_stem(&name) else {
+                continue;
+            };
+            if claimed.iter().any(|known| known == stem) {
+                continue;
+            }
+            let path = entry.path();
+            if path.is_file() {
+                let _ = std::fs::remove_file(&path);
+            } else if path.is_dir() {
+                let _ = std::fs::remove_dir(&path);
+            }
         }
     }
 
@@ -573,37 +702,6 @@ impl AppState {
             .filter(|folder| !folder.is_empty())?;
         let path = PathBuf::from(folder);
         path.is_absolute().then_some(path)
-    }
-
-    /// Remove the parts and manifests in one unfinished folder that no row in
-    /// the list claims.
-    ///
-    /// The caller holds the start gate, so a download cannot be inserting its
-    /// row while its fresh files are read as abandoned. Only the engine's own
-    /// names are touched: anything else in the folder is the user's.
-    fn clean_folder(&self, folder: &std::path::Path) {
-        let claimed: Vec<String> = self
-            .list()
-            .into_iter()
-            .filter(|download| same_folder(&download.dir, folder))
-            .map(|download| download.stem.clone())
-            .collect();
-        let Ok(entries) = std::fs::read_dir(folder) else {
-            return;
-        };
-        for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            let Some(stem) = unfinished_stem(&name) else {
-                continue;
-            };
-            if claimed.iter().any(|known| known == stem) {
-                continue;
-            }
-            let path = entry.path();
-            if path.is_file() {
-                let _ = std::fs::remove_file(&path);
-            }
-        }
     }
 
     /// The capture rules the extension follows while the app runs.
@@ -813,14 +911,11 @@ impl AppState {
 
     /// Push the saved settings into the runtime fields, the whole object at a
     /// time, so a change cannot leave the file and the engine disagreeing.
+    ///
+    /// The staging tree is not part of the settings: the application owns it,
+    /// setup resolved it, and only the category folders arrive from the file.
     pub fn apply_engine_settings(&self) {
         let settings = self.engine_settings();
-        let data_dir = self
-            .data_directory
-            .lock()
-            .expect("data dir lock poisoned")
-            .clone()
-            .unwrap_or_else(|| PathBuf::from("."));
         let rate = if settings.speed_limit_enabled {
             settings.speed_limit_bytes
         } else {
@@ -840,15 +935,7 @@ impl AppState {
         self.set_browser_folder(string_folder(&settings.default_folder));
         self.set_video_button_settings(settings.video_button.clone());
         self.set_browser_policy(settings.browser_policy.clone());
-        // The unfinished folder is stored as the reader wrote it, blank for
-        // the engine's own; the resolution matches the command below, which
-        // stores the same raw value.
-        let unfinished = match settings.unfinished_folder.trim().is_empty() {
-            true => data_dir.join("unfinished"),
-            false => PathBuf::from(settings.unfinished_folder.trim()),
-        };
-        let _ = std::fs::create_dir_all(&unfinished);
-        self.set_download_folders(Some(unfinished), settings.categories.clone());
+        self.set_categories(settings.categories.clone());
     }
 
     /// The choices the tray and the close button follow.
@@ -1061,9 +1148,11 @@ mod tests {
     #[test]
     fn abandoned_temporaries_are_cleared_and_a_known_stem_is_kept() {
         let dir = temp_dir("clean");
-        let unfinished = dir.join("unfinished");
+        // The flat layout of the earlier releases: loose files in the old
+        // unfinished folder beside the application data.
+        let legacy = dir.join("unfinished");
         let final_folder = dir.join("final");
-        std::fs::create_dir_all(&unfinished).expect("folder");
+        std::fs::create_dir_all(&legacy).expect("folder");
         std::fs::create_dir_all(&final_folder).expect("folder");
 
         let state = AppState::default();
@@ -1071,7 +1160,7 @@ mod tests {
             1,
             "https://example.org/kept.mp4".to_string(),
             final_folder.join("kept.mp4"),
-            Some(&unfinished),
+            Some(&legacy),
             4,
             None,
             None,
@@ -1087,18 +1176,19 @@ mod tests {
             "gone.mp4.idmtmp",
             "notes.txt",
         ] {
-            std::fs::write(unfinished.join(name), b"x").expect("write");
+            std::fs::write(legacy.join(name), b"x").expect("write");
         }
 
-        state.set_download_folders(Some(unfinished.clone()), Vec::new());
+        let staging = crate::staging::Staging::resolve(&dir).expect("a staging tree");
+        state.set_staging(staging);
 
-        assert!(unfinished.join("kept.mp4.part0").exists());
-        assert!(unfinished.join("kept.mp4.idm.json").exists());
-        assert!(!unfinished.join("gone.mp4.part0").exists());
-        assert!(!unfinished.join("gone.mp4.idm.json.tmp").exists());
-        assert!(!unfinished.join("gone.mp4.idmtmp").exists());
+        assert!(legacy.join("kept.mp4.part0").exists());
+        assert!(legacy.join("kept.mp4.idm.json").exists());
+        assert!(!legacy.join("gone.mp4.part0").exists());
+        assert!(!legacy.join("gone.mp4.idm.json.tmp").exists());
+        assert!(!legacy.join("gone.mp4.idmtmp").exists());
         assert!(
-            unfinished.join("notes.txt").exists(),
+            legacy.join("notes.txt").exists(),
             "a file the engine did not write stays"
         );
         let _ = std::fs::remove_dir_all(&dir);
@@ -1241,32 +1331,29 @@ mod tests {
     fn a_rule_finds_the_category_and_its_folder() {
         let dir = temp_dir("rules");
         let state = AppState::default();
-        state.set_download_folders(
-            Some(dir.clone()),
-            vec![
-                CategoryRule {
-                    name: "Video".to_string(),
-                    extensions: vec!["mp4".to_string(), "mkv".to_string()],
-                    folder: "relative\\folder".to_string(),
-                    builtin: true,
-                    fallback: false,
-                },
-                CategoryRule {
-                    name: "Films".to_string(),
-                    extensions: vec!["mp4".to_string()],
-                    folder: dir.join("films").to_string_lossy().to_string(),
-                    builtin: false,
-                    fallback: false,
-                },
-                CategoryRule {
-                    name: "Other".to_string(),
-                    extensions: Vec::new(),
-                    folder: dir.join("misc").to_string_lossy().to_string(),
-                    builtin: true,
-                    fallback: true,
-                },
-            ],
-        );
+        state.set_categories(vec![
+            CategoryRule {
+                name: "Video".to_string(),
+                extensions: vec!["mp4".to_string(), "mkv".to_string()],
+                folder: "relative\\folder".to_string(),
+                builtin: true,
+                fallback: false,
+            },
+            CategoryRule {
+                name: "Films".to_string(),
+                extensions: vec!["mp4".to_string()],
+                folder: dir.join("films").to_string_lossy().to_string(),
+                builtin: false,
+                fallback: false,
+            },
+            CategoryRule {
+                name: "Other".to_string(),
+                extensions: Vec::new(),
+                folder: dir.join("misc").to_string_lossy().to_string(),
+                builtin: true,
+                fallback: true,
+            },
+        ]);
 
         assert_eq!(
             state
@@ -1310,16 +1397,13 @@ mod tests {
 
         // Without a fallback the answer is no category at all, and the
         // destination stays where the start put it.
-        state.set_download_folders(
-            Some(dir.clone()),
-            vec![CategoryRule {
-                name: "Video".to_string(),
-                extensions: vec!["mp4".to_string()],
-                folder: String::new(),
-                builtin: true,
-                fallback: false,
-            }],
-        );
+        state.set_categories(vec![CategoryRule {
+            name: "Video".to_string(),
+            extensions: vec!["mp4".to_string()],
+            folder: String::new(),
+            builtin: true,
+            fallback: false,
+        }]);
         assert_eq!(
             state.detect_category(Path::new("C:\\Downloads\\unknown.bin")),
             None
