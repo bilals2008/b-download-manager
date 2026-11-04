@@ -18,10 +18,10 @@ export interface TooltipPlacement {
 }
 
 /** Distance between the trigger and the tooltip body: the caret plus air. */
-export const TOOLTIP_GAP = 10;
+export const TOOLTIP_GAP = 8;
 
 const MARGIN = 8;
-const ARROW_INSET = 16;
+const ARROW_INSET = 12;
 
 const OPPOSITE: Record<TooltipSide, TooltipSide> = {
   top: "bottom",

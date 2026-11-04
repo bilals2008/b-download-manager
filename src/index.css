@@ -1013,8 +1013,15 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
   --radius-chrome: 0.5rem;
+  /* A tooltip is a caption on the surface, not a window: its corner is
+     tighter than the panels it floats over. */
+  --radius-tooltip: 6px;
 
   --shadow-float: var(--float-shadow);
+  /* The tooltip sits over arbitrary content, so it carries its own light
+     shadow rather than the heavy one the floating windows use. */
+  --shadow-tooltip:
+    0 8px 20px -12px rgb(0 0 0 / 0.55), 0 1px 3px -1px rgb(0 0 0 / 0.35);
 
   /*
     A file whose size the server does not tell has no percentage to show, so
@@ -1147,34 +1154,33 @@
 }
 
 /*
-  The tooltip rises out of its trigger, softens into focus, and leaves on the
-  same curve in reverse. The node is dropped when the leave transition ends;
-  `visibility` is what keeps the text out of the accessibility tree and the
-  layout until it opens.
+  The tooltip rises out of its trigger and leaves on the same curve in
+  reverse. The node is dropped when the leave transition ends; `visibility`
+  is what keeps the text out of the accessibility tree and the layout until it
+  opens.
 */
 [data-slot="tooltip"] {
   --tooltip-shift-x: 0rem;
-  --tooltip-shift-y: 0.35rem;
+  --tooltip-shift-y: 0.2rem;
   opacity: 0;
   visibility: hidden;
-  filter: blur(5px);
-  transform: translate(var(--tooltip-shift-x), var(--tooltip-shift-y)) scale(0.94);
+  transform: translate(var(--tooltip-shift-x), var(--tooltip-shift-y)) scale(0.98);
   transform-origin: center bottom;
 }
 
 [data-slot="tooltip"][data-side="bottom"] {
-  --tooltip-shift-y: -0.35rem;
+  --tooltip-shift-y: -0.2rem;
   transform-origin: center top;
 }
 
 [data-slot="tooltip"][data-side="left"] {
-  --tooltip-shift-x: 0.35rem;
+  --tooltip-shift-x: 0.2rem;
   --tooltip-shift-y: 0rem;
   transform-origin: right center;
 }
 
 [data-slot="tooltip"][data-side="right"] {
-  --tooltip-shift-x: -0.35rem;
+  --tooltip-shift-x: -0.2rem;
   --tooltip-shift-y: 0rem;
   transform-origin: left center;
 }
@@ -1182,17 +1188,15 @@
 [data-slot="tooltip"][data-open="true"] {
   opacity: 1;
   visibility: visible;
-  filter: blur(0);
   transform: translate(0, 0) scale(1);
 }
 
 @media (prefers-reduced-motion: no-preference) {
   [data-slot="tooltip"] {
     transition:
-      opacity 140ms ease-out,
-      transform 240ms cubic-bezier(0.16, 1, 0.3, 1),
-      filter 160ms ease-out,
-      visibility 0s linear 240ms;
+      opacity 100ms ease-out,
+      transform 130ms cubic-bezier(0.16, 1, 0.3, 1),
+      visibility 0s linear 130ms;
   }
 
   [data-slot="tooltip"][data-open="true"] {
@@ -1202,7 +1206,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   [data-slot="tooltip"] {
-    filter: none;
     transform: none;
   }
 }

@@ -12,37 +12,37 @@ const tip = { left: 0, top: 0, width: 120, height: 28 };
 
 assert.deepEqual(
   placeTooltip("top", { left: 400, top: 100, width: 100, height: 40 }, tip, view),
-  { side: "top", x: 390, y: 62, arrow: 60 },
+  { side: "top", x: 390, y: 64, arrow: 60 },
   "centred above the trigger when there is room",
 );
 
 assert.deepEqual(
   placeTooltip("top", { left: 400, top: 10, width: 100, height: 40 }, tip, view),
-  { side: "bottom", x: 390, y: 60, arrow: 60 },
+  { side: "bottom", x: 390, y: 58, arrow: 60 },
   "flips under the trigger when the top is too tight",
 );
 
 assert.deepEqual(
   placeTooltip("top", { left: 0, top: 100, width: 40, height: 40 }, tip, view),
-  { side: "top", x: 8, y: 62, arrow: 16 },
+  { side: "top", x: 8, y: 64, arrow: 12 },
   "clamps against the left edge and holds the caret inside",
 );
 
 assert.deepEqual(
   placeTooltip("top", { left: 960, top: 100, width: 40, height: 40 }, tip, view),
-  { side: "top", x: 872, y: 62, arrow: 104 },
+  { side: "top", x: 872, y: 64, arrow: 108 },
   "clamps against the right edge and holds the caret inside",
 );
 
 assert.deepEqual(
   placeTooltip("left", { left: 500, top: 300, width: 40, height: 40 }, tip, view),
-  { side: "left", x: 370, y: 306, arrow: 14 },
+  { side: "left", x: 372, y: 306, arrow: 14 },
   "sits beside the trigger when there is room",
 );
 
 assert.deepEqual(
   placeTooltip("left", { left: 10, top: 300, width: 40, height: 40 }, tip, view),
-  { side: "right", x: 60, y: 306, arrow: 14 },
+  { side: "right", x: 58, y: 306, arrow: 14 },
   "flips to the other side at the window edge",
 );
 

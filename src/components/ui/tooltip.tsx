@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useId,
   useLayoutEffect,
   useRef,
   useState,
@@ -26,7 +27,6 @@ interface TooltipProps {
   /** Extra classes for the anchor, such as `shrink-0` in a flex row. */
   className?: string;
 }
-
 /** How long the next tooltip stays warm after one closes. */
 const WARM_MS = 300;
 
@@ -44,12 +44,13 @@ export function Tooltip({
   content,
   children,
   side = "top",
-  delay = 320,
+  delay = 260,
   shortcut,
   className,
 }: TooltipProps) {
   const anchorRef = useRef<HTMLSpanElement>(null);
   const tipRef = useRef<HTMLDivElement>(null);
+  const tipId = useId();
   const timer = useRef<number | undefined>(undefined);
   const frame = useRef<number | undefined>(undefined);
   const [open, setOpen] = useState(false);
@@ -196,6 +197,7 @@ export function Tooltip({
       <span
         ref={anchorRef}
         className={cn("inline-flex", className)}
+        aria-describedby={open ? tipId : undefined}
         onPointerEnter={(event) => {
           if (event.pointerType !== "touch") {
             openSoon();
@@ -211,6 +213,7 @@ export function Tooltip({
       {mounted && host
         ? createPortal(
             <div
+              id={tipId}
               ref={tipRef}
               role="tooltip"
               aria-hidden={open ? undefined : true}
@@ -229,11 +232,11 @@ export function Tooltip({
                   setMounted(false);
                 }
               }}
-              className="pointer-events-none fixed z-50 flex w-max max-w-64 items-center gap-2 rounded-md bg-chrome-popup px-2.5 py-1.5 text-xs leading-snug text-chrome-menu-text shadow-float select-none"
+              className="pointer-events-none fixed z-50 flex w-max max-w-60 items-center gap-1.5 rounded-tooltip bg-chrome-popup px-2 py-1 text-chrome-micro leading-tight text-chrome-title-text shadow-tooltip select-none"
             >
               <span className="min-w-0 break-words">{content}</span>
               {shortcut ? (
-                <kbd className="shrink-0 rounded-sm bg-chrome-menu-hover px-1.5 font-mono text-chrome-micro text-chrome-muted">
+                <kbd className="shrink-0 rounded-sm bg-chrome-menu-hover px-1 font-mono text-chrome-caption leading-4 text-chrome-muted">
                   {shortcut}
                 </kbd>
               ) : null}
@@ -245,7 +248,7 @@ export function Tooltip({
                     : { top: spot?.arrow }
                 }
                 className={cn(
-                  "absolute size-2 rotate-45 bg-chrome-popup",
+                  "absolute size-1.5 rotate-45 bg-chrome-popup",
                   CARET[placement],
                 )}
               />
@@ -259,8 +262,8 @@ export function Tooltip({
 
 /** The half of the caret that clears the tooltip, per side. */
 const CARET: Record<TooltipSide, string> = {
-  top: "-bottom-[5px] -translate-x-1/2",
-  bottom: "-top-[5px] -translate-x-1/2",
-  left: "-right-[5px] -translate-y-1/2",
-  right: "-left-[5px] -translate-y-1/2",
+  top: "-bottom-[3px] -translate-x-1/2",
+  bottom: "-top-[3px] -translate-x-1/2",
+  left: "-right-[3px] -translate-y-1/2",
+  right: "-left-[3px] -translate-y-1/2",
 };
