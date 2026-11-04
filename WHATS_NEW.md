@@ -8,6 +8,31 @@
   section for its own version, and the release page uses the same words.
 -->
 
+## 0.3.2 — 4 November 2026
+
+### A quieter look
+
+- The windows lost their heavy borders and the Settings pages were redrawn, so more of your list fits on screen.
+- A new dark theme, Ayu Dark, is waiting for you in Appearance.
+
+### Keys you choose
+
+- Every action now has a keyboard shortcut, and you can change any of them in Settings.
+- The menus and tooltips show the key that works, so nothing has to be looked up.
+
+### Files where they belong
+
+- A download that is not finished yet stays in the app's own storage; only the finished file lands in your download folder.
+- A download that starts on one drive and finishes on another now works.
+
+### Updates
+
+- The installer wears the app's own mark and shows a real progress bar while the new version downloads.
+
+### In the browser
+
+- The video button appears as soon as the pointer is on a player, the panel stays open while you pick a quality, and the browser shows the quality names the page offers.
+
 ## 0.3.1 — 2 November 2026
 
 ### Find any setting
