@@ -46,33 +46,35 @@ export function commitsInRange(range, execFileSync) {
 export function renderSection(version, date, commits) {
   const lines = [`## [${version}] - ${date}`, ""];
 
+  const heading = (title) => {
+    if (lines.at(-1) !== "") lines.push("");
+    lines.push(`### ${title}`, "");
+  };
+
   const breaking = commits.filter((commit) => commit.breaking);
   if (breaking.length > 0) {
-    lines.push("### Breaking changes", "");
+    heading("Breaking changes");
     for (const commit of breaking) lines.push(...bullet(commit));
   }
+
+  const recognised = new Set(GROUPS.flatMap((group) => group.types));
+  // Housekeeping (`chore: release vX.Y.Z`) never belongs in the reader's notes.
+  recognised.add("chore");
+  const isKnown = (commit) =>
+    conventional(commit.subject)?.type && recognised.has(conventional(commit.subject).type);
+  // A commit that follows no convention is a change the reader should still
+  // see; it rides in the "Changed" group instead of a second heading.
+  const leftovers = commits.filter((commit) => !commit.breaking && !isKnown(commit));
 
   for (const group of GROUPS) {
     const own = commits.filter(
       (commit) =>
         !commit.breaking && group.types.includes(conventional(commit.subject)?.type),
     );
+    if (group.title === "Changed") own.push(...leftovers);
     if (own.length === 0) continue;
-    lines.push(`### ${group.title}`, "");
+    heading(group.title);
     for (const commit of own) lines.push(...bullet(commit));
-  }
-
-  const recognised = new Set(GROUPS.flatMap((group) => group.types));
-  // Housekeeping (`chore: release vX.Y.Z`) never belongs in the reader's notes.
-  recognised.add("chore");
-  const left = commits.filter(
-    (commit) =>
-      !commit.breaking &&
-      !(conventional(commit.subject)?.type && recognised.has(conventional(commit.subject).type)),
-  );
-  if (left.length > 0) {
-    lines.push("### Changed", "");
-    for (const commit of left) lines.push(...bullet(commit));
   }
 
   return `${lines.join("\n").trimEnd()}\n`;

@@ -19,19 +19,18 @@ edit one before its release ships if a bullet needs better words.
 - **update:** Brand the installer and show real update progress
 - **storage:** Keep unfinished downloads out of the user's download folder
 - **ui:** Redesign settings and tips, add the Ayu Dark theme
+
 ### Changed
 
 - **ui:** Drop the nested borders and compact the complete window
 - **settings:** Compact the settings pages
+- **release:** Add the 0.3.2 notes
+
 ### Fixed
 
 - **extension:** Show the video button for a pointer already on the player
 - **download:** Save across volumes, restart a changed file, keep a silent track
 - **extension:** Read page qualities and keep the overlay panel open
-### Changed
-
-- **release:** Add the 0.3.2 notes
-
 
 ## [0.3.1] - 2 November 2026
 
