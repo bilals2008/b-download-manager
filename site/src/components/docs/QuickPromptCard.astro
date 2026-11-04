@@ -1,0 +1,99 @@
+---
+// One quiet promo line at the foot of the "On this page" rail. The whole
+// thing is a single link, so the rail stays uncluttered.
+import Icon from "../site/Icon.astro";
+
+const href = "https://quickprompt-web.netlify.app/";
+---
+
+<a
+  class="qp"
+  href={href}
+  target="_blank"
+  rel="noopener"
+  aria-label="QuickPrompt, a desktop prompt library. Opens in a new tab."
+>
+  <span class="qp__name">
+    <Icon name="bolt" size={14} strokeWidth={1.6} class="qp__mark" />
+    QuickPrompt
+  </span>
+  <Icon name="arrow-up-right" size={14} class="qp__arrow" />
+  <span class="qp__desc">Your prompts, saved and one copy away.</span>
+</a>
+
+<style>
+  .qp {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.35rem 0.5rem;
+    margin-top: 1.75rem;
+    padding: 0.8rem 0.85rem;
+    border: 1px solid var(--sl-color-hairline);
+    border-radius: var(--radius-sm);
+    text-decoration: none;
+    transition:
+      border-color var(--duration-fast) var(--ease-out),
+      background-color var(--duration-fast) var(--ease-out),
+      transform var(--duration-fast) var(--ease-out);
+  }
+
+  .qp:hover {
+    border-color: var(--accent);
+    background-color: var(--accent-soft);
+    transform: translateY(-1px);
+  }
+
+  .qp__name {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: var(--ink);
+    font-size: var(--type-label);
+    font-weight: 600;
+    line-height: 1.2;
+    transition: color var(--duration-fast) var(--ease-out);
+  }
+
+  .qp:hover .qp__name {
+    color: var(--accent);
+  }
+
+  .qp:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 4px;
+  }
+
+  .qp__name :global(.qp__mark) {
+    color: var(--accent);
+  }
+
+  .qp__arrow {
+    align-self: center;
+    color: var(--muted);
+    transition:
+      color var(--duration-fast) var(--ease-out),
+      transform var(--duration-fast) var(--ease-out);
+  }
+
+  .qp:hover .qp__arrow {
+    color: var(--accent);
+    transform: translate(1px, -1px);
+  }
+
+  .qp__desc {
+    grid-column: 1 / -1;
+    color: var(--muted);
+    font-size: var(--type-caption);
+    line-height: 1.45;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .qp:hover {
+      transform: none;
+    }
+
+    .qp:hover .qp__arrow {
+      transform: none;
+    }
+  }
+</style>
