@@ -93,10 +93,12 @@ verify updates against the key that was baked into *them*.
 2. The updater plugin verifies the `latest.json` signature and then the
    minisign signature of the downloaded package against the baked public key.
    A package the key did not sign is refused before it touches disk.
-3. Nothing installs until the reader presses "Download and install" in the
-   dialog; the release notes are shown first.
-4. Running downloads are paused and saved the same way the close button saves
-   them, then the installer takes over and the app restarts.
+3. Nothing installs until the reader presses *Update now* on the notice or in
+   the update dialog; the manual dialog shows the release notes first.
+4. The window shows the download's own byte count and the verification and
+   install stages. Immediately before the installer starts, running downloads
+   are paused and saved the same way the close button saves them; then the
+   installer takes over, reuses the recorded folder and restarts the app.
 
 If the repository is renamed, the endpoint in `tauri.conf.json` must change
 with it — old installs would otherwise stop seeing updates.
@@ -104,7 +106,23 @@ with it — old installs would otherwise stop seeing updates.
 ## Installer behaviour on Windows
 
 - Per-user install (`currentUser`): no UAC prompt, updates can replace it
-  silently, and the app data lives under the same trust level.
+  without elevation, and the app data lives under the same trust level.
+- The first launch shows the standard NSIS **Choose Install Location** page
+  (`MUI_PAGE_DIRECTORY`) with `%LOCALAPPDATA%\B Download Manager` as the
+  default. The reader can browse to any folder; the installer writes the
+  chosen path to `HKCU\Software\bilals2008\B Download Manager` and to the
+  uninstall entry's `InstallLocation`. Every later installer run starts from
+  that value (`RestorePreviousInstallLocation`), so a reinstall or upgrade
+  keeps the original folder.
+- An in-app update runs the same installer with `/P /UPDATE /R`. Passive mode
+  skips every page, `/UPDATE` skips the reinstall question and the uninstall
+  step, and the restored registry path is the folder the app already lives in.
+  The reader is never asked to choose a folder during a normal update, and no
+  second copy is installed.
+- The wizard is branded from `src-tauri/nsis/header.bmp` (150×57),
+  `src-tauri/nsis/sidebar.bmp` (164×314) and `src-tauri/icons/icon.ico`.
+  `scripts/check-release-integrity.mjs` fails a release when one of those
+  files is missing, so a build cannot silently fall back to the Tauri artwork.
 - The NSIS template creates the Start Menu shortcut (a Desktop shortcut is
   offered by the installer UI itself in current Tauri versions — verified
   against the generated `.nsi` for this build).
@@ -115,6 +133,30 @@ with it — old installs would otherwise stop seeing updates.
 - "Run on startup" is opt-in in Settings → General and uses the registry
   startup entry via the autostart plugin; the installer never enables it by
   itself.
+
+## Update notification and progress
+
+- The startup check follows Settings → About → *Check for updates when the
+  application starts* (off by default). Help → Check for updates and the
+  About page are always available for a manual check.
+- A newer release appears in the small notice in the bottom-right corner, not
+  in a window that takes the keyboard. *Update now* starts the download;
+  *Later* writes the version to `dismissedUpdateVersion` and the same release
+  is not offered again. A newer release is a new question.
+- The notice, the manual dialog and the About page read one shared install
+  state. The backend streams real response bytes over a Tauri channel and the
+  server's `Content-Length` when it sent one; an unknown total runs an
+  indeterminate segment instead of a made-up percentage. The stages are
+  downloading → verifying → installing, and the restart offer appears only
+  after the installer has been started. A failure keeps the backend's sentence
+  and offers *Try again*.
+- Running downloads keep running while the package downloads. They are paused
+  and saved immediately before the installer starts, the same way the close
+  button saves them, so unfinished files and the download list survive the
+  restart.
+- The byte line under the meter is the small caption size and carries the
+  measured transfer rate beside the received and total sizes: the rate is the
+  bytes gained across the last second of backend reports, not a timer.
 
 ## Installer behaviour on Linux
 
@@ -142,12 +184,34 @@ Verified locally (November 2026, CI/CD audit):
 
 - `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`
   and `cargo test --workspace --no-fail-fast`: 171 engine tests (2 ignored) and
-  265 application tests pass from one workspace.
+  274 application tests pass from one workspace.
 - The release profile survived the workspace move: a `--release` build carries
   `lto`, `opt-level=s`, `codegen-units=1`, `panic=abort` and `strip`.
-- `pnpm test` (30 frontend tests), `pnpm check:all` (all 20 self-checks) and
+- `pnpm test` (120 frontend tests), `pnpm check:all` (all 20 self-checks) and
   `pnpm exec tsc --noEmit` pass, and the release-integrity gate rejects a
   mismatched tag or version.
+- The v0.3.1 NSIS installer was built locally with the branded header, sidebar
+  and icon. `pnpm check:installer` read the generated `.nsi` and passed:
+  per-user scope, `MUI_PAGE_DIRECTORY`, its passive-mode skip, the recorded
+  install folder and `RestorePreviousInstallLocation` were all present.
+- The Welcome and Choose Install Location pages were opened and read on this
+  machine: the sidebar carries the mark and product name, the header carries
+  the app tile, the default folder is `%LOCALAPPDATA%\B Download Manager`, and
+  Browse is offered.
+- A temporary install record (backed up and restored afterwards) was used for
+  the Windows install scenarios: a fresh silent install to a custom folder put
+  the executable, ffmpeg and uninstaller there, recorded that folder and
+  pointed the Start Menu shortcut at it. Re-running the installer with the
+  updater's `/P /UPDATE` replaced the executable, kept the custom folder,
+  kept a marker file and the settings file byte-for-byte, and left the real
+  installation untouched. The uninstaller removed the test folder and the
+  registry and shortcuts were restored.
+- The published v0.3.1 installer verifies against the baked key
+  `488BA63203E8DB50`; so does the published v0.2.0 asset. The local
+  updater-artifact signature step could not run in this workspace because the
+  local private key is password-protected and that password is not available
+  here. CI signs with `TAURI_SIGNING_PRIVATE_KEY`; the command and public key
+  were not changed.
 - `scripts/check-release-artifacts.mjs` verified the **published** v0.2.0
   Windows installer against the key baked into `tauri.conf.json` (key id
   `488BA63203E8DB50`): the ed25519 check over the BLAKE2b-512 digest succeeds,
@@ -164,13 +228,19 @@ Not yet observed on GitHub:
   after this change is the end-to-end proof. Publish it as a draft and check
   `verify-artifacts` before pressing Publish.
 
-Needs a second machine (a clean Windows install without the dev app):
+Still needs a published higher version (or a second machine):
 
-- Fresh install → shortcuts → first-run notice → settings survive an in-app
-  update to a higher version → paused downloads resume after it.
-- Uninstall keeps `%APPDATA%\com.bilal.bdownloadmanager`; a reinstall shows
-  the old list.
+- A real *Check for updates* round trip from an installed copy through the
+  signed download, the progress card, the passive installer and the restart.
+  The installer mechanics and the artifact signatures were verified; the
+  network round trip needs a release that is newer than the installed copy.
+- The update notice, progress card and restart-ready state were tested in
+  component/store tests and typechecked, but not observed in the running app
+  against a live newer release.
+- Uninstall keeps `%APPDATA%\com.bilal.bdownloadmanager`; this was verified
+  against the generated script and the temporary install did not touch that
+  folder, but a real uninstall/reinstall of the user's data is left for the
+  release machine.
 - An update published from a *different* key is refused (the security gate
-  itself).
-- A real "Check for updates" round trip from an installed copy to a higher
-  published version still needs a second machine.
+  itself): the artifact verifier rejects a mismatched key, though the running
+  updater has not yet been put through that case.

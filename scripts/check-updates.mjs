@@ -17,9 +17,13 @@ globalThis.window = {
 const { DEFAULT_SETTINGS, loadSettings, saveSettings } = await import(
   "../src/lib/settings.ts"
 );
-const { formatReleaseDate, releaseNoteLines } = await import(
-  "../src/lib/updates.ts"
-);
+const {
+  formatReleaseDate,
+  releaseNoteLines,
+  updatePercent,
+  updateSize,
+  updateStageLabel,
+} = await import("../src/lib/updates.ts");
 
 assert.equal(
   DEFAULT_SETTINGS.firstRunDone,
@@ -112,5 +116,49 @@ store.set("idm-clone.settings.v1", JSON.stringify({ ...DEFAULT_SETTINGS, lastUpd
 assert.equal(loadSettings().lastUpdateCheck, null, "a stamp from before the epoch is no stamp");
 store.set("idm-clone.settings.v1", JSON.stringify({ ...DEFAULT_SETTINGS, lastUpdateCheck: "yesterday" }));
 assert.equal(loadSettings().lastUpdateCheck, null, "a stamp that is not a moment is no stamp");
+
+/* ------------------------------------------------------- put-off release */
+
+assert.equal(
+  loadSettings().dismissedUpdateVersion,
+  null,
+  "no release has been put off yet",
+);
+saveSettings({ ...DEFAULT_SETTINGS, dismissedUpdateVersion: "0.4.0" });
+assert.equal(
+  loadSettings().dismissedUpdateVersion,
+  "0.4.0",
+  "the put-off release survives a reload",
+);
+store.set(
+  "idm-clone.settings.v1",
+  JSON.stringify({ ...DEFAULT_SETTINGS, dismissedUpdateVersion: "" }),
+);
+assert.equal(
+  loadSettings().dismissedUpdateVersion,
+  null,
+  "an empty release is nothing to put off",
+);
+store.set(
+  "idm-clone.settings.v1",
+  JSON.stringify({ ...DEFAULT_SETTINGS, dismissedUpdateVersion: { major: 1 } }),
+);
+assert.equal(
+  loadSettings().dismissedUpdateVersion,
+  null,
+  "junk is not a release number",
+);
+
+/* ------------------------------------------------------- real progress */
+
+assert.equal(updatePercent(0, null), null, "an unknown total is not zero percent");
+assert.equal(updatePercent(0, 0), null, "a zero total says nothing");
+assert.equal(updatePercent(5, 10), 50, "half the bytes is half the meter");
+assert.equal(updatePercent(20, 10), 100, "a whole package cannot exceed 100%");
+assert.equal(updateSize(0, null), "0 B downloaded", "unknown totals count what arrived");
+assert.equal(updateSize(1536, 2048), "1.5 KB of 2.0 KB", "a known total names both sides");
+assert.equal(updateStageLabel("downloading"), "Downloading the update");
+assert.equal(updateStageLabel("verifying"), "Checking the download is genuine");
+assert.equal(updateStageLabel("installing"), "Installing and restarting");
 
 console.log("check:updates ok");

@@ -67,6 +67,11 @@ export interface Settings {
    */
   lastUpdateCheck: number | null;
   /**
+   * The version whose startup notice the reader put off. The same release is
+   * not offered again; a newer one is. Null means nothing was dismissed.
+   */
+  dismissedUpdateVersion: string | null;
+  /**
    * Whether the add dialog has been opened at least once. The first of
    * those openings says where files will land when no save folder has been
    * chosen yet; after that the sentence has done its work.
@@ -111,6 +116,7 @@ export const DEFAULT_SETTINGS: Settings = {
   videoButtonHover: false,
   updateAutoCheck: false,
   lastUpdateCheck: null,
+  dismissedUpdateVersion: null,
   firstRunDone: false,
 };
 
@@ -237,6 +243,10 @@ export function loadSettings(): Settings {
       lastUpdateCheck: stamp(
         value.lastUpdateCheck,
         DEFAULT_SETTINGS.lastUpdateCheck,
+      ),
+      dismissedUpdateVersion: version(
+        value.dismissedUpdateVersion,
+        DEFAULT_SETTINGS.dismissedUpdateVersion,
       ),
       firstRunDone: boolean(value.firstRunDone, DEFAULT_SETTINGS.firstRunDone),
     };
@@ -528,6 +538,19 @@ function stamp(value: unknown, fallback: number | null): number | null {
     return fallback;
   }
   return Math.round(value);
+}
+
+/**
+ * A release number this machine put off. A version is a short token made of
+ * digits, dots and the letters a prerelease can carry; anything else is not
+ * one and reads as nothing dismissed.
+ */
+function version(value: unknown, fallback: string | null): string | null {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+  const trimmed = value.trim();
+  return /^[0-9A-Za-z.+-]{1,64}$/.test(trimmed) ? trimmed : fallback;
 }
 
 function duplicate(

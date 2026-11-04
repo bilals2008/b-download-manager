@@ -11,17 +11,25 @@ import {
 import { ReleaseNotes } from "@/components/ui/release-notes";
 import { Switch } from "@/components/ui/switch";
 import { WarningMark } from "@/components/icons/desktop-icons";
+import { UpdateProgressBody } from "@/components/updates/update-meter";
 import { useAppVersion } from "@/lib/app-version";
 import { APP_NAME, APP_TAGLINE } from "@/lib/brand";
 import { isDesktop } from "@/lib/errors";
 import type { Settings } from "@/lib/settings";
 import {
-  describeFailure,
   formatCheckTime,
-  installUpdate,
   runCheck,
   type CheckOutcome,
+  type UpdateFound,
 } from "@/lib/updates";
+import {
+  beginUpdate,
+  clearUpdateRun,
+  restartApplication,
+  retryUpdate,
+  useUpdateRun,
+  type UpdateRun,
+} from "@/state/update-store";
 
 interface AboutSettingsProps {
   settings: Settings;
@@ -30,12 +38,8 @@ interface AboutSettingsProps {
   onWhatsNew: () => void;
 }
 
-/** Where the page stands between the question and the installer. */
-type Check =
-  | { kind: "idle" }
-  | { kind: "checking" }
-  | { kind: "installing" }
-  | CheckOutcome;
+/** Where the check stands between the question and its answer. */
+type Check = { kind: "idle" } | { kind: "checking" } | CheckOutcome;
 
 /**
  * About: this build, and how it keeps itself up to date.
@@ -51,6 +55,8 @@ export function AboutSettings({
 }: AboutSettingsProps) {
   const version = useAppVersion();
   const [check, setCheck] = useState<Check>({ kind: "idle" });
+  const run = useUpdateRun();
+  const applying = run.phase !== "idle";
 
   function askAgain() {
     setCheck({ kind: "checking" });
@@ -62,17 +68,8 @@ export function AboutSettings({
     });
   }
 
-  function install() {
-    setCheck({ kind: "installing" });
-    void installUpdate().then(
-      () => {
-        // On success the installer takes the process over and this never runs.
-        setCheck({ kind: "idle" });
-      },
-      (failure: unknown) => {
-        setCheck({ kind: "error", message: describeFailure(failure) });
-      },
-    );
+  function startInstall(update: UpdateFound) {
+    beginUpdate(update);
   }
 
   const versionLabel = version
@@ -114,7 +111,7 @@ export function AboutSettings({
         action={
           <SettingsButton
             onClick={askAgain}
-            disabled={check.kind === "checking" || check.kind === "installing"}
+            disabled={check.kind === "checking" || applying}
           >
             {check.kind === "checking" ? "Checking…" : "Check now"}
           </SettingsButton>
@@ -139,12 +136,16 @@ export function AboutSettings({
 
         {/* One region that stays on the page, so the answer is read out at the
             moment it lands instead of only when the reader looks for it. */}
-        <div aria-live="polite">
-          <UpdateAnswer
-            check={check}
-            onInstall={install}
-            onDismiss={() => setCheck({ kind: "idle" })}
-          />
+        <div aria-live={applying ? undefined : "polite"}>
+          {applying ? (
+            <UpdateRunAnswer run={run} />
+          ) : (
+            <UpdateAnswer
+              check={check}
+              onInstall={startInstall}
+              onDismiss={() => setCheck({ kind: "idle" })}
+            />
+          )}
         </div>
       </Section>
     </SettingsPage>
@@ -158,7 +159,7 @@ function UpdateAnswer({
   onDismiss,
 }: {
   check: Check;
-  onInstall: () => void;
+  onInstall: (update: UpdateFound) => void;
   onDismiss: () => void;
 }) {
   if (check.kind === "idle") return null;
@@ -167,14 +168,6 @@ function UpdateAnswer({
     return (
       <p className="pt-1 text-xs text-chrome-menu-text">
         Looking for a newer version…
-      </p>
-    );
-  }
-
-  if (check.kind === "installing") {
-    return (
-      <p className="pt-1 text-xs text-chrome-menu-text">
-        Getting the new version and checking that it is genuine…
       </p>
     );
   }
@@ -209,11 +202,40 @@ function UpdateAnswer({
         </div>
       ) : null}
       <div className="flex flex-wrap gap-2">
-        <SettingsButton tone="normal" onClick={onInstall}>
-          Download and install
+        <SettingsButton tone="normal" onClick={() => onInstall(update)}>
+          Update now
         </SettingsButton>
         <SettingsButton onClick={onDismiss}>Not now</SettingsButton>
       </div>
+    </div>
+  );
+}
+
+/** The shared surface while a download, check or install is actually running. */
+function UpdateRunAnswer({ run }: { run: UpdateRun }) {
+  return (
+    <div className="flex flex-col gap-2 pt-2">
+      {run.update ? (
+        <p className="text-xs text-chrome-title-text">
+          Version {run.update.version}, from {run.update.currentVersion}.
+        </p>
+      ) : null}
+      <UpdateProgressBody run={run} />
+      {run.phase === "restart-ready" ? (
+        <div className="flex flex-wrap gap-2">
+          <SettingsButton tone="normal" onClick={restartApplication}>
+            Restart now
+          </SettingsButton>
+          <SettingsButton onClick={clearUpdateRun}>Later</SettingsButton>
+        </div>
+      ) : run.phase === "error" ? (
+        <div className="flex flex-wrap gap-2">
+          <SettingsButton tone="normal" onClick={retryUpdate}>
+            Try again
+          </SettingsButton>
+          <SettingsButton onClick={clearUpdateRun}>Later</SettingsButton>
+        </div>
+      ) : null}
     </div>
   );
 }

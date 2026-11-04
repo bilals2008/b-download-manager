@@ -31,6 +31,7 @@
     "probe:bridge": "node scripts/bridge-probe.mjs",
     "check:grabber": "node scripts/check-grabber.mjs",
     "check:updates": "node scripts/check-updates.mjs",
+    "check:installer": "node scripts/check-installer-layout.mjs",
     "check:tips": "node scripts/check-tips.mjs",
     "check:share": "node scripts/check-share.mjs",
     "check:whats-new": "node scripts/check-whats-new.mjs",

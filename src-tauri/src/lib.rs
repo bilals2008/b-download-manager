@@ -1333,6 +1333,7 @@ pub fn run() {
             share::share_app,
             updater::check_update,
             updater::install_update,
+            updater::restart_app,
             toolbars::list_toolbar_packs,
             toolbars::install_toolbar_pack,
             toolbars::remove_toolbar_pack,

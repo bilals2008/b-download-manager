@@ -194,6 +194,21 @@ check("bundle configuration", () => {
   for (const icon of bundle.icon ?? []) {
     assert.ok(existsSync(resolve(root, "src-tauri", icon)), `bundle icon ${icon} does not exist`);
   }
+  // The installer is branded from these files; a missing one silently drops
+  // the branding instead of failing the build.
+  for (const key of ["installerIcon", "uninstallerIcon", "headerImage", "sidebarImage"]) {
+    const path = bundle.windows?.nsis?.[key];
+    assert.ok(typeof path === "string" && path, `nsis.${key} is missing`);
+    assert.ok(
+      existsSync(resolve(root, "src-tauri", path)),
+      `nsis.${key} ${path} does not exist`,
+    );
+  }
+  assert.equal(
+    conf.plugins?.updater?.windows?.installMode,
+    "passive",
+    "in-app updates must stay page-skipping (passive) so they reuse the install folder",
+  );
 });
 
 check("macOS bundle sidecar", () => {

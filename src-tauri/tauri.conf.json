@@ -49,7 +49,11 @@
         "languages": [
           "English"
         ],
-        "displayLanguageSelector": false
+        "displayLanguageSelector": false,
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico",
+        "headerImage": "nsis/header.bmp",
+        "sidebarImage": "nsis/sidebar.bmp"
       }
     }
   },
@@ -58,7 +62,10 @@
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ4OEJBNjMyMDNFOERCNTAKUldSUTIrZ0RNcWFMU0RNYXlDTlJkb1o1M0Q3M3pxSms1cUNOQURPcStuc04xcVpGTjJ5N3RlR1EK",
       "endpoints": [
         "https://github.com/bilals2008/b-download-manager/releases/latest/download/latest.json"
-      ]
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }

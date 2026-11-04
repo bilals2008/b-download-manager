@@ -14,6 +14,7 @@ import { AboutDialog } from "@/components/workspace/about-dialog";
 import { AddDownloadDialog } from "@/components/workspace/add-download-dialog";
 import { CloseConfirmDialog } from "@/components/workspace/close-confirm-dialog";
 import { UpdateDialog } from "@/components/workspace/update-dialog";
+import { UpdateNotice } from "@/components/updates/update-notice";
 import { Workspace } from "@/components/workspace/workspace";
 import { WhatsNewDialog } from "@/components/whats-new/whats-new-dialog";
 import { useWhatsNew } from "@/components/whats-new/use-whats-new";
@@ -104,9 +105,9 @@ export default function App() {
   // A tip is offered once per start, and never while another dialog has the
   // reader's attention.
   const startupTipAsked = useRef(false);
-  // The answer a startup check already got, so the window that shows it does
-  // not ask the release server the same question a second time.
-  const [startupUpdate, setStartupUpdate] = useState<UpdateFound | null>(null);
+  // A release the startup check found and the reader has not answered yet.
+  // It becomes the small notice, never a window that takes the keyboard.
+  const [offeredUpdate, setOfferedUpdate] = useState<UpdateFound | null>(null);
   // The count of downloads the backend would interrupt if this window exited.
   // Null when the close button has not asked anything.
   const [closeRequest, setCloseRequest] = useState<number | null>(null);
@@ -340,22 +341,26 @@ export default function App() {
   }, []);
 
   // The one question the reader agreed to on the About page. It runs once the
-  // window is up: only a newer release earns a dialog; an answer that is the
-  // current version, or one that did not arrive at all, is written down and
-  // left quietly there. A launch that is introducing this version holds the
-  // check back, so two offers cannot open one after the other.
+  // window is up: only a newer release earns the small notice; an answer that
+  // is the current version, or one that did not arrive at all, is written
+  // down and left quietly there. A release the reader already put off is not
+  // offered again; a launch that is introducing this version holds the check
+  // back, so two offers cannot open one after the other.
   useEffect(() => {
     if (!isDesktop() || !whatsNew.ready || whatsNew.freshNotes) {
       return;
     }
-    if (!loadSettings().updateAutoCheck) {
+    const settings = loadSettings();
+    if (!settings.updateAutoCheck) {
       return;
     }
     void runCheck().then((outcome) => {
       saveSettings({ ...loadSettings(), lastUpdateCheck: Date.now() });
-      if (outcome.kind === "found") {
-        setStartupUpdate(outcome.update);
-        setUpdateOpen(true);
+      if (
+        outcome.kind === "found" &&
+        outcome.update.version !== settings.dismissedUpdateVersion
+      ) {
+        setOfferedUpdate(outcome.update);
       }
     });
   }, [whatsNew.ready, whatsNew.freshNotes]);
@@ -572,6 +577,16 @@ export default function App() {
     setTipsOpen(false);
   }
 
+  // "Later" is remembered for this release only: a newer version is a new
+  // question and earns a new notice.
+  function offerLater(version: string) {
+    if (!version) {
+      return;
+    }
+    saveSettings({ ...loadSettings(), dismissedUpdateVersion: version });
+    setOfferedUpdate(null);
+  }
+
   // No box in between: the Help row and the toolbar button hand the invitation
   // straight to the share window of the system. Only a machine that can show
   // neither that window nor the Web Share API falls back to the clipboard, and
@@ -646,7 +661,6 @@ export default function App() {
       case "check-updates":
         // A request from the menu is a fresh question, whatever a startup
         // check may have found on the way in.
-        setStartupUpdate(null);
         setUpdateOpen(true);
         break;
       case "resume":
@@ -800,11 +814,12 @@ export default function App() {
       />
       <UpdateDialog
         open={updateOpen && !tipsOpen}
-        found={startupUpdate ?? undefined}
-        onClose={() => {
-          setUpdateOpen(false);
-          setStartupUpdate(null);
-        }}
+        onClose={() => setUpdateOpen(false)}
+      />
+      <UpdateNotice
+        offered={offeredUpdate}
+        onLater={offerLater}
+        onAccepted={() => setOfferedUpdate(null)}
       />
       {closeRequest !== null ? (
         <CloseConfirmDialog

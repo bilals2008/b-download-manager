@@ -195,6 +195,14 @@ jobs:
           prerelease: false
           args: ${{ matrix.args }}
 
+      # The generated NSIS script is checked after the build, not before it:
+      # this is what a fresh install and a passive update will actually do.
+      # The folder page must exist, be skipped only for a passive update, and
+      # the chosen folder must be written and restored.
+      - name: Verify the generated installer layout
+        if: matrix.platform == 'windows-latest'
+        run: node scripts/check-installer-layout.mjs
+
   verify-artifacts:
     name: Verify the draft's artifacts
     needs: [verify, build]

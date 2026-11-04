@@ -386,11 +386,11 @@ is added:
   only, accepts the `Host` it owns, requires `X-BDM-Client: browser-extension`,
   and refuses any `Origin` that is not an extension's. That is the whole door:
   install the app and the extension and they work together.
-- Appearance, fonts, toolbar packs and layouts, tips, the last folder and the
-  update-check stamp are read only by the webview and live only in
-  `localStorage`. Pick the owner by who reads it without a window: if the
-  engine, the tray, or the bridge needs it, it belongs in one of the two
-  backend files; otherwise `localStorage` is enough.
+- Appearance, fonts, toolbar packs and layouts, tips, the last folder, the
+  update-check stamp and the release the reader put off are read only by the
+  webview and live only in `localStorage`. Pick the owner by who reads it
+  without a window: if the engine, the tray, or the bridge needs it, it
+  belongs in one of the two backend files; otherwise `localStorage` is enough.
 
 ## Settings search
 
