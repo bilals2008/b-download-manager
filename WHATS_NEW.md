@@ -8,6 +8,18 @@
   section for its own version, and the release page uses the same words.
 -->
 
+## 1.0.0 — 6 November 2026
+
+### A look that's yours
+
+- Three new themes join the list: Graphite, Bloom and Hive.
+- Each theme has its own token file, so switching between them is instant.
+
+### Video in one file
+
+- Choose a YouTube quality and the app saves the finished video with picture and sound already joined.
+- No extra tools are needed to download or merge a video.
+
 ## 0.3.2 — 4 November 2026
 
 ### A quieter look
