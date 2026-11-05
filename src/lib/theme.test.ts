@@ -27,6 +27,9 @@ describe("resolveTheme", () => {
     expect(resolveTheme("volt")).toBe("volt");
     expect(resolveTheme("softblack")).toBe("softblack");
     expect(resolveTheme("ayu")).toBe("ayu");
+    expect(resolveTheme("graphite")).toBe("graphite");
+    expect(resolveTheme("bloom")).toBe("bloom");
+    expect(resolveTheme("hive")).toBe("hive");
   });
 
   it("follows the operating system in auto mode", () => {
@@ -41,6 +44,7 @@ describe("resolveTheme", () => {
 describe("isLightTheme", () => {
   it("names the appearances drawn on pale surfaces", () => {
     expect(isLightTheme("light")).toBe(true);
+    expect(isLightTheme("bloom")).toBe(true);
   });
 
   it("keeps the dark appearances off the light tray inks", () => {
@@ -49,6 +53,8 @@ describe("isLightTheme", () => {
     expect(isLightTheme("volt")).toBe(false);
     expect(isLightTheme("softblack")).toBe(false);
     expect(isLightTheme("ayu")).toBe(false);
+    expect(isLightTheme("graphite")).toBe(false);
+    expect(isLightTheme("hive")).toBe(false);
   });
 });
 

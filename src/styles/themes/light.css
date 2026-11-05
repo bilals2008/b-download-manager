@@ -1,0 +1,108 @@
+/*
+  Light appearance. Same tokens, same names: a neutral pale canvas the system
+  shell uses, near-black text, and the lime accent kept for primary actions
+  where it still carries dark text. Focus rings, borders and icon tints darken
+  so they stay visible on light surfaces.
+
+  `data-theme` is set on the root by `src/lib/theme.ts` before the first render,
+  so Auto follows the system and the setting can override it. Components never
+  read the attribute; they read the tokens.
+*/
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --background: #f3f4f6;
+    --foreground: #17181b;
+    --card: #ffffff;
+    --card-foreground: #17181b;
+    --popover: #ffffff;
+    --popover-foreground: #17181b;
+
+    /* Same lime-on-deep-green accent as the dark appearance, carried over so
+       the app keeps one identity when the theme switches. */
+    --primary: #022c1e;
+    --primary-foreground: #c8ff00;
+    --progress: #022c1e;
+
+    /* Same meter, carried onto the pale surfaces: the stops darken so the bar
+       still reads as a graphical object, and the track becomes a soft ink wash
+       rather than a light one. */
+    --progress-track: rgb(23 24 27 / 0.1);
+    --progress-active-from: #047857;
+    --progress-active-via: #0e7490;
+    --progress-active-to: #2563eb;
+    --progress-complete-from: #047857;
+    --progress-complete-to: #15803d;
+    --progress-paused-from: #5872a8;
+    --progress-paused-to: #445c88;
+    --progress-failed-from: #dc2626;
+    --progress-failed-to: #b91c1c;
+
+    --secondary: #e9eaee;
+    --secondary-foreground: #1d1f23;
+
+    --muted: #eceef1;
+    --muted-foreground: #565b64;
+
+    --accent: #e3e5ea;
+    --accent-foreground: #1d1f23;
+
+    --success: #2fd06b;
+    --success-foreground: #04130a;
+
+    --destructive: #c42b1c;
+    --destructive-foreground: #ffffff;
+
+    --border: #d8dade;
+    --input: #6a6f78;
+    --ring: #4d7a12;
+
+    --float-shadow:
+      0 18px 40px -22px rgb(9 11 16 / 0.3), 0 4px 12px -8px rgb(9 11 16 / 0.16);
+
+    --chrome-title: #e9eaee;
+    --chrome-title-text: #17181b;
+    --chrome-menu: #f3f4f6;
+    --chrome-menu-text: #17181b;
+    --chrome-menu-hover: #e9eaee;
+    --chrome-menu-active: #dcdfe5;
+    --chrome-toolbar: #f3f4f6;
+    --chrome-toolbar-text: #17181b;
+    --chrome-toolbar-hover: #e9eaee;
+    --chrome-toolbar-active: #dcdfe5;
+    --chrome-popup: #ffffff;
+    --chrome-popup-hover: #f0f1f4;
+    --chrome-row-alt: #eef0f3;
+    --chrome-muted: #565b64;
+    --chrome-canvas: #f3f4f6;
+    --chrome-panel: #ffffff;
+    --chrome-line: #d8dade;
+    --chrome-focus: #4d7a12;
+    --chrome-danger: #c42b1c;
+    --chrome-danger-text: #ffffff;
+    --chrome-error: #a8221a;
+
+    /* Artwork tints darkened so the same drawings read on a light surface. */
+    --icon-green: #1a7f37;
+    --icon-green-bright: #146c2e;
+    --icon-green-deep: #0f5323;
+    --icon-red: #b93227;
+    --icon-red-bright: #a8281d;
+    --icon-red-deep: #7c1f18;
+    --icon-silver: #5b656c;
+    --icon-silver-bright: #d5dbe0;
+    --icon-silver-deep: #3f484e;
+    --icon-purple: #7052ad;
+    --icon-purple-bright: #5b3f94;
+    --icon-purple-deep: #3c2a63;
+    --icon-blue: #4a63a8;
+    --icon-blue-bright: #3d5498;
+    --icon-blue-deep: #2f4176;
+    --icon-amber: #8a5906;
+    --icon-amber-bright: #9c6608;
+    --icon-amber-deep: #5f3b03;
+
+    --file-paper: #ffffff;
+    --file-paper-edge: #66716e;
+    --file-mark: #ffffff;
+}

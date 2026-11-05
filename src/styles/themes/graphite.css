@@ -1,0 +1,98 @@
+/*
+  Graphite. Monochrome chalk on slate: one ink canvas, hairline edges, flat
+  surfaces and squared corners. Finished work is chalk, never green, and red
+  stays for destruction only.
+*/
+:root[data-theme="graphite"] {
+  color-scheme: dark;
+
+  --radius: 0.25rem;
+
+  --background: #0d0d0e;
+  --foreground: #e8eaed;
+  --card: #101012;
+  --card-foreground: #e8eaed;
+  --popover: #141416;
+  --popover-foreground: #e8eaed;
+
+  --primary: #e8eaed;
+  --primary-foreground: #0d0d0e;
+  --progress: #e8eaed;
+
+  --progress-track: rgb(232 234 237 / 0.08);
+  --progress-active-from: #9a9ca1;
+  --progress-active-via: #c7c9cd;
+  --progress-active-to: #e8eaed;
+  --progress-complete-from: #e8eaed;
+  --progress-complete-to: #c7c9cd;
+  --progress-paused-from: #8a8d92;
+  --progress-paused-to: #6e7176;
+  --progress-failed-from: #f0a39c;
+  --progress-failed-to: #d98078;
+
+  --secondary: #141416;
+  --secondary-foreground: #e8eaed;
+
+  --muted: #101012;
+  --muted-foreground: #9a9ca1;
+
+  --accent: #1a1a1d;
+  --accent-foreground: #e8eaed;
+
+  --success: #e8eaed;
+  --success-foreground: #0d0d0e;
+
+  --destructive: #f0a39c;
+  --destructive-foreground: #0d0d0e;
+
+  --border: #26272a;
+  --input: #7e8084;
+  --ring: #e8eaed;
+
+  --float-shadow: none;
+
+  --chrome-title: #0b0b0c;
+  --chrome-title-text: #e8eaed;
+  --chrome-menu: #0d0d0e;
+  --chrome-menu-text: #e8eaed;
+  --chrome-menu-hover: #141416;
+  --chrome-menu-active: #1a1a1d;
+  --chrome-toolbar: #0d0d0e;
+  --chrome-toolbar-text: #e8eaed;
+  --chrome-toolbar-hover: #141416;
+  --chrome-toolbar-active: #1a1a1d;
+  --chrome-popup: #141416;
+  --chrome-popup-hover: #1a1a1d;
+  --chrome-row-alt: #101012;
+  --chrome-muted: #9a9ca1;
+  --chrome-canvas: #0d0d0e;
+  --chrome-panel: #0b0b0c;
+  --chrome-line: #26272a;
+  --chrome-focus: #e8eaed;
+  --chrome-danger: #f0a39c;
+  --chrome-danger-text: #0d0d0e;
+  --chrome-error: #f0a39c;
+
+  --icon-green: #9a9ca1;
+  --icon-green-bright: #e8eaed;
+  --icon-green-deep: #5e6064;
+  --icon-red: #9a9ca1;
+  --icon-red-bright: #e8eaed;
+  --icon-red-deep: #5e6064;
+  --icon-silver: #9a9ca1;
+  --icon-silver-bright: #e8eaed;
+  --icon-silver-deep: #5e6064;
+  --icon-purple: #9a9ca1;
+  --icon-purple-bright: #e8eaed;
+  --icon-purple-deep: #5e6064;
+  --icon-blue: #9a9ca1;
+  --icon-blue-bright: #e8eaed;
+  --icon-blue-deep: #5e6064;
+  --icon-amber: #9a9ca1;
+  --icon-amber-bright: #e8eaed;
+  --icon-amber-deep: #5e6064;
+
+  --file-paper: #e8eaed;
+  --file-paper-edge: #7e8084;
+  --file-mark: #ffffff;
+}

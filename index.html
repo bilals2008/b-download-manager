@@ -13,7 +13,17 @@
         var saved = JSON.parse(
           localStorage.getItem("idm-clone.settings.v1") || "{}",
         );
-        var fixed = ["light", "dark", "cyberpunk", "volt", "softblack", "ayu"];
+        var fixed = [
+          "light",
+          "dark",
+          "bloom",
+          "cyberpunk",
+          "volt",
+          "softblack",
+          "ayu",
+          "graphite",
+          "hive",
+        ];
         var root = document.documentElement;
         var theme = saved.theme;
         if (theme === "auto") {

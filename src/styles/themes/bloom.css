@@ -1,0 +1,97 @@
+/*
+  Bloom. Minimal Material You on a warm paper canvas: neutral surfaces with
+  honey only where it carries meaning. It is the light appearance of the
+  palette, the way the dark themes cover the night side.
+*/
+:root[data-theme="bloom"] {
+  color-scheme: light;
+
+  --background: #fff8f3;
+  --foreground: #1f1b16;
+  --card: #fbf2eb;
+  --card-foreground: #1f1b16;
+  --popover: #f5ece4;
+  --popover-foreground: #1f1b16;
+
+  --primary: #8a5100;
+  --primary-foreground: #ffffff;
+  --progress: #8a5100;
+
+  --progress-track: rgb(31 27 22 / 0.1);
+  --progress-active-from: #047857;
+  --progress-active-via: #0e7490;
+  --progress-active-to: #2563eb;
+  --progress-complete-from: #047857;
+  --progress-complete-to: #15803d;
+  --progress-paused-from: #5872a8;
+  --progress-paused-to: #445c88;
+  --progress-failed-from: #dc2626;
+  --progress-failed-to: #b91c1c;
+
+  --secondary: #f3e0cb;
+  --secondary-foreground: #261a0c;
+
+  --muted: #f5ece4;
+  --muted-foreground: #51453a;
+
+  --accent: #ffddb8;
+  --accent-foreground: #2c1600;
+
+  --success: #2fd06b;
+  --success-foreground: #04130a;
+
+  --destructive: #b3261e;
+  --destructive-foreground: #ffffff;
+
+  --border: #d5c3b5;
+  --input: #837468;
+  --ring: #8a5100;
+
+  --float-shadow:
+    0 18px 40px -22px rgb(44 22 0 / 0.28), 0 4px 12px -8px rgb(44 22 0 / 0.16);
+
+  --chrome-title: #f5ece4;
+  --chrome-title-text: #1f1b16;
+  --chrome-menu: #fff8f3;
+  --chrome-menu-text: #1f1b16;
+  --chrome-menu-hover: #f3e0cb;
+  --chrome-menu-active: #e9e1d9;
+  --chrome-toolbar: #fff8f3;
+  --chrome-toolbar-text: #1f1b16;
+  --chrome-toolbar-hover: #f3e0cb;
+  --chrome-toolbar-active: #e9e1d9;
+  --chrome-popup: #fff8f3;
+  --chrome-popup-hover: #f5ece4;
+  --chrome-row-alt: #fcf5ee;
+  --chrome-muted: #51453a;
+  --chrome-canvas: #fff8f3;
+  --chrome-panel: #fbf2eb;
+  --chrome-line: #d5c3b5;
+  --chrome-focus: #8a5100;
+  --chrome-danger: #b3261e;
+  --chrome-danger-text: #ffffff;
+  --chrome-error: #a8221a;
+
+  --icon-green: #1a7f37;
+  --icon-green-bright: #146c2e;
+  --icon-green-deep: #0f5323;
+  --icon-red: #b93227;
+  --icon-red-bright: #a8281d;
+  --icon-red-deep: #7c1f18;
+  --icon-silver: #5b656c;
+  --icon-silver-bright: #d5dbe0;
+  --icon-silver-deep: #3f484e;
+  --icon-purple: #7052ad;
+  --icon-purple-bright: #5b3f94;
+  --icon-purple-deep: #3c2a63;
+  --icon-blue: #4a63a8;
+  --icon-blue-bright: #3d5498;
+  --icon-blue-deep: #2f4176;
+  --icon-amber: #8a5906;
+  --icon-amber-bright: #9c6608;
+  --icon-amber-deep: #5f3b03;
+
+  --file-paper: #ffffff;
+  --file-paper-edge: #7a6a5c;
+  --file-mark: #ffffff;
+}

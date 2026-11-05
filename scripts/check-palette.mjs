@@ -5,13 +5,24 @@
 // Exits non-zero when a required pair fails, so a colour change cannot land
 // without a contrast check in either appearance.
 
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath, URL } from "node:url";
 
+// The base block lives in `index.css`; every appearance block lives in its own
+// file under `src/styles/themes/`.
 const css = readFileSync(
   fileURLToPath(new URL("../src/index.css", import.meta.url)),
   "utf8",
 );
+const themeDir = fileURLToPath(
+  new URL("../src/styles/themes/", import.meta.url),
+);
+const themeCss = readdirSync(themeDir)
+  .filter((file) => file.endsWith(".css"))
+  .sort()
+  .map((file) => readFileSync(join(themeDir, file), "utf8"))
+  .join("\n");
 
 function tokensIn(text) {
   const map = {};
@@ -25,7 +36,9 @@ function tokensIn(text) {
 // block overrides a subset of it. Each selector is read on its own, so a block
 // that comes later can never leak its values into an earlier appearance.
 const blocks = [
-  ...css.matchAll(/:root(?:\[data-theme="([a-z0-9-]+)"\])?\s*\{([^}]*)\}/g),
+  ...`${css}\n${themeCss}`.matchAll(
+    /:root(?:\[data-theme="([a-z0-9-]+)"\])?\s*\{([^}]*)\}/g,
+  ),
 ];
 const baseBlock = blocks.find(([, name]) => !name);
 if (!baseBlock) {
@@ -39,7 +52,17 @@ const overrides = new Map(
     .map(([, name, body]) => [name, tokensIn(body)]),
 );
 
-const APPEARANCES = ["dark", "light", "cyberpunk", "volt", "softblack", "ayu"];
+const APPEARANCES = [
+  "dark",
+  "light",
+  "bloom",
+  "cyberpunk",
+  "volt",
+  "softblack",
+  "ayu",
+  "graphite",
+  "hive",
+];
 for (const name of APPEARANCES) {
   if (name !== "dark" && !overrides.has(name)) {
     console.error(`MISSING  :root[data-theme="${name}"] theme block`);

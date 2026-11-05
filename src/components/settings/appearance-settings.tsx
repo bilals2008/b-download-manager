@@ -13,11 +13,14 @@ import type { Settings, ThemePreference, UiFont } from "@/lib/settings";
 const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
   { value: "auto", label: "Auto" },
   { value: "light", label: "Light" },
+  { value: "bloom", label: "Bloom" },
   { value: "dark", label: "Dark" },
   { value: "cyberpunk", label: "Cyberpunk" },
   { value: "volt", label: "Volt" },
   { value: "softblack", label: "Soft Black" },
   { value: "ayu", label: "Ayu Dark" },
+  { value: "graphite", label: "Graphite" },
+  { value: "hive", label: "Hive" },
 ];
 
 interface AppearanceSettingsProps {

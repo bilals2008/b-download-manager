@@ -189,22 +189,25 @@ Windows 10, where the API is a no-op, all four corners are square together.
 
 ## Theme
 
-Single source of truth: `src/index.css` (CSS variables + `@theme inline`), read
-by `scripts/check-palette.mjs`. Seven appearances: the deep green-black Dark
-base, the neutral Light, and five fixed looks — Cyberpunk (near-black with a
-cyan accent), Volt (ink-black with a teal cast and lime accent), Soft Black
-(one warm neutral black, off-white text and a monochrome action), Ayu Dark
-(blue-black with Ayu's warm gold accent) and Graphite (monochrome chalk on
-slate, squared corners, no elevation). Green only
-for finished work and red only for destruction in every appearance. Changing a
-colour means changing it there and re-running `pnpm check:palette`, which
-merges the base block with each `:root[data-theme="…"]` block and checks the
-WCAG pairs in all seven.
+Single source of truth: `src/index.css` for the base tokens, the `@theme inline`
+mapping and the fonts, plus one file per appearance under `src/styles/themes/`,
+read by `scripts/check-palette.mjs`. Nine appearances: the deep green-black Dark
+base, the neutral Light, the warm Bloom, and six fixed looks - Cyberpunk
+(near-black with a cyan accent), Volt (ink-black with a teal cast and lime
+accent), Soft Black (one warm neutral black, off-white text and a monochrome
+action), Ayu Dark (blue-black with Ayu's warm gold accent), Graphite
+(monochrome chalk on slate, squared corners, no elevation) and Hive (honey on
+charcoal with soft corners). Green only for finished work and red only for
+destruction in every appearance, except that Graphite and Hive use their own
+ink for finished work. Changing a colour means changing it in its theme file
+and re-running `pnpm check:palette`, which merges the base block with each
+`:root[data-theme="…"]` block and checks the WCAG pairs in all nine.
 
 Adding an appearance takes five places, or it will silently fall back to the
 system light/dark look:
 
-- `src/index.css`: a `:root[data-theme="…"]` block with the full token set.
+- `src/styles/themes/`: a new file with a `:root[data-theme="…"]` block holding
+  the full token set, imported from `src/styles/themes.css`.
 - `src/lib/settings.ts`: the `ThemePreference` union and the `THEME_PREFERENCES`
   list the loader validates against.
 - `src/lib/theme.ts`: `isLightTheme` when the new canvas is pale, so the tray

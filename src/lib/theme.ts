@@ -1,8 +1,8 @@
 import type { ThemePreference } from "@/lib/settings";
 
 /**
- * Appearance. The tokens live in `src/index.css`; this file only decides which
- * block is active by setting `data-theme` on the root element. It is applied
+ * Appearance. The tokens live in `src/index.css` and `src/styles/themes/`; this
+ * file only decides which block is active by setting `data-theme` on the root element. It is applied
  * before the first render (see `main.tsx`), so a light window never flashes
  * dark on the way in.
  *
@@ -27,7 +27,7 @@ export function resolveTheme(preference: ThemePreference): ResolvedTheme {
  * this list when its canvas is pale.
  */
 export function isLightTheme(theme: ResolvedTheme): boolean {
-  return theme === "light";
+  return theme === "light" || theme === "bloom";
 }
 
 export function applyTheme(preference: ThemePreference): void {

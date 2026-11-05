@@ -1,0 +1,10 @@
+/* Each appearance is its own file; this index only lists them. The base
+   `:root` tokens (and every `@theme` mapping) stay in `src/index.css`. */
+@import "./themes/light.css";
+@import "./themes/bloom.css";
+@import "./themes/cyberpunk.css";
+@import "./themes/volt.css";
+@import "./themes/softblack.css";
+@import "./themes/ayu.css";
+@import "./themes/graphite.css";
+@import "./themes/hive.css";

@@ -1,0 +1,80 @@
+/*
+  Hive. Honey on charcoal: warm cells of light on a near-black canvas, with
+  soft corners. The living comb behind the window is not part of the token
+  layer; these are its inks.
+*/
+:root[data-theme="hive"] {
+  color-scheme: dark;
+
+  --radius: 0.875rem;
+
+  --background: #121214;
+  --foreground: #ede6dd;
+  --card: #1a1a1d;
+  --card-foreground: #ede6dd;
+  --popover: #212124;
+  --popover-foreground: #ede6dd;
+
+  --primary: #ffb95f;
+  --primary-foreground: #2c1600;
+  --progress: #ffb95f;
+
+  --progress-track: rgb(255 185 95 / 0.12);
+  --progress-active-from: #ffb95f;
+  --progress-active-via: #f5d58a;
+  --progress-active-to: #ffd9a3;
+  --progress-complete-from: #ffb95f;
+  --progress-complete-to: #e8a33f;
+  --progress-paused-from: #9e8e81;
+  --progress-paused-to: #7c7266;
+  --progress-failed-from: #f0a39c;
+  --progress-failed-to: #d98078;
+
+  --secondary: #2f2a24;
+  --secondary-foreground: #f0e0cc;
+
+  --muted: #1a1a1d;
+  --muted-foreground: #aba195;
+
+  --accent: #29292d;
+  --accent-foreground: #ede6dd;
+
+  --success: #ffb95f;
+  --success-foreground: #2c1600;
+
+  --destructive: #f0a39c;
+  --destructive-foreground: #3b0b07;
+
+  --border: #34312d;
+  --input: #8d8379;
+  --ring: #ffb95f;
+
+  --float-shadow:
+    0 18px 40px -18px rgb(0 0 0 / 0.8), 0 4px 12px -6px rgb(0 0 0 / 0.55);
+
+  --chrome-title: #121214;
+  --chrome-title-text: #ede6dd;
+  --chrome-menu: #121214;
+  --chrome-menu-text: #ede6dd;
+  --chrome-menu-hover: #2f2a24;
+  --chrome-menu-active: #29292d;
+  --chrome-toolbar: #121214;
+  --chrome-toolbar-text: #ede6dd;
+  --chrome-toolbar-hover: #2f2a24;
+  --chrome-toolbar-active: #29292d;
+  --chrome-popup: #1a1a1d;
+  --chrome-popup-hover: #29292d;
+  --chrome-row-alt: #151517;
+  --chrome-muted: #aba195;
+  --chrome-canvas: #121214;
+  --chrome-panel: #151517;
+  --chrome-line: #34312d;
+  --chrome-focus: #ffb95f;
+  --chrome-danger: #f0a39c;
+  --chrome-danger-text: #3b0b07;
+  --chrome-error: #f0a39c;
+
+  --file-paper: #f3e5d7;
+  --file-paper-edge: #85766a;
+  --file-mark: #ffffff;
+}

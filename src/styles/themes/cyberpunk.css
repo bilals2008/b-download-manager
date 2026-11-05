@@ -1,0 +1,101 @@
+/*
+  Cyberpunk. The one appearance that is deliberately loud: a near-black canvas
+  with a cyan accent and violet hover tints, ported from the prompt-nest site's
+  palette. Every token keeps its meaning, so green still marks finished work and
+  red still destroys; only the inks change.
+*/
+:root[data-theme="cyberpunk"] {
+  color-scheme: dark;
+
+  /* Corners go sharp: the theme is a screen, not a window. */
+  --radius: 0.25rem;
+
+  --background: #06060c;
+  --foreground: #e2e2f5;
+  --card: #0c0c16;
+  --card-foreground: #e2e2f5;
+  --popover: #0c0c16;
+  --popover-foreground: #e2e2f5;
+
+  --primary: #00f0ff;
+  --primary-foreground: #06060c;
+  --progress: #00f0ff;
+
+  --progress-track: rgb(0 240 255 / 0.12);
+  --progress-active-from: #00f0ff;
+  --progress-active-via: #4d8bff;
+  --progress-active-to: #b14cff;
+  --progress-complete-from: #22e07a;
+  --progress-complete-to: #12b866;
+  --progress-paused-from: #7c8cff;
+  --progress-paused-to: #5b6bd8;
+  --progress-failed-from: #ff5c7a;
+  --progress-failed-to: #ff8095;
+
+  --secondary: #131326;
+  --secondary-foreground: #e2e2f5;
+
+  --muted: #101020;
+  --muted-foreground: #8a8ab0;
+
+  --accent: #171735;
+  --accent-foreground: #00f0ff;
+
+  --success: #22e07a;
+  --success-foreground: #04130a;
+
+  --destructive: #c81e4a;
+  --destructive-foreground: #ffffff;
+
+  --border: #181830;
+  --input: #6f6f96;
+  --ring: #00f0ff;
+
+  --float-shadow:
+    0 18px 40px -18px rgb(0 0 0 / 0.85), 0 4px 12px -6px rgb(0 0 0 / 0.6);
+
+  --chrome-title: #06060c;
+  --chrome-title-text: #e2e2f5;
+  --chrome-menu: #06060c;
+  --chrome-menu-text: #e2e2f5;
+  --chrome-menu-hover: #101026;
+  --chrome-menu-active: #171733;
+  --chrome-toolbar: #06060c;
+  --chrome-toolbar-text: #e2e2f5;
+  --chrome-toolbar-hover: #101026;
+  --chrome-toolbar-active: #1b1b3d;
+  --chrome-popup: #0c0c16;
+  --chrome-popup-hover: #17172e;
+  --chrome-row-alt: #0a0a14;
+  --chrome-muted: #9a9ac0;
+  --chrome-canvas: #06060c;
+  --chrome-panel: #0c0c16;
+  --chrome-line: #181830;
+  --chrome-focus: #00f0ff;
+  --chrome-danger: #c81e4a;
+  --chrome-danger-text: #ffffff;
+  --chrome-error: #ff8fa3;
+
+  --icon-green: #22e07a;
+  --icon-green-bright: #3dffa0;
+  --icon-green-deep: #0f7a45;
+  --icon-red: #ff5c7a;
+  --icon-red-bright: #ff8fa3;
+  --icon-red-deep: #a21235;
+  --icon-silver: #9a9ac0;
+  --icon-silver-bright: #d6d6f0;
+  --icon-silver-deep: #5c5c7e;
+  --icon-purple: #b47cff;
+  --icon-purple-bright: #d0aaff;
+  --icon-purple-deep: #6b3fa0;
+  --icon-blue: #5bc8ff;
+  --icon-blue-bright: #8fdcff;
+  --icon-blue-deep: #2a76a8;
+  --icon-amber: #ffc857;
+  --icon-amber-bright: #ffdf99;
+  --icon-amber-deep: #9a6a00;
+
+  --file-paper: #eef3ff;
+  --file-paper-edge: #6b7390;
+  --file-mark: #0b0b16;
+}

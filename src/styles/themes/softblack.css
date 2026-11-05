@@ -1,0 +1,98 @@
+/*
+  Soft Black. One warm neutral black across the whole window: no blue, purple
+  or grey cast, off-white text and a monochrome action.
+*/
+:root[data-theme="softblack"] {
+  color-scheme: dark;
+
+  --radius: 0.625rem;
+
+  --background: #0a0a0a;
+  --foreground: #f2f2f0;
+  --card: #111111;
+  --card-foreground: #f2f2f0;
+  --popover: #141414;
+  --popover-foreground: #f2f2f0;
+
+  --primary: #e9e9e6;
+  --primary-foreground: #0a0a0a;
+  --progress: #e9e9e6;
+
+  --progress-track: rgb(255 255 255 / 0.08);
+  --progress-active-from: #34d399;
+  --progress-active-via: #22d3ee;
+  --progress-active-to: #60a5fa;
+  --progress-complete-from: #34d399;
+  --progress-complete-to: #22c55e;
+  --progress-paused-from: #7f9fe0;
+  --progress-paused-to: #6a86c4;
+  --progress-failed-from: #f87171;
+  --progress-failed-to: #ef4444;
+
+  --secondary: #141414;
+  --secondary-foreground: #e6e6e3;
+
+  --muted: #131313;
+  --muted-foreground: #9c9c98;
+
+  --accent: #1a1a1a;
+  --accent-foreground: #f2f2f0;
+
+  --success: #2fd06b;
+  --success-foreground: #04130a;
+
+  --destructive: #c2413a;
+  --destructive-foreground: #ffffff;
+
+  --border: #232323;
+  --input: #7a7a76;
+  --ring: #e9e9e6;
+
+  --float-shadow:
+    0 18px 40px -18px rgb(0 0 0 / 0.75), 0 4px 12px -6px rgb(0 0 0 / 0.5);
+
+  --chrome-title: #0a0a0a;
+  --chrome-title-text: #f2f2f0;
+  --chrome-menu: #0a0a0a;
+  --chrome-menu-text: #f2f2f0;
+  --chrome-menu-hover: #1a1a1a;
+  --chrome-menu-active: #222222;
+  --chrome-toolbar: #0a0a0a;
+  --chrome-toolbar-text: #f2f2f0;
+  --chrome-toolbar-hover: #1a1a1a;
+  --chrome-toolbar-active: #222222;
+  --chrome-popup: #111111;
+  --chrome-popup-hover: #1c1c1c;
+  --chrome-row-alt: #0d0d0d;
+  --chrome-muted: #9c9c98;
+  --chrome-canvas: #0a0a0a;
+  --chrome-panel: #111111;
+  --chrome-line: #232323;
+  --chrome-focus: #e9e9e6;
+  --chrome-danger: #c2413a;
+  --chrome-danger-text: #ffffff;
+  --chrome-error: #ff9d90;
+
+  --icon-green: #3fb950;
+  --icon-green-bright: #56d364;
+  --icon-green-deep: #1f7a33;
+  --icon-red: #c8382b;
+  --icon-red-bright: #e85a4d;
+  --icon-red-deep: #7c1f18;
+  --icon-silver: #b9c0c7;
+  --icon-silver-bright: #eef1f3;
+  --icon-silver-deep: #6f777f;
+  --icon-purple: #8f6fc9;
+  --icon-purple-bright: #b79ae8;
+  --icon-purple-deep: #4c3574;
+  --icon-blue: #7f92cc;
+  --icon-blue-bright: #b6c4ee;
+  --icon-blue-deep: #4f5f94;
+  --icon-amber: #d99a2b;
+  --icon-amber-bright: #f2bf62;
+  --icon-amber-deep: #7a4f07;
+
+  --file-paper: #eef3f3;
+  --file-paper-edge: #7f8d8a;
+  --file-mark: #ffffff;
+}
