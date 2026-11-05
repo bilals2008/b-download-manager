@@ -10,6 +10,22 @@ edit one before its release ships if a bullet needs better words.
 
 ---
 
+## [1.0.0] - 6 November 2026
+
+### Added
+
+- **theme:** Add Graphite, Bloom and Hive, one token file per appearance
+- **video:** Own YouTube resolution and native remux, drop yt-dlp and ffmpeg
+
+### Changed
+
+- **release:** Add the 1.0.0 notes
+
+### Fixed
+
+- **changelog:** Give the leftover commits one Changed heading
+
+
 ## [0.3.2] - 4 November 2026
 
 ### Added
