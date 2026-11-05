@@ -69,8 +69,8 @@ src-tauri/src/
     probe.rs       the manifest GET: redirect and size caps, origin headers
     download.rs    the coordinator: tracks, then mux::join, then the file
     mux.rs         join(inputs, output, container): the only remux entry
+    mp4.rs         the native MP4/M4A writer join uses (no re-encode)
     policy.rs      the headers a page may forward, scoped to its origin
-    ytdlp.rs       the optional last resort for an expired YouTube URL
     window.rs      the quality panel window (`video`)
   grabber/       the Site Grabber
     mod.rs         the one run, its commands, and the hand-over to the engine
@@ -190,15 +190,16 @@ Windows 10, where the API is a no-op, all four corners are square together.
 ## Theme
 
 Single source of truth: `src/index.css` (CSS variables + `@theme inline`), read
-by `scripts/check-palette.mjs`. Six appearances: the deep green-black Dark
-base, the neutral Light, and four fixed looks — Cyberpunk (near-black with a
+by `scripts/check-palette.mjs`. Seven appearances: the deep green-black Dark
+base, the neutral Light, and five fixed looks — Cyberpunk (near-black with a
 cyan accent), Volt (ink-black with a teal cast and lime accent), Soft Black
-(one warm neutral black, off-white text and a monochrome action) and Ayu Dark
-(blue-black with Ayu's warm gold accent). Green only
+(one warm neutral black, off-white text and a monochrome action), Ayu Dark
+(blue-black with Ayu's warm gold accent) and Graphite (monochrome chalk on
+slate, squared corners, no elevation). Green only
 for finished work and red only for destruction in every appearance. Changing a
 colour means changing it there and re-running `pnpm check:palette`, which
 merges the base block with each `:root[data-theme="…"]` block and checks the
-WCAG pairs in all six.
+WCAG pairs in all seven.
 
 Adding an appearance takes five places, or it will silently fall back to the
 system light/dark look:
@@ -427,14 +428,16 @@ these invariants:
   tracks; it does not know what a video is. A track is one ordinary download
   per segment, with the existing resume state.
 - Every remux goes through `video::mux::join(inputs, output, container)`.
-  V4a runs an optional LGPL `ffmpeg` sidecar with `-c copy`; a native writer
-  may replace the body later without touching a caller. A transcode is a bug.
+  The MP4/M4A writer is native (`video/mp4.rs`): it copies each sample and
+  rewrites the container, with no external tool and no transcode. A transcode
+  is a bug.
 - DRM is refused, never touched: `#EXT-X-KEY`, MPD `ContentProtection`,
   `application/vnd.yt-ump` and a `pssh`/encrypted init all produce one
   sentence. Live (`no #EXT-X-ENDLIST`, `MPD@type="dynamic"`) is refused too.
-- No cipher solver and no `n` solver. YouTube uses the signed URL the page
-  already requested; an expired URL is one `yt-dlp` attempt if the optional
-  binary exists, else one readable failure.
+- YouTube is resolved by the app itself through the iOS InnerTube client
+  (`video/yt.rs`): it reads the watch page's visitor data and signature
+  timestamp, asks the player endpoint, and downloads the direct addresses it
+  returns. No JavaScript player, no SABR replay, no external downloader.
 - Headers are accepted only for `Cookie`, `User-Agent`, `Referer`,
   `Origin` and `Authorization`, only on the manifest's own origin, never
   persisted, never logged. A cookie or authorization value waits for the

@@ -4,12 +4,9 @@
 // per script. CI runs this job; a green run means every rule below shipped
 // intact.
 //
-// Two scripts deliberately stay out of this list:
+// One script deliberately stays out of this list:
 //   bridge-probe.mjs  drives a RUNNING desktop app over the real loopback
 //                     bridge; CI has no app to talk to.
-//   fetch-ffmpeg.mjs  the sidecar it checks for is gitignored, so the gate
-//                     fails on every fresh checkout by design; the package and
-//                     release jobs run fetch-ffmpeg.mjs itself instead.
 //
 // check-extension.mjs transitively runs check-links.mjs and check-overlay.mjs,
 // so those two files execute through it, not beside it.

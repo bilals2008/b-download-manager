@@ -412,7 +412,7 @@ async function startPage(options = {}) {
 
   page.hover(controls, 600, 720);
   await page.dom.settle();
-  assert.equal(page.visible(), false, "a player with no address shows no button");
+  assert.equal(page.visible(), true, "a YouTube player shows its button before an address");
 
   // The player asks for its first segment while the pointer waits.
   page.dom.pushResource(RANGED_1080);
@@ -543,7 +543,7 @@ async function startPage(options = {}) {
 
   page.hover(video, 400, 300);
   await page.dom.settle();
-  assert.equal(page.visible(), false, "a video with no stream yet shows no button");
+  assert.equal(page.visible(), true, "a YouTube player shows its button before a stream");
   assert.equal(page.open(), false, "and no panel is left behind");
 
   // The first segment of the third video brings the button back without a new

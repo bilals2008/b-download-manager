@@ -229,6 +229,16 @@
     return bdmAllowsOverlay(state.settings, location.hostname);
   }
 
+  /**
+   * Whether this is a YouTube page. The app resolves a YouTube page itself
+   * through its own player client, so the button is offered even before the
+   * page's formats can be read as plain addresses.
+   */
+  function bdmOverlayYoutube() {
+    const host = String(location.hostname || "").toLowerCase();
+    return host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com");
+  }
+
   function within(rect, x, y, slack) {
     if (!rect || rect.width <= 0 || rect.height <= 0) return false;
     return (
@@ -521,13 +531,19 @@
     state.qualityKey = qualityKey;
 
     const rect = video.getBoundingClientRect();
-    if (rect.width < MIN_WIDTH || rect.height < MIN_HEIGHT) return;
+    // On YouTube only the main player is large enough. The small hover-preview
+    // videos under related thumbnails must not draw a button of their own.
+    const minWidth = bdmOverlayYoutube() ? 320 : MIN_WIDTH;
+    const minHeight = bdmOverlayYoutube() ? 180 : MIN_HEIGHT;
+    if (rect.width < minWidth || rect.height < minHeight) return;
 
     state.hovered = video;
 
     const direct = bdmSourcesFor(video);
     const sources = direct.length ? direct : bdmCapturedSources();
-    if (!sources.length) {
+    // A YouTube page always offers its button: the application reads the video
+    // from the page itself, so a plain address is not needed first.
+    if (!sources.length && !bdmOverlayYoutube()) {
       // The pointer is still on the player, so the video stays the pointer's
       // video and the next stream brings the button back without a new hover.
       if (state.video === video) hide(true);
@@ -682,7 +698,10 @@
       const files = [...new Set(state.sources.filter((url) => bdmIsCapturedMedia(url)))].slice(0, 4);
       if (files.length > 1) return files;
     }
-    return state.sources.length ? [state.sources[0]] : [];
+    if (state.sources.length) return [state.sources[0]];
+    // A YouTube page with nothing captured still goes to the app whole: it
+    // resolves the page itself through its own player client.
+    return bdmOverlayYoutube() ? [location.href] : [];
   }
 
   function setQualityError(message) {

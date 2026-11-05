@@ -8,13 +8,15 @@
 
 pub(crate) mod capture;
 pub(crate) mod download;
+pub(crate) mod mp4;
 pub(crate) mod mux;
 pub(crate) mod policy;
 mod probe;
 pub(crate) mod tools;
 pub(crate) mod verify;
+pub(crate) mod webm;
 pub(crate) mod window;
-pub(crate) mod ytdlp;
+pub(crate) mod yt;
 
 use serde::{Deserialize, Serialize};
 
@@ -39,6 +41,8 @@ pub enum MediaKindHint {
     Hls,
     Dash,
     File,
+    /// A YouTube watch page the app resolves through the iOS player client.
+    Youtube,
 }
 
 /// The parsed form a job keeps for the download that follows.

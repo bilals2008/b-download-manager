@@ -200,7 +200,7 @@ Verified locally (November 2026, CI/CD audit):
   Browse is offered.
 - A temporary install record (backed up and restored afterwards) was used for
   the Windows install scenarios: a fresh silent install to a custom folder put
-  the executable, ffmpeg and uninstaller there, recorded that folder and
+  the executable and uninstaller there, recorded that folder and
   pointed the Start Menu shortcut at it. Re-running the installer with the
   updater's `/P /UPDATE` replaced the executable, kept the custom folder,
   kept a marker file and the settings file byte-for-byte, and left the real

@@ -181,10 +181,6 @@ check("bundle configuration", () => {
   assert.equal(bundle.createUpdaterArtifacts, true, "createUpdaterArtifacts must be true");
   assert.equal(typeof conf.productName, "string", "productName is missing");
   assert.match(conf.identifier ?? "", /^[a-z0-9.]+$/, "the bundle identifier must be a dotted name");
-  assert.ok(
-    (bundle.externalBin ?? []).some((entry) => entry.includes("ffmpeg")),
-    "externalBin does not include the ffmpeg sidecar",
-  );
   assert.equal(
     bundle.windows?.nsis?.installMode,
     "currentUser",
@@ -208,17 +204,6 @@ check("bundle configuration", () => {
     conf.plugins?.updater?.windows?.installMode,
     "passive",
     "in-app updates must stay page-skipping (passive) so they reuse the install folder",
-  );
-});
-
-check("macOS bundle sidecar", () => {
-  const path = "src-tauri/tauri.macos.conf.json";
-  assert.ok(existsSync(resolve(root, path)), `${path} is missing`);
-  const mac = readJson(path);
-  assert.deepEqual(
-    mac.bundle?.externalBin,
-    [],
-    "the macOS bundle must clear externalBin: no ffmpeg sidecar is pinned for macOS",
   );
 });
 

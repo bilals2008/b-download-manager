@@ -161,14 +161,6 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # The media path joins HLS/DASH tracks with an LGPL ffmpeg sidecar. The
-      # build is pinned and checksummed in scripts/fetch-ffmpeg.mjs; macOS has
-      # no pinned build yet, so that leg uses an ffmpeg on PATH at runtime.
-      - name: Place the ffmpeg sidecar
-        if: matrix.platform != 'macos-latest'
-        shell: bash
-        run: node scripts/fetch-ffmpeg.mjs
-
       - name: Read this version's notes from WHATS_NEW.md
         id: notes
         shell: bash

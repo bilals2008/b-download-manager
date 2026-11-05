@@ -177,7 +177,7 @@ pub fn start(
 
 async fn run(
     app: &AppHandle,
-    job: MediaJob,
+    mut job: MediaJob,
     request: DownloadRequest,
     dest: PathBuf,
     work_dir: PathBuf,
@@ -188,7 +188,19 @@ async fn run(
     let limits = state.limits().clone();
     let connections = state.browser_connections().clamp(1, 16);
 
-    let result = match job.source.as_ref() {
+    // A YouTube address is bound to the moment it was resolved, and the server
+    // stops answering new range requests for it after a while. On a refused
+    // track, resolve the page again and continue from the bytes already on disk,
+    // so a long video finishes instead of failing near its end.
+    let mut attempt = 0u32;
+    let result = loop {
+        if super::yt::is_youtube_page(&job.page_url) {
+            if let Ok((manifest, source)) = super::yt::resolve(&job.page_url, &job.title).await {
+                job.manifest = Some(manifest);
+                job.source = Some(source);
+            }
+        }
+        let outcome = match job.source.as_ref() {
         Some(SourcePlan::Hls {
             master,
             media,
@@ -237,6 +249,22 @@ async fn run(
         None => Err(Outcome::Failed(
             "this stream cannot be downloaded".to_string(),
         )),
+        };
+        match outcome {
+            Err(Outcome::Failed(error))
+                if attempt < 2
+                    && super::yt::is_youtube_page(&job.page_url)
+                    && (error.contains("403") || error.contains("refused")) =>
+            {
+                attempt += 1;
+                idm_core::log::write(
+                    "info",
+                    "a YouTube address was refused; resolving the page again",
+                );
+                continue;
+            }
+            other => break other,
+        }
     };
 
     match result {
@@ -291,85 +319,7 @@ async fn run(
                 job.stage = Some("Stopped".to_string());
             });
         }
-        Err(Outcome::Failed(error)) => {
-            if matches!(job.source, Some(SourcePlan::Files { .. })) && error.contains("403") {
-                // A YouTube URL expires. The default path reuses the page's
-                // own signed address, so a 403 means the page changed. One
-                // optional yt-dlp call is the last resort; without it the
-                // failure says what the reader can do.
-                if is_youtube_job(&job) && super::ytdlp::available() {
-                    state.update_media_job(job.id, |job| {
-                        job.stage = Some("Trying yt-dlp".to_string());
-                    });
-                    let page = job.page_url.clone();
-                    let selector = ytdlp_selector(&job, &request);
-                    let destination = dest.clone();
-                    // The tool writes into the job's staging folder, not into
-                    // the destination: its own temporaries must not appear in
-                    // the folder the user chose.
-                    let staging = work_dir.clone();
-                    let fallback = tokio::task::spawn_blocking(move || {
-                        super::ytdlp::download(&page, selector.as_deref(), &destination, &staging)
-                    })
-                    .await;
-                    match fallback {
-                        Ok(Ok(())) => {
-                            // The tool wrote the file; it still has to be what
-                            // the name promises before the row is called saved.
-                            let check_path = dest.clone();
-                            let extension = delivery.extension.clone();
-                            let video = delivery.video;
-                            let audio = delivery.audio;
-                            let audio_selected = delivery.audio_selected;
-                            let checked = tokio::task::spawn_blocking(move || {
-                                verify::check_finished(
-                                    &check_path,
-                                    Expect {
-                                        extension: &extension,
-                                        video,
-                                        audio,
-                                        audio_selected,
-                                    },
-                                )
-                            })
-                            .await;
-                            match checked {
-                                Ok(Ok(_)) => {
-                                    let _ = std::fs::remove_dir_all(&work_dir);
-                                    finish_saved(&state, job.id, dest.clone());
-                                }
-                                Ok(Err(error)) => {
-                                    let _ = std::fs::remove_file(&dest);
-                                    finish_failed(&state, job.id, error)
-                                }
-                                Err(error) => finish_failed(&state, job.id, error.to_string()),
-                            }
-                        }
-                        Ok(Err(super::ytdlp::YtDlpError::Cancelled)) => {
-                            state.update_media_job(job.id, |job| {
-                                job.downloading = false;
-                                job.dest = None;
-                                job.error = None;
-                                job.stage = Some("Stopped".to_string());
-                            });
-                        }
-                        _ => finish_failed(
-                            &state,
-                            job.id,
-                            "this site changed, update the app".to_string(),
-                        ),
-                    }
-                    return;
-                }
-                finish_failed(
-                    &state,
-                    job.id,
-                    "this site changed, update the app".to_string(),
-                );
-                return;
-            }
-            finish_failed(&state, job.id, error)
-        }
+        Err(Outcome::Failed(error)) => finish_failed(&state, job.id, error),
     }
 }
 
@@ -884,7 +834,7 @@ fn audio_track_path(work_dir: &Path) -> PathBuf {
 
 /// The extension of the file the user gets.
 /// The panel's word for a quality: the resolution the manifest stated.
-/// Whether this is a YouTube job the yt-dlp fallback may be asked about.
+/// Whether this is a YouTube job, read from its page or manifest host.
 pub(crate) fn is_youtube_job(job: &MediaJob) -> bool {
     let host = |url: &str| {
         reqwest::Url::parse(url)
@@ -898,21 +848,6 @@ pub(crate) fn is_youtube_job(job: &MediaJob) -> bool {
         || page == "youtu.be"
         || manifest.contains("googlevideo")
         || manifest.contains("youtube.")
-}
-
-/// The yt-dlp format expression for the chosen row, when a fallback runs.
-fn ytdlp_selector(job: &MediaJob, request: &DownloadRequest) -> Option<String> {
-    let format = job
-        .manifest
-        .as_ref()?
-        .formats
-        .iter()
-        .find(|format| format.id == request.video)?;
-    Some(match format.kind {
-        MediaKind::Audio => format!("{}/bestaudio", format.id),
-        MediaKind::Video => format!("{}+bestaudio/{}/best", format.id, format.id),
-        MediaKind::Muxed => format!("{}/best", format.id),
-    })
 }
 
 fn quality_token(format: &Format) -> String {

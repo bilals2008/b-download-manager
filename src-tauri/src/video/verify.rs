@@ -1,11 +1,9 @@
 //! Reading what a finished file actually is.
 //!
-//! Nothing here trusts a file name, an exit code or a manifest. The bytes are
+//! Nothing here trusts a file name or a manifest. The bytes are
 //! read back and the container is parsed: an MP4's `moov` index gives its
 //! tracks, codecs and duration; a Matroska/WebM header gives the same; a byte
-//! stream that is neither is not a deliverable. When `ffmpeg` is present, the
-//! first seconds are decoded as well, so a file whose index lies about its
-//! samples is caught too.
+//! stream that is neither is not a deliverable.
 //!
 //! This is what keeps the download list honest: a media download reports
 //! **Saved** only after [`check_finished`] returned, so a failed join, a
@@ -15,23 +13,13 @@
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
-use std::time::{Duration, Instant};
 
 use idm_core::log;
-
-use super::tools::{self, Tool};
 
 /// How much of a file is read when looking for its index. A `moov` or a
 /// Matroska `Tracks` element is a few hundred kilobytes even for a long film;
 /// this is a ceiling, never a target.
 const MAX_INDEX_BYTES: u64 = 64 * 1024 * 1024;
-
-/// How long the playback check may take. It decodes a few seconds, not the
-/// film, so a tool that hangs is stopped.
-pub const PLAYBACK_TIMEOUT: Duration = Duration::from_secs(120);
-
-/// How many seconds of the finished file are decoded.
-const PLAYBACK_SECONDS: &str = "3";
 
 /// The container the file itself declares.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -175,7 +163,7 @@ pub fn inspect(path: &Path) -> Result<MediaInfo, String> {
 ///
 /// This is the only gate between a download and **Saved**. It fails with one
 /// sentence a person can act on, and it never guesses: a file whose bytes are
-/// not a media container is refused even when `ffmpeg` said it wrote one.
+/// not a media container is refused even when its name claims it is one.
 pub fn check_finished(path: &Path, expect: Expect<'_>) -> Result<MediaInfo, String> {
     let info = inspect(path)?;
     if !info.container.fits_extension(expect.extension) {
@@ -218,84 +206,7 @@ pub fn check_finished(path: &Path, expect: Expect<'_>) -> Result<MediaInfo, Stri
         return Err("the finished file is no time long".to_string());
     }
 
-    // The index can lie about its samples. Decoding the first seconds is the
-    // only way to know the file plays, and it is cheap beside the download.
-    let plays = plays(path);
-    if info.duration.is_none() && plays.is_ok() {
-        // A container with no duration is accepted when the decoder read it:
-        // some streams simply do not state one.
-        return Ok(info);
-    }
-    plays?;
     Ok(info)
-}
-
-/// Decode the first seconds of a file with `ffmpeg`. `Ok` means a decoder read
-/// it without an error; it does not re-encode or write anything.
-pub fn plays(path: &Path) -> Result<(), String> {
-    let Some(tool) = Tool::Ffmpeg.locate() else {
-        // Without the tool there is no playback check. The container check
-        // above already passed, so this is not a reason to fail a download.
-        return Ok(());
-    };
-    let mut child = tools::command_for(&tool)
-        .args(["-hide_banner", "-nostdin", "-v", "error", "-i"])
-        .arg(path)
-        .args(["-map", "0", "-t", PLAYBACK_SECONDS, "-f", "null", "-"])
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .map_err(|error| format!("the playback check could not run: {error}"))?;
-
-    let started = Instant::now();
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                if status.success() {
-                    return Ok(());
-                }
-                let mut message = String::new();
-                if let Some(mut stderr) = child.stderr.take() {
-                    let _ = stderr.read_to_string(&mut message);
-                }
-                let message = last_line(&message);
-                log::write(
-                    "warn",
-                    &format!(
-                        "the playback check failed for {}: {message}",
-                        path.display()
-                    ),
-                );
-                return Err(match message.is_empty() {
-                    true => "the finished file could not be played back".to_string(),
-                    false => format!("the finished file could not be played back: {message}"),
-                });
-            }
-            Ok(None) => {}
-            Err(error) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(format!("the playback check failed: {error}"));
-            }
-        }
-        if started.elapsed() > PLAYBACK_TIMEOUT {
-            let _ = child.kill();
-            let _ = child.wait();
-            log::write("warn", "the playback check timed out");
-            return Err("the playback check took too long and was stopped".to_string());
-        }
-        std::thread::sleep(Duration::from_millis(100));
-    }
-}
-
-fn last_line(text: &str) -> String {
-    text.lines()
-        .rev()
-        .map(str::trim)
-        .find(|line| !line.is_empty())
-        .map(|line| line.chars().take(200).collect())
-        .unwrap_or_default()
 }
 
 fn extension_word(extension: &str) -> &'static str {

@@ -96,6 +96,7 @@ pub async fn register(app: &AppHandle, body: &[u8]) -> (u16, Value) {
         "hls" => MediaKindHint::Hls,
         "dash" => MediaKindHint::Dash,
         "file" => MediaKindHint::File,
+        "youtube" => MediaKindHint::Youtube,
         _ => MediaKindHint::Auto,
     };
 
@@ -231,7 +232,6 @@ pub fn cancel(app: &AppHandle, id: u64) -> (u16, Value) {
     }
     if let Some(dest) = job.dest.as_deref() {
         super::mux::cancel(Path::new(dest));
-        super::ytdlp::cancel(Path::new(dest));
     }
     state.update_media_job(id, |job| {
         job.stage = Some("Stopped".to_string());
@@ -319,7 +319,6 @@ pub fn media_forget(app: AppHandle, job: u64, delete_file: bool) -> Result<(), S
     if let Some(dest) = media.dest.as_deref() {
         let dest = Path::new(dest);
         super::mux::cancel(dest);
-        super::ytdlp::cancel(dest);
         if delete_file {
             match std::fs::remove_file(dest) {
                 Ok(()) => {}
@@ -382,7 +381,6 @@ pub fn media_cancel(app: AppHandle, job: u64) -> Result<(), String> {
     }
     if let Some(dest) = media.dest.as_deref() {
         super::mux::cancel(Path::new(dest));
-        super::ytdlp::cancel(Path::new(dest));
     }
     state.update_media_job(job, |job| {
         job.stage = Some("Stopped".to_string());
@@ -493,7 +491,13 @@ async fn parse_job(app: AppHandle, id: u64) {
 }
 
 async fn parse_manifest(job: &MediaJob) -> Result<(Manifest, SourcePlan), String> {
+    // A YouTube page is resolved through its iOS player client, which still
+    // returns direct addresses; the page's own formats carry no usable `url`.
+    if job.kind == MediaKindHint::Youtube || super::yt::is_youtube_page(&job.page_url) {
+        return super::yt::resolve(&job.page_url, &job.title).await;
+    }
     match infer_kind(job.kind, &job.manifest_url) {
+        MediaKindHint::Youtube => super::yt::resolve(&job.page_url, &job.title).await,
         MediaKindHint::Hls => parse_hls(job).await,
         MediaKindHint::Dash => parse_dash(job).await,
         MediaKindHint::File => parse_file(job).await,

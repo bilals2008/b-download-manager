@@ -79,18 +79,6 @@ jobs:
 
       - uses: swatinem/rust-cache@v2
 
-      # tauri-build refuses to compile when the externalBin sidecar is absent.
-      # These jobs only compile and test, so an empty placeholder satisfies the
-      # existence check; the bundle jobs fetch the real, checksummed binary.
-      - name: Stub the ffmpeg sidecar for compilation
-        shell: bash
-        run: |
-          triple="$(rustc -vV | sed -n 's/^host: //p')"
-          ext=""
-          case "$triple" in *windows*) ext=".exe" ;; esac
-          mkdir -p src-tauri/binaries
-          touch "src-tauri/binaries/ffmpeg-${triple}${ext}"
-
       - name: Format
         run: cargo fmt --all --check
 
@@ -114,17 +102,6 @@ jobs:
 
       # The cache key includes the OS, so this is a tree of its own.
       - uses: swatinem/rust-cache@v2
-
-      # See the Linux job: the build script only checks that the sidecar path
-      # exists, and this leg never packages anything.
-      - name: Stub the ffmpeg sidecar for compilation
-        shell: bash
-        run: |
-          triple="$(rustc -vV | sed -n 's/^host: //p')"
-          ext=""
-          case "$triple" in *windows*) ext=".exe" ;; esac
-          mkdir -p src-tauri/binaries
-          touch "src-tauri/binaries/ffmpeg-${triple}${ext}"
 
       # Not a duplicate of the Linux lint: the cfg(windows) paths in the
       # engine's disk code and in the app's win32 window and tray code are
@@ -164,11 +141,6 @@ jobs:
       - uses: swatinem/rust-cache@v2
 
       - run: pnpm install --frozen-lockfile
-
-      # The bundle embeds the pinned, checksummed sidecar.
-      - name: Place the ffmpeg sidecar
-        shell: bash
-        run: node scripts/fetch-ffmpeg.mjs
 
       # A throwaway key, generated for this build only. It proves the signing
       # and the verification path on every push to main; release.yml keeps

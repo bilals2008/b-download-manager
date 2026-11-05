@@ -1,6 +1,6 @@
 # ADR-0004 — Remux with an `ffmpeg` sidecar behind one function
 
-Status: accepted (V4a)
+Status: superseded by ADR-0005 (the native V4b writer)
 
 ## Context
 
