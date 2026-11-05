@@ -201,54 +201,54 @@ async fn run(
             }
         }
         let outcome = match job.source.as_ref() {
-        Some(SourcePlan::Hls {
-            master,
-            media,
-            base,
-        }) => {
-            run_hls(
-                app,
-                &job,
-                &request,
-                master.as_ref(),
-                media.as_ref(),
+            Some(SourcePlan::Hls {
+                master,
+                media,
                 base,
-                &work_dir,
-                &limits,
-                connections,
-                &control,
-            )
-            .await
-        }
-        Some(SourcePlan::Dash { tracks, .. }) => {
-            run_dash(
-                app,
-                &job,
-                &request,
-                tracks,
-                &work_dir,
-                &limits,
-                connections,
-                &control,
-            )
-            .await
-        }
-        Some(SourcePlan::Files { tracks }) => {
-            run_files(
-                app,
-                &job,
-                &request,
-                tracks,
-                &work_dir,
-                &limits,
-                connections,
-                &control,
-            )
-            .await
-        }
-        None => Err(Outcome::Failed(
-            "this stream cannot be downloaded".to_string(),
-        )),
+            }) => {
+                run_hls(
+                    app,
+                    &job,
+                    &request,
+                    master.as_ref(),
+                    media.as_ref(),
+                    base,
+                    &work_dir,
+                    &limits,
+                    connections,
+                    &control,
+                )
+                .await
+            }
+            Some(SourcePlan::Dash { tracks, .. }) => {
+                run_dash(
+                    app,
+                    &job,
+                    &request,
+                    tracks,
+                    &work_dir,
+                    &limits,
+                    connections,
+                    &control,
+                )
+                .await
+            }
+            Some(SourcePlan::Files { tracks }) => {
+                run_files(
+                    app,
+                    &job,
+                    &request,
+                    tracks,
+                    &work_dir,
+                    &limits,
+                    connections,
+                    &control,
+                )
+                .await
+            }
+            None => Err(Outcome::Failed(
+                "this stream cannot be downloaded".to_string(),
+            )),
         };
         match outcome {
             Err(Outcome::Failed(error))

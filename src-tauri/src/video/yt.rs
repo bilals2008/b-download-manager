@@ -351,7 +351,6 @@ mod live {
     }
 }
 
-
 #[cfg(test)]
 mod live_download {
     use super::*;
@@ -364,9 +363,10 @@ mod live_download {
         let track = match source {
             SourcePlan::Files { tracks } => tracks
                 .into_iter()
-                .filter(|t| t.format.kind == MediaKind::Video && t.format.size.unwrap_or(0) > 20_000_000)
+                .filter(|t| {
+                    t.format.kind == MediaKind::Video && t.format.size.unwrap_or(0) > 20_000_000
+                })
                 .min_by_key(|t| t.format.size.unwrap_or(u64::MAX))
-                .or_else(|| None)
                 .expect("a video track"),
             _ => panic!("files expected"),
         };
@@ -377,7 +377,10 @@ mod live_download {
         let dest = dir.join("video.track");
         let src = idm_core::media::download::TrackSource {
             init: None,
-            segments: vec![idm_core::media::TrackSegment { url: track.url.clone(), range: None }],
+            segments: vec![idm_core::media::TrackSegment {
+                url: track.url.clone(),
+                range: None,
+            }],
             dest: dest.clone(),
             work_dir: dir.clone(),
             stem: "video".to_string(),
@@ -397,7 +400,12 @@ mod live_download {
         .await
         .expect("download");
         let size = std::fs::metadata(&dest).map(|m| m.len()).unwrap_or(0);
-        eprintln!("outcome {:?} bytes {} in {:?}", outcome, size, start.elapsed());
+        eprintln!(
+            "outcome {:?} bytes {} in {:?}",
+            outcome,
+            size,
+            start.elapsed()
+        );
         assert!(size > 1_000_000, "a whole track");
         let _ = std::fs::remove_dir_all(&dir);
         let _ = manifest;
