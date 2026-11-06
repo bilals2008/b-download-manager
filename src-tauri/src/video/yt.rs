@@ -1,15 +1,19 @@
-//! YouTube resolution through its own iOS InnerTube client.
+//! YouTube resolution through its InnerTube clients.
 //!
 //! The web player streams through SABR/UMP over POST and no longer hands over a
-//! plain file address; the legacy `get_video_info` endpoint is gone (`410`). The
-//! iOS client's `player` call still returns a signed, direct `url` for every
-//! format, so this module makes that call itself — no JavaScript player, no
-//! external tool — and turns the formats into the same `Files` plan the rest of
-//! the media path already downloads and muxes.
+//! plain file address; the legacy `get_video_info` endpoint is gone (`410`).
+//! The clients that still return a signed, direct `url` for every format are
+//! asked here — no JavaScript player, no external tool — and their formats
+//! become the same `Files` plan the rest of the media path already downloads
+//! and muxes. iOS is the primary client; the ANDROID_VR client follows it, so
+//! one client losing its URL rights does not stop every video.
 //!
-//! The request needs the page's `visitorData` and `signatureTimestamp` (`STS`),
-//! both read from the watch page. The formats it returns are ordinary GET
-//! addresses; the app downloads them like any file.
+//! Each request needs the page's `visitorData` and `signatureTimestamp`
+//! (`STS`), both read from the watch page. The formats the clients return are
+//! ordinary GET addresses; the app downloads them like any file. The answers
+//! of any client expire in a few hours and stay bound to the address that
+//! asked for them, so a download that begins long after the page was read
+//! resolves the page again first.
 
 use idm_core::media::{quality, youtube, Format, Manifest, MediaKind};
 use reqwest::Url;
@@ -25,6 +29,77 @@ const DESKTOP_UA: &str =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 /// The signature timestamp used when the page does not state one.
 const DEFAULT_STS: u64 = 20_759;
+
+/// The ANDROID_VR client, the one that answers without a proof-of-origin
+/// token when the iOS client does not.
+const VR_CLIENT_VERSION: &str = "1.60.19";
+const VR_UA: &str =
+    "com.google.android.apps.youtube.vr.oculus/1.60.19 (Linux; U; Android 12L; Quest 3 Build/SQ3A.220605.009.A1) gzip";
+
+/// One player client. They share the call and the answer's shape; only the
+/// identity they present differs, so a client that loses its URL rights can
+/// be replaced by the next one.
+struct PlayerProfile {
+    /// What the log calls this client.
+    label: &'static str,
+    user_agent: &'static str,
+    player_client: serde_json::Value,
+    /// `x-youtube-client-name`. Some clients are asked without it.
+    client_name: Option<&'static str>,
+    client_version: &'static str,
+}
+
+fn ios_profile(visitor: &str) -> PlayerProfile {
+    PlayerProfile {
+        label: "iOS",
+        user_agent: IOS_UA,
+        player_client: json!({
+            "hl": "en",
+            "gl": "US",
+            "screenDensityFloat": 1,
+            "screenHeightPoints": 1440,
+            "screenPixelDensity": 1,
+            "screenWidthPoints": 2560,
+            "visitorData": visitor,
+            "clientName": "iOS",
+            "clientVersion": IOS_CLIENT_VERSION,
+            "osName": "iOS",
+            "osVersion": "16.7.7.20H330",
+            "userAgent": IOS_UA,
+            "platform": "MOBILE",
+            "clientFormFactor": "UNKNOWN_FORM_FACTOR",
+            "userInterfaceTheme": "USER_INTERFACE_THEME_LIGHT",
+            "deviceMake": "Apple",
+            "deviceModel": "iPhone10,4",
+            "memoryTotalKbytes": "8000000"
+        }),
+        client_name: Some("5"),
+        client_version: IOS_CLIENT_VERSION,
+    }
+}
+
+fn vr_profile(visitor: &str) -> PlayerProfile {
+    PlayerProfile {
+        label: "ANDROID_VR",
+        user_agent: VR_UA,
+        player_client: json!({
+            "clientName": "ANDROID_VR",
+            "clientVersion": VR_CLIENT_VERSION,
+            "deviceMake": "Oculus",
+            "deviceModel": "Quest 3",
+            "osName": "Android",
+            "osVersion": "12L",
+            "platform": "MOBILE",
+            "visitorData": visitor,
+            "hl": "en",
+            "gl": "US",
+            "utcOffsetMinutes": 0
+        }),
+        // The VR client is not asked through the named header pair.
+        client_name: None,
+        client_version: VR_CLIENT_VERSION,
+    }
+}
 
 /// Whether a page address is a YouTube watch page this module can resolve.
 pub fn is_youtube_page(url: &str) -> bool {
@@ -99,7 +174,51 @@ pub async fn resolve(
         .ok_or_else(|| "the video page did not name a visitor".to_string())?;
     let sts = digits_after(&html, "\"STS\":").unwrap_or(DEFAULT_STS);
 
-    // 2. Ask the iOS client for the player response.
+    // 2. Ask each player client in turn until one hands us streams. iOS is
+    //    first; the VR client answers when iOS does not, so one client losing
+    //    its URL rights no longer stops every video on the page.
+    let mut first_error: Option<String> = None;
+    for profile in [ios_profile(visitor), vr_profile(visitor)] {
+        let response = ask_player(&client, &id, visitor, sts, &profile).await;
+        let data = match response {
+            Ok(data) => data,
+            Err(error) => {
+                first_error.get_or_insert(error);
+                continue;
+            }
+        };
+        let status = data
+            .pointer("/playabilityStatus/status")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        if !status.is_empty() && status != "OK" {
+            let reason = data
+                .pointer("/playabilityStatus/reason")
+                .and_then(Value::as_str)
+                .unwrap_or("the video is not playable");
+            first_error.get_or_insert_with(|| {
+                format!("the video could not be asked for: {reason} ({})", profile.label)
+            });
+            continue;
+        }
+        match plan_from(&data, fallback_title) {
+            Ok((manifest, source)) => return Ok((manifest, source)),
+            Err(error) => {
+                first_error.get_or_insert(error);
+            }
+        }
+    }
+    Err(first_error.unwrap_or_else(|| "the video could not be asked for".to_string()))
+}
+
+/// The player answer of one client.
+async fn ask_player(
+    client: &reqwest::Client,
+    id: &str,
+    visitor: &str,
+    sts: u64,
+    profile: &PlayerProfile,
+) -> Result<Value, String> {
     let body = json!({
         "videoId": id,
         "racyCheckOk": true,
@@ -113,40 +232,25 @@ pub async fn resolve(
             }
         },
         "context": {
-            "client": {
-                "hl": "en",
-                "gl": "US",
-                "screenDensityFloat": 1,
-                "screenHeightPoints": 1440,
-                "screenPixelDensity": 1,
-                "screenWidthPoints": 2560,
-                "visitorData": visitor,
-                "clientName": "iOS",
-                "clientVersion": IOS_CLIENT_VERSION,
-                "osName": "iOS",
-                "osVersion": "16.7.7.20H330",
-                "userAgent": IOS_UA,
-                "platform": "MOBILE",
-                "clientFormFactor": "UNKNOWN_FORM_FACTOR",
-                "userInterfaceTheme": "USER_INTERFACE_THEME_LIGHT",
-                "deviceMake": "Apple",
-                "deviceModel": "iPhone10,4",
-                "memoryTotalKbytes": "8000000"
-            },
+            "client": profile.player_client,
             "user": { "enableSafetyMode": false, "lockedSafetyMode": false },
             "request": { "useSsl": true, "internalExperimentFlags": [] }
         }
     });
-    let response = client
+    let mut request = client
         .post("https://www.youtube.com/youtubei/v1/player?prettyPrint=false&alt=json")
-        .header("user-agent", IOS_UA)
+        .header("user-agent", profile.user_agent)
         .header("accept", "*/*")
         .header("accept-language", "*")
         .header("origin", "https://www.youtube.com")
         .header("x-goog-visitor-id", visitor)
-        .header("x-youtube-client-name", "5")
-        .header("x-youtube-client-version", IOS_CLIENT_VERSION)
-        .header("content-type", "application/json")
+        .header("content-type", "application/json");
+    if let Some(name) = profile.client_name {
+        request = request
+            .header("x-youtube-client-name", name)
+            .header("x-youtube-client-version", profile.client_version);
+    }
+    let response = request
         .body(serde_json::to_vec(&body).map_err(|error| error.to_string())?)
         .send()
         .await
@@ -155,21 +259,14 @@ pub async fn resolve(
         .text()
         .await
         .map_err(|error| format!("the video answer could not be read: {error}"))?;
-    let data: Value = serde_json::from_str(&text)
-        .map_err(|error| format!("the video answer could not be read: {error}"))?;
+    serde_json::from_str(&text)
+        .map_err(|error| format!("the video answer could not be read: {error}"))
+}
 
-    let status = data
-        .pointer("/playabilityStatus/status")
-        .and_then(Value::as_str)
-        .unwrap_or("");
-    if !status.is_empty() && status != "OK" {
-        let reason = data
-            .pointer("/playabilityStatus/reason")
-            .and_then(Value::as_str)
-            .unwrap_or("the video is not playable");
-        return Err(reason.to_string());
-    }
-
+/// The formats of one player answer, as the manifest and the plans the rest
+/// of the media path downloads.
+#[allow(clippy::type_complexity)]
+fn plan_from(data: &Value, fallback_title: &str) -> Result<(Manifest, SourcePlan), String> {
     let Some(streaming) = data.get("streamingData") else {
         return Err("the video returned no streams".to_string());
     };
@@ -322,6 +419,17 @@ mod tests {
         );
         assert_eq!(digits_after(html, "\"STS\":"), Some(20759));
     }
+
+    #[test]
+    fn a_fallback_client_names_itself() {
+        let ios = ios_profile("Cgtabc");
+        let vr = vr_profile("Cgtabc");
+        assert_eq!(ios.player_client["clientName"], "iOS");
+        assert!(ios.client_name.is_some());
+        assert_eq!(vr.player_client["clientName"], "ANDROID_VR");
+        assert_eq!(vr.player_client["visitorData"], "Cgtabc");
+        assert!(vr.client_name.is_none());
+    }
 }
 
 #[cfg(test)]
@@ -409,5 +517,77 @@ mod live_download {
         assert!(size > 1_000_000, "a whole track");
         let _ = std::fs::remove_dir_all(&dir);
         let _ = manifest;
+    }
+}
+
+#[cfg(test)]
+mod live_fallback {
+    use super::*;
+    use idm_core::media::MediaKind;
+
+    #[tokio::test]
+    #[ignore = "reaches YouTube and downloads"]
+    async fn the_vr_client_resolves_and_downloads_a_track() {
+        let id = video_id("https://www.youtube.com/watch?v=dQw4w9WgXcQ").expect("a video id");
+        let client = reqwest::Client::builder().build().expect("client");
+        let page = client
+            .get(format!("https://www.youtube.com/watch?v={id}&hl=en&gl=US"))
+            .header("user-agent", DESKTOP_UA)
+            .header("cookie", "CONSENT=YES+1")
+            .send()
+            .await
+            .expect("page");
+        let html = page.text().await.expect("html");
+        let visitor = text_between(&html, "\"VISITOR_DATA\":\"", '"').expect("visitor");
+        let sts = digits_after(&html, "\"STS\":").unwrap_or(DEFAULT_STS);
+        let data = ask_player(&client, &id, visitor, sts, &vr_profile(visitor))
+            .await
+            .expect("the VR answer");
+        let (manifest, source) = plan_from(&data, "Video").expect("a plan");
+        assert!(!manifest.formats.is_empty(), "the VR answer offered formats");
+        let track = match source {
+            SourcePlan::Files { tracks } => tracks
+                .into_iter()
+                .filter(|t| t.format.kind == MediaKind::Video)
+                .min_by_key(|t| t.format.size.unwrap_or(u64::MAX))
+                .filter(|t| t.format.size.unwrap_or(0) > 1_000_000)
+                .expect("a video track"),
+            _ => panic!("files expected"),
+        };
+        let dir = std::env::temp_dir().join(format!("bdm-yt-vr-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("dir");
+        let dest = dir.join("video.track");
+        let outcome = idm_core::media::download::download_track(
+            idm_core::limits::Limits::default(),
+            idm_core::media::download::TrackSource {
+                init: None,
+                segments: vec![idm_core::media::TrackSegment {
+                    url: track.url.clone(),
+                    range: None,
+                }],
+                dest: dest.clone(),
+                work_dir: dir.clone(),
+                stem: "video".to_string(),
+                connections: 4,
+                proxy: None,
+                referer: None,
+                headers: Vec::new(),
+                header_origin: None,
+            },
+            None,
+            None,
+        )
+        .await;
+        let size = std::fs::metadata(&dest).map(|m| m.len()).unwrap_or(0);
+        eprintln!(
+            "vr itag {} size {:?} outcome {:?} bytes {}",
+            track.format.id,
+            track.format.size,
+            outcome,
+            size
+        );
+        assert!(size > 1_000_000, "a whole track");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

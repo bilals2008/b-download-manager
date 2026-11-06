@@ -195,9 +195,19 @@ async fn run(
     let mut attempt = 0u32;
     let result = loop {
         if super::yt::is_youtube_page(&job.page_url) {
-            if let Ok((manifest, source)) = super::yt::resolve(&job.page_url, &job.title).await {
-                job.manifest = Some(manifest);
-                job.source = Some(source);
+            // A resolve that fails quietly here would send the retry against
+            // the same dead address, so what it said is written down.
+            match super::yt::resolve(&job.page_url, &job.title).await {
+                Ok((manifest, source)) => {
+                    job.manifest = Some(manifest);
+                    job.source = Some(source);
+                }
+                Err(error) => {
+                    idm_core::log::write(
+                        "warn",
+                        &format!("resolving the page again failed: {error}"),
+                    );
+                }
             }
         }
         let outcome = match job.source.as_ref() {
