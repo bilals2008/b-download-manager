@@ -71,6 +71,12 @@ pub enum SourcePlan {
 pub struct FileTrack {
     pub format: Format,
     pub url: String,
+    /// The client identity the address was signed for, when the app asked
+    /// a provider for the URL itself. A server that-bound address is
+    /// refused to any request that names an unlike client, so the download
+    /// has to carry the User-Agent the resolver used. Browser-captured
+    /// addresses carry the browser's own headers instead.
+    pub user_agent: Option<String>,
 }
 
 /// One manifest the extension asked about.

@@ -1301,6 +1301,7 @@ mod tests {
             tracks: vec![FileTrack {
                 format: Format::new("137", MediaKind::Video, "mp4"),
                 url: "https://cdn.example.org/videoplayback?itag=137".to_string(),
+                user_agent: None,
             }],
         });
         state.insert_media_job(job);

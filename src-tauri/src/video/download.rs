@@ -705,6 +705,10 @@ async fn run_files(
     };
     let total_segments = 1 + usize::from(audio_track.is_some());
     let last_video = Arc::new(Mutex::new(TrackProgress::default()));
+    // A YouTube address is signed for the client that asked for it: the
+    // server refuses a request that presents an unlike identity, so the
+    // resolved client's User-Agent rides along with the job's own headers.
+    let video_headers = track_headers(job, chosen.user_agent.as_deref());
     let track = TrackSource {
         init: None,
         segments: vec![TrackSegment {
@@ -717,7 +721,7 @@ async fn run_files(
         connections,
         proxy: app.state::<AppState>().limits().proxy(),
         referer: Some(job.referer.clone()).filter(|referer| !referer.is_empty()),
-        headers: job.headers.clone(),
+        headers: video_headers,
         header_origin: Some(job.header_origin.clone()).filter(|origin| !origin.is_empty()),
     };
     run_track(
@@ -756,7 +760,7 @@ async fn run_files(
             connections,
             proxy: app.state::<AppState>().limits().proxy(),
             referer: Some(job.referer.clone()).filter(|referer| !referer.is_empty()),
-            headers: job.headers.clone(),
+            headers: track_headers(job, audio.user_agent.as_deref()),
             header_origin: Some(job.header_origin.clone()).filter(|origin| !origin.is_empty()),
         };
         run_track(
@@ -825,6 +829,15 @@ fn finish_failed(state: &AppState, id: u64, error: String) {
         job.error = Some(error);
         job.stage = Some("Failed".to_string());
     });
+}
+
+/// The job headers with the client identity the track address was signed for.
+fn track_headers(job: &MediaJob, user_agent: Option<&str>) -> Vec<(String, String)> {
+    let mut headers = job.headers.clone();
+    if let Some(user_agent) = user_agent {
+        headers.push(("user-agent".to_string(), user_agent.to_string()));
+    }
+    headers
 }
 
 fn segment(segment: &hls::HlsSegment) -> TrackSegment {

@@ -654,6 +654,7 @@ async fn parse_file(job: &MediaJob) -> Result<(Manifest, SourcePlan), String> {
             tracks: vec![FileTrack {
                 format,
                 url: probe.url,
+                user_agent: None,
             }],
         },
     ))

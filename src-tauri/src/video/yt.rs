@@ -204,7 +204,7 @@ pub async fn resolve(
             });
             continue;
         }
-        match plan_from(&data, fallback_title) {
+        match plan_from(&data, fallback_title, Some(profile.user_agent)) {
             Ok((manifest, source)) => return Ok((manifest, source)),
             Err(error) => {
                 first_error.get_or_insert(error);
@@ -269,7 +269,11 @@ async fn ask_player(
 /// The formats of one player answer, as the manifest and the plans the rest
 /// of the media path downloads.
 #[allow(clippy::type_complexity)]
-fn plan_from(data: &Value, fallback_title: &str) -> Result<(Manifest, SourcePlan), String> {
+fn plan_from(
+    data: &Value,
+    fallback_title: &str,
+    user_agent: Option<&str>,
+) -> Result<(Manifest, SourcePlan), String> {
     let Some(streaming) = data.get("streamingData") else {
         return Err("the video returned no streams".to_string());
     };
@@ -316,6 +320,7 @@ fn plan_from(data: &Value, fallback_title: &str) -> Result<(Manifest, SourcePlan
         tracks.push(FileTrack {
             format,
             url: url.to_string(),
+            user_agent: user_agent.map(str::to_string),
         });
     }
     if tracks.is_empty() {
@@ -498,7 +503,11 @@ mod live_download {
             connections: 8,
             proxy: None,
             referer: None,
-            headers: Vec::new(),
+            headers: track
+                .user_agent
+                .iter()
+                .map(|user_agent| ("user-agent".to_string(), user_agent.clone()))
+                .collect(),
             header_origin: None,
         };
         let start = std::time::Instant::now();
@@ -546,7 +555,7 @@ mod live_fallback {
         let data = ask_player(&client, &id, visitor, sts, &vr_profile(visitor))
             .await
             .expect("the VR answer");
-        let (manifest, source) = plan_from(&data, "Video").expect("a plan");
+        let (manifest, source) = plan_from(&data, "Video", Some(VR_UA)).expect("a plan");
         assert!(
             !manifest.formats.is_empty(),
             "the VR answer offered formats"
@@ -578,7 +587,11 @@ mod live_fallback {
                 connections: 4,
                 proxy: None,
                 referer: None,
-                headers: Vec::new(),
+                headers: track
+                    .user_agent
+                    .iter()
+                    .map(|user_agent| ("user-agent".to_string(), user_agent.clone()))
+                    .collect(),
                 header_origin: None,
             },
             None,
