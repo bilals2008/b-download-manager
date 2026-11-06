@@ -1,7 +1,7 @@
 // Self-check for the update surface: the first-run setting round-trips and
 // defaults like every other field, and the release date reads as a day or
 // says nothing. Node strips the types, so this runs against the same modules
-// the app imports. Run it with `pnpm run check:updates`.
+// the app imports. Run it with `ppnpm check:updates`.
 
 import assert from "node:assert/strict";
 
@@ -12,6 +12,14 @@ globalThis.window = {
     setItem: (key, value) => store.set(key, String(value)),
     removeItem: (key) => store.delete(key),
   },
+  // A dark system: a first open reads the appearance, and a read that throws
+  // would fall back to the whole default record instead of the saved one.
+  matchMedia: (query) => ({
+    matches: false,
+    media: query,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  }),
 };
 
 const { DEFAULT_SETTINGS, loadSettings, saveSettings } = await import(

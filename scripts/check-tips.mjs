@@ -1,7 +1,7 @@
 // Self-check for the tips: the collection is unique and readable, every entry
 // only names something the app can do, and the saved position wraps cleanly.
 // Node strips the types, so this runs against the same modules the dialog
-// imports. Run it with `pnpm run check:tips`.
+// imports. Run it with `ppnpm check:tips`.
 
 import assert from "node:assert/strict";
 
@@ -12,6 +12,14 @@ globalThis.window = {
     setItem: (key, value) => store.set(key, String(value)),
     removeItem: (key) => store.delete(key),
   },
+  // A dark system: a first open reads the appearance, and a read that throws
+  // would fall back to the whole default record instead of the saved one.
+  matchMedia: (query) => ({
+    matches: false,
+    media: query,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  }),
 };
 
 const {

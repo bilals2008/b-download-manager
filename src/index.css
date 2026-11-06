@@ -213,7 +213,7 @@
   switching.
 
   In every appearance green marks finished work and red destroys. The hex
-  values are the ones the palette checker (`npm run check:palette`) verifies for
+  values are the ones the palette checker (`pnpm check:palette`) verifies for
   WCAG contrast, so change them here and run the checker.
 */
 :root {
@@ -311,7 +311,7 @@
     Application chrome. Window furniture and panes share the one canvas
     surface, and edges come from a hairline, never a second shade. Hover and
     open are the only tints. Every text pair below is checked by
-    `npm run check:palette`.
+    `pnpm check:palette`.
   */
   --chrome-title: #0b1416;
   --chrome-title-text: #d7e3df;
@@ -362,6 +362,22 @@
   --file-paper: #eef3f3;
   --file-paper-edge: #7f8d8a;
   --file-mark: #ffffff;
+
+  /*
+    The dot each appearance carries in the theme picker. These are fixed
+    identities, not tokens: they describe a theme instead of following the
+    active one, so all of them sit here once.
+  */
+  --theme-swatch-auto: linear-gradient(135deg, #f3f4f6 50%, #0b1416 50%);
+  --theme-swatch-light: #022c1e;
+  --theme-swatch-dark: #c8ff00;
+  --theme-swatch-bloom: #8a5100;
+  --theme-swatch-cyberpunk: #00f0ff;
+  --theme-swatch-volt: #c8ff00;
+  --theme-swatch-softblack: #e9e9e6;
+  --theme-swatch-ayu: #e6b450;
+  --theme-swatch-graphite: #e8eaed;
+  --theme-swatch-hive: #ffb95f;
 }
 
 /*

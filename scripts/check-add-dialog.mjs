@@ -1,7 +1,7 @@
 // Self-check for the Add URL dialog: the address, the file name, the reason a
 // probe failed and the destination the dialog builds before the engine sees
 // them. Node strips the types, so this runs against the same helpers the
-// dialog imports. Run it with `npm run check:add-dialog`.
+// dialog imports. Run it with `pnpm check:add-dialog`.
 
 import assert from "node:assert/strict";
 
@@ -218,6 +218,14 @@ globalThis.window = {
     getItem: (key) => storage.get(key) ?? null,
     setItem: (key, value) => storage.set(key, String(value)),
   },
+  // The settings fall back to a whole default record when a read throws, so
+  // the appearance query the first open answers has to be here too.
+  matchMedia: (query) => ({
+    matches: false,
+    media: query,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  }),
 };
 is(loadLastFolder(), "", "no folder remembered yet");
 is(preferredFolder(), "", "nothing to start from yet");

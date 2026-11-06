@@ -41,7 +41,10 @@ export function AppearanceSettings({
               label="Theme"
               value={settings.theme}
               onChange={(theme) => onChange("theme", theme as ThemePreference)}
-              options={THEME_OPTIONS}
+              options={THEME_OPTIONS.map((option) => ({
+                ...option,
+                swatch: `var(--theme-swatch-${option.value})`,
+              }))}
             />
           </div>
         </SettingRow>

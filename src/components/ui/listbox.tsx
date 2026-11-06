@@ -6,6 +6,8 @@ import { CheckGlyph, ChevronDown } from "@/components/icons/ui-icons";
 export interface ListBoxOption {
   value: string;
   label: string;
+  /** A CSS paint for the dot shown before the label, for palettes and swatches. */
+  swatch?: string;
 }
 
 interface ListBoxProps {
@@ -238,7 +240,10 @@ export function ListBox({
         onKeyDown={handleKeyDown}
         className="flex w-full items-center justify-between gap-2 rounded-chrome border border-chrome-line bg-chrome-canvas px-2.5 py-1.5 text-left text-xs text-chrome-menu-text transition-colors hover:border-chrome-muted focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none disabled:cursor-default disabled:opacity-45 disabled:hover:border-chrome-line"
       >
-        <span className="truncate">{selected?.label ?? label}</span>
+        <span className="flex min-w-0 items-center gap-2">
+          {selected?.swatch ? <Swatch paint={selected.swatch} /> : null}
+          <span className="truncate">{selected?.label ?? label}</span>
+        </span>
         <ChevronDown className="size-3.5 shrink-0 text-chrome-muted" />
       </button>
 
@@ -278,6 +283,7 @@ export function ListBox({
                       <CheckGlyph
                         className={`size-3.5 shrink-0 ${isSelected ? "opacity-100" : "opacity-0"}`}
                       />
+                      {option.swatch ? <Swatch paint={option.swatch} /> : null}
                       <span className="truncate">{option.label}</span>
                     </button>
                   </li>
@@ -290,5 +296,16 @@ export function ListBox({
           )
         : null}
     </div>
+  );
+}
+
+/** The colour dot a palette option carries, ringed so a pale dot still reads. */
+function Swatch({ paint }: { paint: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="size-2.5 shrink-0 rounded-full ring-1 ring-chrome-line ring-inset"
+      style={{ background: paint }}
+    />
   );
 }

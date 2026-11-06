@@ -151,11 +151,11 @@ export function loadSettings(): Settings {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      return DEFAULT_SETTINGS;
+      return { ...DEFAULT_SETTINGS, theme: initialTheme() };
     }
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") {
-      return DEFAULT_SETTINGS;
+      return { ...DEFAULT_SETTINGS, theme: initialTheme() };
     }
     const value = parsed as Partial<Record<keyof Settings, unknown>>;
     const migrated =
@@ -187,7 +187,7 @@ export function loadSettings(): Settings {
         value.tipsOnStartup,
         DEFAULT_SETTINGS.tipsOnStartup,
       ),
-      theme: theme(value.theme, DEFAULT_SETTINGS.theme),
+      theme: theme(value.theme, initialTheme()),
       uiFont: font(value.uiFont, DEFAULT_SETTINGS.uiFont),
       uiWeight: weight(value.uiWeight, DEFAULT_SETTINGS.uiWeight),
       defaultFolder: text(value.defaultFolder, DEFAULT_SETTINGS.defaultFolder),
@@ -452,6 +452,23 @@ const THEME_PREFERENCES: readonly ThemePreference[] = [
   "bloom",
   "hive",
 ];
+
+/**
+ * The appearance a first open starts in: Ayu Dark, or Bloom when the operating
+ * system asks for a light appearance. Only a first open reads this; a saved
+ * choice is always kept.
+ *
+ * A host that cannot answer the question is not an error to report. The
+ * self-check scripts in `scripts/` build their own `window`, and one that has
+ * no `matchMedia` is simply a host whose appearance is unknown, so it starts in
+ * the dark theme the application shipped with.
+ */
+export function initialTheme(): ThemePreference {
+  const light =
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-color-scheme: light)").matches;
+  return light ? "bloom" : "ayu";
+}
 
 /**
  * The faces the appearance page offers. System is the Windows face, so it

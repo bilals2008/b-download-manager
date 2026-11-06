@@ -1,16 +1,24 @@
 // Self-check for the settings model: defaults, validation, the capture rules
 // and the remembered folder. Node strips the types, so this runs against the
-// same module the options window imports. Run it with `npm run check:settings`.
+// same module the options window imports. Run it with `pnpm check:settings`.
 
 import assert from "node:assert/strict";
 
 const store = new Map();
+// The appearance the host reports, which only a first open reads.
+let systemPrefersLight = false;
 globalThis.window = {
   localStorage: {
     getItem: (key) => store.get(key) ?? null,
     setItem: (key, value) => store.set(key, String(value)),
     removeItem: (key) => store.delete(key),
   },
+  matchMedia: (query) => ({
+    matches: systemPrefersLight,
+    media: query,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  }),
 };
 
 const {
@@ -160,6 +168,19 @@ is(clamped.defaultConnections, 1, "a connection count below the minimum clamps")
 is(clamped.maxConnections, MAX_CONNECTIONS, "a connection count above the cap clamps");
 is(clamped.speedLimitBytes, 0, "a negative cap clamps to none");
 is(clamped.launchOnStartup, false, "a non-boolean switch falls back");
+
+// A first open reads the appearance the system asks for, and a saved choice is
+// never moved by the system afterwards.
+store.delete(STORAGE_KEY);
+systemPrefersLight = true;
+is(loadSettings().theme, "bloom", "a light system opens in Bloom");
+systemPrefersLight = false;
+is(loadSettings().theme, "ayu", "a dark system opens in Ayu Dark");
+saveSettings({ ...DEFAULT_SETTINGS, theme: "graphite" });
+systemPrefersLight = true;
+is(loadSettings().theme, "graphite", "a saved appearance outlives the system");
+systemPrefersLight = false;
+store.delete(STORAGE_KEY);
 
 store.set(
   STORAGE_KEY,
