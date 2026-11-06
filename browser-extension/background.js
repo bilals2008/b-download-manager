@@ -1,9 +1,10 @@
 /*
   The Chrome/Edge build: the same loopback API as the Firefox extension.
 
-  Two things hand a link to the application: the right click menu, and a
-  download the browser starts. A browser download is handed over before it is
-  cancelled, so a closed application never loses the file.
+  Three things hand a link to the application: the right click menu, a
+  download the browser starts, and a media address the page's player has
+  fetched — captured with the browser's own headers, the way the classic
+  Windows download manager does it.
 
   While the application runs, its Settings page owns the capture switch, the
   ask switch, the file types and the site list. The small local fallback
@@ -35,12 +36,19 @@ async function request(method, path, body) {
 
 /** Downloads already handed over, so a repeated event cannot send twice. */
 const handedOver = new Set();
-/** Media addresses already reported, so a range request cannot report twice. */
-const seenMedia = new Set();
 /** The tab whose first manifest has been sent; later media playlists are its children. */
 const manifestTabs = new Set();
 chrome.tabs?.onUpdated?.addListener((tabId, change) => {
-  if (change.status === "loading") manifestTabs.delete(tabId);
+  if (change.status === "loading") {
+    manifestTabs.delete(tabId);
+    mediaCounts.delete(tabId);
+    seenMedia.delete(tabId);
+    chrome.action.setBadgeText({ tabId, text: "" }).catch(() => {});
+  }
+});
+chrome.tabs?.onRemoved?.addListener((tabId) => {
+  mediaCounts.delete(tabId);
+  seenMedia.delete(tabId);
 });
 
 async function handOver(url, referer, name, ask) {
@@ -203,3 +211,154 @@ chrome.downloads.onCreated.addListener(async (item) => {
   await chrome.downloads.cancel(item.id).catch(() => {});
   await chrome.downloads.erase({ id: item.id }).catch(() => {});
 });
+
+/* ------------------------------------------------------- media capture */
+
+/*
+  The third hand-over: the requests the page's player makes. An address the
+  player was already authorized for is offered to the application together
+  with the exact cookies and agent the player used, which is what lets the
+  application fetch an address that refuses any other visitor.
+*/
+
+const MEDIA_STREAM_PATTERN = /\.(m3u8|mpd|ism)(?:[?#]|$)/i;
+const MEDIA_FILE_PATTERN = /\.(mp4|m4v|webm|mkv|mov|avi|ogv|mp3|m4a|aac|flac|wav|ogg|oga|opus)(?:[?#]|$)/i;
+/** Query parameters that name one byte range of a whole media file. */
+const MEDIA_RANGE_PARAMS = ["range", "rn", "rbuf", "bytestart", "byteend"];
+
+/** The media count of each tab, shown over the toolbar button. */
+const mediaCounts = new Map();
+/** Reported addresses per tab, so a range request cannot report twice. */
+const seenMedia = new Map();
+
+chrome.action.setBadgeBackgroundColor({ color: "#c8ff00" }).catch(() => {});
+
+/** What an address is to the application: a kind, or "" when it is not media. */
+function mediaKindOf(url) {
+  if (MEDIA_STREAM_PATTERN.test(url)) {
+    return /\.m3u8(?:[?#]|$)/i.test(url) ? "hls" : "dash";
+  }
+  try {
+    const parsed = new URL(url);
+    if (
+      parsed.searchParams.has("itag") &&
+      /\/(?:videoplayback|get_video)$/.test(parsed.pathname)
+    ) {
+      return "youtube";
+    }
+  } catch {
+    return "";
+  }
+  return MEDIA_FILE_PATTERN.test(url) ? "file" : "";
+}
+
+/** The whole-file address behind a range request. */
+function fullMediaUrl(url) {
+  try {
+    const parsed = new URL(url);
+    let ranged = false;
+    for (const name of MEDIA_RANGE_PARAMS) {
+      if (parsed.searchParams.has(name)) {
+        parsed.searchParams.delete(name);
+        ranged = true;
+      }
+    }
+    return ranged ? parsed.href : url;
+  } catch {
+    return url;
+  }
+}
+
+/** Two ranges of one stream share a key; two different streams do not. */
+function mediaKeyOf(url) {
+  try {
+    const parsed = new URL(url);
+    const itag = parsed.searchParams.get("itag");
+    if (itag) {
+      const id = parsed.searchParams.get("id") || "";
+      const mime = parsed.searchParams.get("mime") || "";
+      return `${id}|${itag}|${mime}`;
+    }
+  } catch {
+    // A malformed address only stands for itself.
+  }
+  return url;
+}
+
+function seenMediaFor(tabId) {
+  let seen = seenMedia.get(tabId);
+  if (!seen) {
+    seen = new Set();
+    seenMedia.set(tabId, seen);
+  }
+  return seen;
+}
+
+/** The headers the player's requests carry: the site's cookies and the
+    browser's user agent. The application scopes them to the manifest's own
+    origin and asks the reader once before it forwards a cookie. */
+async function mediaHeaders(url) {
+  const headers = {};
+  try {
+    const cookies = await chrome.cookies.getAll({ url });
+    if (Array.isArray(cookies) && cookies.length) {
+      headers.Cookie = cookies
+        .map((cookie) => `${cookie.name}=${cookie.value}`)
+        .join("; ");
+    }
+  } catch {
+    // The cookies permission may be refused; the address may still work.
+  }
+  if (navigator.userAgent) headers["User-Agent"] = navigator.userAgent;
+  return headers;
+}
+
+chrome.webRequest.onCompleted.addListener(
+  (request) => {
+    void reportMedia(request).catch(() => {});
+  },
+  { urls: ["<all_urls>"], types: ["media", "xmlhttprequest", "object"] },
+);
+
+async function reportMedia(request) {
+  const url = String(request.url || "");
+  if (url.startsWith(BRIDGE)) return;
+  const kind = mediaKindOf(url);
+  if (!kind) return;
+  // A named file is offered only when a player element fetched it; streams
+  // and manifests arrive through the player's script, which is an XHR.
+  if (kind === "file" && request.type !== "media") return;
+  const tabId = request.tabId;
+  if (!Number.isInteger(tabId) || tabId < 0) return;
+
+  const manifestUrl = fullMediaUrl(url);
+  const key = mediaKeyOf(manifestUrl);
+  const seen = seenMediaFor(tabId);
+  if (seen.has(key)) return;
+  seen.add(key);
+
+  const settings = await effectiveSettings();
+  if (!settings.capture) return;
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  if (!tab || !/^https?:\/\//i.test(tab.url || "")) return;
+  if (skipped(hostOf(tab.url), settings.skipSites)) return;
+
+  try {
+    await request("POST", "/v1/media", {
+      pageUrl: tab.url,
+      manifestUrl,
+      kind,
+      title: tab.title || "",
+      referer: tab.url,
+      headers: await mediaHeaders(manifestUrl),
+      presentation: "window",
+    });
+    const count = Math.min(99, (mediaCounts.get(tabId) || 0) + 1);
+    mediaCounts.set(tabId, count);
+    chrome.action
+      .setBadgeText({ tabId, text: String(count) })
+      .catch(() => {});
+  } catch {
+    // The app is closed or refused it; the player keeps its own copy.
+  }
+}
