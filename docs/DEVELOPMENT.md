@@ -7,8 +7,9 @@ Reference material moved out of `AGENTS.md`. Read this before larger changes.
 A multi-connection download manager modelled on the classic Windows download
 manager: a Tauri v2 (Rust)
 backend in `src-tauri/` and a React 19 + TypeScript + Tailwind CSS v4 +
-shadcn/ui frontend in `src/`. The reverse-engineering evidence behind the
-engine is in `ANALYSIS.md`; the plans and ADRs are in `planning/`.
+shadcn/ui frontend in `src/`. The reverse-engineering notes behind the
+engine live in `planning/02-rea-plan.md` and `planning/10-video-capture-research.md`;
+the plans and ADRs are in `planning/`.
 
 ## Commands
 

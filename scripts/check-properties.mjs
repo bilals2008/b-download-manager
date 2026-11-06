@@ -1,7 +1,7 @@
 // Self-check for the properties window: which fields a row may move, which
 // row has a file to delete, and the words the resume state is shown in. Node
 // strips the types, so this runs against the same module the window imports.
-// Run it with `npm run check:properties`.
+// Run it with `pnpm check:properties`.
 
 import assert from "node:assert/strict";
 

@@ -6,7 +6,9 @@
 //! a `number` value. When the cap is hit it tells the user: "Too many open
 //! network connections. Please wait for some downloads to finish."
 //!
-//! See `ANALYSIS.md` for the evidence.
+//! The evidence for the cap and for its wording is the string the reference
+//! product shows; `planning/09-remaining-work.md` tracks what the clone still
+//! does not do with it.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};

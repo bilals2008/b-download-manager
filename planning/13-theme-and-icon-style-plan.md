@@ -1,9 +1,27 @@
 # 13 — Themes and icon styles
 
-Status: proposal. Nothing here is started. Two independent tracks: **A** widens
-the appearance system past light/dark, **B** brings the `fun-isometric` sticker
-kit into the app's icon artwork. They share one mechanism (semantic tokens) and
-one gate (`prefers-reduced-motion`), but ship separately.
+Status: **track A shipped, track B shipped for the toolbars.** Two independent
+tracks were proposed — **A** widening the appearance system past light/dark,
+**B** bringing the `fun-isometric` sticker kit into the app's icon artwork —
+sharing one mechanism (semantic tokens) and one gate (`prefers-reduced-motion`),
+shipping separately. Re-measured against the source on 6 November 2026.
+
+- **A, the appearance system**, is done and then some: nine appearances
+  (Light, Dark, Ayu, Cyberpunk, Volt, Soft Black, Graphite, Bloom, Hive) plus
+  Auto. The mechanism the proposal asked for is what runs — `:root` in
+  `src/index.css` now declares 92 custom properties and each appearance
+  overrides its own set in `src/styles/themes/<name>.css` (Ayu declares 76), so
+  a switch repaints everything at once, and `pnpm check:palette` gates 70 pairs
+  across all nine.
+- **B, the `fun-isometric` artwork**, shipped as toolbar artwork, not as a
+  category-icon style switch: `src/lib/toolbar-art-isometric.ts` draws the
+  Isometric and Blueprint packs in the kit's idiom, in RISO inks and in the blue
+  mono palette. There is no `iconStyle` setting in `src/lib/settings.ts`, so the
+  "pick an icon style" half of the proposal is still open.
+- The line in the original version of this file — "`:root` declares 82 custom
+  properties, `:root[data-theme="light"]` overrides 75", inside `src/index.css` —
+  no longer describes the tree: the per-appearance blocks moved out of
+  `src/index.css` into `src/styles/themes/`.
 
 ## What was verified before writing this
 

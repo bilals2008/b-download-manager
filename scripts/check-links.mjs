@@ -6,7 +6,7 @@
 // the page-link switch, selecting, and the chunked hand-over with one answer
 // per link — rather than the browser's rendering.
 //
-// Loaded from scripts/check-extension.mjs, so `npm run check:extension` runs
+// Loaded from scripts/check-extension.mjs, so `pnpm check:extension` runs
 // them with the rest.
 
 import assert from "node:assert/strict";

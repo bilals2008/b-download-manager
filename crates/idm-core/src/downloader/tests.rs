@@ -1129,8 +1129,8 @@ async fn a_server_that_sends_the_wrong_bytes_goes_on_with_one_connection() {
 /// ```
 ///
 /// The split rule of the reference download manager was not found in the
-/// binary (see `ANALYSIS.md`, section 10.4), so the number of connections is
-/// a question for a measurement.
+/// binary (the open question is priority 1 in `planning/02-rea-plan.md`), so
+/// the number of connections is a question for a measurement.
 #[tokio::test]
 #[ignore]
 async fn bench_connections() {

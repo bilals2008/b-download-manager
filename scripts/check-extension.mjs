@@ -4,7 +4,7 @@
 // loads, not copies: the manifest is read, every page reference is resolved,
 // the settings and media helpers are executed in a sandbox, and the background
 // page is loaded against a mocked browser and a mocked loopback bridge. Run it
-// with `npm run check:extension`.
+// with `pnpm check:extension`.
 
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";

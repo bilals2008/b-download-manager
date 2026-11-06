@@ -1,6 +1,6 @@
 // Palette gate. Reads the colour tokens straight out of src/index.css and
 // checks the foreground/background pairs the product actually uses against
-// WCAG 2.2, once per theme. Run it with `npm run check:palette`.
+// WCAG 2.2, once per theme. Run it with `pnpm check:palette`.
 //
 // Exits non-zero when a required pair fails, so a colour change cannot land
 // without a contrast check in either appearance.

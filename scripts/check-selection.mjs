@@ -1,6 +1,6 @@
 // Self-check for the Shift range rule, in the order the list shows. Node
 // strips the types, so the check runs against the same file the app imports.
-// Run it with `npm run check:selection`.
+// Run it with `pnpm check:selection`.
 
 import assert from "node:assert/strict";
 

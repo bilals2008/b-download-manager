@@ -5,7 +5,8 @@
 //! binary call it "Download complete" and give its body as "File %s download
 //! complete.\n\nDownloaded %s (%I64d
 //! Bytes)\nFile saved as %s"; the option that turns it on is "Show download
-//! complete dialog" (`ANALYSIS.md`, section 9.4). This window keeps the first
+//! complete dialog". Those quoted strings are the record — the report they came
+//! from (`ANALYSIS.md`) was removed in `433e99e`. This window keeps the first
 //! two lines and leaves the path out: Open folder and Open file reach it.
 //!
 //! The window is a second webview with its own title bar, so the main window

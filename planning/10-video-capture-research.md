@@ -1,47 +1,55 @@
-# 10 - Video capture: IDM kaise kaam karta hai (research, koi implementation nahi)
+# 10 - Video capture: how IDM works (research, no implementation)
 
-Ye document sirf research aur plan hai. Isme koi code change nahi hua. Maqsad:
-samajhna ke IDM YouTube video kaise pakadta hai, quality kaise banata hai, audio
-aur video ko kaise jodta hai, aur is project me isko kabhi banane ka plan kya
-hoga.
+> **Status note, 6 November 2026.** Two things about this file. (1) Section 6 is
+> the plan written before the media path existed; that path has since been built
+> in-house, and section 6 says exactly which parts of the plan shipped, which
+> were reversed, and which still hold. Sections 2 to 5 and 7 are the
+> reverse-engineering record and are unchanged. (2) The evidence here is
+> **static** unless a line says otherwise. Nothing was observed at runtime; the
+> binary was never executed.
 
-Har claim ke saath evidence likha hai: file, address ya source path. Jo cheez
-verify nahi hui, wo "unknown" section me hai.
+This document is research and plan only. No code changed while writing it. The
+goal: understand how IDM captures a YouTube video, how it builds the quality
+list, how it joins audio and video, and what a plan to build the same thing in
+this project would look like.
+
+Every claim carries its evidence: a file, an address or a source path. Anything
+not verified is listed in the unknowns section.
 
 ---
 
-## 1. Sawaal
+## 1. The questions
 
-| # | Sawaal | Jawab mila? |
+| # | Question | Answered? |
 |---|---|---|
-| 1 | Browser se video URL IDM tak kaise pahunchta hai? | haan |
-| 2 | YouTube par IDM ko quality list kahan se milti hai? | haan |
-| 3 | "1080p HD, 60fps" jaise labels kaise bante hain? | haan |
-| 4 | Audio aur video alag aate hain, jode kaise jaate hain? | haan |
-| 5 | Kitni connections, resume kaise? | haan |
-| 6 | Kya nahi hota (DRM, 8K, AV1, live)? | haan |
+| 1 | How does a video URL get from the browser to IDM? | yes |
+| 2 | Where does IDM get the quality list on YouTube? | yes |
+| 3 | How are labels like "1080p HD, 60fps" produced? | yes |
+| 4 | Audio and video arrive separately - how are they joined? | yes |
+| 5 | How many connections, and how does resume work? | yes |
+| 6 | What does it not do (DRM, 8K, AV1, live)? | yes |
 
 ---
 
-## 2. Evidence: kaunsi files aur kya mila
+## 2. Evidence: which files, and what came out of them
 
-Sab kuch installed copy se, `C:\Program Files (x86)\Internet Download Manager\`,
-IDM 6.43.16.2.
+Everything came from the installed copy at
+`C:\Program Files (x86)\Internet Download Manager\`, IDM 6.43.16.2.
 
-| File | Kya hai (FileDescription) | Isse kya mila |
+| File | What it is (FileDescription) | What it gave |
 |---|---|---|
 | `IDMGCExt.crx` | Chrome extension, v6.43.1 | MV3 manifest, network sniffing, native messaging |
-| `idmmzcc.xpi` | Firefox add-on | wahi kaam, purana XUL bridge |
+| `idmmzcc.xpi` | Firefox add-on | the same job, over the older XUL bridge |
 | `IDMMsgHost.json` | native messaging config | host name `com.tonec.idm`, path `IDMMsgHost.exe` |
-| `IDMMsgHost.exe` | "Native Messaging Host" | browser extension se IDM tak pipe |
+| `IDMMsgHost.exe` | "Native Messaging Host" | the pipe from the browser extension to IDM |
 | `idmcchandler7_64.dll` | "click catcher for browsers" | URL/content-type dispatcher, YouTube `fmt_stream_map` parser, HLS parser |
-| `IDMVMPrs64.dll` | "Parser Module" | **asli MPD/DASH parser** (`GetMPDParserInfo`, `qualityRanking`); ismein HLS ka koi `EXT-X` string nahi |
+| `IDMVMPrs64.dll` | "Parser Module" | **the real MPD/DASH parser** (`GetMPDParserInfo`, `qualityRanking`); it holds no HLS `EXT-X` string at all |
 | `IDMan.exe` | main app | grabber UI, quality labels, merge, connections |
 | `idmvconv.dll` | "IDM Module" | container muxer; verified strings: `MuxMP4AndMKVToMKV`, `MuxMKVAndMKVToMKV`, `MuxTSandTStoMKV`, `IDMmkvlib` |
-| `idmbrbtn64.dll` | "Download Panel" | floating panel |
+| `idmbrbtn64.dll` | "Download Panel" | the floating panel |
 
-REA (Ghidra 12.1.4) se ye teen khule, SHA-256 ke saath (isi build par dobara
-verify karne ke liye):
+REA (Ghidra 12.1.4) opened these three, with SHA-256 so the same build can be
+re-checked later:
 
 | File | SHA-256 |
 |---|---|
@@ -49,16 +57,16 @@ verify karne ke liye):
 | `IDMVMPrs64.dll` | `6ff10a3025e0e74bbe9fd99ea21bdaa20a32c94e13145b8805acc82cf1229f5f` |
 | `IDMan.exe` | `3b5dc9ce53eb31933effa3fd973bec068a78e0f8c1d15a919b081f0c4d9325ba` |
 
-`IDMan.exe` stripped x86 hai, is liye wahan sirf string-level evidence hai
-(Ghidra code analysis nahi chalti).
+`IDMan.exe` is a stripped x86 binary, so the evidence from it is string-level
+only (Ghidra's code analysis does not run on it).
 
 ---
 
-## 3. IDM ka YouTube flow, step by step
+## 3. IDM's YouTube flow, step by step
 
-### Step 1 - Browser extension sirf "sniffer" hai
+### Step 1 - the browser extension is only a sniffer
 
-`IDMGCExt.crx` ke andar `manifest.json` (exact):
+Inside `IDMGCExt.crx`, the `manifest.json` (verbatim):
 
 ```
 manifest_version: 3
@@ -72,9 +80,9 @@ permissions: scripting, tabs, cookies, contextMenus, webNavigation,
 host_permissions: <all_urls>
 ```
 
-Extension ke andar YouTube ka koi zikr nahi. Wo sirf network traffic dekhta hai
-aur MIME type se decide karta hai ke ye media hai ya nahi. `background.js` me
-poora MIME -> extension table hai, jisme ye entries hain:
+The extension never mentions YouTube. It watches network traffic and decides
+whether something is media from its MIME type. `background.js` holds the full
+MIME -> extension table, and these are the entries in it:
 
 ```
 video/mp4          -> MP4|M4V|M4S
@@ -86,46 +94,48 @@ video/vnd.mpeg.dash.mpd       -> MPD
 application/vnd.yt-ump        -> UMP
 ```
 
-Aakhri line ahem hai: `application/vnd.yt-ump` YouTube ka UMP hai (DRM wala
-stream). IDM usko detect karta hai, par khol nahi sakta.
+The last line matters: `application/vnd.yt-ump` is YouTube's UMP, the DRM
+stream. IDM detects it but cannot open it.
 
-### Step 2 - Page ke andar hook (config-driven)
+### Step 2 - the hooks inside the page (config-driven)
 
-`document.js` page ke main world me chalta hai, lekin uska patch list **hardcoded
-nahi**: `content.js` pehle `postMessage([1229212978, ...])` se config string
-bhejta hai (`|` se split), jisme property paths aur regex aate hain. Us config ke
-baad hi ye patch lagte hain:
+`document.js` runs in the page's main world, but its patch list is **not
+hardcoded**: `content.js` first sends a config string through
+`postMessage([1229212978, ...])` (split on `|`) carrying property paths and
+regexes. Only after that config do these patches go in:
 
-| Kya | Kaise |
+| What | How |
 |---|---|
-| XHR `open` / `send` | prototype methods wrap, URL regex match par marker add aur flag |
-| fetch | global replace, URL match par wrapper |
-| `Response.json` / `.text` / `.arrayBuffer` / `.blob` / `.formData` | body readers wrap |
-| `Response.body` getter | stream wrap (`stream: true`) |
+| XHR `open` / `send` | prototype methods wrapped; on a URL regex match a marker is added and the flag set |
+| fetch | global replace, wrapper when the URL matches |
+| `Response.json` / `.text` / `.arrayBuffer` / `.blob` / `.formData` | the body readers wrapped |
+| `Response.body` getter | the stream wrapped (`stream: true`) |
 
-Har extracted body `postMessage([1229212980, ...])` se `content.js` ko jati hai.
-Yani IDM page ke andar "sun raha" hota hai, lekin **kya** sunna hai wo config
-batati hai.
+Every extracted body is handed back to `content.js` with
+`postMessage([1229212980, ...])`. So IDM is "listening" inside the page, but the
+config says **what** to listen to.
 
-Ahem: ye config YouTube-specific **nahi** hai. Poore extension (`gc/*.js` aur
-manifest) me `youtube`, `googlevideo`, `videoplayback`, `itag`, `ytInitial`,
-`player_response`, `adaptiveFormats` ka ek bhi string nahi - sirf `m3u8` hai
-(`background.js` me 13 dafa). Yani extension YouTube ko pehchanta hi nahi; wo
-generic sniffer hai, aur YouTube ka kaam native side (Step 4-6) karta hai.
+Important: that config is not YouTube-specific. Across the whole extension
+(`gc/*.js` and the manifest) there is not one occurrence of `youtube`,
+`googlevideo`, `videoplayback`, `itag`, `ytInitial`, `player_response` or
+`adaptiveFormats` - only `m3u8` (13 times in `background.js`). The extension
+does not recognise YouTube at all; it is a generic sniffer, and YouTube's work
+happens on the native side (steps 4-6).
 
-### Step 3 - Native messaging
+### Step 3 - native messaging
 
-Extension URL + headers + **cookies** `IDMMsgHost.exe` ko deta hai
-(`IDMMsgHost.json`: `"name": "com.tonec.idm", "type": "stdio"`).
+The extension hands the URL, the headers and the **cookies** to
+`IDMMsgHost.exe` (`IDMMsgHost.json`: `"name": "com.tonec.idm", "type": "stdio"`).
 
-Cookies kyun: `welcome.html` ki privacy policy khud kehti hai ke IDM wahi
-request dobara bhejta hai jo browser bhej raha tha - URL, cookies, query
-parameters, post data. Isi liye login wali site par bhi download chalta hai,
-aur isi liye DRM wali site par nahi chalta (DRM licence alag cheez hai).
+Why the cookies: the privacy policy in `welcome.html` says it itself - IDM
+resends the very request the browser was making, with its URL, cookies, query
+parameters and post data. That is why a download works on a logged-in site, and
+that is also why it does not work on a DRM site (a DRM licence is a different
+thing entirely).
 
-### Step 4 - YouTube ko pehchanna
+### Step 4 - recognising YouTube
 
-`idmcchandler7_64.dll` me ye strings hain (REA `search_strings`, asli
+`idmcchandler7_64.dll` contains these strings (REA `search_strings`, real
 addresses):
 
 | Address | String |
@@ -140,57 +150,57 @@ addresses):
 | `0x1800a7100` | `.?AVIDMSTRUCT_YOUTUBEDASHTRACK@CDownloadButtonsArray@@` |
 | `0x1800a7150` | `.?AVIDMSTRUCT_YOUTUBEDASHMP4VIDEO@CDownloadButtonsArray@@` |
 
-`xrefs` se ye sab ek hi procedure `FUN_180045500` (0x180045500, ~32 KB) me jaate
-hain: `0x18004bcc1`, `0x18004bd9b`, `0x18004bcf7`, `0x18004755c`, `0x18004758e`,
-`0x18004732b`, `0x18004be4b`. Yani URL/content-type **dispatch** ek jagah hai;
-asli kaam alag helpers me hai - itag table `FUN_1800049a0`, `fmt_stream_map`
-parser `FUN_180057450`, HLS parser `FUN_180051f80` + `FUN_180052460`
-(Step 5, 6, 9).
+The `xrefs` show all of them leading into one procedure, `FUN_180045500`
+(0x180045500, about 32 KB): `0x18004bcc1`, `0x18004bd9b`, `0x18004bcf7`,
+`0x18004755c`, `0x18004758e`, `0x18004732b`, `0x18004be4b`. So the
+URL/content-type **dispatch** is in one place; the real work is in separate
+helpers - the itag table in `FUN_1800049a0`, the `fmt_stream_map` parser in
+`FUN_180057450`, the HLS parser in `FUN_180051f80` plus `FUN_180052460` (steps
+5, 6, 9).
 
-### Step 5 - YouTube: do raaste, dono ab verified
+### Step 5 - YouTube: two routes, both now verified
 
-`FUN_180045500` (`0x180045500`, `idmcchandler7_64.dll`, 112,401 characters
-pseudocode) poora dispatcher hai: URL aur content-type dekh kar decide karta hai
-ke kya karna hai. Wo **khud HTTP request nahi karta** - is DLL me `WinHttp`,
-`HttpSendRequest`, `InternetOpenUrl`, `MaxConnectionsNumber`, `IDMMsgHost` aur
-`\\.\pipe\` ka koi string nahi (REA `search_strings`, sab `(none)`). Yani DLL
-sirf dekhti hai, download `IDMan.exe` karta hai, aur handoff COM se hota hai
-(`@idm/mozilla_cc_helper5;1`).
+`FUN_180045500` (`0x180045500`, `idmcchandler7_64.dll`, 112,401 characters of
+pseudocode) is the whole dispatcher: it looks at the URL and the content type
+and decides what to do. It **does not make the HTTP request itself** - this DLL
+contains no `WinHttp`, `HttpSendRequest`, `InternetOpenUrl`,
+`MaxConnectionsNumber`, `IDMMsgHost` or `\\.\pipe\` string at all (REA
+`search_strings`, every one `(none)`). The DLL only inspects; `IDMan.exe` does
+the downloading, and the hand-off goes through COM (`@idm/mozilla_cc_helper5;1`).
 
-Dispatcher ke branches (pseudocode me literal `strstr`):
+The dispatcher's branches (literal `strstr` calls in the pseudocode):
 
-| Match | Kya hota hai |
+| Match | What happens |
 |---|---|
-| `youtube.com/videoplayback?` / `googlevideo.com/videoplayback?` | `&itag=` `sscanf` se nikala jata hai, URL **jaisa hai waisa** use hota hai |
-| `youtube.com/get_video_info?`, `youtube.com/api_video_info?`, `googlevideo.com/get_video_info?` | jawab `application/json` ho to parse; `FUN_18001fa10(url,"el","adunit")` se ad filter |
-| `youtube.com/watch?` + `&v=` | page URL |
-| `manifest.googlevideo.com/api/manifest/` (http aur https) | alag branch |
+| `youtube.com/videoplayback?` / `googlevideo.com/videoplayback?` | `&itag=` is pulled out with `sscanf`, and the URL is used **exactly as it is** |
+| `youtube.com/get_video_info?`, `youtube.com/api_video_info?`, `googlevideo.com/get_video_info?` | the answer is parsed when it is `application/json`; `FUN_18001fa10(url,"el","adunit")` filters ads |
+| `youtube.com/watch?` + `&v=` | the page URL |
+| `manifest.googlevideo.com/api/manifest/` (http and https) | its own branch |
 | `.m3u8` | HLS |
-| `player.vimeo.com/video`, `facebook.com/ajax/` | do aur special cases |
+| `player.vimeo.com/video`, `facebook.com/ajax/` | two more special cases |
 
-Content-type par size caps (sab literal constants):
+Size caps on the content type (all literal constants):
 
 | Test | Cap |
 |---|---|
-| `video/*` (aur `flash` nahi) | `< 0x79d39` (499,001) aur `!= 0` |
+| `video/*` (and not `flash`) | `< 0x79d39` (499,001) and `!= 0` |
 | `mpd`, `application/dash+xml` | `< 0x2dc6c1` (3,000,001) |
 | `f4m`, `text+xml`, `application/vnd.lumberjack.manifest` | `< 0x186a1` (100,001) |
 | `ram` | `< 0x800` (2,048) |
 
-**Raasta A - click catcher (jo aaj chalta hai).** Browser ka player khud
-`googlevideo.com/videoplayback?...&itag=137...` maangta hai; IDM wahi signed URL
-pakad kar dobara use karta hai. Isme na cipher solve hota hai, na `n` parameter
-chhua jata hai (`&n=` aur `?n=` dono binaries me `(none)`). Faida: hamesha
-chalta hai. Nuksan: YouTube ki throttle (`n`) wahi rehti hai jo browser ko mili
-thi.
+**Route A - the click catcher (what runs today).** The browser's own player
+requests `googlevideo.com/videoplayback?...&itag=137...`; IDM captures that
+signed URL and reuses it. No cipher is solved and the `n` parameter is not
+touched (`&n=` and `?n=` are `(none)` in both binaries). The gain: it always
+works. The cost: the YouTube throttle (`n`) stays exactly what the browser was
+handed.
 
-**Raasta B - purana `get_video_info` parse (code me aaj bhi hai).**
-`FUN_180057450` `url_encoded_fmt_stream_map` aur `"adaptive_fmts":` dono match
-karta hai, har entry se `url=`, `itag=`, `sig=`, `s=` (aur JSON-escaped
-`\u0026itag=` / `\u0026s=` forms) nikalta hai, duplicate `FUN_180055890` se
-hataata hai, phir `FUN_180002a60(ctx,url,itag,isAdaptive)` par register karta
-hai. Agar URL me `signature=` pehle se nahi hai to wo **raw** value append karta
-hai:
+**Route B - the old `get_video_info` parse (the code is still in the binary).**
+`FUN_180057450` matches both `url_encoded_fmt_stream_map` and `"adaptive_fmts":`,
+takes `url=`, `itag=`, `sig=`, `s=` out of each entry (and the JSON-escaped
+`\u0026itag=` / `\u0026s=` forms), removes duplicates with `FUN_180055890`, and
+then registers on `FUN_180002a60(ctx,url,itag,isAdaptive)`. When the URL does not
+already carry `signature=`, it appends the **raw** value:
 
 ```
 pwVar12 = wcsstr(pOVar10,L"signature=");
@@ -204,25 +214,25 @@ if (pwVar12 == (wchar_t *)0x0) {
 }
 ```
 
-Yahi is raaste ki kamzori hai: ciphered format me `s` ek obfuscated string hota
-hai jise player JS transform karta hai. IDM raw `s` append kar deta hai, is liye
-aisa format 403 deta hai. Yani IDM cipher **solve nahi** karta - wo sirf umeed
-karta hai ke signature pehle se URL me maujood ho.
+That is where this route is weak: in the ciphered format `s` is an obfuscated
+string that the player JS transforms. IDM appends the raw `s`, so such a format
+comes back `403`. In other words IDM does **not** solve the cipher - it only
+hopes the signature is already in the URL.
 
-> `get_video_info` YouTube ne 2021 me band kar diya. Strings aaj bhi binary me
-> hain (fallback / purane embed ke liye).
+> YouTube switched `get_video_info` off in 2021. The strings are still in the
+> binary today (a fallback, or for old embeds).
 
-**DASH yahan nahi hai.** Is DLL me `SegmentTemplate`, `AdaptationSet`,
-`ContentProtection`, `availabilityStartTime`, `availabilityEndTime` - kuch bhi
-nahi. `CYoutubeDashXMLParser` ka RTTI naam maujood hai (`0x1800a7410`), lekin
-uske xrefs khali hain aur MPD ka koi element string is DLL me nahi. Asli MPD
-parser `IDMVMPrs64.dll` hai (Step 10). Yani "IDM DASH manifest se YouTube
-chalata hai" wali baat galat thi - wo sirf detect karta hai aur aage bhejta hai.
+**DASH is not here.** This DLL holds no `SegmentTemplate`, `AdaptationSet`,
+`ContentProtection`, `availabilityStartTime` or `availabilityEndTime`. The RTTI
+name `CYoutubeDashXMLParser` exists (`0x1800a7410`) but its xrefs are empty, and
+no MPD element string is in this DLL. The real MPD parser is `IDMVMPrs64.dll`
+(step 10). So the claim "IDM runs YouTube from the DASH manifest" was wrong - it
+only detects the manifest and passes it on.
 
-### Step 6 - Quality list: itag table (verified, `FUN_1800049a0`)
+### Step 6 - the quality list: the itag table (verified, `FUN_1800049a0`)
 
-`FUN_1800049a0` ek `switch(itag)` hai; har branch container (BSTR) aur label
-set karta hai. Poora table jo decompile hua:
+`FUN_1800049a0` is a `switch(itag)`; every branch sets a container (BSTR) and a
+label. The complete table that decompiled:
 
 | itag | Container | Label |
 |---|---|---|
@@ -257,9 +267,10 @@ set karta hai. Poora table jo decompile hua:
 | 308 | MKV | 1440p HD, 60fps |
 | 315 | MKV | 2160p K, 60fps |
 
-`2160p K, 60fps` IDM ki apni typo hai ("4K" ki jagah "K").
+`2160p K, 60fps` is IDM's own typo (a "K" where it means "4K").
 
-Labels runtime par bante hain, ye format strings `0x1800877d0` ke aas paas hain:
+The labels are built at runtime; these format strings sit around
+`0x1800877d0`:
 
 ```
 %s %s, %s %s        (container/codec + resolution + flags)
@@ -269,24 +280,24 @@ Labels runtime par bante hain, ye format strings `0x1800877d0` ke aas paas hain:
 Ultra HD 4K
 ```
 
-Yani label = container/codec + resolution + HD + fps + bitrate. Isi liye IDM
-me "MP4 1080p HD, 60fps" jaisa text dikhta hai.
+So a label is container/codec + resolution + HD + fps + bitrate, which is why
+IDM shows text like "MP4 1080p HD, 60fps".
 
-**Limits jo isi table se nikalte hain (verify kiye):**
+**The limits that fall out of this same table (verified):**
 
-- Sabse oonchi entry 2160p (4K) hai. **8K / 4320p label maujood nahi.**
-- AV1 (itag 399/400) table me nahi hai. RTTI me `IDMSTRUCT_YOUTUBEDASHMP4VIDEO`
-  hai lekin AV1 ka koi itag branch nahi.
-- Audio-only itags (139, 140, 251) table me **nahi** hain - audio track
-  DASH/adaptive list se aata hai, is table se nahi. Yani ye table sirf video
-  (aur purane muxed) itags ke liye hai.
-- VP9 ko MP4 me nahi daal sakta - is liye MKV fallback hai. Binary me is kaam ka
-  help link bhi hai:
+- The highest entry is 2160p (4K). **No 8K / 4320p label exists.**
+- AV1 (itag 399/400) is not in the table. The RTTI has
+  `IDMSTRUCT_YOUTUBEDASHMP4VIDEO`, but there is no AV1 itag branch.
+- Audio-only itags (139, 140, 251) are **not** in the table - the audio track
+  comes from the DASH/adaptive list, not from this table. So the table covers
+  video itags (and the old muxed ones) only.
+- VP9 cannot be put into MP4, which is why there is an MKV fallback. The binary
+  even carries the help link for it:
   `https://www.internetdownloadmanager.com/support/mkvvp9codec.html`
 
-### Step 7 - Download
+### Step 7 - the download
 
-`IDMan.exe` me:
+In `IDMan.exe`:
 
 ```
 MaxConnectionsNumber
@@ -296,16 +307,16 @@ Optional connections not needed.
 &range=
 ```
 
-Yani IDM ek hi file ko kai byte-ranges me todta hai, aur load dekh kar
-"optional connections" khud add/remove karta hai (dynamic splitting). Ye wahi
-cheez hai jo is project ke `crates/idm-core/segmenter.rs` me already hai.
+So IDM splits one file across several byte ranges, and adds or drops "optional
+connections" as the load looks - dynamic splitting. That is exactly what this
+project already has in `crates/idm-core/src/segmenter.rs`.
 
-### Step 8 - Audio + video jodna (merge)
+### Step 8 - joining audio and video (merge)
 
-YouTube 1080p+ par audio aur video alag deta hai. IDM do download karta hai,
-phir **re-encode nahi**, sirf **remux** karta hai.
+Above 1080p YouTube serves audio and video apart. IDM downloads both, then
+**remuxes** them - it does not re-encode.
 
-`IDMan.exe` ke andar poora muxer hai, namespace `ts2mp4`:
+`IDMan.exe` contains a whole muxer under the namespace `ts2mp4`:
 
 ```
 AacCodec, Ac3Codec, Eac3Codec, H264Codec, HevcCodec, MpegAudioCodec
@@ -317,44 +328,43 @@ Convert to mp4, s2
 %s.mp4.tmp
 ```
 
-`-tmp_dashinit` ka matlab: DASH ka **init segment** (`ftyp` + `moov`) alag
-likha jata hai, phir media segments uske peeche. Ye fMP4 remux ka classic
-tareeqa hai.
+`-tmp_dashinit` means: the DASH **init segment** (`ftyp` + `moov`) is written
+separately, and the media segments follow it. That is the classic fMP4 remux.
 
-`idmvconv.dll` container-level muxer hai:
+`idmvconv.dll` is the container-level muxer:
 
 ```
 MuxMP4AndMKVToMKV, MuxMKVAndMKVToMKV, MuxTSandTStoMKV
 IDMmkvlib0.1
 ```
 
-Yani:
+So:
 
 | Input | Output |
 |---|---|
 | MP4 video + M4A/MP4 audio | `.mp4` |
 | VP9/Opus (WebM) | `.mkv` |
-| TS (HLS) | `.mp4` ya `.mkv` |
+| TS (HLS) | `.mp4` or `.mkv` |
 
-### Step 9 - HLS parser (verified, `FUN_180052460` + `FUN_180051f80`)
+### Step 9 - the HLS parser (verified, `FUN_180052460` + `FUN_180051f80`)
 
-HLS do functions me hai, dono `idmcchandler7_64.dll` me:
+HLS is in two functions, both in `idmcchandler7_64.dll`.
 
-**Master playlist - `FUN_180051f80`** (`#EXT-X-STREAM-INF` xref
-`0x1800520d5`, `#EXT-X-MEDIA` xref `0x18005204b`):
+**Master playlist - `FUN_180051f80`** (`#EXT-X-STREAM-INF` xref `0x1800520d5`,
+`#EXT-X-MEDIA` xref `0x18005204b`):
 
 | Tag | Behaviour |
 |---|---|
-| `#EXTM3U` | pehli line, flag `ctx+0xc` |
+| `#EXTM3U` | first line, flag `ctx+0xc` |
 | `#EXT-X-VERSION:` | `sscanf %d` -> `ctx+0x58` |
-| `#EXT-X-MEDIA:` | alag record bana kar `ctx+8` list me |
-| `#EXT-X-STREAM-INF:` | stream entry, agli non-`#` line uska URI |
-| `RESOLUTION=`, `BANDWIDTH=`, `CODECS=`, `NAME=`, `SUBTITLES=` | attributes parse hote hain |
+| `#EXT-X-MEDIA:` | its own record, appended to the list at `ctx+8` |
+| `#EXT-X-STREAM-INF:` | a stream entry; the next non-`#` line is its URI |
+| `RESOLUTION=`, `BANDWIDTH=`, `CODECS=`, `NAME=`, `SUBTITLES=` | parsed as attributes |
 
-**Jo master parser nahi karta:** `FRAME-RATE`, `AVERAGE-BANDWIDTH`, `AUDIO=`,
-`CHANNELS` ka koi string DLL me nahi. Yani separate audio rendition group
-(`#EXT-X-MEDIA:TYPE=AUDIO` + `AUDIO="..."`) pair nahi hota, aur fps label
-master playlist se nahi aata.
+**What the master parser does not do:** no `FRAME-RATE`, `AVERAGE-BANDWIDTH`,
+`AUDIO=` or `CHANNELS` string exists in the DLL. So a separate audio rendition
+group (`#EXT-X-MEDIA:TYPE=AUDIO` + `AUDIO="..."`) is never paired, and the fps
+label never comes from the master playlist.
 
 **Media playlist - `FUN_180052460`:**
 
@@ -362,110 +372,111 @@ master playlist se nahi aata.
 |---|---|
 | `#EXTM3U` | flag `ctx+0xc` |
 | `#EXT-X-VERSION:` | `ctx+0x58` |
-| `#EXT-X-TARGETDURATION:`, `#EXT-X-MEDIA-SEQUENCE:` | parse |
-| `#EXT-X-PLAYLIST-TYPE:` | match hota hai, **value ignore** |
-| `#EXT-X-BYTERANGE:` | parse |
-| `#EXT-X-DISCONTINUITY`, `#EXT-X-PROGRAM-DATE-TIME` | parse |
+| `#EXT-X-TARGETDURATION:`, `#EXT-X-MEDIA-SEQUENCE:` | parsed |
+| `#EXT-X-PLAYLIST-TYPE:` | matched, **value ignored** |
+| `#EXT-X-BYTERANGE:` | parsed |
+| `#EXT-X-DISCONTINUITY`, `#EXT-X-PROGRAM-DATE-TIME` | parsed |
 | `#EXTINF:` | segment duration |
-| `#EXT-X-MAP:` | duration-0 segment; `.ts` na ho to flag `ctx+0xd8` |
-| `#EXT-X-KEY:` | **sirf ek flag set**, METHOD/URI/IV parse nahi |
-| `EXT-X-ENDLIST` | is function me nahi; uska handler `0x1800354ae` hai (is research me detail nahi kholi) |
+| `#EXT-X-MAP:` | a duration-0 segment; flagged `ctx+0xd8` unless it is `.ts` |
+| `#EXT-X-KEY:` | **only sets a flag**; METHOD/URI/IV are not parsed |
+| `EXT-X-ENDLIST` | not in this function; its handler is `0x1800354ae` (not opened in this research) |
 
-Encryption: poore DLL me `AES`, `decrypt`, `IV=`, `METHOD=`,
-`EXT-X-SESSION-KEY` ka koi string nahi. Is liye encrypted HLS par IDM na
-decrypt karta hai, na saaf error deta hai - file banti hai aur unplayable hoti
-hai. (`#EXT-X-STREAM-INF` aur `#EXT-X-MEDIA` strings maujood hain, lekin wo
-master parser me hain, media parser me nahi.)
+Encryption: nowhere in the DLL is there an `AES`, `decrypt`, `IV=`, `METHOD=` or
+`EXT-X-SESSION-KEY` string. So on encrypted HLS IDM neither decrypts nor reports
+a clear error - the file is written and is unplayable. (The
+`#EXT-X-STREAM-INF` and `#EXT-X-MEDIA` strings do exist, but in the master
+parser, not the media parser.)
 
-### Step 10 - DASH parser (verified, `IDMVMPrs64.dll`)
+### Step 10 - the DASH parser (verified, `IDMVMPrs64.dll`)
 
-MPD ka asli parser `IDMVMPrs64.dll` hai (`GetMPDParserInfo`). Jo elements
-strings ki tarah maujood hain:
+The real MPD parser is `IDMVMPrs64.dll` (`GetMPDParserInfo`). The elements that
+exist as strings:
 
 ```
 MPD   Period   AdaptationSet   Representation   SubRepresentation
 SegmentTemplate   SegmentBase   RepresentationIndex   ContentProtection
 ```
 
-Attributes jo parse hote hain: `bandwidth`, `minBandwidth`, `maxBandwidth`,
-`frameRate`, `minFrameRate`, `maxFrameRate`, `codecs`, `qualityRanking`,
-`audioSamplingRate`, `AudioChannelConfiguration`, `startWithSAP`,
-`maxPlayoutRate`, `codingDependency`, `scanType`.
+The attributes parsed: `bandwidth`, `minBandwidth`, `maxBandwidth`, `frameRate`,
+`minFrameRate`, `maxFrameRate`, `codecs`, `qualityRanking`, `audioSamplingRate`,
+`AudioChannelConfiguration`, `startWithSAP`, `maxPlayoutRate`,
+`codingDependency`, `scanType`.
 
-**Live DASH parse hota hai:** `MPD@type` ko `OnDemand`, `static`, `Live` aur
-`dynamic` se compare kiya jata hai; `Live`/`dynamic` par flag `_Dst+6 = 1` set
-hota hai. Live attributes bhi parse hote hain: `availabilityStartTime`,
-`availabilityEndTime`, `mediaPresentationDuration`, `minimumUpdatePeriod`,
-`minBufferTime`, `timeShiftBufferDepth`, `suggestedPresentationDelay`,
-`maxSegmentDuration`, `maxSubsegmentDuration`.
+**Live DASH is parsed:** `MPD@type` is compared against `OnDemand`, `static`,
+`Live` and `dynamic`; on `Live`/`dynamic` the flag `_Dst+6 = 1` is set. The live
+attributes are parsed too: `availabilityStartTime`, `availabilityEndTime`,
+`mediaPresentationDuration`, `minimumUpdatePeriod`, `minBufferTime`,
+`timeShiftBufferDepth`, `suggestedPresentationDelay`, `maxSegmentDuration`,
+`maxSubsegmentDuration`.
 
-**DRM:** `ContentProtection` sirf representation struct me record hota hai
-(field `+0xf`). Na refuse, na decrypt. `Widevine`, `DRM`, `encrypted` strings
-is DLL me nahi hain.
+**DRM:** `ContentProtection` is only recorded in the representation struct
+(field `+0xf`). Neither refused nor decrypted. No `Widevine`, `DRM` or
+`encrypted` string is in this DLL.
 
-`sidx` string bhi nahi hai - SegmentBase ka index `RepresentationIndex` element
-se aata hai, box ke naam se nahi.
+There is no `sidx` string either - the `SegmentBase` index comes from the
+`RepresentationIndex` element, not from the box name.
 
-### Poora flow, ek line me
+### The whole flow, in one block
 
 ```
-browser play
-  -> extension webRequest dekhta hai (video/*, audio/*, m3u8, mpd, yt-ump)
+browser plays
+  -> the extension watches webRequest (video/*, audio/*, m3u8, mpd, yt-ump)
   -> native messaging: URL + headers + cookies
-  -> click catcher URL + content-type match karta hai
-     - videoplayback?&itag=NN -> wahi signed URL queue me (Raasta A)
-     - get_video_info / adaptive_fmts -> itag + sig parse, &signature= append
-       (Raasta B, cipher solve nahi)
-     - mpd / dash+xml -> IDMVMPrs64.dll MPD parse (static aur dynamic dono)
-     - m3u8 -> master, phir media playlist parse
-  -> har format = ek quality button (itag table + label format strings)
-  -> user quality chunta hai
-  -> video-only + audio-only, dono multi-connection range download
-  -> init segment + media segments remux (.mp4, VP9 ho to .mkv)
+  -> the click catcher matches URL + content type
+     - videoplayback?&itag=NN -> the same signed URL goes on the queue (route A)
+     - get_video_info / adaptive_fmts -> itag + sig parsed, &signature= appended
+       (route B, no cipher solved)
+     - mpd / dash+xml -> IDMVMPrs64.dll parses the MPD (static and dynamic)
+     - m3u8 -> master first, then the media playlist
+  -> every format = one quality button (itag table + label format strings)
+  -> the user picks a quality
+  -> video-only + audio-only, both as multi-connection range downloads
+  -> init segment + media segments remuxed (.mp4, or .mkv for VP9)
 ```
 
 ---
 
-## 4. Kya kaam nahi karta (saboot ke saath)
+## 4. What does not work (with the proof)
 
-| Case | Verified wajah |
+| Case | Verified reason |
 |---|---|
-| 8K / AV1 | itag table me 399/400 nahi, 4320p label nahi |
-| DRM (UMP, `application/vnd.yt-ump`) | content-type detect hota hai; `Widevine`, `DRM`, `encrypted` strings in dono parser DLLs (click catcher + MPD parser) me nahi |
-| MPD me `ContentProtection` | sirf record hota hai (struct `+0xf`), refuse nahi hota - file download ho kar unplayable banti hai |
-| HLS encrypted (AES-128) | `#EXT-X-KEY` sirf flag set karta hai; `AES` / `decrypt` / `IV=` poore DLL me nahi - unplayable file, saaf error nahi |
-| YouTube ciphered formats | raw `&signature=<s>` append hota hai, transform nahi - 403 |
-| `n` throttle | `&n=` / `?n=` dono binaries me nahi - throttle browser se inherit hoti hai |
-| HLS separate audio | `AUDIO=` / `CHANNELS` strings nahi - audio rendition pair nahi hota |
-| HLS `FRAME-RATE` | master parser me string nahi - fps label nahi milta |
-| Live stream | parsed hota hai (`dynamic`/`Live` flag), lekin recording behaviour runtime par verify nahi hua |
-| Login wali site (Udemy etc.) | cookies jaate hain, lekin player JS ke andar bana URL miss ho sakta hai (ye inference hai) |
+| 8K / AV1 | no itag 399/400 in the table, no 4320p label |
+| DRM (UMP, `application/vnd.yt-ump`) | the content type is detected; no `Widevine`, `DRM` or `encrypted` string in either parser DLL (click catcher or MPD parser) |
+| `ContentProtection` in an MPD | only recorded (struct `+0xf`), never refused - the file downloads and is unplayable |
+| Encrypted HLS (AES-128) | `#EXT-X-KEY` only sets a flag; no `AES` / `decrypt` / `IV=` anywhere in the DLL - an unplayable file and no clear error |
+| Ciphered YouTube formats | the raw `&signature=<s>` is appended, never transformed - `403` |
+| The `n` throttle | `&n=` / `?n=` are absent from both binaries - the throttle is inherited from the browser |
+| HLS separate audio | no `AUDIO=` / `CHANNELS` string - the audio rendition is never paired |
+| HLS `FRAME-RATE` | no such string in the master parser - no fps label |
+| Live streams | parsed (the `dynamic`/`Live` flag), but the recording behaviour was never observed at runtime |
+| A logged-in site (Udemy and the like) | cookies are forwarded, but a URL built inside the player JS can still be missed - this one is inference, not measurement |
 
 ---
 
-## 5. AB Download Manager se comparison (open source, code parha)
+## 5. Comparison with AB Download Manager (open source, code read)
 
-Repo: `D:\Dev\ab-download-manager` (commit `286e2a4`) aur
-`D:\Dev\ab-download-manager-browser-integration` (commit `658a0c7`).
-Kotlin Multiplatform + Compose.
+Repos: `D:\Dev\ab-download-manager` (commit `286e2a4`) and
+`D:\Dev\ab-download-manager-browser-integration` (commit `658a0c7`). Kotlin
+Multiplatform + Compose.
 
-| Cheez | IDM | AB Download Manager |
+| Thing | IDM | AB Download Manager |
 |---|---|---|
-| Extension sniffing | `webRequest` + MIME table | `LinkGrabber`, `MediaRegistry`, `OnMediaInterceptedFromRequestListener` |
-| HLS | haan - master (`FUN_180051f80`) + media (`FUN_180052460`), TS | haan - `hls-parser`, `HLSDownloadJob`, `HLSPartDownloader` |
-| HLS audio rendition | nahi (`AUDIO=` string nahi) | nahi |
-| DASH / MPD | haan - `IDMVMPrs64.dll`, static + dynamic/live | **nahi** (code me `dash`/`mpd` ka koi handle nahi) |
-| YouTube | haan - click-catcher URL reuse + legacy `fmt_stream_map`; cipher/`n` nahi | **nahi** |
-| Encrypted HLS | `#EXT-X-KEY` sirf flag, decrypt nahi, unplayable | saaf mana: `"Encrypted HLS playlists are not supported"` (`HLSResponseInfo.kt:67`) |
+| Extension sniffing | `webRequest` + a MIME table | `LinkGrabber`, `MediaRegistry`, `OnMediaInterceptedFromRequestListener` |
+| HLS | yes - master (`FUN_180051f80`) + media (`FUN_180052460`), TS | yes - `hls-parser`, `HLSDownloadJob`, `HLSPartDownloader` |
+| HLS audio rendition | no (no `AUDIO=` string) | no |
+| DASH / MPD | yes - `IDMVMPrs64.dll`, static + dynamic/live | **no** (nothing in the code handles `dash` or `mpd`) |
+| YouTube | yes - click-catcher URL reuse + the legacy `fmt_stream_map`; no cipher, no `n` | **no** |
+| Encrypted HLS | `#EXT-X-KEY` only sets a flag, no decrypt, unplayable output | refused in words: `"Encrypted HLS playlists are not supported"` (`HLSResponseInfo.kt:67`) |
 | Multi-connection | `MaxConnectionsNumber` + optional connections | `PartSplitSupport` + `SplitToRange(size, minPartSize, maxPartCount)` + `resumeSupport` |
-| Remux | `ts2mp4` + `idmvconv` | **nahi** - plain byte concat |
-| Speed limit | haan | `SpeedLimiter`, `OkioCustomizedThrottler` |
-| Queues / scheduler | haan | `DownloadQueue`, `QueueManager`, `ScheduleTimes` |
+| Remux | `ts2mp4` + `idmvconv` | **no** - plain byte concat |
+| Speed limit | yes | `SpeedLimiter`, `OkioCustomizedThrottler` |
+| Queues / scheduler | yes | `DownloadQueue`, `QueueManager`, `ScheduleTimes` |
 
-**AB DM ka HLS merge (verified, `HLSDownloadJob.kt` + `SegmentedDownloadDestination.kt`):**
-koi remux nahi. Har segment apni file me jata hai (`tempDirectory/<partID>`),
-phir `SegmentedDownloadDestination.assemble` unko part id ki tarteeb se
-byte-by-byte concat karta hai:
+**AB DM's HLS merge (verified, `HLSDownloadJob.kt` +
+`SegmentedDownloadDestination.kt`):** no remux at all. Every segment goes into
+its own file (`tempDirectory/<partID>`), and
+`SegmentedDownloadDestination.assemble` concatenates them byte by byte in
+part-id order:
 
 ```kotlin
 sources.forEach { sourceFile ->
@@ -475,106 +486,147 @@ sources.forEach { sourceFile ->
 }
 ```
 
-`HLSResponseInfo.fromConnection` sirf `.ts` pehla segment accept karta hai
-(`"Only HLS .ts segments supported at the moment..."`) aur encrypted playlist ko
-line 65 par refuse karta hai. Yani byte concat ke baad file `.ts` hi rehti hai;
-`.mp4` chahiye to remux lazmi hai.
+`HLSResponseInfo.fromConnection` accepts only a leading `.ts` segment (`"Only
+HLS .ts segments supported at the moment..."`) and refuses an encrypted playlist
+at line 65. So after the byte concat the file is still `.ts`; wanting `.mp4`
+means a remux is unavoidable.
 
-**Sabak:** AB Download Manager ek saaf, modern, multi-connection downloader hai
-- bilkul wahi cheez jo ye project ban raha hai. Usne video ki taraf qadam
-rakha (HLS) lekin DASH/YouTube chhoda. Yani HLS pehla step hai, DASH doosra,
-aur YouTube teesra.
+**The lesson:** AB Download Manager is a clean, modern, multi-connection
+downloader - exactly what this project is. It took one step into video (HLS) and
+left DASH and YouTube. So HLS is the first step, DASH the second, YouTube the
+third.
 
-Doosre open-source options (is session me code verify nahi kiya, sirf
-reference): `aria2` (multi-connection engine, koi video nahi), `Motrix`
-(aria2 ka GUI), `yt-dlp` (YouTube extraction ka asli reference), `N_m3u8DL-RE`
-(HLS/DASH + merge), `ffmpeg` (remux ka standard tool).
+Other open-source options (their code was not verified in this session; listed
+as references only): `aria2` (multi-connection engine, no video), `Motrix` (an
+aria2 GUI), `yt-dlp` (the real reference for YouTube extraction), `N_m3u8DL-RE`
+(HLS/DASH + merge), `ffmpeg` (the standard remux tool).
 
 ---
 
-## 6. Is project ke liye plan (sirf plan)
+## 6. The plan for this project (plan only)
 
-Abhi `crates/idm-core` me HTTP range engine hai, media splitting nahi
-(`planning/README.md` bhi yahi kehta hai). Tarteeb ye honi chahiye:
+> **Measured again on 6 November 2026.** This was the plan written before the
+> media path existed, and its opening line - "the range engine is there, media
+> splitting is not" - has not been true for some time. The order it argued for
+> is the order that was followed, so the section is kept as written; these are
+> the places where the product parted company with the plan:
+>
+> - **Phases A and B shipped.** `media/hls.rs` and `media/dash.rs` parse the
+>   playlists, `media/download.rs` fetches every segment through the ordinary
+>   range engine and resumes from the segments already on disk, and the panel
+>   lists the formats the manifest really offers.
+> - **Phase A point 3 shipped the way IDM does not.** The audio rendition is
+>   paired with its variant (`Master::audio_group`,
+>   `quality.rs:380 an_hls_master_is_paired_with_its_audio_group`), and
+>   `FRAME-RATE` is read as well (`hls.rs:8`) - the two things IDM's parser
+>   cannot do, which is why it shows no fps label and never pairs separate
+>   audio.
+> - **Phase A point 7 shipped the way AB DM does it:** encrypted HLS is refused
+>   with a clear sentence instead of producing an unplayable file
+>   (`refuse_key`, `hls.rs:389`, tested by
+>   `an_encrypted_playlist_is_refused_with_one_sentence`, with
+>   `METHOD=NONE` correctly read as "not encrypted").
+> - **Phase C went the expensive way.** The native remuxer in
+>   `src-tauri/src/video/mp4.rs` and `mux.rs` replaced `ffmpeg` entirely
+>   (`ADR-0005-native-remuxer`,
+>   [14](./14-own-youtube-and-native-muxer-plan.md)); the bundle no longer
+>   carries an external tool, which is what made the cheap route unacceptable.
+> - **Phase D point 4 is dead.** The `yt-dlp` sidecar was tried, shipped in
+>   0.3.x, and then deleted. YouTube extraction is now in-house against the
+>   InnerTube iOS client (`src-tauri/src/video/yt.rs`,
+>   `ADR-0006-youtube-ios-innertube`), which returns directly playable tracks
+>   instead of a ciphered URL.
+> - **Phase D point 3 still holds and is still the rule:** no signature solver,
+>   no `n` solver. That line has not moved.
 
-### Phase A - HLS (sabse aasan, sabse zyada faida)
+At the time of writing, `crates/idm-core` had the HTTP range engine and no media
+splitting. The order of work should be:
 
-1. `.m3u8` detect karo (extension ya URL se).
+### Phase A - HLS (the easiest, the biggest gain)
+
+1. Detect `.m3u8` (from the extension or the URL).
 2. Master playlist -> variants (`BANDWIDTH`, `RESOLUTION`, `CODECS`,
-   `FRAME-RATE`), user ko list dikhao.
-3. `#EXT-X-MEDIA:TYPE=AUDIO` groups bhi parse karo aur `AUDIO="..."` se variant
-   ka audio rendition jodo. IDM ye nahi karta (Step 9) - humein karna chahiye.
-4. Media playlist -> segments (`#EXTINF`, `#EXT-X-MAP` init segment).
-5. Segments ko mojooda range engine se parallel download karo.
-6. Segments ko tarteeb se concat karo -> `.ts`, phir `.mp4` remux.
-7. AES-128 (`#EXT-X-KEY`) abhi **reject** karo, saaf error do - AB DM ki tarah.
+   `FRAME-RATE`), shown to the user as a list.
+3. Parse `#EXT-X-MEDIA:TYPE=AUDIO` groups too and pair each variant with its
+   audio rendition through `AUDIO="..."`. IDM does not do this (step 9) - we
+   should.
+4. Media playlist -> segments (`#EXTINF`, the `#EXT-X-MAP` init segment).
+5. Download the segments in parallel through the existing range engine.
+6. Concatenate the segments in order -> `.ts`, then remux to `.mp4`.
+7. Reject AES-128 (`#EXT-X-KEY`) for now, with a clear error - the way AB DM
+   does it.
 
 ### Phase B - DASH (MPD)
 
-1. MPD XML parse: `Period` -> `AdaptationSet` -> `Representation`.
-2. `Representation` ke `id`, `bandwidth`, `width`x`height`, `codecs` se quality list.
-3. `SegmentTemplate` (`$Number$`, `$Time$`, `$RepresentationID$`) expand karo.
-4. Video-only + audio-only alag download, phir remux.
+1. Parse the MPD XML: `Period` -> `AdaptationSet` -> `Representation`.
+2. Build the quality list from each `Representation`'s `id`, `bandwidth`,
+   `width`x`height` and `codecs`.
+3. Expand the `SegmentTemplate` (`$Number$`, `$Time$`, `$RepresentationID$`).
+4. Download video-only and audio-only apart, then remux.
 
-### Phase C - Remux (ffmpeg ke bagair, ya ffmpeg ke saath)
+### Phase C - Remux (without ffmpeg, or with it)
 
-Do raaste:
+Two routes:
 
-- **Sasta:** `ffmpeg -i v -i a -c copy out.mp4`. Ek dependency, 100% kaam.
-- **Mehnga:** apna fMP4 writer. IDM ne yahi kiya (`ts2mp4`, 30+ classes).
+- **Cheap:** `ffmpeg -i v -i a -c copy out.mp4`. One dependency, works
+  completely.
+- **Expensive:** write our own fMP4 writer. IDM did exactly this (`ts2mp4`, 30+
+  classes).
 
-Ponytail rule: pehle ffmpeg. Apna muxer sirf tab jab ffmpeg bundle na karna ho.
+The lazy rule said: ffmpeg first, own muxer only if bundling ffmpeg is not
+acceptable. Bundling it turned out to be the thing worth avoiding - the
+dependency is gone and the in-house writer is what ships.
 
-### Phase D - YouTube (sabse aakhir, sabse nazuk)
+### Phase D - YouTube (last, and the most fragile)
 
-1. Default: **wahi signed URL reuse** jo player ne khud maanga (IDM ka Raasta A,
-   Step 5). Ismein na signature, na `n` - kuch solve nahi karna padta, is liye
-   ye kabhi "toota" nahi. Qeemat: throttle wahi rehti hai.
-2. Fallback: page ka player response (`ytInitialPlayerResponse`) ya
-   `/youtubei/v1/player` se formats - **sirf** jab unke URL pehle se signed hon.
-   Raw `s` ko `&signature=` ke saath chipkana bug hai (IDM ka Raasta B isi wajah
-   se 403 deta hai).
-3. Signature / `n` ka apna solver **nahi**. Ye har hafte badalta hai - maintenance
-   ka black hole.
-4. Agar phir bhi na chale: `yt-dlp` ko sidecar ki tarah use karo.
+1. Default: **reuse the very signed URL** the player itself asked for (IDM's
+   route A, step 5). No signature, no `n`, nothing to solve - which is why it
+   never "breaks". The price: the throttle stays.
+2. Fallback: the formats from the page's player response
+   (`ytInitialPlayerResponse`) or `/youtubei/v1/player` - but **only** when their
+   URLs are already signed. Sticking the raw `s` onto `&signature=` is the bug
+   that makes IDM's route B return 403.
+3. No signature / `n` solver of our own. It changes every week - a maintenance
+   black hole.
+4. If it still does not work: use `yt-dlp` as a sidecar.
 
-### Jo cheez is project me daalni hi nahi
+### What should never enter this project
 
-- DRM bypass (UMP, Widevine). Ye legal aur technical dono taur par out.
-- Signature cipher ka apna solver. Maintenance ka black hole.
+- DRM bypass (UMP, Widevine). Out of bounds legally and technically.
+- A signature cipher solver of our own. A maintenance black hole.
 
 ---
 
-## 7. Unknowns - ab kya bacha hai
+## 7. Unknowns - what is left
 
-Pehle jo "unknown" tha, wo ab resolve ho gaya:
+What was unknown before is now resolved:
 
-| Cheez | Ab status |
+| Thing | Status now |
 |---|---|
-| `n=` throttle param | **resolved** - handle nahi hota (`&n=` / `?n=` dono binaries me `(none)`) |
-| Kya IDM cipher solve karta hai | **resolved** - nahi. Raw `s` ko `&signature=` ke saath append karta hai (`FUN_180057450`) |
-| IDM kis process me download karta hai | **resolved** - DLL me HTTP client nahi, COM handoff -> `IDMan.exe` |
-| Live DASH support | **resolved** - `dynamic`/`Live` parse hota hai, flag set hota hai, live attributes bhi parse hote hain |
-| AB DM HLS concat | **resolved** - plain byte concat, koi remux nahi |
-| YouTube DASH manifest path | **resolved** - `idmcchandler7_64.dll` me MPD parser nahi; `IDMVMPrs64.dll` generic MPD parser hai |
+| The `n=` throttle parameter | **resolved** - it is not handled (`&n=` / `?n=` are `(none)` in both binaries) |
+| Does IDM solve the cipher | **resolved** - no. It appends the raw `s` with `&signature=` (`FUN_180057450`) |
+| Which process does the download | **resolved** - there is no HTTP client in the DLL; a COM hand-off goes to `IDMan.exe` |
+| Live DASH support | **resolved** - `dynamic`/`Live` is parsed, the flag is set, and the live attributes are parsed |
+| AB DM's HLS concat | **resolved** - plain byte concat, no remux |
+| The YouTube DASH manifest path | **resolved** - no MPD parser in `idmcchandler7_64.dll`; `IDMVMPrs64.dll` is the generic MPD parser |
 
-Bacha hua asli gap, saaf lafzon me:
+The gaps that genuinely remain, plainly:
 
-| Cheez | Kyun bacha |
+| Gap | Why it remains |
 |---|---|
-| Runtime packet capture (IDM ko live YouTube par chalana) | is session me nahi kiya. Sab kuch static analysis (REA/Ghidra) se hai. Isi liye "aaj IDM `get_video_info` call karta hai ya nahi" ka jawab **code maujood hai, call hota hai ya nahi pata nahi** hai |
-| Live DASH ki recording behaviour | parse karna verified hai; recording chal kar dekhi nahi |
-| Login wali sites par player-JS URL miss hona | inference hai, measured nahi |
-| `n` throttle ka asar | throttle inherit hoti hai, magar kitni slow hoti hai - measured nahi |
+| Runtime packet capture (running IDM against live YouTube) | not done in this session. Everything here is static analysis (REA/Ghidra). So "does IDM call `get_video_info` today" has no answer: **the code exists, whether it is reached is unknown** |
+| Live DASH recording behaviour | the parsing is verified; the recording path was never watched running |
+| Missing a player-JS URL on a logged-in site | inference, not measurement |
+| The size of the `n` throttle | the throttle is inherited, but how slow it makes the stream was never measured |
 
-Agar aage koi ye feature implement kare: upar wali pehli row (runtime capture)
-sab se pehle karni chahiye, kyunki baqi sab usi se confirm hota hai.
+If anyone takes this feature further: the first row above (runtime capture)
+should come first, because everything else is confirmed through it.
 
 ---
 
 ## 8. Legal
 
-YouTube ki Terms of Service third-party downloaders ko allow nahi karti. Ye
-document sirf ye samajhne ke liye hai ke installed software kaise kaam karta
-hai, taake apna downloader saaf tareeqe se bane. Koi DRM bypass nahi, koi
-signature circumvention nahi.
+YouTube's Terms of Service do not allow third-party downloaders. This document
+exists only to understand how an installed piece of software works, so that our
+own downloader is built the clean way. No DRM bypass, no signature
+circumvention.

@@ -3,8 +3,8 @@
 //! The reference download manager opens raw sockets and terminates TLS
 //! itself, but the wire format is what matters here: every request carries an
 //! explicit `Range:` header and `Accept-Encoding: identity`, so the bytes on
-//! the wire line up with the byte offsets in the file. See `ANALYSIS.md` for
-//! the evidence.
+//! the wire line up with the byte offsets in the file. The evidence trail is
+//! `planning/02-rea-plan.md`.
 
 use std::time::Duration;
 

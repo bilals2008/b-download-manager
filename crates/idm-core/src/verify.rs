@@ -8,7 +8,9 @@
 //!
 //! Evidence: `FUN_00566f10`, the strings "Strart data for this chunk is
 //! matched with start of the file!!!", "There is real matching" and "no
-//! match, step 4". See `ANALYSIS.md`, section 10.2.
+//! match, step 4". Those strings and addresses are the record here; the report
+//! that held the detail (`ANALYSIS.md`) was removed from the repository in
+//! `433e99e`.
 
 /// How many bytes of the head of the file the reference manager keeps:
 /// `0x80c`.

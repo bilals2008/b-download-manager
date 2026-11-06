@@ -1,7 +1,7 @@
 // Self-check for the File Exists and Download Failed windows: the question the
 // engine's refusal becomes, the answers a conflict allows, and the sentence a
 // failure is reported in. Node strips the types, so this runs against the same
-// modules the windows import. Run it with `npm run check:recovery`.
+// modules the windows import. Run it with `pnpm check:recovery`.
 
 import assert from "node:assert/strict";
 

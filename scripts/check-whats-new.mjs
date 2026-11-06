@@ -2,7 +2,7 @@
 // version decision shows a newer build once and never a first install, the
 // record survives a restart, and the real file carries notes for the version
 // this package ships. Node strips the types, so this runs against the same
-// module the app imports. Run it with `pnpm run check:whats-new`.
+// module the app imports. Run it with `ppnpm check:whats-new`.
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";

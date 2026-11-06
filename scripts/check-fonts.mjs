@@ -2,7 +2,7 @@
 // of them has to reach three places or the picker silently does nothing:
 // a `--app-font-ui` stack in src/index.css, the files those stacks name, and a
 // `data-font` value the settings module accepts. Run it with
-// `npm run check:fonts`.
+// `pnpm check:fonts`.
 
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath, URL } from "node:url";

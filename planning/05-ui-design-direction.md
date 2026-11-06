@@ -14,10 +14,37 @@ Explicitly rejected:
 - high-contrast neons;
 - more than one accent colour.
 
-The current palette lives in `src/index.css` and is checked by
-`npm run check:palette`. That script is the gate: it reads the tokens out of
-the stylesheet and fails if any pair the product actually renders drops below
-its WCAG minimum.
+The palette is token-driven and lives in `src/index.css` plus one file per
+appearance in `src/styles/themes/`; `pnpm check:palette` is the gate, reading
+the tokens out of the stylesheets and failing if any pair the product actually
+renders drops below its WCAG minimum.
+
+## Where this document stands at v1.0.0
+
+Written before the first release, and the product moved past parts of it. The
+reasoning below is kept because it still explains the *shape* of the system;
+these are the lines that are no longer true, checked 6 November 2026:
+
+- **One palette became nine appearances.** Light, Dark, Ayu, Cyberpunk, Volt,
+  Soft Black, Graphite, Bloom and Hive, with Auto following the system. They
+  are in `src/styles/themes/`, and switching one swaps the whole set at once.
+  The hex table further down is the original single palette, not the current
+  default.
+- **"No gradients, anywhere" is now "gradients only inside the meters".**
+  `--progress-active-from/via/to` and the complete, paused and failed pairs are
+  real tokens (`src/index.css`), which is why the gate speaks of 70 pairs in 9
+  appearances.
+- **"One accent" holds in spirit, but the accent is not clay.** The identity
+  that survived is deep green with a lime foreground (`--primary: #022c1e`,
+  `--primary-foreground: #c8ff00` in `light.css`), and the high-contrast
+  appearances (Cyberpunk, Volt) are wanted, not rejected.
+- **"One family, the platform UI stack" is a setting now.** The UI face is
+  chosen in Appearance and `pnpm check:fonts` guards the set.
+- **"One column, centred, max 1152 px" never survived the shell.** The app is
+  a desktop window with a categories rail, a list, a toolbar and a status bar;
+  its own minimum width is 640 px (`src-tauri/tauri.conf.json`).
+
+The rejected list at the top still describes the intent, minus the neon line.
 
 ## The palette
 
@@ -154,7 +181,7 @@ No screenshot of this direction was captured in the environment it was built
 in, so **the visual result is not verified**. What *is* verified:
 
 - the contrast gate passes for all 11 pairs the product renders
-  (`npm run check:palette`);
+  (`pnpm check:palette`);
 - the DOM renders with the expected tokens applied, the expected labels, and
   no emoji;
 - the type check and the production build pass.

@@ -1,8 +1,8 @@
 //! The download engine — a port of the mechanics observed in the reference
 //! binary.
 //!
-//! What the reverse engineering established (see `ANALYSIS.md` for the
-//! evidence):
+//! What the reverse engineering established (the record is in
+//! `planning/02-rea-plan.md` and `planning/09-remaining-work.md`):
 //!
 //! * The reference download manager speaks HTTP over **raw WinSock sockets**
 //!   (`WS2_32.DLL::socket`, `recv`, `send`, `ioctlsocket`), not

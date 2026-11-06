@@ -1,6 +1,6 @@
 // Self-check for Find Next: the walk, the wrap and the first press. Node
 // strips the types, so the check runs against the same file the app imports.
-// Run it with `npm run check:find`.
+// Run it with `pnpm check:find`.
 
 import assert from "node:assert/strict";
 

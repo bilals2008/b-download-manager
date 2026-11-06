@@ -169,8 +169,8 @@ registered per user or per Firefox profile.
 
 ```powershell
 cd D:\Dev\my-idm-clone
-npm install
-npm run tauri dev
+pnpm install
+pnpm tauri dev
 ```
 
 Or start the built `B Download Manager` executable. The application opens the
@@ -265,7 +265,7 @@ there.
 ## Checks
 
 ```powershell
-npm run check:extension
+pnpm check:extension
 npx web-ext lint --source-dir extension-firefox --self-hosted
 ```
 
@@ -277,7 +277,7 @@ time-sliced link reader over a fake page and the link window against a small
 document, verifies that every icon name exists, and checks the Chrome build's
 hand-over contract too.
 
-Against the running application, `npm run probe:bridge` is the live version of
+Against the running application, `pnpm probe:bridge` is the live version of
 the same contract: the extension header, a page origin, a borrowed `Host`, a
 non-JSON body, and one real hand-over whose bytes are read back off the disk.
 
@@ -316,9 +316,12 @@ icons/                 the app mark at 32, 48, 96 and 128 px
 
 These are honest boundaries, not unfinished UI:
 
-- **HLS and DASH are not offered.** The engine has no muxer yet
-  (`PROGRESS.md`: *Media splitting for MP4 DASH, HLS and MPEG-TS*). A `.m3u8`
-  would be saved as a playlist, not a video.
+- **HLS and DASH are offered, live ones are not.** The panel lists the
+  renditions a manifest carries and the app fetches each segment through the
+  same engine it uses for an ordinary file, joining them with the native
+  remuxer. A `dynamic`/`Live` MPD or a playlist with no `#EXT-X-ENDLIST` is
+  refused: there is no recording path yet. DRM is refused for the same reason
+  it is honest to refuse it, listed below.
 - **DRM/EME media is not offered.** The overlay checks `mediaKeys` and never
   pretends a protected stream is available. An MSE player's `blob:` URL is
   replaced by the file requests it made; those addresses are signed and expire,

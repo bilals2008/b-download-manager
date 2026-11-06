@@ -7,7 +7,8 @@
 //! to start there with `REST`.
 //!
 //! Evidence: `FTPConnection::StartGetChunk`, `InsInChunksList` and `SendRetr`
-//! (assertion strings in the reference binary). See `ANALYSIS.md`.
+//! (assertion strings in the reference binary). The strings are quoted here so
+//! the module carries its own evidence.
 
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader, ReadHalf, WriteHalf};
 use tokio::net::TcpStream;

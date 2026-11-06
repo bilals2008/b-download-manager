@@ -1,7 +1,7 @@
 // Self-check for the download progress window: the percentage, the words, the
 // transfer rate and the speed limiter conversions. Node strips the types, so
 // the check runs against the same files the window imports.
-// Run it with `npm run check:progress`.
+// Run it with `pnpm check:progress`.
 
 import assert from "node:assert/strict";
 

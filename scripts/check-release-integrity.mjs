@@ -7,7 +7,7 @@
 // Read-only and network-free, so it runs on every pull request through
 // check-all.mjs and again on the tag in release.yml (with --tag). Every
 // problem is collected and printed together; the exit code says whether any
-// were found. Run it with `pnpm run check:release`.
+// were found. Run it with `ppnpm check:release`.
 
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";

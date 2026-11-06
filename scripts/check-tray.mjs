@@ -2,7 +2,7 @@
 // the two places the same list is written down. Node strips the types, so the
 // check runs against the same module the window imports.
 //
-// Run it with `pnpm run check:tray`.
+// Run it with `ppnpm check:tray`.
 
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";

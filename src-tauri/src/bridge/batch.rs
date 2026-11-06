@@ -71,8 +71,9 @@ pub fn options(app: &AppHandle, state: &AppState) -> Value {
 
 /// The one queue the application has, and the two ways a batch can use it.
 ///
-/// There are no named queues yet (`PROGRESS.md`), so the window offers "start
-/// now" and the main queue instead of a dropdown of imaginary queues.
+/// There are no named queues yet (`planning/09-remaining-work.md`), so the
+/// window offers "start now" and the main queue instead of a dropdown of
+/// imaginary queues.
 fn last_folder(state: &AppState) -> Option<PathBuf> {
     state
         .list()

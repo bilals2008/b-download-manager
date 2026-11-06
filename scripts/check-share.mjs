@@ -1,6 +1,6 @@
 // Self-check for Tell a friend: the Windows share window, its refusal, and the
 // clipboard left underneath it. Node strips the types, so the check runs
-// against the same file the app imports. Run it with `pnpm run check:share`.
+// against the same file the app imports. Run it with `ppnpm check:share`.
 
 import assert from "node:assert/strict";
 

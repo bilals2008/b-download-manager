@@ -3,9 +3,12 @@
 The target is the reference product's 32-bit (x86) main binary, SHA-256
 `e3fc655a335e17a6fdd09a9b315291d0c8863180f0d801e5dd7433c9e56afbd8`.
 
-Current results are in [`../ANALYSIS.md`](../ANALYSIS.md). This file is the
-**next** work: what is still unknown, where to look, and what evidence each
-step should produce.
+The evidence gathered so far was kept in `ANALYSIS.md` at the repository root
+until `433e99e` removed it; the surviving in-repo record is
+[10-video-capture-research.md](./10-video-capture-research.md) for the media
+path and the ADRs in [decisions/](./decisions/). This file is the **next**
+work: what is still unknown, where to look, and what evidence each step should
+produce.
 
 ## Ground rules
 
@@ -177,10 +180,22 @@ on the wire". If a question genuinely requires it:
 
 ## Deliverable for each item
 
-A short section appended to [`../ANALYSIS.md`](../ANALYSIS.md) containing:
+A short section in the findings log at the end of this file — there is no
+`ANALYSIS.md` in the repository any more, since `433e99e` removed it —
+containing:
 
 1. the question;
 2. the addresses and strings examined;
 3. the observed answer, with the evidence inline;
 4. what is still unknown;
-5. the design consequence — what changes in `src-tauri/`, if anything.
+5. the design consequence — what changes in `src-tauri/` or `crates/`, if
+   anything.
+
+A finding about the media path belongs in
+[10-video-capture-research.md](./10-video-capture-research.md) instead, next
+to the rest of that study.
+
+## Findings log
+
+Nothing recorded here yet. Append one section per answered priority, in the
+five-part shape above, and date it.

@@ -7,7 +7,7 @@
 // sit above the picture, a stream that arrives after the pointer, a navigation
 // inside the document, fullscreen, and a page that unloads.
 //
-// Loaded from scripts/check-extension.mjs, so `npm run check:extension` runs
+// Loaded from scripts/check-extension.mjs, so `pnpm check:extension` runs
 // them with the rest.
 
 import assert from "node:assert/strict";

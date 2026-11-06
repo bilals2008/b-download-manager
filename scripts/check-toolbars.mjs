@@ -1,6 +1,6 @@
 // Self-check for the toolbar model: the layout rules, the remembered choice,
 // and the pack reader. Node strips the types, so the check runs against the
-// same modules the window imports. Run it with `pnpm run check:toolbars`.
+// same modules the window imports. Run it with `ppnpm check:toolbars`.
 
 import assert from "node:assert/strict";
 

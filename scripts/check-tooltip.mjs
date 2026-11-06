@@ -1,7 +1,7 @@
 // Self-check for the tooltip placement: the preferred side, the flip when it
 // does not fit, and the clamp that keeps the body and its caret inside the
 // window. Node strips the types, so the check runs against the same helper the
-// component imports. Run it with `npm run check:tooltip`.
+// component imports. Run it with `pnpm check:tooltip`.
 
 import assert from "node:assert/strict";
 

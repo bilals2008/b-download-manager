@@ -10,9 +10,9 @@ whoever builds it.
 
 | Tool | Notes |
 | --- | --- |
-| [Node.js](https://nodejs.org/) | 20 or later |
+| [Node.js](https://nodejs.org/) | 24, the version CI builds with |
 | [Rust](https://rustup.rs/) | 1.77 or later, stable toolchain |
-| pnpm | any recent version |
+| pnpm | 12.15, pinned by `packageManager` in `package.json` |
 | **Windows** | [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) (*Desktop development with C++*) and WebView2, which ships with Windows 10 and 11 |
 | **macOS** | Xcode Command Line Tools: `xcode-select --install` |
 | **Linux** | WebKitGTK and the [Tauri prerequisites](https://tauri.app/start/prerequisites/) |
@@ -70,7 +70,7 @@ unless it is a well-formed `moz-extension://` or `chrome-extension://` one, and
 only such an origin is ever echoed back in `Access-Control-Allow-Origin`.
 
 ```powershell
-npm run probe:bridge    # against the running app: the rules, and one real download
+pnpm probe:bridge    # against the running app: the rules, and one real download
 ```
 
 The extension treats `/v1/ping` as the handshake: a different program holding
@@ -98,6 +98,7 @@ deleted.
 
 ## What is not built yet
 
-The scheduler, media splitting for HLS and DASH streams, batch adding, and the
-File types, Browser capture, Sites Logins, Dial Up / VPN and Sounds settings
-pages. `PROGRESS.md` in the repository keeps the authoritative list.
+The scheduler with named queues, batch adding from the toolbar, export and
+import, the drop target, the sounds page and site logins are still open.
+`planning/09-remaining-work.md` in the repository keeps the authoritative list,
+with the file that proves each line.
