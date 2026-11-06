@@ -9,7 +9,7 @@ import { DialogAction } from "@/components/ui/dialog-action";
 import { FIELD } from "@/components/ui/field";
 import { Tooltip } from "@/components/ui/tooltip";
 import {
-  categoryFolder,
+  categoryTargetFolder,
   detectCategory,
   downloadUrl,
   fileNameFromUrl,
@@ -122,6 +122,11 @@ export function AddDownloadDialog({
   const folderPicked = useRef(false);
   const categoryFolderApplied = useRef(false);
   const baseFolder = useRef("");
+  // The save folder of the options window, or the Downloads folder of the
+  // system when it has none. A category without a folder of its own saves to a
+  // folder of this one named after it, so it is not the same thing as the
+  // folder the form opened on.
+  const [defaultFolder, setDefaultFolder] = useState("");
   // The add dialog's first opening says where the files land, because no
   // save folder has been chosen yet; it is shown from the settings value
   // read at this moment and retired as soon as it has been seen.
@@ -168,26 +173,38 @@ export function AddDownloadDialog({
 
   // Start from the folder of the last download, then from the folder of the
   // options window, and from the Downloads folder of the system when neither
-  // has one.
+  // has one. The last two are the default save folder: the one a category
+  // without a folder of its own saves under.
   useEffect(() => {
     if (!open) {
       return;
     }
     let active = true;
+    const fallback = loadSettings().defaultFolder.trim();
+    setDefaultFolder(fallback);
     const remembered = preferredFolder();
     if (remembered) {
       baseFolder.current = remembered;
       setFolder(remembered);
-      return () => {
-        active = false;
-      };
     }
+    // Asked for even when the form opened on the last folder: without it a
+    // category has no default save folder to put its own folder inside.
     defaultDestination()
       .then((answer) => {
-        if (active && !folderPicked.current && !categoryFolderApplied.current) {
-          const target = splitPath(answer).dir || ".";
-          baseFolder.current = target;
-          setFolder(target);
+        if (!active) {
+          return;
+        }
+        const target = splitPath(answer).dir;
+        if (target && target !== ".") {
+          setDefaultFolder(target);
+        }
+        if (
+          !remembered &&
+          !folderPicked.current &&
+          !categoryFolderApplied.current
+        ) {
+          baseFolder.current = target || ".";
+          setFolder(target || ".");
         }
       })
       .catch(() => {
@@ -303,16 +320,17 @@ export function AddDownloadDialog({
   const target =
     folder.trim() && name.trim() ? joinPath(folder.trim(), name.trim()) : "";
 
-  // A category with a folder of its own starts the dialog there. Switching to
-  // one without a folder gives the remembered or default folder back.
+  // A category starts the dialog in its own folder: the one set on it, or the
+  // folder of that name under the default save folder. General and Other, and a
+  // category before the default has answered, give back the remembered folder.
   useEffect(() => {
     if (!open || folderPicked.current) {
       return;
     }
-    const configured = categoryFolder(categories, category);
-    categoryFolderApplied.current = configured !== "";
-    setFolder(configured || baseFolder.current);
-  }, [open, category, categories]);
+    const chosen = categoryTargetFolder(categories, category, defaultFolder);
+    categoryFolderApplied.current = chosen !== "";
+    setFolder(chosen || baseFolder.current);
+  }, [open, category, categories, defaultFolder]);
 
   // Say so when the exact link is already in the list, without refusing it:
   // a second copy is a legitimate choice.

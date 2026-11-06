@@ -8,17 +8,24 @@
  * groups "All Downloads", "Unfinished" and "Finished" above them.
  */
 
-import type { CategoryName } from "./categories.ts";
+import {
+  categoryFolder,
+  savesToRootFolder,
+  type CategoryDefinition,
+  type CategoryName,
+} from "./categories.ts";
 
 export {
   BUILTIN_CATEGORIES,
   CATEGORIES,
   DEFAULT_CATEGORIES,
+  OTHER_CATEGORY,
   categoryFolder,
   categoryName,
   categoryOfFile,
   detectCategory,
   knownCategory,
+  savesToRootFolder,
   type BuiltinCategory,
   type CategoryDefinition,
   type CategoryDraft,
@@ -259,6 +266,30 @@ export function joinPath(dir: string, fileName: string): string {
   }
   const separator = folder.includes("\\") || !folder.includes("/") ? "\\" : "/";
   return `${folder}${separator}${fileName}`;
+}
+
+/**
+ * The folder a category sends a new download to, the way the reference manager
+ * does: a folder set on the category wins; without one, every category except
+ * General and Other saves to a folder of the default save folder named after
+ * it. Empty leaves the choice to the caller: the general categories keep the
+ * folder the dialog opened on, and no default folder yet means nothing to hang
+ * a name under.
+ */
+export function categoryTargetFolder(
+  categories: readonly CategoryDefinition[],
+  name: string,
+  defaultFolder: string,
+): string {
+  const configured = categoryFolder(categories, name);
+  if (configured) {
+    return configured;
+  }
+  const root = defaultFolder.trim();
+  if (!root || savesToRootFolder(name)) {
+    return "";
+  }
+  return joinPath(root, name);
 }
 
 /** Last segment of a folder path, for the tree rows. */

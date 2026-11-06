@@ -15,6 +15,7 @@ import {
   categoryDraftProblem,
   invalidCategoryExtensions,
   parseCategoryExtensions,
+  savesToRootFolder,
   type CategoryDefinition,
 } from "@/lib/categories";
 import { defaultCategoryIcon, type CategoryIcon } from "@/lib/category-icons";
@@ -57,6 +58,9 @@ export function CategoryEditorDialog({
   );
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // General and Other save in the default save folder itself; a category of its
+  // own names a folder inside it when none is set here.
+  const savesToDefault = savesToRootFolder(name.trim() || category?.name || "");
 
   async function pickFolder() {
     if (!isDesktop()) {
@@ -244,7 +248,11 @@ export function CategoryEditorDialog({
               Browse
             </DialogAction>
           </div>
-          <p className={HINT}>Empty uses the default save folder.</p>
+          <p className={HINT}>
+            {savesToDefault
+              ? "Empty uses the default save folder."
+              : "Empty saves to a folder of this name, inside the default save folder."}
+          </p>
         </div>
 
         {problem ? (

@@ -38,7 +38,11 @@ export interface CategoryDefinition {
   name: string;
   /** Lower-case extensions without the dot. Empty matches nothing. */
   extensions: string[];
-  /** An absolute folder, or empty to use the default save folder. */
+  /**
+   * An absolute folder, or empty to follow the default save folder: General
+   * and Other use it directly, every other category saves in a folder of its
+   * own name inside it.
+   */
   folder: string;
   builtin: boolean;
   /** The drawing and palette the tree shows for it. */
@@ -210,7 +214,10 @@ export function categoryName(
     : null;
 }
 
-/** The folder a category saves new downloads to. Empty follows the default. */
+/**
+ * The folder a category saves new downloads to. Empty means the category has no
+ * folder of its own, so `categoryTargetFolder` decides where it goes.
+ */
 export function categoryFolder(
   categories: readonly CategoryDefinition[],
   name: string,
@@ -218,6 +225,15 @@ export function categoryFolder(
   return (
     categories.find((category) => category.name === name)?.folder.trim() ?? ""
   );
+}
+
+/**
+ * The categories that save to the default save folder itself instead of a
+ * folder of their own: the two general buckets that every file which matched no
+ * rule could land in.
+ */
+export function savesToRootFolder(name: string): boolean {
+  return name === "General" || name === OTHER_CATEGORY;
 }
 
 /** The icon a category shows, falling back to the one its name has always had. */
