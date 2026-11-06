@@ -502,7 +502,7 @@ mod live_download {
             stem: "video".to_string(),
             connections: 8,
             proxy: None,
-            referer: None,
+            referer: Some("https://www.youtube.com/watch?v=dQw4w9WgXcQ".to_string()),
             headers: track
                 .user_agent
                 .iter()
