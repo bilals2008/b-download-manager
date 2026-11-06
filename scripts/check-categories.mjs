@@ -2,7 +2,7 @@
 // wins when two claim it, what a category and its folder may be called, and
 // what survives a restart. Node strips the types, so this runs against the
 // same helpers the pane, the dialogs and the store import. Run it with
-// `npm run check:categories`.
+// `pnpm check:categories`.
 
 import assert from "node:assert/strict";
 
@@ -31,7 +31,11 @@ import {
   defaultCategoryIcon,
   normalizeCategoryIcon,
 } from "../src/lib/category-icons.ts";
-import { matchesStatusFilter } from "../src/lib/downloads.ts";
+import {
+  categoryTargetFolder,
+  matchesStatusFilter,
+  savesToRootFolder,
+} from "../src/lib/downloads.ts";
 
 let checks = 0;
 
@@ -125,8 +129,8 @@ is(
 );
 is(categoryNameProblem("Minhas Aulas", DEFAULT_CATEGORIES), null, "a name with a space");
 
-// A folder is absolute, or empty to follow the default. It does not have to
-// exist: the engine creates it with the first file.
+// A folder is absolute, or empty to follow the default save folder. It does
+// not have to exist: the engine creates it with the first file.
 is(categoryFolderProblem(""), null, "no folder follows the default");
 is(categoryFolderProblem("C:\\Downloads\\Video"), null, "a drive path");
 is(categoryFolderProblem("D:/Downloads/Video"), null, "a drive path with forward slashes");
@@ -142,6 +146,59 @@ is(
   'A folder cannot contain < > " | ? *.',
   "characters a path cannot hold",
 );
+
+// Where a new download of a category goes, the way the reference manager
+// routes it: the folder set on the category, or a folder of its own name
+// inside the default save folder. An empty answer leaves the folder to the add
+// dialog, which is the remembered one when there is one.
+const DEFAULT_SAVE_FOLDER = "C:\\Downloads";
+is(
+  categoryTargetFolder(DEFAULT_CATEGORIES, "Video", DEFAULT_SAVE_FOLDER),
+  "C:\\Downloads\\Video",
+  "a built-in without a folder of its own names one inside the default",
+);
+is(
+  categoryTargetFolder([custom("Courses", ["xyz"])], "Courses", DEFAULT_SAVE_FOLDER),
+  "C:\\Downloads\\Courses",
+  "a user category gets a folder of its name the same way",
+);
+is(
+  categoryTargetFolder(
+    [custom("Courses", ["xyz"], "D:\\Files\\Courses")],
+    "Courses",
+    DEFAULT_SAVE_FOLDER,
+  ),
+  "D:\\Files\\Courses",
+  "the folder set on a category wins over the default",
+);
+is(
+  categoryTargetFolder(DEFAULT_CATEGORIES, "General", DEFAULT_SAVE_FOLDER),
+  "",
+  "General saves in the folder the dialog opened on",
+);
+is(
+  categoryTargetFolder(DEFAULT_CATEGORIES, OTHER_CATEGORY, DEFAULT_SAVE_FOLDER),
+  "",
+  "an unmatched file does too",
+);
+is(
+  categoryTargetFolder(DEFAULT_CATEGORIES, "Video", ""),
+  "",
+  "no default folder yet means nothing to name a folder inside",
+);
+is(
+  categoryTargetFolder(DEFAULT_CATEGORIES, "Music", "/home/user/Downloads"),
+  "/home/user/Downloads/Music",
+  "a unix default keeps its separator",
+);
+is(
+  categoryTargetFolder(DEFAULT_CATEGORIES, "Music", "C:\\Downloads\\"),
+  "C:\\Downloads\\Music",
+  "a trailing separator is not doubled",
+);
+is(savesToRootFolder("Video"), false, "Video saves in a folder of its own");
+is(savesToRootFolder("General"), true, "General saves in the default itself");
+is(savesToRootFolder(OTHER_CATEGORY), true, "Other saves in the default itself");
 
 // A built-in keeps its name and its types. A custom category may claim a
 // built-in type on purpose, but not one another custom category owns.
