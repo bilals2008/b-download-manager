@@ -197,7 +197,10 @@ pub async fn resolve(
                 .and_then(Value::as_str)
                 .unwrap_or("the video is not playable");
             first_error.get_or_insert_with(|| {
-                format!("the video could not be asked for: {reason} ({})", profile.label)
+                format!(
+                    "the video could not be asked for: {reason} ({})",
+                    profile.label
+                )
             });
             continue;
         }
@@ -544,7 +547,10 @@ mod live_fallback {
             .await
             .expect("the VR answer");
         let (manifest, source) = plan_from(&data, "Video").expect("a plan");
-        assert!(!manifest.formats.is_empty(), "the VR answer offered formats");
+        assert!(
+            !manifest.formats.is_empty(),
+            "the VR answer offered formats"
+        );
         let track = match source {
             SourcePlan::Files { tracks } => tracks
                 .into_iter()
@@ -582,10 +588,7 @@ mod live_fallback {
         let size = std::fs::metadata(&dest).map(|m| m.len()).unwrap_or(0);
         eprintln!(
             "vr itag {} size {:?} outcome {:?} bytes {}",
-            track.format.id,
-            track.format.size,
-            outcome,
-            size
+            track.format.id, track.format.size, outcome, size
         );
         assert!(size > 1_000_000, "a whole track");
         let _ = std::fs::remove_dir_all(&dir);
