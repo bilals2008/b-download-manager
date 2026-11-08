@@ -7,10 +7,11 @@
 //! (the whole file as one ranged download). A representation id is kept as
 //! text, so YouTube's numeric itags pass through unchanged.
 //!
-//! Multi-period manifests are refused: one track list cannot describe two
-//! periods without duplicating every track. Live (`type="dynamic"`) and
-//! protected (`ContentProtection`) manifests are refused with the same one
-//! sentence the rest of the media path uses.
+//! Multi-period manifests offer their first period, and the period ends where
+//! the next one starts, so no segment is asked for past the stretch it
+//! describes. Live (`type="dynamic"`) and protected (`ContentProtection`)
+//! manifests are refused with their own sentences: a live stream is not
+//! encryption, and a protection system is named when the manifest names one.
 
 use reqwest::Url;
 
@@ -60,7 +61,7 @@ pub fn parse_full(text: &str, base_url: &str) -> Result<DashManifest, MediaError
         return Err(MediaError::Live);
     }
     if root.contains("ContentProtection") {
-        return Err(MediaError::Protected);
+        return Err(MediaError::protected(protection_scheme(&root)));
     }
 
     let duration = root
@@ -85,17 +86,23 @@ pub fn parse_full(text: &str, base_url: &str) -> Result<DashManifest, MediaError
     let mpd_base = resolve_base(&root, base_url)?;
     let period = periods[0];
     let period_base = resolve_base(period, &mpd_base)?;
-    let period_duration = period
-        .attr("duration")
-        .and_then(parse_duration)
-        .or(duration);
-    let period_start = period.attr("start").and_then(parse_duration).unwrap_or(0.0);
-    let period_length = period_duration.map(|total| (total - period_start).max(0.0));
+    let period_length = first_period_length(period, periods.get(1).copied(), duration);
+    // The list describes one period, so the length the panel shows is that
+    // period's, not the whole presentation's: a ten-second presentation whose
+    // first period is four seconds downloads four seconds.
+    let offered = period_length.or(duration);
 
     let mut tracks: Vec<DashTrack> = Vec::new();
+    // Reasons a representation could not be planned. They are only reported
+    // when nothing else could be read, so one unusable row does not take the
+    // rest of the manifest down with it.
+    let mut skipped: Vec<MediaError> = Vec::new();
+    // Segment information is inherited down the tree: a period or a set may
+    // carry the `SegmentTemplate` every representation under it uses.
+    let period_template = Template::from_element(period);
     for (set_index, set) in period.children_named("AdaptationSet").enumerate() {
         if set.contains("ContentProtection") {
-            return Err(MediaError::Protected);
+            return Err(MediaError::protected(protection_scheme(set)));
         }
         let role = set
             .child("Role")
@@ -111,11 +118,12 @@ pub fn parse_full(text: &str, base_url: &str) -> Result<DashManifest, MediaError
             continue;
         }
         let set_base = resolve_base(set, &period_base)?;
-        let set_template = Template::from_element(set);
+        let set_template =
+            Template::merge(period_template.as_ref(), Template::from_element(set).as_ref());
 
         for (rep_index, rep) in set.children_named("Representation").enumerate() {
             if rep.contains("ContentProtection") {
-                return Err(MediaError::Protected);
+                return Err(MediaError::protected(protection_scheme(rep)));
             }
             let mime = rep.attr("mimeType").unwrap_or(set_mime);
             let content = rep.attr("contentType").unwrap_or(set_content);
@@ -126,15 +134,18 @@ pub fn parse_full(text: &str, base_url: &str) -> Result<DashManifest, MediaError
             let rep_base = resolve_base(rep, &set_base)?;
             let template =
                 Template::merge(set_template.as_ref(), Template::from_element(rep).as_ref());
-            let plan = segment_plan(
+            let plan = match segment_plan(
                 rep,
                 &template,
                 &rep_base,
                 period_length,
                 rep.attr("id").unwrap_or(""),
-            )?;
-            let Some(plan) = plan else {
-                continue;
+            ) {
+                Ok(plan) => plan,
+                Err(reason) => {
+                    skipped.push(reason);
+                    continue;
+                }
             };
             if plan.segments.len() > MAX_SEGMENTS {
                 return Err(MediaError::TooLarge(format!(
@@ -164,7 +175,7 @@ pub fn parse_full(text: &str, base_url: &str) -> Result<DashManifest, MediaError
                 .or(set.attr("frameRate"))
                 .and_then(number_f64);
             format.bandwidth = bandwidth;
-            format.size = format.estimate_size(duration);
+            format.size = format.estimate_size(offered);
             tracks.push(DashTrack {
                 format,
                 init: plan.init,
@@ -175,14 +186,14 @@ pub fn parse_full(text: &str, base_url: &str) -> Result<DashManifest, MediaError
     }
 
     if tracks.is_empty() {
-        return Err(MediaError::Malformed(
-            "the manifest names no video or audio track".to_string(),
-        ));
+        return Err(skipped.into_iter().next().unwrap_or_else(|| {
+            MediaError::Malformed("the manifest names no video or audio track".to_string())
+        }));
     }
 
-    let manifest = build_manifest(&tracks, duration);
+    let manifest = build_manifest(&tracks, offered);
     Ok(DashManifest {
-        duration,
+        duration: offered,
         tracks,
         manifest,
         notice,
@@ -294,6 +305,84 @@ fn track_container(kind: MediaKind, mime: &str, codecs: Option<&str>) -> String 
     }
 }
 
+/// The protection system a manifest names, as the panel should read it.
+///
+/// `ContentProtection` identifies a system by `schemeIdUri`, usually in the
+/// UUID form registered with DASH-IF. The well-known ones are named; anything
+/// else is shown as the manifest wrote it, bounded so a hostile document
+/// cannot push a paragraph into the window.
+fn protection_scheme(element: &Element) -> String {
+    let mut schemes = Vec::new();
+    collect_schemes(element, &mut schemes);
+    let named: Vec<String> = schemes.iter().map(|scheme| protection_name(scheme)).collect();
+    for known in ["Widevine", "PlayReady", "FairPlay", "Clear Key"] {
+        if named.iter().any(|name| name == known) {
+            return known.to_string();
+        }
+    }
+    named
+        .into_iter()
+        .find(|name| !name.is_empty())
+        .unwrap_or_default()
+}
+
+fn collect_schemes(element: &Element, out: &mut Vec<String>) {
+    if element.name.eq_ignore_ascii_case("ContentProtection") {
+        let scheme = element
+            .attr("schemeIdUri")
+            .or_else(|| element.attr("value"))
+            .unwrap_or("");
+        out.push(scheme.trim().to_ascii_lowercase());
+    }
+    for child in &element.children {
+        collect_schemes(child, out);
+    }
+}
+
+/// The readable name of one `schemeIdUri`.
+fn protection_name(scheme: &str) -> String {
+    if scheme.contains("edef8ba9-79d6-4ace-a3c8-27dcd51d21ed") || scheme.contains("widevine") {
+        return "Widevine".to_string();
+    }
+    if scheme.contains("9a04f079-9840-4286-ab92-e65be0885f95") || scheme.contains("playready") {
+        return "PlayReady".to_string();
+    }
+    if scheme.contains("94ce86fb-07ff-4f43-adb8-93d2fa968ca2") || scheme.contains("fairplay") {
+        return "FairPlay".to_string();
+    }
+    if scheme.contains("1077efec-c0b2-4d02-ace3-3c1e52e2fb4b") || scheme.contains("clearkey") {
+        return "Clear Key".to_string();
+    }
+    if scheme.contains("mp4protection") {
+        return "MPEG Common Encryption".to_string();
+    }
+    scheme.chars().take(64).collect()
+}
+
+/// How long the first period lasts, in seconds.
+///
+/// A period ends where its own `@duration` says it does, otherwise where the
+/// next period starts, otherwise at the end of the presentation. Reading the
+/// whole presentation's length for the first period of a multi-period stream
+/// would ask for segments that belong to a different stretch of it.
+fn first_period_length(
+    period: &Element,
+    next: Option<&Element>,
+    presentation: Option<f64>,
+) -> Option<f64> {
+    let start = period.attr("start").and_then(parse_duration).unwrap_or(0.0);
+    let end = period
+        .attr("duration")
+        .and_then(parse_duration)
+        .map(|length| start + length)
+        .or_else(|| {
+            next.and_then(|next| next.attr("start"))
+                .and_then(parse_duration)
+        })
+        .or(presentation);
+    end.map(|end| (end - start).max(0.0))
+}
+
 /* --------------------------------------------------------------- segments */
 
 struct Plan {
@@ -336,9 +425,9 @@ impl Template {
         };
         if let Some(timeline) = node.child("SegmentTimeline") {
             for entry in timeline.children_named("S") {
-                let Some(duration) = entry.attr("d").and_then(number) else {
-                    continue;
-                };
+                // A missing `d` is kept as a zero so the plan can refuse it by
+                // name instead of quietly dropping the entry.
+                let duration = entry.attr("d").and_then(number).unwrap_or(0);
                 template.timeline.push(TimelineEntry {
                     time: entry.attr("t").and_then(number),
                     duration,
@@ -389,16 +478,16 @@ fn segment_plan(
     base_url: &str,
     period_length: Option<f64>,
     representation_id: &str,
-) -> Result<Option<Plan>, MediaError> {
+) -> Result<Plan, MediaError> {
     let bandwidth = rep
         .attr("bandwidth")
         .and_then(|value| value.parse::<u64>().ok())
         .unwrap_or(0);
 
-    if let Some(template) = template {
-        let Some(media) = template.media.as_deref() else {
-            return Ok(None);
-        };
+    // A template only describes the bytes when it names the media; one that
+    // only carries timing falls through to the other segment information.
+    let media = template.as_ref().and_then(|template| template.media.as_deref());
+    if let (Some(template), Some(media)) = (template.as_ref(), media) {
         let init = template.initialization.as_deref().map(|uri| {
             let url = expand(
                 uri,
@@ -421,27 +510,40 @@ fn segment_plan(
         let pto = template.presentation_time_offset.unwrap_or(0);
         let mut segments = Vec::new();
 
+        // A zero-length entry would repeat forever, and a repeat below -1 is
+        // not a value the format allows; both are refusals rather than a
+        // quietly shortened segment list.
+        for entry in &template.timeline {
+            if entry.duration == 0 {
+                return Err(MediaError::Malformed(
+                    "a timeline entry has no duration".to_string(),
+                ));
+            }
+            if entry.repeat < -1 {
+                return Err(MediaError::Malformed(
+                    "a timeline repeat is outside the format's range".to_string(),
+                ));
+            }
+        }
+
         if !template.timeline.is_empty() {
             let mut number = start_number;
             let mut time = 0u64;
             for entry in &template.timeline {
                 time = entry.time.unwrap_or(time);
                 let repeats = if entry.repeat < 0 {
-                    // `r="-1"` repeats until the period ends. Without a
-                    // period length the repetition is bounded by the segment
-                    // cap, never by an open-ended loop.
+                    // `r="-1"` repeats until the period ends, so the number
+                    // of *additional* segments is the span divided by the
+                    // duration, less the one this entry already describes.
+                    // Without a period length the repetition is bounded by
+                    // the segment cap, never by an open-ended loop.
                     match period_length {
                         Some(length) => {
                             let end = (length * timescale as f64) as u64 + pto;
-                            entry
-                                .duration
+                            end.saturating_sub(time)
                                 .checked_div(entry.duration)
-                                .map(|_| {
-                                    end.saturating_sub(time)
-                                        .checked_div(entry.duration)
-                                        .unwrap_or(0)
-                                })
-                                .unwrap_or(0)
+                                .unwrap_or(1)
+                                .saturating_sub(1)
                         }
                         None => (MAX_SEGMENTS as u64).saturating_sub(1),
                     }
@@ -465,7 +567,10 @@ fn segment_plan(
             }
         } else {
             let Some(duration) = template.duration.filter(|duration| *duration > 0) else {
-                return Ok(None);
+                return Err(MediaError::Unsupported(
+                    "the segment template names neither a timeline nor a segment duration"
+                        .to_string(),
+                ));
             };
             let Some(length) = period_length.filter(|length| *length > 0.0) else {
                 return Err(MediaError::Unsupported(
@@ -496,9 +601,11 @@ fn segment_plan(
         }
 
         if segments.is_empty() {
-            return Ok(None);
+            return Err(MediaError::Unsupported(
+                "the segment template expands to no segment".to_string(),
+            ));
         }
-        return Ok(Some(Plan { init, segments }));
+        return Ok(Plan { init, segments });
     }
 
     if let Some(list) = rep.child("SegmentList") {
@@ -530,36 +637,40 @@ fn segment_plan(
             }
         }
         if segments.is_empty() {
-            return Ok(None);
+            return Err(MediaError::Unsupported(
+                "the segment list names no segment".to_string(),
+            ));
         }
-        return Ok(Some(Plan { init, segments }));
+        return Ok(Plan { init, segments });
     }
 
     if rep.child("SegmentBase").is_some() {
         // The representation is one file; the engine's range download fetches
         // it. A `sidx` index would only change how it is split, not the bytes.
-        return Ok(Some(Plan {
+        return Ok(Plan {
             init: None,
             segments: vec![TrackSegment {
                 url: base_url.to_string(),
                 range: None,
             }],
-        }));
+        });
     }
 
     // A representation with a BaseURL and no segment information is one
     // progressive file.
     if rep.child("BaseURL").is_some() {
-        return Ok(Some(Plan {
+        return Ok(Plan {
             init: None,
             segments: vec![TrackSegment {
                 url: base_url.to_string(),
                 range: None,
             }],
-        }));
+        });
     }
 
-    Ok(None)
+    Err(MediaError::Unsupported(
+        "the manifest gives no address for the track's bytes".to_string(),
+    ))
 }
 
 /// Replace the placeholders a template may carry.
@@ -931,10 +1042,33 @@ mod tests {
           <ContentProtection schemeIdUri="urn:mpeg:dash:mp4protection:2011"/>
           <Representation id="1"><BaseURL>a.mp4</BaseURL></Representation>
         </AdaptationSet></Period></MPD>"#;
+        let error = parse_full(text, BASE).expect_err("protected");
         assert_eq!(
-            parse_full(text, BASE).expect_err("protected"),
-            MediaError::Protected
+            error,
+            MediaError::protected("MPEG Common Encryption"),
+            "the protection system is named"
         );
+        assert!(error.to_string().contains("protected"));
+    }
+
+    #[test]
+    fn a_protection_system_is_named_instead_of_one_blanket_sentence() {
+        let text = r#"<MPD type="static"><Period><AdaptationSet contentType="video">
+          <ContentProtection
+            schemeIdUri="urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"/>
+          <Representation id="1"><BaseURL>a.mp4</BaseURL></Representation>
+        </AdaptationSet></Period></MPD>"#;
+        let error = parse_full(text, BASE).expect_err("widevine");
+        assert!(error.to_string().contains("Widevine"), "{error}");
+
+        // A `ContentProtection` on the representation is read the same way.
+        let per_rep = r#"<MPD type="static"><Period><AdaptationSet contentType="video">
+          <Representation id="1"><BaseURL>a.mp4</BaseURL>
+            <ContentProtection schemeIdUri="urn:uuid:9a04f079-9840-4286-ab92-e65be0885f95"/>
+          </Representation>
+        </AdaptationSet></Period></MPD>"#;
+        let error = parse_full(per_rep, BASE).expect_err("playready");
+        assert!(error.to_string().contains("PlayReady"), "{error}");
     }
 
     #[test]
@@ -942,7 +1076,122 @@ mod tests {
         let text = r#"<MPD type="dynamic"><Period><AdaptationSet contentType="video">
           <Representation id="1"><BaseURL>a.mp4</BaseURL></Representation>
         </AdaptationSet></Period></MPD>"#;
-        assert_eq!(parse_full(text, BASE).expect_err("live"), MediaError::Live);
+        let error = parse_full(text, BASE).expect_err("live");
+        assert_eq!(error, MediaError::Live);
+        assert!(error.to_string().contains("live"));
+        assert!(!error.to_string().contains("protected"));
+    }
+
+    #[test]
+    fn segment_information_is_inherited_from_the_period() {
+        let text = r#"<MPD type="static" mediaPresentationDuration="PT4S">
+          <Period>
+            <SegmentTemplate timescale="1000" duration="2000" media="v-$Number$.m4s"/>
+            <AdaptationSet contentType="video" mimeType="video/mp4">
+              <Representation id="137" bandwidth="1000" width="640" height="360"/>
+            </AdaptationSet>
+          </Period>
+        </MPD>"#;
+        let parsed = parse_full(text, BASE).expect("a period-level template");
+        assert_eq!(parsed.tracks.len(), 1);
+        assert_eq!(parsed.tracks[0].segments.len(), 2);
+        assert!(parsed.tracks[0].segments[0].url.ends_with("v-1.m4s"));
+    }
+
+    #[test]
+    fn the_first_period_stops_where_the_next_one_starts() {
+        let text = r#"<MPD type="static" mediaPresentationDuration="PT10S">
+          <Period>
+            <AdaptationSet contentType="video" mimeType="video/mp4">
+              <SegmentTemplate timescale="1000" duration="2000" media="v-$Number$.m4s"/>
+              <Representation id="1" bandwidth="1000" width="640" height="360"/>
+            </AdaptationSet>
+          </Period>
+          <Period start="PT4S">
+            <AdaptationSet contentType="video" mimeType="video/mp4">
+              <Representation id="2"><BaseURL>second.mp4</BaseURL></Representation>
+            </AdaptationSet>
+          </Period>
+        </MPD>"#;
+        let parsed = parse_full(text, BASE).expect("the first period");
+        assert_eq!(
+            parsed.tracks[0].segments.len(),
+            2,
+            "four seconds of two-second segments, not the whole ten-second presentation"
+        );
+        assert_eq!(
+            parsed.duration,
+            Some(4.0),
+            "what the panel promises is what the first period holds"
+        );
+    }
+
+    #[test]
+    fn a_repeat_that_runs_to_the_period_end_stops_there() {
+        let text = r#"<MPD type="static" mediaPresentationDuration="PT6S">
+          <Period>
+            <AdaptationSet contentType="video" mimeType="video/mp4">
+              <SegmentTemplate timescale="1000" media="s-$Time$.m4s">
+                <SegmentTimeline><S t="0" d="2000" r="-1"/></SegmentTimeline>
+              </SegmentTemplate>
+              <Representation id="1" bandwidth="1000" width="640" height="360"/>
+            </AdaptationSet>
+          </Period>
+        </MPD>"#;
+        let parsed = parse_full(text, BASE).expect("a repeat");
+        assert_eq!(
+            parsed.tracks[0].segments.len(),
+            3,
+            "six seconds of two-second segments"
+        );
+        assert!(parsed.tracks[0].segments[2].url.ends_with("s-4000.m4s"));
+    }
+
+    #[test]
+    fn a_presentation_time_offset_shifts_the_first_segment_time() {
+        let text = r#"<MPD type="static" mediaPresentationDuration="PT4S">
+          <Period><AdaptationSet contentType="video" mimeType="video/mp4">
+            <SegmentTemplate timescale="1000" duration="2000" presentationTimeOffset="9000"
+              media="s-$Number$-$Time$.m4s"/>
+            <Representation id="1" bandwidth="1000" width="640" height="360"/>
+          </AdaptationSet></Period>
+        </MPD>"#;
+        let parsed = parse_full(text, BASE).expect("an offset");
+        let urls: Vec<&str> = parsed.tracks[0]
+            .segments
+            .iter()
+            .map(|segment| segment.url.as_str())
+            .collect();
+        assert_eq!(urls.len(), 2);
+        assert!(urls[0].ends_with("s-1-9000.m4s"), "{}", urls[0]);
+        assert!(urls[1].ends_with("s-2-11000.m4s"), "{}", urls[1]);
+    }
+
+    #[test]
+    fn a_timeline_entry_without_a_duration_is_refused() {
+        let text = r#"<MPD type="static" mediaPresentationDuration="PT6S">
+          <Period><AdaptationSet contentType="video" mimeType="video/mp4">
+            <SegmentTemplate timescale="1000" media="s-$Time$.m4s">
+              <SegmentTimeline><S t="0" d="0"/></SegmentTimeline>
+            </SegmentTemplate>
+            <Representation id="1" bandwidth="1000" width="640" height="360"/>
+          </AdaptationSet></Period>
+        </MPD>"#;
+        let error = parse_full(text, BASE).expect_err("a zero duration");
+        assert!(matches!(error, MediaError::Malformed(_)), "{error:?}");
+        assert!(error.to_string().contains("duration"), "{error}");
+    }
+
+    #[test]
+    fn a_track_with_no_address_says_that_instead_of_disappearing() {
+        let text = r#"<MPD type="static" mediaPresentationDuration="PT4S">
+          <Period><AdaptationSet contentType="video" mimeType="video/mp4">
+            <Representation id="1" bandwidth="1000" width="640" height="360"/>
+          </AdaptationSet></Period>
+        </MPD>"#;
+        let error = parse_full(text, BASE).expect_err("no address");
+        assert!(matches!(error, MediaError::Unsupported(_)), "{error:?}");
+        assert!(error.to_string().contains("no address"), "{error}");
     }
 
     #[test]
@@ -1034,6 +1283,7 @@ mod tests {
                 referer: None,
                 headers: Vec::new(),
                 header_origin: None,
+                fingerprint: None,
             },
             None,
             None,
@@ -1069,6 +1319,7 @@ mod tests {
                 referer: None,
                 headers: Vec::new(),
                 header_origin: None,
+                fingerprint: None,
             },
             None,
             None,

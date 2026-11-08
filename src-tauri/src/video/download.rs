@@ -13,13 +13,15 @@ use tauri::{AppHandle, Manager};
 
 use idm_core::disk;
 use idm_core::media::download::{
-    self, ProgressSink, TrackControl, TrackOutcome, TrackProgress, TrackSource,
+    self, ProgressSink, TrackControl, TrackError, TrackOutcome, TrackProblem, TrackProgress,
+    TrackSource,
 };
 use idm_core::media::{hls, Format, MediaKind, TrackSegment};
 
 use crate::state::AppState;
 
 use super::capture::DownloadRequest;
+use super::lease::RequestLease;
 use super::mux::{self, Container};
 use super::verify::{self, Expect};
 use super::{MediaJob, MediaState, SourcePlan};
@@ -188,28 +190,32 @@ async fn run(
     let limits = state.limits().clone();
     let connections = state.browser_connections().clamp(1, 16);
 
-    // A YouTube address is bound to the moment it was resolved, and the server
-    // stops answering new range requests for it after a while. On a refused
-    // track, resolve the page again and continue from the bytes already on disk,
-    // so a long video finishes instead of failing near its end.
-    let mut attempt = 0u32;
-    let result = loop {
-        if super::yt::is_youtube_page(&job.page_url) {
-            // A resolve that fails quietly here would send the retry against
-            // the same dead address, so what it said is written down.
-            match super::yt::resolve(&job.page_url, &job.title).await {
-                Ok((manifest, source)) => {
-                    job.manifest = Some(manifest);
-                    job.source = Some(source);
-                }
-                Err(error) => {
-                    idm_core::log::write(
-                        "warn",
-                        &format!("resolving the page again failed: {error}"),
-                    );
-                }
+    // A YouTube address is bound to the moment it was resolved: the client
+    // identity it was signed for, and a deadline the provider chose. The plan
+    // the panel parsed can be minutes old by the time the user picks a
+    // quality, so the page is asked once more before the first byte.
+    if super::yt::is_youtube_page(&job.page_url) {
+        // A resolve that fails quietly here would send the download against a
+        // dead address, so what it said is written down.
+        match super::yt::resolve(&job.page_url, &job.title).await {
+            Ok((manifest, source)) => {
+                job.manifest = Some(manifest);
+                job.source = Some(source);
+            }
+            Err(error) => {
+                idm_core::log::write(
+                    "warn",
+                    &format!("resolving the page again failed: {error}"),
+                );
             }
         }
+    }
+
+    // At most one renewal. A provider that refuses the second address of the
+    // same representation is not going to accept a third, and a loop here
+    // would spend the user's time instead of telling them.
+    let mut refreshed = false;
+    let result = loop {
         let outcome = match job.source.as_ref() {
             Some(SourcePlan::Hls {
                 master,
@@ -256,22 +262,63 @@ async fn run(
                 )
                 .await
             }
-            None => Err(Outcome::Failed(
-                "this stream cannot be downloaded".to_string(),
-            )),
+            None => Err(Outcome::media("this stream cannot be downloaded")),
         };
         match outcome {
+            // The engine says the address was refused, or that the bytes behind
+            // it changed. Both are decisions, not sentences, so they are
+            // answered with a new address from the page rather than with a
+            // search for "403" in the words of the error.
             Err(Outcome::Failed(error))
-                if attempt < 2
-                    && super::yt::is_youtube_page(&job.page_url)
-                    && (error.contains("403") || error.contains("refused")) =>
+                if !refreshed
+                    && worth_another_address(&error)
+                    && super::yt::is_youtube_page(&job.page_url) =>
             {
-                attempt += 1;
+                refreshed = true;
                 idm_core::log::write(
                     "info",
-                    "a YouTube address was refused; resolving the page again",
+                    &format!(
+                        "a track address stopped working ({}); asking the page for a new one",
+                        error.problem.name()
+                    ),
                 );
-                continue;
+                match super::yt::renew(&job.page_url, &job.title).await {
+                    Ok((manifest, source)) => {
+                        let before = chosen_lease(job.source.as_ref(), &request.video).cloned();
+                        let after = chosen_lease(Some(&source), &request.video).cloned();
+                        match (&before, &after) {
+                            (Some(before), Some(after)) if before.same_bytes(after) => {
+                                idm_core::log::write(
+                                    "info",
+                                    "the new address serves the same representation; the bytes on disk are kept",
+                                );
+                            }
+                            (Some(_), Some(_)) => {
+                                // The guard in the engine drops the bytes of
+                                // the old representation before the first
+                                // fetch, so nothing is mixed. Saying so is the
+                                // difference between a slower download and a
+                                // corruption nobody notices.
+                                idm_core::log::write(
+                                    "warn",
+                                    "the new address serves another representation; the bytes on disk are dropped",
+                                );
+                            }
+                            _ => {}
+                        }
+                        job.manifest = Some(manifest);
+                        job.source = Some(source);
+                        continue;
+                    }
+                    Err(renew_error) => {
+                        break Err(Outcome::Failed(TrackError::new(
+                            error.problem,
+                            format!(
+                                "the address was refused and the page did not offer a new one: {renew_error}"
+                            ),
+                        )));
+                    }
+                }
             }
             other => break other,
         }
@@ -329,31 +376,108 @@ async fn run(
                 job.stage = Some("Stopped".to_string());
             });
         }
-        Err(Outcome::Failed(error)) => finish_failed(&state, job.id, error),
+        Err(Outcome::Failed(error)) => finish_failed(&state, job.id, error.to_string()),
     }
 }
 
 enum Outcome {
     Cancelled,
-    Failed(String),
+    Failed(TrackError),
+}
+
+impl Outcome {
+    /// A failure that no new address can fix: a manifest that does not hold
+    /// the quality, a playlist that is gone, a job with no source at all.
+    fn media(message: impl Into<String>) -> Self {
+        Outcome::Failed(TrackError::new(TrackProblem::Media, message))
+    }
+
+    /// A failure that may pass when the same address is asked again.
+    fn transient(message: impl Into<String>) -> Self {
+        Outcome::Failed(TrackError::new(TrackProblem::Transient, message))
+    }
 }
 
 /// Why the finished file could not be delivered. As visible as [`deliver`],
 /// which answers with it: a type a caller can receive cannot be more private
 /// than the function that returns it.
+#[derive(Debug)]
 pub(super) enum DeliverError {
     Cancelled,
     Failed(String),
 }
 
+/// Whether a failure is the address's fault rather than the network's, and so
+/// whether the page should be asked for another one.
+///
+/// A refusal says the address, or the identity it was signed for, is no longer
+/// accepted. A change says the bytes behind the address are not the bytes this
+/// run started with, which the same address cannot fix either; the guard in the
+/// engine has already dropped what no longer matches, so one new address
+/// answers both. A short read or a busy server is neither, and is retried by
+/// the engine itself rather than here.
+fn worth_another_address(error: &TrackError) -> bool {
+    matches!(error.problem, TrackProblem::Denied | TrackProblem::Changed)
+}
+
+/// The lease of the track a job is downloading, when its plan carries leases.
+///
+/// It is what a renewal is compared against: a new address for the same bytes
+/// keeps the work already done, and an address for another encode must not.
+fn chosen_lease<'a>(source: Option<&'a SourcePlan>, id: &str) -> Option<&'a RequestLease> {
+    match source? {
+        SourcePlan::Files { tracks } => tracks
+            .iter()
+            .find(|track| track.format.id == id)
+            .map(|track| &track.lease),
+        _ => None,
+    }
+}
+
+/// A stable name for the playlist a set of segments came from.
+///
+/// The addresses inside a playlist are re-signed on every read, so the query
+/// is dropped; what is left — the number of segments and the paths of the
+/// first and the last — is the same for the same playlist, and different for
+/// a live window that has slid on.
+fn hls_fingerprint(playlist: &hls::MediaPlaylist) -> Option<String> {
+    let first = playlist.segments.first()?;
+    let last = playlist.segments.last()?;
+    Some(format!(
+        "hls|{}|{}|{}",
+        playlist.segments.len(),
+        path_of(&first.url),
+        path_of(&last.url)
+    ))
+}
+
+/// The same for one representation of a DASH manifest.
+fn dash_fingerprint(track: &idm_core::media::dash::DashTrack) -> Option<String> {
+    let first = track.segments.first()?;
+    Some(format!(
+        "dash|{}|{}|{}|{}",
+        track.format.id,
+        track.format.container,
+        track.segments.len(),
+        path_of(&first.url)
+    ))
+}
+
+/// The path of an address, without the query a provider signs.
+fn path_of(url: &str) -> String {
+    reqwest::Url::parse(url)
+        .map(|parsed| parsed.path().to_string())
+        .unwrap_or_default()
+}
+
 /// Put the downloaded tracks in place, then read the result back.
 ///
 /// A track that already is the file the name promises (a progressive MP4, a
-/// WebM, a fragmented `.m4a`) is moved; everything else is copied into and
-/// checked against that container. Either way the bytes are verified before
-/// the caller is told the download succeeded, so a file that is not what it
-/// claims can never be reported as Saved. The join temporary lives in
-/// `work_dir`, the job's own staging folder.
+/// WebM, a fragmented `.m4a`) is checked where it lies; anything else is
+/// joined and checked inside the job's staging folder. The destination is
+/// touched by one step only — the move of a finished, checked file — and a
+/// file that was already there is replaced, never deleted: a failed download
+/// must not take away what the user had.
 pub(super) fn deliver(
     dest: &Path,
     inputs: Vec<PathBuf>,
@@ -365,6 +489,12 @@ pub(super) fn deliver(
         .first()
         .cloned()
         .ok_or_else(|| DeliverError::Failed("there is nothing to save".to_string()))?;
+    let expect = || Expect {
+        extension: &delivery.extension,
+        video: delivery.video,
+        audio: delivery.audio,
+        audio_selected: delivery.audio_selected,
+    };
     let already = inputs.len() == 1
         && verify::inspect(&primary)
             .ok()
@@ -373,19 +503,24 @@ pub(super) fn deliver(
         .container
         .or_else(|| Container::from_extension(&delivery.extension));
 
-    if already {
+    let staged = if already {
         stage("Checking");
-        disk::replace_file(&primary, dest).map_err(|error| {
-            DeliverError::Failed(format!(
-                "the finished file could not be put in place: {error}"
-            ))
-        })?;
+        verify::check_finished(&primary, expect()).map_err(DeliverError::Failed)?;
+        primary
     } else if let Some(container) = container {
         stage("Joining");
-        mux::join(&inputs, dest, work_dir, container).map_err(|error| match error {
+        let joined = work_dir.join(format!("final.{}", delivery.extension));
+        let _ = std::fs::remove_file(&joined);
+        mux::join(&inputs, &joined, work_dir, container).map_err(|error| match error {
             mux::MuxError::Cancelled => DeliverError::Cancelled,
             other => DeliverError::Failed(other.to_string()),
         })?;
+        stage("Checking");
+        if let Err(error) = verify::check_finished(&joined, expect()) {
+            let _ = std::fs::remove_file(&joined);
+            return Err(DeliverError::Failed(error));
+        }
+        joined
     } else {
         // Nothing can be joined into this name and the track is not in it:
         // saving the bytes under it would be a lie about the file.
@@ -393,23 +528,19 @@ pub(super) fn deliver(
             "the download is not the {} it should be",
             delivery.extension
         )));
-    }
+    };
 
-    stage("Checking");
-    verify::check_finished(
-        dest,
-        Expect {
-            extension: &delivery.extension,
-            video: delivery.video,
-            audio: delivery.audio,
-            audio_selected: delivery.audio_selected,
-        },
-    )
-    .map_err(|error| {
-        // A file that cannot be played is not kept: the row says it failed and
-        // nothing wait-shaped is left in the folder.
-        let _ = std::fs::remove_file(dest);
-        DeliverError::Failed(error)
+    stage("Saving");
+    // A single track that already is the file its name promises can be sitting
+    // at the destination itself. Renaming a file onto itself would move the
+    // user's file out from under the name they are looking at.
+    if staged == dest {
+        return Ok(dest.to_path_buf());
+    }
+    disk::replace_file(&staged, dest).map_err(|error| {
+        DeliverError::Failed(format!(
+            "the finished file could not be put in place: {error}"
+        ))
     })?;
     Ok(dest.to_path_buf())
 }
@@ -440,7 +571,7 @@ async fn run_hls(
     let playlist = if request.video == "media" {
         stored
             .cloned()
-            .ok_or_else(|| Outcome::Failed("the playlist is not there any more".to_string()))?
+            .ok_or_else(|| Outcome::media("the playlist is not there any more"))?
     } else {
         // A variant, or an audio-only rendition chosen on its own row.
         let uri = match master {
@@ -452,14 +583,27 @@ async fn run_hls(
             },
             None => None,
         }
-        .ok_or_else(|| Outcome::Failed("that quality is not in the manifest".to_string()))?;
+        .ok_or_else(|| Outcome::media("that quality is not in the manifest"))?;
         let fetched = super::probe::fetch(&uri, &job.referer, &job.headers, job.header_origin())
             .await
-            .map_err(Outcome::Failed)?;
+            .map_err(Outcome::transient)?;
         hls::parse_media(&fetched.text, &fetched.url)
-            .map_err(|error| Outcome::Failed(error.to_string()))?
+            .map_err(|error| Outcome::media(error.to_string()))?
     };
     let _ = base;
+    if playlist.discontinuities > 0 {
+        // The segments are joined in the order the playlist lists them, and
+        // each plain segment carries its own timestamps. A stream whose
+        // timeline restarts is worth a note in the log rather than a silent
+        // assumption that it does not matter.
+        idm_core::log::write(
+            "info",
+            &format!(
+                "the playlist restarts its timeline {} time(s); the segments are joined in the order it lists them",
+                playlist.discontinuities
+            ),
+        );
+    }
 
     // The sound playlist is read first, only to know how many segments the
     // whole job has. That count is what keeps the row's percentage stable
@@ -467,9 +611,7 @@ async fn run_hls(
     let audio_playlist = if let Some(audio_id) = request.audio.as_deref() {
         let rendition = master
             .and_then(|master| master.audio_rendition(audio_id))
-            .ok_or_else(|| {
-                Outcome::Failed("that audio track is not in the manifest".to_string())
-            })?;
+            .ok_or_else(|| Outcome::media("that audio track is not in the manifest"))?;
         let fetched = super::probe::fetch(
             &rendition.uri,
             &job.referer,
@@ -477,10 +619,10 @@ async fn run_hls(
             job.header_origin(),
         )
         .await
-        .map_err(Outcome::Failed)?;
+        .map_err(Outcome::transient)?;
         Some(
             hls::parse_media(&fetched.text, &fetched.url)
-                .map_err(|error| Outcome::Failed(error.to_string()))?,
+                .map_err(|error| Outcome::media(error.to_string()))?,
         )
     } else {
         None
@@ -504,6 +646,10 @@ async fn run_hls(
         referer: Some(job.referer.clone()).filter(|referer| !referer.is_empty()),
         headers: job.headers.clone(),
         header_origin: Some(job.header_origin.clone()).filter(|origin| !origin.is_empty()),
+        // A playlist is re-read every run, but the segments already on disk
+        // belong to the playlist of the run that wrote them. When a live
+        // window has slid on, the index files no longer mean the same bytes.
+        fingerprint: hls_fingerprint(&playlist),
     };
 
     run_track(
@@ -541,6 +687,7 @@ async fn run_hls(
             referer: Some(job.referer.clone()).filter(|referer| !referer.is_empty()),
             headers: job.headers.clone(),
             header_origin: Some(job.header_origin.clone()).filter(|origin| !origin.is_empty()),
+            fingerprint: hls_fingerprint(&audio_playlist),
         };
         run_track(
             limits,
@@ -568,7 +715,13 @@ async fn run_track(
     control: &Arc<TrackControl>,
     sink: ProgressSink,
 ) -> Result<(), Outcome> {
-    match download::download_track(limits.clone(), source, Some(control.clone()), Some(sink)).await
+    match download::download_track_typed(
+        limits.clone(),
+        source,
+        Some(control.clone()),
+        Some(sink),
+    )
+    .await
     {
         Ok(TrackOutcome::Done) => Ok(()),
         Ok(TrackOutcome::Cancelled) => Err(Outcome::Cancelled),
@@ -590,15 +743,13 @@ async fn run_dash(
     let track = tracks
         .iter()
         .find(|track| track.format.id == request.video)
-        .ok_or_else(|| Outcome::Failed("that quality is not in the manifest".to_string()))?;
+        .ok_or_else(|| Outcome::media("that quality is not in the manifest"))?;
     let audio_track = if let Some(audio_id) = request.audio.as_deref() {
         Some(
             tracks
                 .iter()
                 .find(|track| track.format.id == audio_id)
-                .ok_or_else(|| {
-                    Outcome::Failed("that audio track is not in the manifest".to_string())
-                })?,
+                .ok_or_else(|| Outcome::media("that audio track is not in the manifest"))?,
         )
     } else {
         None
@@ -619,6 +770,7 @@ async fn run_dash(
         referer: Some(job.referer.clone()).filter(|referer| !referer.is_empty()),
         headers: job.headers.clone(),
         header_origin: Some(job.header_origin.clone()).filter(|origin| !origin.is_empty()),
+        fingerprint: dash_fingerprint(track),
     };
     run_track(
         limits,
@@ -655,6 +807,7 @@ async fn run_dash(
             referer: Some(job.referer.clone()).filter(|referer| !referer.is_empty()),
             headers: job.headers.clone(),
             header_origin: Some(job.header_origin.clone()).filter(|origin| !origin.is_empty()),
+            fingerprint: dash_fingerprint(audio),
         };
         run_track(
             limits,
@@ -690,29 +843,23 @@ async fn run_files(
     let chosen = tracks
         .iter()
         .find(|track| track.format.id == request.video)
-        .ok_or_else(|| Outcome::Failed("that quality is not in the manifest".to_string()))?;
+        .ok_or_else(|| Outcome::media("that quality is not in the manifest"))?;
     let audio_track = if let Some(audio_id) = request.audio.as_deref() {
         Some(
             tracks
                 .iter()
                 .find(|track| track.format.id == audio_id)
-                .ok_or_else(|| {
-                    Outcome::Failed("that audio track is not in the manifest".to_string())
-                })?,
+                .ok_or_else(|| Outcome::media("that audio track is not in the manifest"))?,
         )
     } else {
         None
     };
     let total_segments = 1 + usize::from(audio_track.is_some());
     let last_video = Arc::new(Mutex::new(TrackProgress::default()));
-    // A YouTube address is signed for the client that asked for it: the
-    // server refuses a request that presents an unlike identity, so the
-    // resolved client's User-Agent rides along with the job's own headers.
-    let video_headers = track_headers(job, chosen.user_agent.as_deref());
     let track = TrackSource {
         init: None,
         segments: vec![TrackSegment {
-            url: chosen.url.clone(),
+            url: chosen.url().to_string(),
             range: None,
         }],
         dest: video_track_path(work_dir),
@@ -721,8 +868,9 @@ async fn run_files(
         connections,
         proxy: app.state::<AppState>().limits().proxy(),
         referer: Some(job.referer.clone()).filter(|referer| !referer.is_empty()),
-        headers: video_headers,
+        headers: track_headers(job, &chosen.lease),
         header_origin: Some(job.header_origin.clone()).filter(|origin| !origin.is_empty()),
+        fingerprint: Some(chosen.lease.representation.key()),
     };
     run_track(
         limits,
@@ -751,7 +899,7 @@ async fn run_files(
         let source = TrackSource {
             init: None,
             segments: vec![TrackSegment {
-                url: audio.url.clone(),
+                url: audio.url().to_string(),
                 range: None,
             }],
             dest: audio_track_path(work_dir),
@@ -760,8 +908,9 @@ async fn run_files(
             connections,
             proxy: app.state::<AppState>().limits().proxy(),
             referer: Some(job.referer.clone()).filter(|referer| !referer.is_empty()),
-            headers: track_headers(job, audio.user_agent.as_deref()),
+            headers: track_headers(job, &audio.lease),
             header_origin: Some(job.header_origin.clone()).filter(|origin| !origin.is_empty()),
+            fingerprint: Some(audio.lease.representation.key()),
         };
         run_track(
             limits,
@@ -831,13 +980,15 @@ fn finish_failed(state: &AppState, id: u64, error: String) {
     });
 }
 
-/// The job headers with the client identity the track address was signed for.
-fn track_headers(job: &MediaJob, user_agent: Option<&str>) -> Vec<(String, String)> {
-    let mut headers = job.headers.clone();
-    if let Some(user_agent) = user_agent {
-        headers.push(("user-agent".to_string(), user_agent.to_string()));
-    }
-    headers
+/// The headers a track request carries: the page's, scoped to the origin
+/// they were collected from, plus the identity the address was signed for.
+///
+/// The lease decides once more rather than trusting the job: a redirect can
+/// leave the origin, and a `user-agent` from the page must never be sent
+/// beside the one the provider signed the address for — a server that sees
+/// two identities refuses the request.
+fn track_headers(job: &MediaJob, lease: &RequestLease) -> Vec<(String, String)> {
+    lease.headers_for(&lease.url, &job.headers, job.header_origin())
 }
 
 fn segment(segment: &hls::HlsSegment) -> TrackSegment {
@@ -950,5 +1101,99 @@ mod tests {
     #[test]
     fn a_component_cannot_leave_the_folder() {
         assert_eq!(safe_component("a/b\\c:d"), "a_b_c_d");
+    }
+
+    fn scratch(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("bdm-deliver-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("the test folder");
+        dir
+    }
+
+    fn delivery(extension: &str) -> Delivery {
+        Delivery {
+            extension: extension.to_string(),
+            container: None,
+            video: true,
+            audio: false,
+            audio_selected: false,
+        }
+    }
+
+    #[test]
+    fn a_file_that_is_already_the_destination_is_left_where_it_is() {
+        let dir = scratch("in-place");
+        let dest = dir.join("Film.webm");
+        std::fs::write(&dest, super::super::tools::tiny_webm()).expect("the file");
+
+        // The track and the destination are the same path: a download resumed
+        // straight into the folder it belongs to.
+        let saved = deliver(&dest, vec![dest.clone()], &dir, &delivery("webm"), &|_| {})
+            .expect("a file that checks out");
+
+        assert_eq!(saved, dest);
+        assert!(dest.is_file(), "the destination is still there");
+        assert_eq!(
+            std::fs::read(&dest).expect("the file"),
+            super::super::tools::tiny_webm()
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_file_that_does_not_check_out_never_replaces_the_destination() {
+        let dir = scratch("check");
+        let dest = dir.join("Film.webm");
+        let old = b"the file that was already there";
+        std::fs::write(&dest, old).expect("the old file");
+
+        // A WebM header with no segment and no track: it is the container the
+        // name promises, and it holds nothing a person could watch.
+        let track = dir.join("video.track");
+        std::fs::write(
+            &track,
+            super::super::tools::ebml(
+                &[0x1A, 0x45, 0xDF, 0xA3],
+                &super::super::tools::ebml(&[0x42, 0x82], b"webm"),
+            ),
+        )
+        .expect("the track");
+
+        let failed = match deliver(&dest, vec![track], &dir, &delivery("webm"), &|_| {}) {
+            Ok(_) => panic!("a file with no picture cannot be saved"),
+            Err(error) => error,
+        };
+        assert!(matches!(failed, DeliverError::Failed(_)));
+        assert_eq!(
+            std::fs::read(&dest).expect("the old file"),
+            old,
+            "the destination the user had is untouched"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_join_that_fails_never_replaces_the_destination() {
+        let dir = scratch("join");
+        let dest = dir.join("Film.mp4");
+        let old = b"the file that was already there";
+        std::fs::write(&dest, old).expect("the old file");
+
+        // Text where an MP4 should be: the join refuses it before anything is
+        // moved into the destination.
+        let track = dir.join("video.track");
+        std::fs::write(&track, b"<!doctype html><title>Not found</title>").expect("the track");
+
+        let failed = match deliver(&dest, vec![track], &dir, &delivery("mp4"), &|_| {}) {
+            Ok(_) => panic!("an HTML page is not a video"),
+            Err(error) => error,
+        };
+        assert!(matches!(failed, DeliverError::Failed(_)));
+        assert_eq!(
+            std::fs::read(&dest).expect("the old file"),
+            old,
+            "the destination the user had is untouched"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

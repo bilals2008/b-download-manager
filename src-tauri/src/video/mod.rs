@@ -7,7 +7,9 @@
 //! the HTTP requests the parser needs.
 
 pub(crate) mod capture;
+pub(crate) mod challenge;
 pub(crate) mod download;
+pub(crate) mod lease;
 pub(crate) mod mp4;
 pub(crate) mod mux;
 pub(crate) mod policy;
@@ -66,17 +68,30 @@ pub enum SourcePlan {
     Files { tracks: Vec<FileTrack> },
 }
 
-/// One plain media file: its format and the address that serves it.
-#[derive(Debug, Clone)]
+/// One plain media file: its format and the lease that serves it.
+///
+/// The address, the client identity it was signed for, its expiry and the
+/// representation it carries all live in [`lease::RequestLease`], because a
+/// bare URL cannot answer any of the questions a retry has to ask.
+#[derive(Clone)]
 pub struct FileTrack {
     pub format: Format,
-    pub url: String,
-    /// The client identity the address was signed for, when the app asked
-    /// a provider for the URL itself. A server that-bound address is
-    /// refused to any request that names an unlike client, so the download
-    /// has to carry the User-Agent the resolver used. Browser-captured
-    /// addresses carry the browser's own headers instead.
-    pub user_agent: Option<String>,
+    pub lease: lease::RequestLease,
+}
+
+impl FileTrack {
+    pub fn url(&self) -> &str {
+        &self.lease.url
+    }
+}
+
+impl std::fmt::Debug for FileTrack {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FileTrack")
+            .field("format", &self.format)
+            .field("lease", &self.lease.describe())
+            .finish()
+    }
 }
 
 /// One manifest the extension asked about.

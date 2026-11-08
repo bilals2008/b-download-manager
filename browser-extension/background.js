@@ -314,28 +314,37 @@ async function mediaHeaders(url) {
 }
 
 chrome.webRequest.onCompleted.addListener(
-  (request) => {
-    void reportMedia(request).catch(() => {});
+  // The event details are deliberately not named `request`: that is the
+  // bridge helper below, and a parameter of the same name hid it, so every
+  // registration threw and was swallowed.
+  (details) => {
+    void reportMedia(details).catch((error) => {
+      // A closed app is expected and quiet; anything else is worth seeing in
+      // the extension's own console. The media address is not printed because
+      // it can be signed.
+      if (!error || error.name !== "TypeError") {
+        console.warn("media registration failed:", error?.message || error);
+      }
+    });
   },
   { urls: ["<all_urls>"], types: ["media", "xmlhttprequest", "object"] },
 );
 
-async function reportMedia(request) {
-  const url = String(request.url || "");
+async function reportMedia(details) {
+  const url = String(details.url || "");
   if (url.startsWith(BRIDGE)) return;
   const kind = mediaKindOf(url);
   if (!kind) return;
   // A named file is offered only when a player element fetched it; streams
   // and manifests arrive through the player's script, which is an XHR.
-  if (kind === "file" && request.type !== "media") return;
-  const tabId = request.tabId;
+  if (kind === "file" && details.type !== "media") return;
+  const tabId = details.tabId;
   if (!Number.isInteger(tabId) || tabId < 0) return;
 
   const manifestUrl = fullMediaUrl(url);
   const key = mediaKeyOf(manifestUrl);
   const seen = seenMediaFor(tabId);
   if (seen.has(key)) return;
-  seen.add(key);
 
   const settings = await effectiveSettings();
   if (!settings.capture) return;
@@ -343,22 +352,19 @@ async function reportMedia(request) {
   if (!tab || !/^https?:\/\//i.test(tab.url || "")) return;
   if (skipped(hostOf(tab.url), settings.skipSites)) return;
 
-  try {
-    await request("POST", "/v1/media", {
-      pageUrl: tab.url,
-      manifestUrl,
-      kind,
-      title: tab.title || "",
-      referer: tab.url,
-      headers: await mediaHeaders(manifestUrl),
-      presentation: "window",
-    });
-    const count = Math.min(99, (mediaCounts.get(tabId) || 0) + 1);
-    mediaCounts.set(tabId, count);
-    chrome.action
-      .setBadgeText({ tabId, text: String(count) })
-      .catch(() => {});
-  } catch {
-    // The app is closed or refused it; the player keeps its own copy.
-  }
+  // Remembered only after the bridge accepted it: a refused or failed
+  // registration stays retryable for the next request of the same media.
+  await request("POST", "/v1/media", {
+    pageUrl: tab.url,
+    manifestUrl,
+    kind,
+    title: tab.title || "",
+    referer: tab.url,
+    headers: await mediaHeaders(manifestUrl),
+    presentation: "window",
+  });
+  seen.add(key);
+  const count = Math.min(99, (mediaCounts.get(tabId) || 0) + 1);
+  mediaCounts.set(tabId, count);
+  chrome.action.setBadgeText({ tabId, text: String(count) }).catch(() => {});
 }

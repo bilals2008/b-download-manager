@@ -37,12 +37,26 @@ const TRACK_TYPE: u64 = 0x83;
 const CODEC_ID: u64 = 0x86;
 const CODEC_PRIVATE: u64 = 0x63A2;
 const DEFAULT_DURATION: u64 = 0x23E383;
+/// How long the decoder has to be delayed before its first frame lines up with
+/// the rest of the file. Dropping it puts Opus audio ahead of the picture.
+const CODEC_DELAY: u64 = 0x56AA;
+/// How many nanoseconds of audio the encoder expects a seek to discard.
+const SEEK_PRE_ROLL: u64 = 0x56BB;
 const VIDEO: u64 = 0xE0;
 const PIXEL_WIDTH: u64 = 0xB0;
 const PIXEL_HEIGHT: u64 = 0xBA;
 const AUDIO: u64 = 0xE1;
 const SAMPLING_FREQUENCY: u64 = 0xB5;
 const CHANNELS: u64 = 0x9F;
+/// How much of a block's last frame the decoder must throw away. Only a
+/// `BlockGroup` can carry it, so a group is kept whenever it is present.
+const DISCARD_PADDING: u64 = 0x75A2;
+const CUES: u64 = 0x1C53_BB6B;
+const CUE_POINT: u64 = 0xBB;
+const CUE_TIME: u64 = 0xB3;
+const CUE_TRACK_POSITIONS: u64 = 0xB7;
+const CUE_TRACK: u64 = 0xF7;
+const CUE_CLUSTER_POSITION: u64 = 0xF1;
 const MUXING_APP: u64 = 0x4D80;
 const WRITING_APP: u64 = 0x5741;
 
@@ -60,6 +74,8 @@ struct RawTrack {
     codec_id: Vec<u8>,
     codec_private: Vec<u8>,
     default_duration: Option<u64>,
+    codec_delay: Option<u64>,
+    seek_pre_roll: Option<u64>,
     pixel_width: Option<u64>,
     pixel_height: Option<u64>,
     sample_rate: Option<f64>,
@@ -74,6 +90,9 @@ struct Block {
     time_ns: u64,
     data_offset: u64,
     data_len: u64,
+    /// The signed nanoseconds the decoder must discard from the end of this
+    /// block's last frame, when its `BlockGroup` said so.
+    discard_padding: Option<i64>,
 }
 
 #[derive(Default)]
@@ -197,6 +216,8 @@ fn parse_tracks(body: &[u8]) -> Vec<RawTrack> {
             codec_id: element_bytes(data, CODEC_ID).unwrap_or_default(),
             codec_private: element_bytes(data, CODEC_PRIVATE).unwrap_or_default(),
             default_duration: element_uint(data, DEFAULT_DURATION),
+            codec_delay: element_uint(data, CODEC_DELAY).filter(|value| *value > 0),
+            seek_pre_roll: element_uint(data, SEEK_PRE_ROLL).filter(|value| *value > 0),
             ..RawTrack::default()
         };
         if let Some(video) = element_body(data, VIDEO) {
@@ -224,24 +245,20 @@ fn parse_cluster(file: &mut File, cluster: &Header, input: &mut Input) -> Result
                 let body = read_body(file, &header)?;
                 cluster_ts = read_uint(&body).unwrap_or(0);
             }
-            SIMPLE_BLOCK => record_block(file, &header, cluster_ts, input.scale, None, input)?,
-            BLOCK_GROUP => {
-                let mut inner = header.data;
-                let mut keyframe = true;
-                while inner < header.end {
-                    let child = read_header(file, inner, header.end)?;
-                    if child.id == REFERENCE_BLOCK {
-                        keyframe = false;
-                    }
-                    if child.id == BLOCK {
-                        record_block(file, &child, cluster_ts, input.scale, Some(keyframe), input)?;
-                    }
-                    if child.end <= inner {
-                        break;
-                    }
-                    inner = child.end;
-                }
-            }
+            SIMPLE_BLOCK => record_block(
+                file,
+                &header,
+                cluster_ts,
+                input.scale,
+                None,
+                None,
+                input,
+            )?,
+            BLOCK_GROUP => parse_block_group(file, &header, cluster_ts, input)?,
+            // A cluster whose size is unknown runs to the end of its parent,
+            // so the clusters that follow it arrive here as children. Without
+            // this arm every block after the first such cluster is lost.
+            CLUSTER => parse_cluster(file, &header, input)?,
             _ => {}
         }
         if header.end <= at {
@@ -252,12 +269,59 @@ fn parse_cluster(file: &mut File, cluster: &Header, input: &mut Input) -> Result
     Ok(())
 }
 
+/// Read a `BlockGroup` into one `Block`.
+///
+/// A group is the only place a `DiscardPadding` can live, and its `Block`
+/// carries no keyframe bit of its own: the absence of a `ReferenceBlock` is
+/// what makes the frame a keyframe. Both facts have to survive, so the group's
+/// children are read together rather than streamed as they are met.
+fn parse_block_group(
+    file: &mut File,
+    group: &Header,
+    cluster_ts: u64,
+    input: &mut Input,
+) -> Result<(), MuxError> {
+    let mut inner = group.data;
+    let mut keyframe = true;
+    let mut block: Option<Header> = None;
+    let mut padding: Option<i64> = None;
+    while inner < group.end {
+        let child = read_header(file, inner, group.end)?;
+        match child.id {
+            REFERENCE_BLOCK => keyframe = false,
+            BLOCK => block = Some(child.clone()),
+            DISCARD_PADDING => {
+                let body = read_body(file, &child)?;
+                padding = read_int(&body);
+            }
+            _ => {}
+        }
+        if child.end <= inner {
+            break;
+        }
+        inner = child.end;
+    }
+    if let Some(block) = &block {
+        record_block(
+            file,
+            block,
+            cluster_ts,
+            input.scale,
+            Some(keyframe),
+            padding,
+            input,
+        )?;
+    }
+    Ok(())
+}
+
 fn record_block(
     file: &mut File,
     header: &Header,
     cluster_ts: u64,
     scale: u64,
     group_keyframe: Option<bool>,
+    discard_padding: Option<i64>,
     input: &mut Input,
 ) -> Result<(), MuxError> {
     let Some(prefix) = read_prefix(file, header.data, 8, header.end)? else {
@@ -288,6 +352,7 @@ fn record_block(
         time_ns,
         data_offset: header.data + header_len,
         data_len: header.size.unwrap_or(0) - header_len,
+        discard_padding,
     });
     Ok(())
 }
@@ -304,14 +369,12 @@ fn write_joined(
     let mut file = File::create(&temporary)
         .map_err(|error| MuxError::Io(format!("the file could not be written: {error}")))?;
 
-    let mut tracks = Vec::new();
+    let mut tracks: Vec<RawTrack> = Vec::new();
     let mut blocks = Vec::new();
-    let mut next_number = 1u64;
     for input in inputs {
         for track in &input.tracks {
-            let out_number = next_number;
-            next_number += 1;
-            tracks.push((out_number, track.clone()));
+            let order = tracks.len();
+            tracks.push(track.clone());
             for block in input
                 .blocks
                 .iter()
@@ -319,8 +382,8 @@ fn write_joined(
             {
                 blocks.push(OutputBlock {
                     path: input.path.clone(),
-                    out_number,
-                    order: tracks.len() - 1,
+                    out_number: 0, // numbered once the tracks are known
+                    order,
                     block: block.clone(),
                 });
             }
@@ -330,24 +393,66 @@ fn write_joined(
         return Err(MuxError::Io("the tracks have no frames".to_string()));
     }
     blocks.sort_by_key(|block| block.block.time_ns);
-    let duration_ns = blocks.last().map(|block| block.block.time_ns).unwrap_or(0);
+
+    // A track that contributed no frame would still be declared in `Tracks`,
+    // and a file that promises a stream it never delivers is refused by some
+    // players. Drop it, and number what is left from one.
+    let mut used = vec![false; tracks.len()];
+    for block in &blocks {
+        used[block.order] = true;
+    }
+    let mut renumber = vec![0usize; tracks.len()];
+    let mut kept: Vec<RawTrack> = Vec::with_capacity(tracks.len());
+    for (index, track) in tracks.into_iter().enumerate() {
+        if !used[index] {
+            continue;
+        }
+        renumber[index] = kept.len();
+        kept.push(track);
+    }
+    for block in &mut blocks {
+        block.order = renumber[block.order];
+        block.out_number = block.order as u64 + 1;
+    }
+    let tracks = kept;
+
+    // The file ends when its last frame ends, not when that frame starts; a
+    // track's own frame length is the only statement of that the file carries.
+    let duration_ns = blocks
+        .iter()
+        .map(|block| {
+            let frame = tracks
+                .get(block.order)
+                .and_then(|track| track.default_duration)
+                .unwrap_or(0);
+            block.block.time_ns.saturating_add(frame)
+        })
+        .max()
+        .unwrap_or(0);
 
     let doc_type = if container == Container::Mkv {
         "matroska"
     } else {
         "webm"
     };
-    file.write_all(&ebml_header(doc_type))
-        .map_err(write_error)?;
-    // A Segment of unknown size is the normal shape for a streamed file.
-    file.write_all(&id(SEGMENT))
-        .and_then(|_| file.write_all(&unknown_size()))
-        .map_err(write_error)?;
+    let ebml = ebml_header(doc_type);
+    file.write_all(&ebml).map_err(write_error)?;
+    // A Segment of unknown size is the normal shape for a streamed file. Every
+    // cue position is measured from the first byte after its size field, so the
+    // header's own length has to be known here.
+    let segment_header = [id(SEGMENT), unknown_size()].concat();
+    file.write_all(&segment_header).map_err(write_error)?;
+    let segment_data = ebml.len() as u64 + segment_header.len() as u64;
     file.write_all(&info(duration_ns)).map_err(write_error)?;
     file.write_all(&tracks_element(&tracks))
         .map_err(write_error)?;
 
-    write_clusters(&mut file, &blocks, work_dir)?;
+    let points = write_clusters(&mut file, &blocks, segment_data)?;
+    // Without cues a player has to scan every cluster to find a keyframe, which
+    // is why a WebM that has them scrubs and one that does not stutters.
+    if !points.is_empty() {
+        file.write_all(&cues(&points)).map_err(write_error)?;
+    }
 
     file.flush().map_err(write_error)?;
     drop(file);
@@ -366,9 +471,10 @@ struct OutputBlock {
 fn write_clusters(
     file: &mut File,
     blocks: &[OutputBlock],
-    _work_dir: &Path,
-) -> Result<(), MuxError> {
+    segment_data: u64,
+) -> Result<Vec<CuePoint>, MuxError> {
     let mut readers: Vec<Option<File>> = (0..count_tracks(blocks)).map(|_| None).collect();
+    let mut points = Vec::new();
     let mut index = 0usize;
     while index < blocks.len() {
         let cluster_ms = blocks[index].block.time_ns / DEFAULT_SCALE;
@@ -382,7 +488,7 @@ fn write_clusters(
             if !cluster_blocks.is_empty() && block_ms.saturating_sub(cluster_ms) > CLUSTER_SPAN_MS {
                 break;
             }
-            cluster_blocks.push((block_ms as i64 - cluster_ms as i64, blocks[index].clone()));
+            cluster_blocks.push((relative, blocks[index].clone()));
             index += 1;
         }
 
@@ -390,18 +496,45 @@ fn write_clusters(
         body.extend(uint_element(CLUSTER_TIMESTAMP, cluster_ms));
         for (relative, block) in &cluster_blocks {
             let entry = read_block_frames(&mut readers, block)?;
-            body.extend(simple_block(
-                block.out_number,
-                *relative,
-                block.block.flags,
-                block.block.keyframe,
-                &entry,
-            ));
+            body.extend(output_block(block, *relative, &entry));
         }
         let cluster = element(CLUSTER, &body);
+        // Only a cluster that opens on a keyframe is somewhere a seek can land.
+        if let Some((_, first)) = cluster_blocks.first() {
+            if first.block.keyframe {
+                let at = file.stream_position().map_err(write_error)?;
+                points.push(CuePoint {
+                    time_ms: cluster_ms,
+                    track: first.out_number,
+                    cluster: at.saturating_sub(segment_data),
+                });
+            }
+        }
         file.write_all(&cluster).map_err(write_error)?;
     }
-    Ok(())
+    Ok(points)
+}
+
+/// Where a cue point sends the player: the cluster's offset inside the Segment,
+/// and the time of the keyframe it starts with.
+struct CuePoint {
+    time_ms: u64,
+    track: u64,
+    cluster: u64,
+}
+
+fn cues(points: &[CuePoint]) -> Vec<u8> {
+    let mut body = Vec::new();
+    for point in points {
+        let mut positions = Vec::new();
+        positions.extend(uint_element(CUE_TRACK, point.track));
+        positions.extend(uint_element(CUE_CLUSTER_POSITION, point.cluster));
+        let mut entry = Vec::new();
+        entry.extend(uint_element(CUE_TIME, point.time_ms));
+        entry.extend(element(CUE_TRACK_POSITIONS, &positions));
+        body.extend(element(CUE_POINT, &entry));
+    }
+    element(CUES, &body)
 }
 
 fn count_tracks(blocks: &[OutputBlock]) -> usize {
@@ -431,13 +564,40 @@ fn read_block_frames(
     Ok(frames)
 }
 
-fn simple_block(track: u64, relative: i64, flags: u8, keyframe: bool, frames: &[u8]) -> Vec<u8> {
+/// One output block: a `SimpleBlock`, or a `BlockGroup` when the block has
+/// padding to carry. A group is the only element that can state padding, so the
+/// block keeps its group rather than losing the tail of its last frame.
+fn output_block(block: &OutputBlock, relative: i64, frames: &[u8]) -> Vec<u8> {
+    if block.block.discard_padding.is_some() {
+        let mut group = Vec::new();
+        group.extend(element(BLOCK, &block_payload(block, relative, frames, false)));
+        if !block.block.keyframe {
+            // Inside a group the keyframe bit is not used; a reference to the
+            // frame before is what says this one is not a keyframe.
+            group.extend(uint_element(REFERENCE_BLOCK, 0));
+        }
+        if let Some(padding) = block.block.discard_padding {
+            group.extend(element(DISCARD_PADDING, &padding.to_be_bytes()));
+        }
+        return element(BLOCK_GROUP, &group);
+    }
+    element(SIMPLE_BLOCK, &block_payload(block, relative, frames, true))
+}
+
+fn block_payload(block: &OutputBlock, relative: i64, frames: &[u8], simple: bool) -> Vec<u8> {
     let mut payload = Vec::with_capacity(frames.len() + 4);
-    payload.extend(encode_vint(track));
+    payload.extend(encode_vint(block.out_number));
     payload.extend(&(relative as i16).to_be_bytes());
-    payload.push((flags & 0x7F) | if keyframe { 0x80 } else { 0 });
+    // A `SimpleBlock` states whether it is a keyframe; a plain `Block` must not
+    // set that bit, because it means something else there.
+    let flags = if simple {
+        (block.block.flags & 0x7F) | if block.block.keyframe { 0x80 } else { 0 }
+    } else {
+        block.block.flags & 0x0F
+    };
+    payload.push(flags);
     payload.extend(frames);
-    element(SIMPLE_BLOCK, &payload)
+    payload
 }
 
 /* -------------------------------------------------------------- EBML write */
@@ -460,10 +620,10 @@ fn info(duration_ns: u64) -> Vec<u8> {
     element(INFO, &body)
 }
 
-fn tracks_element(tracks: &[(u64, RawTrack)]) -> Vec<u8> {
+fn tracks_element(tracks: &[RawTrack]) -> Vec<u8> {
     let mut body = Vec::new();
-    for (number, track) in tracks {
-        body.extend(track_entry(*number, track));
+    for (index, track) in tracks.iter().enumerate() {
+        body.extend(track_entry(index as u64 + 1, track));
     }
     element(TRACKS, &body)
 }
@@ -479,6 +639,14 @@ fn track_entry(number: u64, track: &RawTrack) -> Vec<u8> {
     }
     if let Some(duration) = track.default_duration {
         body.extend(uint_element(DEFAULT_DURATION, duration));
+    }
+    // The decoder's own start offset: without it the sound of an Opus track is
+    // ahead of the picture by the length of its pre-skip.
+    if let Some(delay) = track.codec_delay {
+        body.extend(uint_element(CODEC_DELAY, delay));
+    }
+    if let Some(pre_roll) = track.seek_pre_roll {
+        body.extend(uint_element(SEEK_PRE_ROLL, pre_roll));
     }
     if track.kind == 1 {
         let mut video = Vec::new();
@@ -559,6 +727,7 @@ fn encode_vint(value: u64) -> Vec<u8> {
 
 /* --------------------------------------------------------------- EBML read */
 
+#[derive(Clone)]
 struct Header {
     id: u64,
     data: u64,
@@ -695,6 +864,18 @@ fn read_uint(bytes: &[u8]) -> Option<u64> {
             .iter()
             .fold(0u64, |value, byte| (value << 8) | *byte as u64),
     )
+}
+
+/// A Matroska *signed* integer, which is sign-extended from its top bit.
+fn read_int(bytes: &[u8]) -> Option<i64> {
+    if bytes.is_empty() || bytes.len() > 8 {
+        return None;
+    }
+    let mut value = if bytes[0] & 0x80 != 0 { -1i64 } else { 0i64 };
+    for byte in bytes {
+        value = (value << 8) | *byte as i64;
+    }
+    Some(value)
 }
 
 fn read_id(bytes: &[u8]) -> Option<(u64, usize)> {
@@ -853,6 +1034,322 @@ mod tests {
         let info = super::super::verify::inspect(&out).expect("the file is WebM");
         assert!(info.video_codec.is_some(), "the picture is there");
         assert!(info.audio_codec.is_some(), "the sound is there");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /* -------------------------------------------- deterministic fixtures */
+
+    /// A whole WebM file, assembled from the same primitives the writer uses.
+    ///
+    /// Building it here instead of with an encoder is what makes the reader's
+    /// edge cases testable everywhere: no ffmpeg, no sample files, no clock.
+    fn fixture(tracks: &[RawTrack], clusters: &[Vec<u8>]) -> Vec<u8> {
+        let mut out = ebml_header("webm");
+        out.extend(id(SEGMENT));
+        out.extend(unknown_size());
+        out.extend(info(0));
+        let mut entries = Vec::new();
+        for track in tracks {
+            entries.extend(track_entry(track.number, track));
+        }
+        out.extend(element(TRACKS, &entries));
+        for cluster in clusters {
+            out.extend_from_slice(cluster);
+        }
+        out
+    }
+
+    fn video_track(number: u64) -> RawTrack {
+        RawTrack {
+            number,
+            kind: 1,
+            codec_id: b"V_VP9".to_vec(),
+            default_duration: Some(40_000_000),
+            pixel_width: Some(320),
+            pixel_height: Some(240),
+            ..RawTrack::default()
+        }
+    }
+
+    fn audio_track(number: u64) -> RawTrack {
+        RawTrack {
+            number,
+            kind: 2,
+            codec_id: b"A_OPUS".to_vec(),
+            default_duration: Some(20_000_000),
+            codec_delay: Some(6_500_000),
+            seek_pre_roll: Some(80_000_000),
+            sample_rate: Some(48_000.0),
+            channels: Some(2),
+            ..RawTrack::default()
+        }
+    }
+
+    fn simple_block(track: u64, relative: i16, keyframe: bool, frames: &[u8]) -> Vec<u8> {
+        let mut payload = encode_vint(track);
+        payload.extend(relative.to_be_bytes());
+        payload.push(if keyframe { 0x80 } else { 0x00 });
+        payload.extend(frames);
+        element(SIMPLE_BLOCK, &payload)
+    }
+
+    fn block_group(track: u64, relative: i16, keyframe: bool, padding: i64, frames: &[u8]) -> Vec<u8> {
+        let mut payload = encode_vint(track);
+        payload.extend(relative.to_be_bytes());
+        // A plain `Block` must not set the keyframe bit: inside a group the
+        // absence of a `ReferenceBlock` is what says the frame stands alone.
+        payload.push(0x00);
+        payload.extend(frames);
+        let mut body = element(BLOCK, &payload);
+        if !keyframe {
+            body.extend(uint_element(REFERENCE_BLOCK, 0));
+        }
+        body.extend(element(DISCARD_PADDING, &padding.to_be_bytes()));
+        element(BLOCK_GROUP, &body)
+    }
+
+    fn cluster(at_ms: u64, children: &[Vec<u8>], sized: bool) -> Vec<u8> {
+        let mut body = uint_element(CLUSTER_TIMESTAMP, at_ms);
+        for child in children {
+            body.extend_from_slice(child);
+        }
+        let mut out = id(CLUSTER);
+        out.extend(if sized {
+            encode_size(body.len() as u64)
+        } else {
+            unknown_size()
+        });
+        out.extend(body);
+        out
+    }
+
+    fn found(bytes: &[u8], wanted: u64) -> Option<usize> {
+        let pattern = id(wanted);
+        bytes
+            .windows(pattern.len())
+            .position(|window| window == pattern.as_slice())
+    }
+
+    /// The body of the first `wanted` element of a finished file.
+    fn body_of(bytes: &[u8], wanted: u64) -> Option<Vec<u8>> {
+        let at = found(bytes, wanted)?;
+        let (_, id_len) = read_id(&bytes[at..])?;
+        let (size, size_len) = read_size(&bytes[at + id_len..])?;
+        let data = at + id_len + size_len;
+        Some(bytes[data..data + size?].to_vec())
+    }
+
+    /// Where the Segment's data begins, which is what a cue position counts from.
+    fn segment_start(bytes: &[u8]) -> usize {
+        let (_, ebml_id) = read_id(bytes).expect("the EBML header");
+        let (ebml_size, ebml_len) = read_size(&bytes[ebml_id..]).expect("its size");
+        let after = ebml_id + ebml_len + ebml_size.expect("a known size");
+        let (_, segment_id) = read_id(&bytes[after..]).expect("the Segment");
+        let (_, segment_len) = read_size(&bytes[after + segment_id..]).expect("its size");
+        after + segment_id + segment_len
+    }
+
+    fn written(dir: &Path, name: &str, bytes: &[u8]) -> PathBuf {
+        let path = dir.join(name);
+        std::fs::write(&path, bytes).expect("the fixture");
+        path
+    }
+
+    #[test]
+    fn a_padding_is_a_signed_number() {
+        assert_eq!(read_int(&[0x85]), Some(-123));
+        assert_eq!(
+            read_int(&[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x85]),
+            Some(-123),
+            "the top bit is what makes it negative"
+        );
+        assert_eq!(read_int(&[0x00, 0x7B]), Some(123));
+        assert_eq!(read_int(&[]), None);
+        assert_eq!(read_int(&[0; 9]), None, "a Matroska integer holds eight bytes");
+    }
+
+    #[test]
+    fn a_block_group_keeps_its_padding_and_its_reference() {
+        let dir = folder("padding");
+        let input = written(
+            &dir,
+            "audio.track",
+            &fixture(
+                &[audio_track(1)],
+                &[cluster(
+                    0,
+                    &[
+                        block_group(1, 0, true, -123, &[1, 2]),
+                        block_group(1, 20, false, 456, &[3, 4]),
+                    ],
+                    true,
+                )],
+            ),
+        );
+        let out = dir.join("joined.webm");
+        join(&[input], &out, &dir, Container::Webm).expect("a join");
+
+        let joined = read_input(&out).expect("the joined file");
+        assert_eq!(joined.blocks.len(), 2, "both frames are kept");
+        assert_eq!(joined.blocks[0].discard_padding, Some(-123));
+        assert_eq!(joined.blocks[1].discard_padding, Some(456));
+        assert!(
+            joined.blocks[0].keyframe,
+            "a padded first frame still stands alone"
+        );
+        assert!(
+            !joined.blocks[1].keyframe,
+            "a reference block is not a keyframe"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_unknown_size_cluster_does_not_swallow_the_clusters_after_it() {
+        let dir = folder("nested");
+        let input = written(
+            &dir,
+            "video.track",
+            &fixture(
+                &[video_track(1)],
+                &[
+                    cluster(0, &[simple_block(1, 0, true, &[1])], false),
+                    cluster(2000, &[simple_block(1, 0, true, &[2])], true),
+                ],
+            ),
+        );
+        let out = dir.join("joined.webm");
+        join(&[input], &out, &dir, Container::Webm).expect("a join");
+
+        let joined = read_input(&out).expect("the joined file");
+        assert_eq!(
+            joined.blocks.len(),
+            2,
+            "the blocks after the open cluster are kept"
+        );
+        assert_eq!(joined.blocks[1].time_ns, 2_000_000_000);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_track_that_never_appears_is_not_declared() {
+        let dir = folder("unused-track");
+        let input = written(
+            &dir,
+            "mixed.track",
+            &fixture(
+                &[video_track(1), audio_track(2)],
+                &[cluster(0, &[simple_block(1, 0, true, &[1])], true)],
+            ),
+        );
+        let out = dir.join("joined.webm");
+        join(&[input], &out, &dir, Container::Webm).expect("a join");
+
+        let joined = read_input(&out).expect("the joined file");
+        assert_eq!(
+            joined.tracks.len(),
+            1,
+            "a stream that never delivers a frame is not promised"
+        );
+        assert_eq!(joined.tracks[0].number, 1);
+        assert_eq!(joined.tracks[0].kind, 1);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_codec_delay_and_the_seek_pre_roll_survive_the_join() {
+        let dir = folder("delay");
+        let input = written(
+            &dir,
+            "audio.track",
+            &fixture(
+                &[audio_track(1)],
+                &[cluster(0, &[simple_block(1, 0, true, &[1])], true)],
+            ),
+        );
+        let out = dir.join("joined.webm");
+        join(&[input], &out, &dir, Container::Webm).expect("a join");
+
+        let joined = read_input(&out).expect("the joined file");
+        assert_eq!(
+            joined.tracks[0].codec_delay,
+            Some(6_500_000),
+            "without this the sound starts ahead of the picture"
+        );
+        assert_eq!(joined.tracks[0].seek_pre_roll, Some(80_000_000));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_file_ends_when_its_last_frame_ends() {
+        let dir = folder("duration");
+        let input = written(
+            &dir,
+            "video.track",
+            &fixture(
+                &[video_track(1)],
+                &[cluster(
+                    0,
+                    &[
+                        simple_block(1, 0, true, &[1]),
+                        simple_block(1, 1000, true, &[2]),
+                    ],
+                    true,
+                )],
+            ),
+        );
+        let out = dir.join("joined.webm");
+        join(&[input], &out, &dir, Container::Webm).expect("a join");
+
+        let bytes = std::fs::read(&out).expect("the file");
+        let info = body_of(&bytes, INFO).expect("an Info");
+        let duration = element_float(&info, DURATION).expect("a duration");
+        // The last frame starts at one second and is forty milliseconds long.
+        assert!(
+            (duration - 1040.0).abs() < 0.5,
+            "the duration was {duration}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn every_cue_point_lands_on_the_cluster_it_names() {
+        let dir = folder("cues");
+        let input = written(
+            &dir,
+            "video.track",
+            &fixture(
+                &[video_track(1)],
+                &[
+                    cluster(0, &[simple_block(1, 0, true, &[1])], true),
+                    cluster(2000, &[simple_block(1, 0, true, &[2])], true),
+                ],
+            ),
+        );
+        let out = dir.join("joined.webm");
+        join(&[input], &out, &dir, Container::Webm).expect("a join");
+
+        let bytes = std::fs::read(&out).expect("the file");
+        let cues = body_of(&bytes, CUES).expect("a cue index");
+        let start = segment_start(&bytes);
+        let mut points = 0;
+        for point in elements(&cues) {
+            if point.id != CUE_POINT {
+                continue;
+            }
+            let entry = &cues[point.data..point.end];
+            let positions = element_body(entry, CUE_TRACK_POSITIONS).expect("track positions");
+            let position = element_uint(positions, CUE_CLUSTER_POSITION).expect("a position");
+            let at = start + position as usize;
+            assert_eq!(
+                &bytes[at..at + id(CLUSTER).len()],
+                id(CLUSTER).as_slice(),
+                "a cue must name the first byte of a cluster"
+            );
+            assert_eq!(element_uint(positions, CUE_TRACK), Some(1));
+            points += 1;
+        }
+        assert_eq!(points, 2, "one cue per keyframe cluster");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

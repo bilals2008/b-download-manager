@@ -134,12 +134,22 @@ impl Manifest {
 }
 
 /// Why a manifest could not be used, in one sentence a person can act on.
+///
+/// Each refusal is its own variant so the panel can say *which* of the
+/// reasons applies: encrypted media, a live stream, or a stream that only
+/// exists inside the player's own transport. Labeling all three as "DRM"
+/// would be a lie, and a generic HTTP failure would say nothing.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MediaError {
-    /// DRM of any kind. Never downloaded, never decrypted.
-    Protected,
+    /// Encrypted media. The name is the protection scheme that was found
+    /// (Widevine, PlayReady, FairPlay, AES-128, ...), or empty when the
+    /// manifest did not say which one. Never downloaded, never decrypted.
+    Protected(String),
     /// A live stream. Recording live is not in this feature.
     Live,
+    /// The stream is only offered through the player's own protocol
+    /// (YouTube's SABR or UMP), which has no plain address to fetch.
+    PlayerTransport(String),
     /// A cap was reached: manifest size, segment count, duration.
     TooLarge(String),
     /// The manifest is not the format it claims to be.
@@ -148,16 +158,32 @@ pub enum MediaError {
     Unsupported(String),
 }
 
+impl MediaError {
+    /// The refusal of an encrypted stream, naming the scheme when one was
+    /// recognised. An empty name keeps the plain "protected" sentence.
+    pub fn protected(scheme: impl Into<String>) -> Self {
+        MediaError::Protected(scheme.into().trim().to_string())
+    }
+}
+
 impl std::fmt::Display for MediaError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            MediaError::Protected => write!(
+            MediaError::Protected(scheme) if scheme.is_empty() => write!(
                 f,
                 "this stream is protected (DRM), so it cannot be downloaded"
+            ),
+            MediaError::Protected(scheme) => write!(
+                f,
+                "this stream is protected by {scheme}, so it cannot be downloaded"
             ),
             MediaError::Live => write!(
                 f,
                 "this is a live stream; recording live streams is not supported"
+            ),
+            MediaError::PlayerTransport(what) => write!(
+                f,
+                "this stream is only offered through {what}, which has no downloadable address"
             ),
             MediaError::TooLarge(what) => write!(f, "the stream is too large: {what}"),
             MediaError::Malformed(what) => write!(f, "the manifest could not be read: {what}"),
@@ -179,16 +205,28 @@ pub const MAX_DURATION: f64 = 12.0 * 60.0 * 60.0;
 /// The most bytes a manifest may be (2 MiB).
 pub const MAX_MANIFEST_BYTES: u64 = 2 * 1024 * 1024;
 
-/// Whether an init segment carries a protection box.
+/// The protection marker an init segment carries, if any.
 ///
-/// `pssh` is the common encryption header, and `encv`/`enca` are protected
+/// `pssh` is the common-encryption header, and `encv`/`enca` are protected
 /// sample entries. Their presence means the bytes are encrypted, so the media
-/// path refuses the track with the same sentence as every other DRM case.
-/// Nothing here decrypts or inspects the licence.
+/// path refuses the track with the same class of sentence as every other DRM
+/// case — but naming what was found. Nothing here decrypts or inspects a
+/// licence.
+pub fn protection_in(bytes: &[u8]) -> Option<&'static str> {
+    let mut sample_entry = false;
+    for window in bytes.windows(4) {
+        match window {
+            b"pssh" => return Some("MPEG Common Encryption"),
+            b"encv" | b"enca" => sample_entry = true,
+            _ => {}
+        }
+    }
+    sample_entry.then_some("an encrypted sample entry")
+}
+
+/// Whether an init segment carries a protection box.
 pub fn looks_protected(bytes: &[u8]) -> bool {
-    bytes
-        .windows(4)
-        .any(|window| window == b"pssh" || window == b"encv" || window == b"enca")
+    protection_in(bytes).is_some()
 }
 
 /// One address that has to be downloaded for a track, with the byte range the
@@ -226,8 +264,10 @@ mod tests {
     #[test]
     fn every_refusal_reads_as_one_sentence() {
         for error in [
-            MediaError::Protected,
+            MediaError::protected(""),
+            MediaError::protected("Widevine"),
             MediaError::Live,
+            MediaError::PlayerTransport("YouTube's UMP protocol".to_string()),
             MediaError::TooLarge("too many segments".to_string()),
             MediaError::Malformed("no header".to_string()),
             MediaError::Unsupported("trickmode".to_string()),
@@ -235,8 +275,31 @@ mod tests {
             let text = error.to_string();
             assert!(!text.is_empty());
             assert!(!text.contains('\n'));
+            assert!(
+                text.chars().filter(|character| *character == '.').count() <= 1,
+                "one sentence: {text}"
+            );
         }
-        assert!(MediaError::Protected.to_string().contains("protected"));
+        assert!(MediaError::protected("").to_string().contains("protected"));
+    }
+
+    #[test]
+    fn each_refusal_says_which_reason_it_is() {
+        let encrypted = MediaError::protected("Widevine").to_string();
+        let live = MediaError::Live.to_string();
+        let player = MediaError::PlayerTransport("YouTube's UMP protocol".to_string()).to_string();
+
+        assert!(encrypted.contains("Widevine"), "{encrypted}");
+        assert!(!encrypted.contains("live"), "{encrypted}");
+        assert!(live.contains("live"), "{live}");
+        assert!(!live.contains("protected"), "{live}");
+        assert!(player.contains("UMP"), "{player}");
+        assert!(
+            !player.contains("protected") && !player.contains("DRM"),
+            "a transport with no plain address is not encryption: {player}"
+        );
+        assert_ne!(encrypted, live);
+        assert_ne!(live, player);
     }
 
     #[test]
@@ -246,5 +309,14 @@ mod tests {
         assert!(looks_protected(b"..enca.."));
         assert!(!looks_protected(b"\0\0\0\x20ftypisom"));
         assert!(!looks_protected(b""));
+        assert_eq!(
+            protection_in(b"\0\0\0\x20pssh\0\0\0\0"),
+            Some("MPEG Common Encryption")
+        );
+        assert_eq!(
+            protection_in(b"....encv...."),
+            Some("an encrypted sample entry")
+        );
+        assert_eq!(protection_in(b"ftypisom"), None);
     }
 }

@@ -6,7 +6,7 @@
 //! the wire line up with the byte offsets in the file. The evidence trail is
 //! `planning/02-rea-plan.md`.
 
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use futures_util::StreamExt;
 use reqwest::header::HeaderMap;
@@ -168,7 +168,27 @@ pub async fn open_range(
     if !status.is_success() {
         // A `416` is not "the range is complete": the engine never asks for
         // a range it already has. It means the resource no longer covers the
-        // range, which asking again will not change.
+        // range. Two cases hide behind it, and they are not the same: a server
+        // that now names a different total has a different file behind the
+        // address, while the same total means the offset itself is wrong and
+        // asking again will not change it.
+        if status == reqwest::StatusCode::RANGE_NOT_SATISFIABLE {
+            let named_total = response
+                .headers()
+                .get(CONTENT_RANGE)
+                .and_then(|value| value.to_str().ok())
+                .and_then(parse_content_range_total);
+            if let (Some(expected), Some(actual)) = (expected_total, named_total) {
+                if actual != expected {
+                    return Err(TransferError::changed(format!(
+                        "{CHANGED_PREFIX}: it was {expected} bytes, it is {actual} now"
+                    )));
+                }
+            }
+            return Err(TransferError::permanent(format!(
+                "the server no longer serves bytes from {from} of a {expected_total:?}-byte file (416)"
+            )));
+        }
         return Err(answer_error(status.as_u16(), retry_after));
     }
     if status == reqwest::StatusCode::OK && !covers_all {
@@ -344,12 +364,139 @@ fn percent_decode(value: &str) -> String {
 
 /// How long the server asked us to wait before trying again.
 ///
-/// shortcut: only the delta-seconds form of `Retry-After` is honoured. The
-/// HTTP-date form needs a date parser this crate does not carry.
+/// Both forms of the header are honoured: the delta-seconds form
+/// (`120`), and the HTTP-date form (`Sun, 06 Nov 1994 08:49:37 GMT`). A date
+/// in the past — or one this build cannot read — is not a wait, so the caller
+/// falls back to its own backoff instead of sleeping for a negative time.
+/// The result is capped at [`MAX_RETRY_AFTER`] so a wrong clock on either side
+/// cannot park a download for days.
 pub fn parse_retry_after(headers: &HeaderMap) -> Option<Duration> {
     let value = headers.get(RETRY_AFTER)?.to_str().ok()?.trim();
-    let seconds: u64 = value.parse().ok()?;
-    Some(Duration::from_secs(seconds))
+    if value.is_empty() {
+        return None;
+    }
+    if let Ok(seconds) = value.parse::<u64>() {
+        return Some(Duration::from_secs(seconds.min(MAX_RETRY_AFTER.as_secs())));
+    }
+    let at = parse_http_date(value)?;
+    let wait = at.duration_since(SystemTime::now()).unwrap_or_default();
+    Some(wait.min(MAX_RETRY_AFTER))
+}
+
+/// The longest wait a `Retry-After` may impose. A day is already far more
+/// than any server means by it in the middle of a download.
+pub const MAX_RETRY_AFTER: Duration = Duration::from_secs(24 * 60 * 60);
+
+/// Read one of the three date forms RFC 9110 allows in `Retry-After`.
+///
+/// The preferred form is IMF-fixdate (`Sun, 06 Nov 1994 08:49:37 GMT`); the
+/// obsolete RFC 850 (`Sunday, 06-Nov-94 08:49:37 GMT`) and asctime
+/// (`Sun Nov  6 08:49:37 1994`) forms are still sent by old servers, so they
+/// are read too. A value is refused rather than guessed at, because a wrong
+/// wait is worse than the caller's own backoff.
+pub fn parse_http_date(value: &str) -> Option<SystemTime> {
+    let value = value.trim();
+    let rest = value
+        .split_once(", ")
+        .map(|(_, rest)| rest)
+        .unwrap_or_else(|| {
+            // asctime has no comma after the weekday; drop the two names.
+            value
+                .split_once(' ')
+                .map(|(_, rest)| rest)
+                .unwrap_or(value)
+        });
+    let parts: Vec<&str> = rest.split_whitespace().collect();
+    // `06 Nov 1994 08:49:37 GMT` splits into six pieces, `06-Nov-94` stays
+    // whole, `Nov 6 08:49:37 1994` splits into five.
+    let (day, month, year, clock) = match parts.as_slice() {
+        [day, month, year, clock, zone] if zone.eq_ignore_ascii_case("GMT") => {
+            (day.to_string(), month.to_string(), *year, *clock)
+        }
+        [day_month_year, clock, zone] if zone.eq_ignore_ascii_case("GMT") => {
+            return parse_rfc850(day_month_year, clock);
+        }
+        // `Nov 6 08:49:37 1994` — the asctime form, which names no zone and
+        // is therefore always GMT.
+        [month, day, clock, year] => ((*day).to_string(), (*month).to_string(), *year, *clock),
+        _ => return None,
+    };
+    let day: u32 = day.parse().ok()?;
+    let month = month_number(&month)?;
+    let year: i64 = year.parse().ok()?;
+    let (hour, minute, second) = parse_clock(clock)?;
+    to_system_time(day, month, year, hour, minute, second)
+}
+
+/// `06-Nov-94 08:49:37` — the RFC 850 form.
+fn parse_rfc850(value: &str, clock: &str) -> Option<SystemTime> {
+    let (day, rest) = value.split_once('-')?;
+    let (month, year) = rest.split_once('-')?;
+    let day: u32 = day.parse().ok()?;
+    let month = month_number(month)?;
+    let year: i64 = year.parse().ok()?;
+    // A two-digit year is this century when it is small; the form predates
+    // 2000 by design, so 94 means 1994 and 24 means 2024.
+    let year = if year < 70 { 2000 + year } else if year < 100 { 1900 + year } else { year };
+    let (hour, minute, second) = parse_clock(clock)?;
+    to_system_time(day, month, year, hour, minute, second)
+}
+
+fn parse_clock(value: &str) -> Option<(i64, i64, i64)> {
+    let mut pieces = value.split(':');
+    let hour = pieces.next()?.parse().ok()?;
+    let minute = pieces.next()?.parse().ok()?;
+    let second = pieces.next()?.parse().ok()?;
+    if pieces.next().is_some() || hour > 23 || minute > 59 || second > 60 {
+        return None;
+    }
+    Some((hour, minute, second))
+}
+
+fn month_number(name: &str) -> Option<u32> {
+    const MONTHS: [&str; 12] = [
+        "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+    ];
+    let lower = name.to_ascii_lowercase();
+    let lower = lower.trim_end_matches('.');
+    // The asctime form abbreviates to three letters; a full name is accepted
+    // too, because some proxies send one.
+    let three = if lower.len() >= 3 { &lower[..3] } else { lower };
+    MONTHS
+        .iter()
+        .position(|month| *month == three)
+        .map(|index| index as u32 + 1)
+}
+
+/// Days since 1970-01-01 for a proleptic Gregorian date (Howard Hinnant's
+/// `days_from_civil`), so no calendar crate is needed.
+fn days_from_civil(year: i64, month: u32, day: u32) -> i64 {
+    let year = if month <= 2 { year - 1 } else { year };
+    let era = if year >= 0 { year } else { year - 399 } / 400;
+    let year_of_era = year - era * 400;
+    let month = month as i64;
+    let day_of_year = (153 * (if month > 2 { month - 3 } else { month + 9 }) + 2) / 5 + day as i64 - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    era * 146_097 + day_of_era - 719_468
+}
+
+fn to_system_time(
+    day: u32,
+    month: u32,
+    year: i64,
+    hour: i64,
+    minute: i64,
+    second: i64,
+) -> Option<SystemTime> {
+    if !(1..=31).contains(&day) || !(1970..=9999).contains(&year) {
+        return None;
+    }
+    let days = days_from_civil(year, month, day);
+    if days < 0 {
+        return None;
+    }
+    let seconds = days * 86_400 + hour * 3_600 + minute * 60 + second;
+    Some(UNIX_EPOCH + Duration::from_secs(seconds as u64))
 }
 
 /// The wait before the next attempt after a failure.
@@ -527,5 +674,61 @@ mod tests {
             "the message was: {message}"
         );
         assert!(status_message(404).contains("not on the server"));
+    }
+
+    fn wait_as_seconds(at: SystemTime) -> u64 {
+        at.duration_since(UNIX_EPOCH)
+            .expect("after the epoch")
+            .as_secs()
+    }
+
+    #[test]
+    fn every_form_of_the_retry_date_is_read() {
+        // The three forms RFC 9110 allows, all naming the same instant.
+        for value in [
+            "Sun, 06 Nov 1994 08:49:37 GMT",
+            "Sunday, 06-Nov-94 08:49:37 GMT",
+            "Sun Nov  6 08:49:37 1994",
+        ] {
+            assert_eq!(
+                parse_http_date(value).map(wait_as_seconds),
+                Some(784_111_777),
+                "{value}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_date_that_is_not_a_date_is_refused_rather_than_guessed() {
+        assert_eq!(parse_http_date(""), None);
+        assert_eq!(parse_http_date("soon"), None);
+        assert_eq!(parse_http_date("Sun, 32 Nov 1994 08:49:37 GMT"), None);
+        assert_eq!(parse_http_date("Sun, 06 Never 1994 08:49:37 GMT"), None);
+        assert_eq!(parse_http_date("Sun, 06 Nov 1969 08:49:37 GMT"), None);
+        assert_eq!(parse_http_date("Sun, 06 Nov 1994 25:49:37 GMT"), None);
+    }
+
+    #[test]
+    fn a_retry_header_in_either_form_becomes_a_wait() {
+        let mut headers = HeaderMap::new();
+        headers.insert(RETRY_AFTER, "17".parse().expect("a value"));
+        assert_eq!(parse_retry_after(&headers), Some(Duration::from_secs(17)));
+
+        // A date far ahead is capped instead of parking the download.
+        headers.insert(
+            RETRY_AFTER,
+            "Fri, 01 Jan 2100 00:00:00 GMT".parse().expect("a value"),
+        );
+        assert_eq!(parse_retry_after(&headers), Some(MAX_RETRY_AFTER));
+
+        // A date in the past is not a wait at all.
+        headers.insert(
+            RETRY_AFTER,
+            "Sun, 06 Nov 1994 08:49:37 GMT".parse().expect("a value"),
+        );
+        assert_eq!(parse_retry_after(&headers), Some(Duration::ZERO));
+
+        headers.insert(RETRY_AFTER, "much later".parse().expect("a value"));
+        assert_eq!(parse_retry_after(&headers), None);
     }
 }

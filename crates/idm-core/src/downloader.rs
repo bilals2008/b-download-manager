@@ -25,7 +25,7 @@
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -299,6 +299,10 @@ pub struct Download {
     category: Mutex<Option<String>>,
     description: Mutex<Option<String>>,
     last_emit: Mutex<Instant>,
+    /// The status the server last refused a request with, kept as a number.
+    /// A caller that has to decide whether an address must be renewed cannot
+    /// read that decision back out of the message it was rendered into.
+    last_status: AtomicU16,
 }
 
 impl Download {
@@ -409,7 +413,30 @@ impl Download {
             category: Mutex::new(None),
             description: Mutex::new(None),
             last_emit: Mutex::new(last_emit),
+            last_status: AtomicU16::new(0),
         }))
+    }
+
+    /// Record the status the server last refused a request with.
+    ///
+    /// `None` forgets it: a run that reaches the server again starts from
+    /// "nothing was refused" rather than from the answer of the last run.
+    pub fn note_status(&self, status: Option<u16>) {
+        self.last_status
+            .store(status.unwrap_or(0), Ordering::SeqCst);
+    }
+
+    /// The status the server last refused a request with, if one did.
+    ///
+    /// The engine renders a refusal into a message for the row, and that
+    /// message is all the media layer used to receive. A refusal that means
+    /// "this address is no longer accepted" is a decision, not a sentence, so
+    /// the code is kept beside the message.
+    pub fn last_status(&self) -> Option<u16> {
+        match self.last_status.load(Ordering::SeqCst) {
+            0 => None,
+            status => Some(status),
+        }
     }
 
     pub fn info(&self) -> DownloadInfo {
@@ -1147,10 +1174,20 @@ async fn fetch_range(
     // instead, which `open` turns into an error.
     let validator = download.validator();
     let expected_total = (total > 0).then_some(total);
-    let mut stream = download
+    let opened = download
         .source
         .open(from, to, covers_all, validator.as_deref(), expected_total)
-        .await?;
+        .await;
+    let mut stream = match opened {
+        Ok(stream) => stream,
+        Err(error) => {
+            // The status is the one fact a caller needs to tell "the address
+            // was refused" from "the network blinked", and it is gone once
+            // the refusal has been rendered into a message.
+            download.note_status(error.status);
+            return Err(error);
+        }
+    };
     download.set_seg_status(seg_id, SegmentStatus::Receiving);
 
     let Some(part) = download.seg_part(seg_id) else {
@@ -1844,9 +1881,13 @@ async fn probe_with_retries(download: &Arc<Download>, epoch: u64) -> Result<Prob
             return Err("cancelled".to_string());
         }
         match download.source.probe().await {
-            Ok(probe) => return Ok(probe),
+            Ok(probe) => {
+                download.note_status(None);
+                return Ok(probe);
+            }
             Err(error) => {
                 attempt += 1;
+                download.note_status(error.status);
                 if !error.is_transient() || attempt >= download.max_attempts.load(Ordering::SeqCst)
                 {
                     return Err(error.message);

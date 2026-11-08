@@ -1300,8 +1300,22 @@ mod tests {
         job.source = Some(SourcePlan::Files {
             tracks: vec![FileTrack {
                 format: Format::new("137", MediaKind::Video, "mp4"),
-                url: "https://cdn.example.org/videoplayback?itag=137".to_string(),
-                user_agent: None,
+                lease: crate::video::lease::RequestLease::new(
+                    "https://cdn.example.org/videoplayback?itag=137",
+                    crate::video::lease::Authority::Native,
+                    "iOS",
+                    None,
+                    None,
+                    crate::video::lease::Credentials::at("https://cdn.example.org"),
+                    crate::video::lease::Transport::Progressive,
+                    crate::video::lease::RepresentationFingerprint {
+                        id: "137".to_string(),
+                        container: "mp4".to_string(),
+                        codec: None,
+                        bytes: None,
+                    },
+                    None,
+                ),
             }],
         });
         state.insert_media_job(job);

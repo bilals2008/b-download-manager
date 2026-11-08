@@ -8,7 +8,17 @@
 //! `RESOLUTION`, `CODECS`, `FRAME-RATE` and `AUDIO` on a variant; `#EXTINF`,
 //! `#EXT-X-MAP`, `#EXT-X-BYTERANGE`, `#EXT-X-MEDIA` and `#EXT-X-ENDLIST` on a
 //! playlist. Anything encrypted is refused with [`MediaError::Protected`],
-//! never decrypted, and a playlist without `#EXT-X-ENDLIST` is refused as live.
+//! never decrypted, and the sentence names the key method or key format that
+//! was found. A playlist without `#EXT-X-ENDLIST` is refused as live, which is
+//! its own sentence: a live stream is not encryption.
+//!
+//! Byte ranges are read the way the format defines them: an omitted offset
+//! continues the previous sub-range of the *same* resource and is refused when
+//! there is none, an init segment's range needs its offset, and every range is
+//! checked for overflow. A playlist that changes its init segment partway
+//! through, restarts its timeline (a discontinuity in a fragmented stream), or
+//! skips a segment it marked as a gap is refused rather than joined into a
+//! file whose timeline claims bytes it does not have.
 
 use reqwest::Url;
 
@@ -94,6 +104,11 @@ pub struct MediaPlaylist {
     pub ended: bool,
     pub target_duration: Option<f64>,
     pub version: Option<u32>,
+    /// How often the playlist restarts its timeline. A playlist of plain
+    /// MPEG-TS segments is joined byte for byte, where each segment carries
+    /// its own timestamps, so a discontinuity is only a note. A fragmented
+    /// playlist is refused before it gets this far.
+    pub discontinuities: usize,
 }
 
 /// Read a playlist of either kind.
@@ -227,6 +242,7 @@ pub fn parse_media(text: &str, base_url: &str) -> Result<MediaPlaylist, MediaErr
     // The end of the previous sub-range of the same resource, for a
     // `#EXT-X-BYTERANGE` that names only a length.
     let mut last_range_end: Option<(String, u64)> = None;
+    let mut discontinuities = 0usize;
 
     for line in text.lines() {
         let line = line.trim();
@@ -249,21 +265,46 @@ pub fn parse_media(text: &str, base_url: &str) -> Result<MediaPlaylist, MediaErr
                     "an init segment has no address".to_string(),
                 ));
             };
-            let range =
-                attrs
-                    .get("BYTERANGE")
-                    .and_then(parse_byte_range)
-                    .map(|(length, offset)| {
-                        let offset = offset.unwrap_or(0);
-                        (offset, offset + length.saturating_sub(1))
-                    });
+            let range = match attrs.get("BYTERANGE") {
+                Some(value) => {
+                    let (length, offset) = parse_byte_range(value).ok_or_else(|| {
+                        MediaError::Malformed(
+                            "an init segment's byte range could not be read".to_string(),
+                        )
+                    })?;
+                    // The format requires the offset here: the init segment
+                    // is the first thing read from its resource, so there is
+                    // no previous sub-range it could continue from.
+                    let Some(offset) = offset else {
+                        return Err(MediaError::Malformed(
+                            "an init segment's byte range has no offset".to_string(),
+                        ));
+                    };
+                    Some((offset, span(offset, length)?))
+                }
+                None => None,
+            };
             let url = resolve(base_url, uri)?;
-            last_range_end = range.map(|(_, end)| (url.clone(), end + 1));
-            init = Some(HlsSegment {
+            let map = HlsSegment {
                 url,
                 range,
                 duration: 0.0,
-            });
+            };
+            // A playlist may repeat its map; a *different* one partway
+            // through describes bytes the join cannot place, because the
+            // segments on each side are initialised differently.
+            match &init {
+                None => {
+                    last_range_end = range.map(|(_, end)| (map.url.clone(), end + 1));
+                    init = Some(map);
+                }
+                Some(first) if first == &map => {}
+                Some(_) => {
+                    return Err(MediaError::Unsupported(
+                        "the playlist changes its init segment partway through, so the segments cannot be joined into one file".to_string(),
+                    ));
+                }
+            }
             continue;
         }
         if let Some(rest) = line.strip_prefix("#EXT-X-BYTERANGE:") {
@@ -298,27 +339,51 @@ pub fn parse_media(text: &str, base_url: &str) -> Result<MediaPlaylist, MediaErr
             ended = true;
             continue;
         }
+        if line == "#EXT-X-DISCONTINUITY" {
+            discontinuities += 1;
+            continue;
+        }
+        if line == "#EXT-X-GAP" {
+            // The tag marks a segment the publisher says is missing. Joining
+            // around it would produce a file whose timeline claims time it
+            // does not hold, so the stream is refused instead.
+            return Err(MediaError::Unsupported(
+                "the playlist has a gap (EXT-X-GAP) where a segment should be".to_string(),
+            ));
+        }
         if line.starts_with('#') {
-            // `#EXT-X-DISCONTINUITY`, `#EXT-X-PROGRAM-DATE-TIME`, `#EXT-X-GAP`
-            // and the rest do not change which bytes are downloaded.
+            // `#EXT-X-PROGRAM-DATE-TIME` and the rest do not change which
+            // bytes are downloaded.
             continue;
         }
 
         // A URI line belongs to the `#EXTINF` before it.
         let duration = pending_duration.take().unwrap_or(0.0);
         let url = resolve(base_url, line)?;
-        let range = pending_range.take().map(|(length, offset)| {
-            let offset = offset.unwrap_or_else(|| {
-                // An omitted offset continues after the previous sub-range of
-                // the same resource. An explicit `@0` is the first byte.
-                last_range_end
-                    .as_ref()
-                    .filter(|(last_url, _)| *last_url == url)
-                    .map(|(_, end)| *end)
-                    .unwrap_or(0)
-            });
-            (offset, offset + length.saturating_sub(1))
-        });
+        let range = match pending_range.take() {
+            Some((length, offset)) => {
+                let offset = match offset {
+                    Some(offset) => offset,
+                    None => {
+                        // An omitted offset continues after the previous
+                        // sub-range — but only when that sub-range is of the
+                        // same resource. Guessing zero would fetch the wrong
+                        // bytes from the same address.
+                        match last_range_end.as_ref() {
+                            Some((last_url, end)) if last_url == &url => *end,
+                            _ => {
+                                return Err(MediaError::Malformed(
+                                    "a byte range has no offset and does not continue a previous one"
+                                        .to_string(),
+                                ))
+                            }
+                        }
+                    }
+                };
+                Some((offset, span(offset, length)?))
+            }
+            None => None,
+        };
         if let Some((_, end)) = range {
             last_range_end = Some((url.clone(), end + 1));
         } else {
@@ -350,6 +415,14 @@ pub fn parse_media(text: &str, base_url: &str) -> Result<MediaPlaylist, MediaErr
     if !ended {
         return Err(MediaError::Live);
     }
+    // A fragmented stream states its own decode times, so a discontinuity
+    // resets the clock the join relies on. Plain segments are joined byte for
+    // byte and carry their own timestamps, so a note is enough there.
+    if discontinuities > 0 && init.is_some() {
+        return Err(MediaError::Unsupported(format!(
+            "the playlist restarts its timeline {discontinuities} time(s) (EXT-X-DISCONTINUITY), which a fragmented stream cannot be joined across"
+        )));
+    }
 
     Ok(MediaPlaylist {
         segments,
@@ -358,6 +431,7 @@ pub fn parse_media(text: &str, base_url: &str) -> Result<MediaPlaylist, MediaErr
         ended,
         target_duration,
         version,
+        discontinuities,
     })
 }
 
@@ -385,14 +459,36 @@ fn require_header(text: &str) -> Result<(), MediaError> {
 }
 
 /// `#EXT-X-KEY:METHOD=NONE` is the absence of encryption; everything else is a
-/// protected stream. The key is never fetched and the bytes are never touched.
+/// protected stream. The key is never fetched and the bytes are never touched;
+/// the refusal names the method or key format so the sentence says what was
+/// found instead of one blanket "DRM".
 fn refuse_key(rest: &str) -> Result<(), MediaError> {
     let attrs = Attributes::parse(rest);
     let method = attrs.get("METHOD").unwrap_or("").trim();
     if method.eq_ignore_ascii_case("NONE") || method.is_empty() {
         return Ok(());
     }
-    Err(MediaError::Protected)
+    Err(MediaError::protected(key_scheme(method, attrs.get("KEYFORMAT"))))
+}
+
+/// The readable name of the protection a `#EXT-X-KEY` names.
+fn key_scheme(method: &str, key_format: Option<&str>) -> String {
+    let format = key_format.unwrap_or("").to_ascii_lowercase();
+    if format.contains("edef8ba9-79d6-4ace-a3c8-27dcd51d21ed") || format.contains("widevine") {
+        return "Widevine".to_string();
+    }
+    if format.contains("com.apple.streamingkeydelivery") || format.contains("fairplay") {
+        return "FairPlay".to_string();
+    }
+    if format.contains("com.microsoft.playready") || format.contains("playready") {
+        return "PlayReady".to_string();
+    }
+    match method.trim().to_ascii_uppercase().as_str() {
+        "" => String::new(),
+        // `identity` is the format's own name for no key format at all.
+        "IDENTITY" | "NONE" => String::new(),
+        other => other.to_string(),
+    }
 }
 
 struct PendingVariant {
@@ -532,6 +628,16 @@ fn parse_byte_range(value: &str) -> Option<(u64, Option<u64>)> {
     Some((length, offset))
 }
 
+/// The inclusive last byte of `length` bytes starting at `offset`.
+fn span(offset: u64, length: u64) -> Result<u64, MediaError> {
+    offset
+        .checked_add(length)
+        .and_then(|end| end.checked_sub(1))
+        .ok_or_else(|| {
+            MediaError::Malformed("a byte range reaches past the end of the address".to_string())
+        })
+}
+
 /// Resolve a playlist address against the address the playlist came from.
 pub fn resolve(base_url: &str, uri: &str) -> Result<String, MediaError> {
     let base = Url::parse(base_url)
@@ -644,8 +750,117 @@ mod tests {
     #[test]
     fn an_encrypted_playlist_is_refused_with_one_sentence() {
         let error = parse_media(fixtures::HLS_ENCRYPTED, BASE).expect_err("encrypted");
-        assert_eq!(error, MediaError::Protected);
-        assert!(error.to_string().contains("protected"));
+        assert_eq!(error, MediaError::protected("AES-128"));
+        assert!(error.to_string().contains("protected"), "{error}");
+        assert!(error.to_string().contains("AES-128"), "{error}");
+    }
+
+    #[test]
+    fn a_key_names_its_system_and_a_live_playlist_is_not_encryption() {
+        let widevine = "#EXTM3U\n#EXT-X-TARGETDURATION:2\n\
+            #EXT-X-KEY:METHOD=SAMPLE-AES,URI=\"skd://k\",KEYFORMAT=\"urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed\"\n\
+            #EXTINF:2,\na.ts\n#EXT-X-ENDLIST\n";
+        let error = parse_media(widevine, BASE).expect_err("widevine");
+        assert!(error.to_string().contains("Widevine"), "{error}");
+        assert!(!error.to_string().contains("live"), "{error}");
+
+        // A session key on a master is the same refusal, named the same way.
+        let master = "#EXTM3U\n\
+            #EXT-X-SESSION-KEY:METHOD=SAMPLE-AES,URI=\"skd://k\",KEYFORMAT=\"com.apple.streamingkeydelivery\"\n\
+            #EXT-X-STREAM-INF:BANDWIDTH=800000\nlow/index.m3u8\n";
+        let error = parse_master(master, BASE).expect_err("fairplay");
+        assert!(error.to_string().contains("FairPlay"), "{error}");
+
+        // A live stream is not encryption, and says so.
+        let live = "#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXTINF:2,\na.ts\n";
+        let error = parse_media(live, BASE).expect_err("live");
+        assert_eq!(error, MediaError::Live);
+        assert!(!error.to_string().contains("protected"), "{error}");
+    }
+
+    #[test]
+    fn a_playlist_that_changes_its_init_segment_is_refused() {
+        let text = "#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXT-X-MAP:URI=\"a.mp4\"\n\
+            #EXTINF:2,\ns0.m4s\n#EXT-X-MAP:URI=\"b.mp4\"\n\
+            #EXTINF:2,\ns1.m4s\n#EXT-X-ENDLIST\n";
+        let error = parse_media(text, BASE).expect_err("two maps");
+        assert!(matches!(error, MediaError::Unsupported(_)), "{error:?}");
+        assert!(error.to_string().contains("init segment"), "{error}");
+    }
+
+    #[test]
+    fn the_same_init_segment_may_be_named_again() {
+        let text = "#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXT-X-MAP:URI=\"a.mp4\"\n\
+            #EXTINF:2,\ns0.m4s\n#EXT-X-MAP:URI=\"a.mp4\"\n\
+            #EXTINF:2,\ns1.m4s\n#EXT-X-ENDLIST\n";
+        let media = parse_media(text, BASE).expect("one map");
+        assert_eq!(media.segments.len(), 2);
+        assert_eq!(
+            media.init.expect("a map").url,
+            "https://cdn.example.org/hls/a.mp4"
+        );
+    }
+
+    #[test]
+    fn an_init_segment_range_needs_its_offset() {
+        let text = "#EXTM3U\n#EXT-X-TARGETDURATION:2\n\
+            #EXT-X-MAP:URI=\"all.mp4\",BYTERANGE=\"100\"\n\
+            #EXTINF:2,\n#EXT-X-BYTERANGE:200@0\nall.mp4\n#EXT-X-ENDLIST\n";
+        let error = parse_media(text, BASE).expect_err("no offset");
+        assert!(matches!(error, MediaError::Malformed(_)), "{error:?}");
+        assert!(error.to_string().contains("offset"), "{error}");
+    }
+
+    #[test]
+    fn a_range_without_an_offset_must_continue_the_same_resource() {
+        let first = "#EXTM3U\n#EXT-X-TARGETDURATION:2\n\
+            #EXTINF:2,\n#EXT-X-BYTERANGE:100\nall.ts\n#EXT-X-ENDLIST\n";
+        let error = parse_media(first, BASE).expect_err("no previous range");
+        assert!(matches!(error, MediaError::Malformed(_)), "{error:?}");
+        assert!(error.to_string().contains("offset"), "{error}");
+
+        let other = "#EXTM3U\n#EXT-X-TARGETDURATION:2\n\
+            #EXTINF:2,\n#EXT-X-BYTERANGE:100@0\nall.ts\n\
+            #EXTINF:2,\n#EXT-X-BYTERANGE:50\nother.ts\n#EXT-X-ENDLIST\n";
+        let error = parse_media(other, BASE).expect_err("another resource");
+        assert!(matches!(error, MediaError::Malformed(_)), "{error:?}");
+    }
+
+    #[test]
+    fn a_range_that_runs_past_the_address_space_is_refused() {
+        let text = "#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXTINF:2,\n\
+            #EXT-X-BYTERANGE:18446744073709551615@18446744073709551615\n\
+            all.ts\n#EXT-X-ENDLIST\n";
+        let error = parse_media(text, BASE).expect_err("overflow");
+        assert!(matches!(error, MediaError::Malformed(_)), "{error:?}");
+    }
+
+    #[test]
+    fn a_gap_is_refused_rather_than_joined_around() {
+        let text = "#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXTINF:2,\na.ts\n\
+            #EXT-X-GAP\n#EXTINF:2,\nb.ts\n#EXT-X-ENDLIST\n";
+        let error = parse_media(text, BASE).expect_err("a gap");
+        assert!(matches!(error, MediaError::Unsupported(_)), "{error:?}");
+        assert!(error.to_string().contains("gap"), "{error}");
+    }
+
+    #[test]
+    fn a_fragmented_playlist_cannot_be_joined_across_a_discontinuity() {
+        let text = "#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXT-X-MAP:URI=\"a.mp4\"\n\
+            #EXTINF:2,\ns0.m4s\n#EXT-X-DISCONTINUITY\n#EXTINF:2,\ns1.m4s\n#EXT-X-ENDLIST\n";
+        let error = parse_media(text, BASE).expect_err("a discontinuity");
+        assert!(matches!(error, MediaError::Unsupported(_)), "{error:?}");
+        assert!(error.to_string().contains("DISCONTINUITY"), "{error}");
+    }
+
+    #[test]
+    fn a_plain_playlist_keeps_its_discontinuity_as_a_note() {
+        let text = "#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXTINF:2,\na.ts\n\
+            #EXT-X-DISCONTINUITY\n#EXTINF:2,\nb.ts\n#EXT-X-ENDLIST\n";
+        let media = parse_media(text, BASE).expect("plain segments");
+        assert_eq!(media.discontinuities, 1);
+        assert_eq!(media.segments.len(), 2);
+        assert!(media.init.is_none());
     }
 
     #[test]

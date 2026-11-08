@@ -18,7 +18,7 @@ use idm_core::media::{dash, hls, quality, Format, Manifest, MediaError, MediaKin
 use crate::bridge::{dest, error_body, ok};
 use crate::state::AppState;
 
-use super::{FileTrack, MediaJob, MediaJobView, MediaKindHint, MediaState, SourcePlan};
+use super::{lease, FileTrack, MediaJob, MediaJobView, MediaKindHint, MediaState, SourcePlan};
 
 /// What the extension posts when a player offers a manifest.
 #[derive(Debug, Deserialize)]
@@ -491,13 +491,13 @@ async fn parse_job(app: AppHandle, id: u64) {
 }
 
 async fn parse_manifest(job: &MediaJob) -> Result<(Manifest, SourcePlan), String> {
-    // A YouTube page is resolved through its iOS player client, which still
-    // returns direct addresses; the page's own formats carry no usable `url`.
+    // A YouTube page is resolved through its player clients, which still return
+    // direct addresses; the page's own formats carry no usable `url`.
     if job.kind == MediaKindHint::Youtube || super::yt::is_youtube_page(&job.page_url) {
-        return super::yt::resolve(&job.page_url, &job.title).await;
+        return resolve_youtube(job).await;
     }
     match infer_kind(job.kind, &job.manifest_url) {
-        MediaKindHint::Youtube => super::yt::resolve(&job.page_url, &job.title).await,
+        MediaKindHint::Youtube => resolve_youtube(job).await,
         MediaKindHint::Hls => parse_hls(job).await,
         MediaKindHint::Dash => parse_dash(job).await,
         MediaKindHint::File => parse_file(job).await,
@@ -521,6 +521,14 @@ async fn parse_manifest(job: &MediaJob) -> Result<(Manifest, SourcePlan), String
             }
         }
     }
+}
+
+/// The page resolver reports typed reasons (unplayable, members only, live,
+/// SABR only); the panel shows the sentence, so the message is what travels.
+async fn resolve_youtube(job: &MediaJob) -> Result<(Manifest, SourcePlan), String> {
+    super::yt::resolve(&job.page_url, &job.title)
+        .await
+        .map_err(|error| error.to_string())
 }
 
 async fn parse_hls(job: &MediaJob) -> Result<(Manifest, SourcePlan), String> {
@@ -616,12 +624,8 @@ async fn parse_file(job: &MediaJob) -> Result<(Manifest, SourcePlan), String> {
         job.header_origin(),
     )
     .await?;
-    if probe
-        .content_type
-        .as_deref()
-        .is_some_and(is_protected_content_type)
-    {
-        return Err(MediaError::Protected.to_string());
+    if let Some(refusal) = probe.content_type.as_deref().and_then(refused_content_type) {
+        return Err(refusal.to_string());
     }
     let title = title_of(job, &probe.url);
     let params = youtube_params(&probe.url);
@@ -648,14 +652,46 @@ async fn parse_file(job: &MediaJob) -> Result<(Manifest, SourcePlan), String> {
 
     let manifest = file_manifest(title, vec![format.clone()]);
     let format = manifest.formats.first().cloned().unwrap_or(format);
+
+    // A plain file was pointed at by the page itself, so the page's own
+    // headers are the identity it expects — but only back to the origin they
+    // were collected from, and only when the job's consent covers them.
+    let origin = lease::origin_of(&probe.url);
+    let same_origin = job
+        .header_origin()
+        .is_some_and(|page| page.eq_ignore_ascii_case(&origin));
+    let user_agent = if same_origin {
+        job.headers
+            .iter()
+            .find(|(name, _)| name.eq_ignore_ascii_case("user-agent"))
+            .map(|(_, value)| value.clone())
+    } else {
+        None
+    };
+    let credentials = lease::Credentials {
+        origin,
+        cookies: job.cookie_consent && job.cookies_offered,
+    };
+    let lease = lease::RequestLease::new(
+        probe.url,
+        lease::Authority::Browser,
+        "browser",
+        None,
+        user_agent,
+        credentials,
+        lease::Transport::Progressive,
+        lease::RepresentationFingerprint {
+            id: format.id.clone(),
+            container: format.container.clone(),
+            codec: format.codec.clone(),
+            bytes: format.size,
+        },
+        None,
+    );
     Ok((
         manifest,
         SourcePlan::Files {
-            tracks: vec![FileTrack {
-                format,
-                url: probe.url,
-                user_agent: None,
-            }],
+            tracks: vec![FileTrack { format, lease }],
         },
     ))
 }
@@ -795,10 +831,29 @@ fn file_container(url: &str, content_type: Option<&str>) -> String {
     "mp4".to_string()
 }
 
-/// YouTube's UMP and any explicit DRM type are the same refusal.
-fn is_protected_content_type(content_type: &str) -> bool {
+/// The refusal a manifest address's content type names, if any.
+///
+/// YouTube's UMP is the player's own streaming protocol rather than a file, so
+/// it is reported as a transport with no plain address: calling it DRM would
+/// be a lie when the bytes were never inspected. An explicit DRM type is
+/// reported as encryption, with the scheme named when the type names one.
+fn refused_content_type(content_type: &str) -> Option<MediaError> {
     let content_type = content_type.to_ascii_lowercase();
-    content_type.contains("vnd.yt-ump") || content_type.contains("application/drm")
+    if content_type.contains("vnd.yt-ump") {
+        return Some(MediaError::PlayerTransport(
+            "YouTube's UMP protocol".to_string(),
+        ));
+    }
+    if content_type.contains("application/drm") {
+        return Some(MediaError::protected(""));
+    }
+    if content_type.contains("vnd.widevine") {
+        return Some(MediaError::protected("Widevine"));
+    }
+    if content_type.contains("vnd.ms-playready") {
+        return Some(MediaError::protected("PlayReady"));
+    }
+    None
 }
 
 fn is_audio(container: &str, content_type: Option<&str>) -> bool {
@@ -913,13 +968,21 @@ mod tests {
     }
 
     #[test]
-    fn a_ump_content_type_is_the_protected_refusal() {
-        assert!(is_protected_content_type("application/vnd.yt-ump"));
-        assert!(!is_protected_content_type("video/mp4"));
-        assert_eq!(
-            MediaError::Protected.to_string(),
-            "this stream is protected (DRM), so it cannot be downloaded"
-        );
+    fn a_ump_content_type_is_a_transport_not_encryption() {
+        let refusal = refused_content_type("application/vnd.yt-ump").expect("a refusal");
+        assert!(matches!(refusal, MediaError::PlayerTransport(_)), "{refusal:?}");
+        let sentence = refusal.to_string();
+        assert!(sentence.contains("UMP"), "{sentence}");
+        assert!(!sentence.contains("DRM"), "{sentence}");
+
+        let drm = refused_content_type("application/drm").expect("a refusal");
+        assert!(drm.to_string().contains("protected"), "{drm}");
+
+        let widevine = refused_content_type("video/vnd.widevine").expect("a refusal");
+        assert!(widevine.to_string().contains("Widevine"), "{widevine}");
+
+        assert!(refused_content_type("video/mp4").is_none());
+        assert!(refused_content_type("application/x-mpegURL").is_none());
     }
 
     #[test]
