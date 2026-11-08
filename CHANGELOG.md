@@ -10,6 +10,31 @@ edit one before its release ships if a bullet needs better words.
 
 ---
 
+## [1.1.0] - 8 November 2026
+
+### Added
+
+- **extension:** Capture the media the browser's players fetch
+- **appearance:** Open a light system in Bloom and paint a swatch per theme
+
+### Changed
+
+- **video:** Satisfy rustfmt in the YouTube planner
+- **video:** Rustfmt download.rs and satisfy clippy
+- **whats-new:** Describe 1.1.0 for readers
+- **media:** The live YouTube download mirrors the panel's referer
+- Measure the plans against the source and keep the record in English
+- **categories:** Cover the folder each category saves into
+- Bump upload-artifact to v7 for the node24 runtime
+
+### Fixed
+
+- **video:** Recover YouTube downloads with request leases and strict remux
+- **media:** Download YouTube tracks with the identity the URL was signed for
+- **video:** Fall back to the ANDROID_VR player client and log failed re-resolves
+- **categories:** Save downloads in the folder of their category like the reference manager
+
+
 ## [1.0.0] - 6 November 2026
 
 ### Added
