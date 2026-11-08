@@ -8,6 +8,26 @@
   section for its own version, and the release page uses the same words.
 -->
 
+## 1.1.0 — 8 November 2026
+
+### The browser extension adds more
+
+- Videos and audio a page plays on its own now show up in the extension too, not just files you click.
+- Grabbed media goes straight to your download list like everything else.
+
+### YouTube downloads that finish
+
+- A YouTube download now keeps trying on its own when the source acts up, and joins picture and sound before it calls itself done.
+- Each track keeps the identity it was fetched with, so more videos download instead of failing.
+
+### Files land where they belong
+
+- A download that belongs to a category is saved in that category's own folder.
+
+### A brighter Bloom
+
+- The Bloom theme now comes in a light version, and the Appearance page shows a colour swatch for every theme.
+
 ## 1.0.0 — 6 November 2026
 
 ### A look that's yours
