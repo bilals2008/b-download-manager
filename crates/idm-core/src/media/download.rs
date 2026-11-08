@@ -288,8 +288,9 @@ pub async fn download_track_typed(
             "the track has more than {MAX_SEGMENTS} segments"
         )));
     }
-    std::fs::create_dir_all(&source.work_dir)
-        .map_err(|error| TrackError::storage(format!("the unfinished folder could not be made: {error}")))?;
+    std::fs::create_dir_all(&source.work_dir).map_err(|error| {
+        TrackError::storage(format!("the unfinished folder could not be made: {error}"))
+    })?;
 
     // Before a single byte is read or written: do the bytes on disk belong to
     // the representation this run is about to fetch? The answer is written
@@ -699,9 +700,7 @@ async fn fetch_window(
                         "the range failed after {attempt} attempts: {}",
                         error.message
                     );
-                    return Err(FetchFailure::Failed(
-                        classify(&error).wrapped(message),
-                    ));
+                    return Err(FetchFailure::Failed(classify(&error).wrapped(message)));
                 }
                 tokio::time::sleep(error.retry_after.unwrap_or_else(|| http::backoff(attempt)))
                     .await;

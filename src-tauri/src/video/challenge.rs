@@ -56,17 +56,26 @@ impl std::fmt::Display for ChallengeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ChallengeError::UnknownOperation(name) => {
-                write!(f, "the player uses a transform step this build does not run ({name})")
+                write!(
+                    f,
+                    "the player uses a transform step this build does not run ({name})"
+                )
             }
             ChallengeError::TooManySteps(count) => {
-                write!(f, "the player's transform has {count} steps, more than the {MAX_STEPS} allowed")
+                write!(
+                    f,
+                    "the player's transform has {count} steps, more than the {MAX_STEPS} allowed"
+                )
             }
             ChallengeError::OutOfRange { step, index } => write!(
                 f,
                 "transform step {step} points at {index}, outside the value it rewrites"
             ),
             ChallengeError::TooLong(len) => {
-                write!(f, "the value to transform is {len} bytes, more than the {MAX_INPUT} allowed")
+                write!(
+                    f,
+                    "the value to transform is {len} bytes, more than the {MAX_INPUT} allowed"
+                )
             }
             ChallengeError::Malformed(what) => write!(f, "the transform could not be read: {what}"),
         }
@@ -114,15 +123,18 @@ impl Program {
                 None if piece.eq_ignore_ascii_case("reverse") => Step::Reverse,
                 None => return Err(ChallengeError::UnknownOperation(piece.to_string())),
                 Some((name, rest)) => {
-                    let numbers: Vec<usize> = rest
-                        .split(',')
-                        .map(|number| {
-                            number.trim().parse().map_err(|_| {
-                                ChallengeError::Malformed(format!("{name}: {rest}"))
+                    let numbers: Vec<usize> =
+                        rest.split(',')
+                            .map(|number| {
+                                number.trim().parse().map_err(|_| {
+                                    ChallengeError::Malformed(format!("{name}: {rest}"))
+                                })
                             })
-                        })
-                        .collect::<Result<_, _>>()?;
-                    match (name.trim().to_ascii_lowercase().as_str(), numbers.as_slice()) {
+                            .collect::<Result<_, _>>()?;
+                    match (
+                        name.trim().to_ascii_lowercase().as_str(),
+                        numbers.as_slice(),
+                    ) {
                         ("splice", [at, count]) => Step::Splice {
                             at: *at,
                             count: *count,
@@ -133,7 +145,9 @@ impl Program {
                         ("splice" | "swap", _) => {
                             return Err(ChallengeError::Malformed(format!("{name}: {rest}")))
                         }
-                        (other, _) => return Err(ChallengeError::UnknownOperation(other.to_string())),
+                        (other, _) => {
+                            return Err(ChallengeError::UnknownOperation(other.to_string()))
+                        }
                     }
                 }
             };
@@ -162,17 +176,26 @@ impl Program {
                 Step::Reverse => chars.reverse(),
                 Step::Splice { at, count } => {
                     if at > chars.len() {
-                        return Err(ChallengeError::OutOfRange { step: index, index: at });
+                        return Err(ChallengeError::OutOfRange {
+                            step: index,
+                            index: at,
+                        });
                     }
                     let end = at.saturating_add(count).min(chars.len());
                     chars.drain(at..end);
                 }
                 Step::Swap { a, b } => {
                     if a >= chars.len() {
-                        return Err(ChallengeError::OutOfRange { step: index, index: a });
+                        return Err(ChallengeError::OutOfRange {
+                            step: index,
+                            index: a,
+                        });
                     }
                     if b >= chars.len() {
-                        return Err(ChallengeError::OutOfRange { step: index, index: b });
+                        return Err(ChallengeError::OutOfRange {
+                            step: index,
+                            index: b,
+                        });
                     }
                     chars.swap(a, b);
                 }
@@ -225,7 +248,8 @@ impl Cache {
         if self.programs.contains_key(identity) {
             return self.programs.get(identity);
         }
-        self.programs.retain(|known, _| known.client != identity.client);
+        self.programs
+            .retain(|known, _| known.client != identity.client);
         None
     }
 
@@ -416,7 +440,10 @@ mod tests {
         let mut cache = Cache::new();
         let identity = PlayerIdentity::new("iOS", "20.11.6");
         // "abc" reversed is "cba".
-        cache.put(identity.clone(), Program::parse("reverse").expect("a program"));
+        cache.put(
+            identity.clone(),
+            Program::parse("reverse").expect("a program"),
+        );
         let rewritten = rewrite(
             &mut cache,
             &identity,
@@ -425,8 +452,7 @@ mod tests {
         .expect("no error")
         .expect("a rewritten address");
         assert_eq!(
-            rewritten,
-            "https://rr1.googlevideo.com/videoplayback?itag=137&n=cba&sig=SIGNED",
+            rewritten, "https://rr1.googlevideo.com/videoplayback?itag=137&n=cba&sig=SIGNED",
             "the signed value must not be re-encoded"
         );
     }
@@ -438,13 +464,24 @@ mod tests {
         let url = "https://rr1.googlevideo.com/videoplayback?itag=137&n=abc";
         assert_eq!(rewrite(&mut cache, &identity, url), Ok(None));
 
-        cache.put(identity.clone(), Program::parse("reverse").expect("a program"));
+        cache.put(
+            identity.clone(),
+            Program::parse("reverse").expect("a program"),
+        );
         assert_eq!(
-            rewrite(&mut cache, &identity, "https://rr1.googlevideo.com/videoplayback?itag=137"),
+            rewrite(
+                &mut cache,
+                &identity,
+                "https://rr1.googlevideo.com/videoplayback?itag=137"
+            ),
             Ok(None)
         );
         assert_eq!(
-            rewrite(&mut cache, &identity, "https://rr1.googlevideo.com/videoplayback?n="),
+            rewrite(
+                &mut cache,
+                &identity,
+                "https://rr1.googlevideo.com/videoplayback?n="
+            ),
             Ok(None)
         );
     }

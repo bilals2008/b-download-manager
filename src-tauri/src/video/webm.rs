@@ -245,15 +245,9 @@ fn parse_cluster(file: &mut File, cluster: &Header, input: &mut Input) -> Result
                 let body = read_body(file, &header)?;
                 cluster_ts = read_uint(&body).unwrap_or(0);
             }
-            SIMPLE_BLOCK => record_block(
-                file,
-                &header,
-                cluster_ts,
-                input.scale,
-                None,
-                None,
-                input,
-            )?,
+            SIMPLE_BLOCK => {
+                record_block(file, &header, cluster_ts, input.scale, None, None, input)?
+            }
             BLOCK_GROUP => parse_block_group(file, &header, cluster_ts, input)?,
             // A cluster whose size is unknown runs to the end of its parent,
             // so the clusters that follow it arrive here as children. Without
@@ -570,7 +564,10 @@ fn read_block_frames(
 fn output_block(block: &OutputBlock, relative: i64, frames: &[u8]) -> Vec<u8> {
     if block.block.discard_padding.is_some() {
         let mut group = Vec::new();
-        group.extend(element(BLOCK, &block_payload(block, relative, frames, false)));
+        group.extend(element(
+            BLOCK,
+            &block_payload(block, relative, frames, false),
+        ));
         if !block.block.keyframe {
             // Inside a group the keyframe bit is not used; a reference to the
             // frame before is what says this one is not a keyframe.
@@ -1093,7 +1090,13 @@ mod tests {
         element(SIMPLE_BLOCK, &payload)
     }
 
-    fn block_group(track: u64, relative: i16, keyframe: bool, padding: i64, frames: &[u8]) -> Vec<u8> {
+    fn block_group(
+        track: u64,
+        relative: i16,
+        keyframe: bool,
+        padding: i64,
+        frames: &[u8],
+    ) -> Vec<u8> {
         let mut payload = encode_vint(track);
         payload.extend(relative.to_be_bytes());
         // A plain `Block` must not set the keyframe bit: inside a group the
@@ -1165,7 +1168,11 @@ mod tests {
         );
         assert_eq!(read_int(&[0x00, 0x7B]), Some(123));
         assert_eq!(read_int(&[]), None);
-        assert_eq!(read_int(&[0; 9]), None, "a Matroska integer holds eight bytes");
+        assert_eq!(
+            read_int(&[0; 9]),
+            None,
+            "a Matroska integer holds eight bytes"
+        );
     }
 
     #[test]

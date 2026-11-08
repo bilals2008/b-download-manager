@@ -371,12 +371,10 @@ pub fn parse_media(text: &str, base_url: &str) -> Result<MediaPlaylist, MediaErr
                         // bytes from the same address.
                         match last_range_end.as_ref() {
                             Some((last_url, end)) if last_url == &url => *end,
-                            _ => {
-                                return Err(MediaError::Malformed(
-                                    "a byte range has no offset and does not continue a previous one"
-                                        .to_string(),
-                                ))
-                            }
+                            _ => return Err(MediaError::Malformed(
+                                "a byte range has no offset and does not continue a previous one"
+                                    .to_string(),
+                            )),
                         }
                     }
                 };
@@ -468,7 +466,10 @@ fn refuse_key(rest: &str) -> Result<(), MediaError> {
     if method.eq_ignore_ascii_case("NONE") || method.is_empty() {
         return Ok(());
     }
-    Err(MediaError::protected(key_scheme(method, attrs.get("KEYFORMAT"))))
+    Err(MediaError::protected(key_scheme(
+        method,
+        attrs.get("KEYFORMAT"),
+    )))
 }
 
 /// The readable name of the protection a `#EXT-X-KEY` names.

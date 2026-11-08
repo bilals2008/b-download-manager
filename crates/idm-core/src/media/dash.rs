@@ -118,8 +118,10 @@ pub fn parse_full(text: &str, base_url: &str) -> Result<DashManifest, MediaError
             continue;
         }
         let set_base = resolve_base(set, &period_base)?;
-        let set_template =
-            Template::merge(period_template.as_ref(), Template::from_element(set).as_ref());
+        let set_template = Template::merge(
+            period_template.as_ref(),
+            Template::from_element(set).as_ref(),
+        );
 
         for (rep_index, rep) in set.children_named("Representation").enumerate() {
             if rep.contains("ContentProtection") {
@@ -314,7 +316,10 @@ fn track_container(kind: MediaKind, mime: &str, codecs: Option<&str>) -> String 
 fn protection_scheme(element: &Element) -> String {
     let mut schemes = Vec::new();
     collect_schemes(element, &mut schemes);
-    let named: Vec<String> = schemes.iter().map(|scheme| protection_name(scheme)).collect();
+    let named: Vec<String> = schemes
+        .iter()
+        .map(|scheme| protection_name(scheme))
+        .collect();
     for known in ["Widevine", "PlayReady", "FairPlay", "Clear Key"] {
         if named.iter().any(|name| name == known) {
             return known.to_string();
@@ -486,7 +491,9 @@ fn segment_plan(
 
     // A template only describes the bytes when it names the media; one that
     // only carries timing falls through to the other segment information.
-    let media = template.as_ref().and_then(|template| template.media.as_deref());
+    let media = template
+        .as_ref()
+        .and_then(|template| template.media.as_deref());
     if let (Some(template), Some(media)) = (template.as_ref(), media) {
         let init = template.initialization.as_deref().map(|uri| {
             let url = expand(

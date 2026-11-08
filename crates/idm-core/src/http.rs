@@ -401,10 +401,7 @@ pub fn parse_http_date(value: &str) -> Option<SystemTime> {
         .map(|(_, rest)| rest)
         .unwrap_or_else(|| {
             // asctime has no comma after the weekday; drop the two names.
-            value
-                .split_once(' ')
-                .map(|(_, rest)| rest)
-                .unwrap_or(value)
+            value.split_once(' ').map(|(_, rest)| rest).unwrap_or(value)
         });
     let parts: Vec<&str> = rest.split_whitespace().collect();
     // `06 Nov 1994 08:49:37 GMT` splits into six pieces, `06-Nov-94` stays
@@ -437,7 +434,13 @@ fn parse_rfc850(value: &str, clock: &str) -> Option<SystemTime> {
     let year: i64 = year.parse().ok()?;
     // A two-digit year is this century when it is small; the form predates
     // 2000 by design, so 94 means 1994 and 24 means 2024.
-    let year = if year < 70 { 2000 + year } else if year < 100 { 1900 + year } else { year };
+    let year = if year < 70 {
+        2000 + year
+    } else if year < 100 {
+        1900 + year
+    } else {
+        year
+    };
     let (hour, minute, second) = parse_clock(clock)?;
     to_system_time(day, month, year, hour, minute, second)
 }
@@ -475,7 +478,8 @@ fn days_from_civil(year: i64, month: u32, day: u32) -> i64 {
     let era = if year >= 0 { year } else { year - 399 } / 400;
     let year_of_era = year - era * 400;
     let month = month as i64;
-    let day_of_year = (153 * (if month > 2 { month - 3 } else { month + 9 }) + 2) / 5 + day as i64 - 1;
+    let day_of_year =
+        (153 * (if month > 2 { month - 3 } else { month + 9 }) + 2) / 5 + day as i64 - 1;
     let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
     era * 146_097 + day_of_era - 719_468
 }

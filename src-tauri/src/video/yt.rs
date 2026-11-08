@@ -29,8 +29,8 @@ use serde_json::{json, Value};
 
 use super::challenge::{self, PlayerIdentity};
 use super::lease::{
-    expiry_from_seconds, origin_of, Authority, Credentials, RequestLease,
-    RepresentationFingerprint, Transport, EXPIRY_MARGIN,
+    expiry_from_seconds, origin_of, Authority, Credentials, RepresentationFingerprint,
+    RequestLease, Transport, EXPIRY_MARGIN,
 };
 use super::{FileTrack, SourcePlan};
 
@@ -307,7 +307,10 @@ pub async fn resolve(
 /// A refresh never reuses an answer: the whole point is that the previous one
 /// is no longer accepted. The caller compares the new tracks with the old
 /// before it reuses a single byte.
-pub async fn renew(page_url: &str, fallback_title: &str) -> Result<(Manifest, SourcePlan), YtError> {
+pub async fn renew(
+    page_url: &str,
+    fallback_title: &str,
+) -> Result<(Manifest, SourcePlan), YtError> {
     let id = video_id(page_url).ok_or(YtError::NotYoutube)?;
     remember(&id, fallback_title, true).await
 }
@@ -324,8 +327,7 @@ async fn remember(
                 // carries its own deadline, and a deadline is what a server
                 // actually honours: handing one back that is about to pass
                 // would fail the download on its first segment for no reason.
-                if answer.at.elapsed() < ANSWER_TTL
-                    && !expiring(&answer.source, SystemTime::now())
+                if answer.at.elapsed() < ANSWER_TTL && !expiring(&answer.source, SystemTime::now())
                 {
                     return Ok((answer.manifest.clone(), answer.source.clone()));
                 }
@@ -486,9 +488,7 @@ fn check_playable(data: &Value, asked: &str) -> Result<(), YtError> {
     }
     if data.get("streamingData").is_none() {
         // A video behind DRM says so here, in the licence parameters.
-        let protected = data
-            .pointer("/streamingData/drmParams")
-            .is_some()
+        let protected = data.pointer("/streamingData/drmParams").is_some()
             || data.get("licenseInfos").is_some();
         let what = reason();
         return Err(if protected {
@@ -514,8 +514,7 @@ fn has_licence(streaming: &Value) -> bool {
             .and_then(Value::as_array)
             .is_some_and(|items| {
                 items.iter().any(|item| {
-                    item.get("drmFamilies").is_some()
-                        || item.get("licenseInfos").is_some()
+                    item.get("drmFamilies").is_some() || item.get("licenseInfos").is_some()
                 })
             })
 }
@@ -560,13 +559,10 @@ async fn ask_player(
             .header("x-youtube-client-version", profile.client_version);
     }
     let response = request
-        .body(
-            serde_json::to_vec(&body)
-                .map_err(|error| YtError::Client {
-                    client: profile.label.to_string(),
-                    reason: error.to_string(),
-                })?,
-        )
+        .body(serde_json::to_vec(&body).map_err(|error| YtError::Client {
+            client: profile.label.to_string(),
+            reason: error.to_string(),
+        })?)
         .send()
         .await
         .map_err(|error| YtError::Transient {
@@ -925,7 +921,10 @@ mod tests {
         assert!(video.lease.expires_at.is_some(), "the expire says when");
         assert_eq!(video.lease.representation.id, "137");
         assert_eq!(video.lease.representation.bytes, Some(24_000_000));
-        assert_eq!(video.lease.representation.codec.as_deref(), Some("avc1.640028"));
+        assert_eq!(
+            video.lease.representation.codec.as_deref(),
+            Some("avc1.640028")
+        );
         // The signed value is not in anything a log would print.
         assert!(!video.lease.describe().contains("secret"));
     }
@@ -949,7 +948,10 @@ mod tests {
             "playabilityStatus": { "status": "UNPLAYABLE", "reason": "This video is private" }
         });
         let error = check_playable(&data, "x").expect_err("a refusal");
-        assert!(error.to_string().contains("This video is private"), "{error}");
+        assert!(
+            error.to_string().contains("This video is private"),
+            "{error}"
+        );
         assert!(error.to_string().contains("UNPLAYABLE"), "{error}");
     }
 
@@ -970,15 +972,17 @@ mod tests {
             "videoDetails": { "videoId": "x" },
             "streamingData": { "serverAbrStreamingUrl": "https://www.youtube.com/api" }
         });
-        assert_eq!(plan_from(&data, "x", &ios_profile("v")).err(), Some(YtError::NoPlainAddress));
+        assert_eq!(
+            plan_from(&data, "x", &ios_profile("v")).err(),
+            Some(YtError::NoPlainAddress)
+        );
     }
 
     #[test]
     fn a_throttled_answer_is_kept_but_marked() {
         let mut data = answer();
-        data["streamingData"]["adaptiveFormats"][0]["url"] = json!(
-            "https://rr1.googlevideo.com/videoplayback?itag=137&n=AbC"
-        );
+        data["streamingData"]["adaptiveFormats"][0]["url"] =
+            json!("https://rr1.googlevideo.com/videoplayback?itag=137&n=AbC");
         let planned = plan_from(&data, "x", &ios_profile("v")).expect("a plan");
         assert!(planned.throttled);
         let tracks = match planned.source {
@@ -1008,10 +1012,10 @@ mod tests {
         // This client name belongs to this test alone, so a parallel test's
         // program cannot be the one that answers.
         let platform = PlayerIdentity::new("TEST-REWRITE", "1a2b3c4d");
-        programs()
-            .lock()
-            .expect("the cache")
-            .put(platform, challenge::Program::parse("reverse").expect("a program"));
+        programs().lock().expect("the cache").put(
+            platform,
+            challenge::Program::parse("reverse").expect("a program"),
+        );
 
         let mut data = answer();
         data["playerConfig"] = json!({

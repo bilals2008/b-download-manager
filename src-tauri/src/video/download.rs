@@ -203,10 +203,7 @@ async fn run(
                 job.source = Some(source);
             }
             Err(error) => {
-                idm_core::log::write(
-                    "warn",
-                    &format!("resolving the page again failed: {error}"),
-                );
+                idm_core::log::write("warn", &format!("resolving the page again failed: {error}"));
             }
         }
     }
@@ -715,13 +712,8 @@ async fn run_track(
     control: &Arc<TrackControl>,
     sink: ProgressSink,
 ) -> Result<(), Outcome> {
-    match download::download_track_typed(
-        limits.clone(),
-        source,
-        Some(control.clone()),
-        Some(sink),
-    )
-    .await
+    match download::download_track_typed(limits.clone(), source, Some(control.clone()), Some(sink))
+        .await
     {
         Ok(TrackOutcome::Done) => Ok(()),
         Ok(TrackOutcome::Cancelled) => Err(Outcome::Cancelled),

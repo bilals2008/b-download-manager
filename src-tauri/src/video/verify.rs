@@ -252,10 +252,7 @@ pub fn check_finished(path: &Path, expect: Expect<'_>) -> Result<MediaInfo, Stri
         ),
         Playback::Unverified(reason) => log::write(
             "info",
-            &format!(
-                "{} was read but not proved: {reason}",
-                path.display()
-            ),
+            &format!("{} was read but not proved: {reason}", path.display()),
         ),
     }
 
@@ -527,7 +524,10 @@ fn judge_tracks(tracks: &[TrackIndex], info: &mut MediaInfo, bytes: u64) -> Play
         }
         placed = placed.saturating_add(table.count);
         if let Some(sync) = &table.sync {
-            if sync.iter().any(|number| *number == 0 || *number as u64 > table.count) {
+            if sync
+                .iter()
+                .any(|number| *number == 0 || *number as u64 > table.count)
+            {
                 return Playback::Broken(
                     "the keyframe table names a sample that is not in the track".to_string(),
                 );
@@ -786,7 +786,9 @@ fn sample_format(media: &[u8]) -> Option<(Option<String>, bool)> {
     let end = (8 + size).clamp(16, body.len());
     let configured = find(
         &body[24.min(end)..end],
-        &[b"avcC", b"hvcC", b"av1C", b"vpcC", b"esds", b"dOps", b"dac3", b"dec3"],
+        &[
+            b"avcC", b"hvcC", b"av1C", b"vpcC", b"esds", b"dOps", b"dac3", b"dec3",
+        ],
     )
     .is_some();
     Some((
@@ -993,8 +995,7 @@ fn parse_matroska(file: &mut File, bytes: u64) -> Result<MediaInfo, String> {
     // last cluster that declares more bytes than remain is a download that
     // stopped in the middle of a frame, and no player recovers from that.
     if body.len() as u64 == bytes && !walk_complete(&body, segment.data, segment.end) {
-        info.playback =
-            Playback::Broken("the file ends inside an element it declared".to_string());
+        info.playback = Playback::Broken("the file ends inside an element it declared".to_string());
         return Ok(info);
     }
     info.playback = if tracks == 0 {
@@ -1458,13 +1459,21 @@ mod tests {
         hdlr[8..12].copy_from_slice(b"vide");
         let mdia = boxed(
             b"mdia",
-            &[boxed(b"mdhd", &mdhd), boxed(b"hdlr", &hdlr), boxed(b"minf", &stbl)].concat(),
+            &[
+                boxed(b"mdhd", &mdhd),
+                boxed(b"hdlr", &hdlr),
+                boxed(b"minf", &stbl),
+            ]
+            .concat(),
         );
 
         let mut mvhd = vec![0u8; 100];
         mvhd[12..16].copy_from_slice(&1000u32.to_be_bytes());
         mvhd[16..20].copy_from_slice(&2000u32.to_be_bytes());
-        let moov = boxed(b"moov", &[boxed(b"mvhd", &mvhd), boxed(b"trak", &mdia)].concat());
+        let moov = boxed(
+            b"moov",
+            &[boxed(b"mvhd", &mvhd), boxed(b"trak", &mdia)].concat(),
+        );
 
         let mut ftyp = Vec::new();
         ftyp.extend(b"isom");

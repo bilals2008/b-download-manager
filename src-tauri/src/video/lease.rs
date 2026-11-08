@@ -198,11 +198,12 @@ impl RequestLease {
     /// renewal worth doing *before* the first segment instead of after the
     /// first refusal.
     pub fn expiring_at(&self, margin: Duration, now: SystemTime) -> bool {
-        self.expires_at.is_some_and(|at| match at.duration_since(now) {
-            Ok(left) => left <= margin,
-            // The deadline is already behind us, which is no time at all.
-            Err(_) => true,
-        })
+        self.expires_at
+            .is_some_and(|at| match at.duration_since(now) {
+                Ok(left) => left <= margin,
+                // The deadline is already behind us, which is no time at all.
+                Err(_) => true,
+            })
     }
 
     /// Whether another lease serves the same bytes.
@@ -310,7 +311,10 @@ pub fn redacted_target(url: &str) -> String {
     for (name, value) in parsed.query_pairs() {
         shown.push(if first { '?' } else { '&' });
         first = false;
-        if SIGNED.iter().any(|signed| name.eq_ignore_ascii_case(signed)) {
+        if SIGNED
+            .iter()
+            .any(|signed| name.eq_ignore_ascii_case(signed))
+        {
             shown.push_str(&name);
             shown.push_str("=…");
         } else {
@@ -334,7 +338,9 @@ pub fn origin_of(url: &str) -> String {
         return String::new();
     };
     match (parsed.scheme(), parsed.host_str(), parsed.port()) {
-        (scheme, Some(host), Some(port)) => format!("{}://{}:{port}", scheme, host.to_ascii_lowercase()),
+        (scheme, Some(host), Some(port)) => {
+            format!("{}://{}:{port}", scheme, host.to_ascii_lowercase())
+        }
         (scheme, Some(host), None) => format!("{}://{}", scheme, host.to_ascii_lowercase()),
         _ => String::new(),
     }

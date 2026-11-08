@@ -970,7 +970,10 @@ mod tests {
     #[test]
     fn a_ump_content_type_is_a_transport_not_encryption() {
         let refusal = refused_content_type("application/vnd.yt-ump").expect("a refusal");
-        assert!(matches!(refusal, MediaError::PlayerTransport(_)), "{refusal:?}");
+        assert!(
+            matches!(refusal, MediaError::PlayerTransport(_)),
+            "{refusal:?}"
+        );
         let sentence = refusal.to_string();
         assert!(sentence.contains("UMP"), "{sentence}");
         assert!(!sentence.contains("DRM"), "{sentence}");

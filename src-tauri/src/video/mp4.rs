@@ -307,10 +307,7 @@ fn progressive_samples(moov: &[u8], track_id: u32) -> Result<Vec<Sample>, MuxErr
             size: *size,
             duration: durations[index],
             decode_time,
-            composition_offset: compositions
-                .as_ref()
-                .map(|list| list[index])
-                .unwrap_or(0),
+            composition_offset: compositions.as_ref().map(|list| list[index]).unwrap_or(0),
             sync,
         });
         decode_time = decode_time.saturating_add(durations[index] as u64);
@@ -333,7 +330,9 @@ fn composition_offsets(body: Option<&[u8]>, samples: usize) -> Result<Option<Vec
         return Ok(None);
     };
     if body.len() < 8 {
-        return Err(MuxError::Io("the composition table is truncated".to_string()));
+        return Err(MuxError::Io(
+            "the composition table is truncated".to_string(),
+        ));
     }
     let version = body[0];
     if version > 1 {
@@ -350,7 +349,9 @@ fn composition_offsets(body: Option<&[u8]>, samples: usize) -> Result<Option<Vec
         }
         let end = at + 8;
         if end > body.len() {
-            return Err(MuxError::Io("the composition table is truncated".to_string()));
+            return Err(MuxError::Io(
+                "the composition table is truncated".to_string(),
+            ));
         }
         let run = u32::from_be_bytes([body[at], body[at + 1], body[at + 2], body[at + 3]]);
         let value = u32::from_be_bytes([body[at + 4], body[at + 5], body[at + 6], body[at + 7]]);
@@ -596,8 +597,7 @@ fn fragment_samples(
             let traf = &fragment.moof[atom.start..atom.end];
             let tfhd = find_box(traf, b"tfhd")
                 .ok_or_else(|| MuxError::Io("a fragment has no header".to_string()))?;
-            let tfhd =
-                parse_tfhd(&traf[tfhd.start..tfhd.end], fragment.base, defaults)?;
+            let tfhd = parse_tfhd(&traf[tfhd.start..tfhd.end], fragment.base, defaults)?;
             if tfhd.track_id != track_id {
                 continue;
             }
@@ -664,11 +664,9 @@ fn fragment_samples(
                     } else {
                         0
                     };
-                    let offset = data_offset
-                        .checked_add(running)
-                        .ok_or_else(|| {
-                            MuxError::Io("a sample offset runs past the file".to_string())
-                        })?;
+                    let offset = data_offset.checked_add(running).ok_or_else(|| {
+                        MuxError::Io("a sample offset runs past the file".to_string())
+                    })?;
                     samples.push(Sample {
                         offset,
                         size,
@@ -706,9 +704,10 @@ impl<'a> Cursor<'a> {
             .at
             .checked_add(count)
             .ok_or_else(|| MuxError::Io("a box's length overflows".to_string()))?;
-        let slice = self.data.get(self.at..end).ok_or_else(|| {
-            MuxError::Io("a box ends before the fields it promises".to_string())
-        })?;
+        let slice = self
+            .data
+            .get(self.at..end)
+            .ok_or_else(|| MuxError::Io("a box ends before the fields it promises".to_string()))?;
         self.at = end;
         Ok(slice)
     }
@@ -1671,12 +1670,7 @@ mod tests {
         base.extend(900_000u64.to_be_bytes());
         let moof = boxed(
             b"traf",
-            &[
-                tfhd(1, 100, 10),
-                boxed(b"tfdt", &base),
-                trun(None, &[10]),
-            ]
-            .concat(),
+            &[tfhd(1, 100, 10), boxed(b"tfdt", &base), trun(None, &[10])].concat(),
         );
         let fragments = [Fragment { moof, base: 0 }];
         let samples = fragment_samples(&fragments, &[], 1).expect("the fragment");
