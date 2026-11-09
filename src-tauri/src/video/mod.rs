@@ -19,6 +19,7 @@ pub(crate) mod verify;
 pub(crate) mod webm;
 pub(crate) mod window;
 pub(crate) mod yt;
+pub(crate) mod ytdlp;
 
 use serde::{Deserialize, Serialize};
 

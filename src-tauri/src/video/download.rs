@@ -197,7 +197,7 @@ async fn run(
     if super::yt::is_youtube_page(&job.page_url) {
         // A resolve that fails quietly here would send the download against a
         // dead address, so what it said is written down.
-        match super::yt::resolve(&job.page_url, &job.title).await {
+        match super::ytdlp::resolve_page(app, &job.page_url, &job.title).await {
             Ok((manifest, source)) => {
                 job.manifest = Some(manifest);
                 job.source = Some(source);
@@ -279,7 +279,7 @@ async fn run(
                         error.problem.name()
                     ),
                 );
-                match super::yt::renew(&job.page_url, &job.title).await {
+                match super::ytdlp::renew_page(app, &job.page_url, &job.title).await {
                     Ok((manifest, source)) => {
                         let before = chosen_lease(job.source.as_ref(), &request.video).cloned();
                         let after = chosen_lease(Some(&source), &request.video).cloned();

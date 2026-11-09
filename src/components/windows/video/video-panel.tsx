@@ -5,6 +5,7 @@ import { DialogAction } from "@/components/ui/dialog-action";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip } from "@/components/ui/tooltip";
 import { FormatList } from "@/components/windows/video/format-list";
+import { HelperOffer } from "@/components/windows/video/helper-offer";
 import { useMediaJob } from "@/components/windows/video/use-media-job";
 import { formatSize } from "@/lib/downloads";
 import { describeError } from "@/lib/errors";
@@ -12,10 +13,13 @@ import { openPath } from "@/lib/ipc";
 import {
   formatDuration,
   initialQuality,
+  isYoutubePage,
   mediaAllowCookies,
   mediaCancel,
   mediaDownload,
+  mediaReparse,
   mediaRows,
+  videoHelperStatus,
 } from "@/lib/media";
 import { closeWindow, showWindowWhenPainted } from "@/lib/window";
 
@@ -33,9 +37,35 @@ export function VideoPanel({ initialJob }: { initialJob: number }) {
   const [busy, setBusy] = useState(false);
   const [consentBusy, setConsentBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [helperInstalled, setHelperInstalled] = useState<boolean | null>(null);
+  const [offerDismissed, setOfferDismissed] = useState(false);
   const selectedFor = useRef<number | null>(null);
 
   const rows = useMemo(() => (view ? mediaRows(view) : []), [view]);
+
+  // Ask once whether the optional helper is there. A failed check is treated
+  // as "there": a status error must not turn into an install prompt.
+  useEffect(() => {
+    let cancelled = false;
+    videoHelperStatus()
+      .then((installed) => {
+        if (!cancelled) {
+          setHelperInstalled(installed);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setHelperInstalled(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const offerHelper = Boolean(
+    view && helperInstalled === false && !offerDismissed && isYoutubePage(view.pageUrl),
+  );
 
   // A ready job opens on this host's last choice, else 1080p. Later polls
   // carry the same job and must not reset a choice the reader just made.
@@ -93,6 +123,19 @@ export function VideoPanel({ initialJob }: { initialJob: number }) {
       setActionError(describeError(error));
     } finally {
       setConsentBusy(false);
+    }
+  }
+
+  async function afterHelper() {
+    setHelperInstalled(true);
+    if (!view) {
+      return;
+    }
+    try {
+      await mediaReparse(view.job);
+      await refresh();
+    } catch (error) {
+      setActionError(describeError(error));
     }
   }
 
@@ -185,6 +228,13 @@ export function VideoPanel({ initialJob }: { initialJob: number }) {
       ) : null}
 
       <main className="flex min-h-0 flex-1 flex-col px-4 pb-2">
+        {offerHelper ? (
+          <HelperOffer
+            onInstalled={() => void afterHelper()}
+            onDismiss={() => setOfferDismissed(true)}
+          />
+        ) : null}
+
         {view?.cookiesOffered && !view.cookieConsent ? (
           <div className="mb-2 shrink-0 rounded-chrome bg-chrome-canvas px-3 py-2.5">
             <p className="text-chrome-micro text-chrome-menu-text">

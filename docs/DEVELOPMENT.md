@@ -438,10 +438,14 @@ these invariants:
 - DRM is refused, never touched: `#EXT-X-KEY`, MPD `ContentProtection`,
   `application/vnd.yt-ump` and a `pssh`/encrypted init all produce one
   sentence. Live (`no #EXT-X-ENDLIST`, `MPD@type="dynamic"`) is refused too.
-- YouTube is resolved by the app itself through the iOS InnerTube client
-  (`video/yt.rs`): it reads the watch page's visitor data and signature
-  timestamp, asks the player endpoint, and downloads the direct addresses it
-  returns. No JavaScript player, no SABR replay, no external downloader.
+- YouTube is resolved by the optional `yt-dlp` helper (`video/ytdlp.rs`) when
+  it is installed: it reads the watch page and returns direct file addresses,
+  which the app downloads itself at full speed. The in-house iOS InnerTube
+  resolver (`video/yt.rs`) is the fallback when the helper is absent, so a
+  fresh install still works. No JavaScript player and no SABR replay. The
+  helper is fetched on demand from its official release, checked against the
+  publisher's SHA-256 list, and kept in the app's data folder; the installer
+  ships no video tool.
 - Headers are accepted only for `Cookie`, `User-Agent`, `Referer`,
   `Origin` and `Authorization`, only on the manifest's own origin, never
   persisted, never logged. A cookie or authorization value waits for the

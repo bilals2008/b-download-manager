@@ -389,6 +389,51 @@ pub fn media_cancel(app: AppHandle, job: u64) -> Result<(), String> {
     Ok(())
 }
 
+/// Read the page again, for example after the video helper was installed.
+#[tauri::command]
+pub fn media_reparse(app: AppHandle, job: u64) -> Result<MediaJobView, String> {
+    let state = app.state::<AppState>();
+    let media = state
+        .media_job(job)
+        .ok_or_else(|| "unknown media job".to_string())?;
+    state.update_media_job(job, |job| {
+        job.state = MediaState::Parsing;
+        job.error = None;
+        job.notice = None;
+        job.manifest = None;
+        job.source = None;
+        job.progress = Default::default();
+    });
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        parse_job(handle, job).await;
+    });
+    state
+        .media_job(media.id)
+        .map(|job| job.view())
+        .ok_or_else(|| "unknown media job".to_string())
+}
+
+/// Whether the video helper is installed.
+#[tauri::command]
+pub fn video_helper_status(app: AppHandle) -> bool {
+    super::tools::installed(&app).is_some()
+}
+
+/// Download and check the video helper, then answer whether it is ready.
+#[tauri::command]
+pub async fn video_helper_install(app: AppHandle) -> Result<bool, String> {
+    super::tools::install(&app).await?;
+    Ok(true)
+}
+
+/// Keep a helper the person downloaded themselves; `true` means it was checked
+/// against the publisher's list.
+#[tauri::command]
+pub async fn video_helper_import(app: AppHandle, path: String) -> Result<bool, String> {
+    super::tools::import(&app, Path::new(&path)).await
+}
+
 /* --------------------------------------------------------------- parsing */
 
 async fn parse_job(app: AppHandle, id: u64) {
@@ -396,7 +441,7 @@ async fn parse_job(app: AppHandle, id: u64) {
         Some(job) => job,
         None => return,
     };
-    let result = parse_manifest(&job).await;
+    let result = parse_manifest(&app, &job).await;
     let state = app.state::<AppState>();
     match result {
         Ok((manifest, source)) => {
@@ -490,14 +535,15 @@ async fn parse_job(app: AppHandle, id: u64) {
     }
 }
 
-async fn parse_manifest(job: &MediaJob) -> Result<(Manifest, SourcePlan), String> {
-    // A YouTube page is resolved through its player clients, which still return
-    // direct addresses; the page's own formats carry no usable `url`.
+async fn parse_manifest(app: &AppHandle, job: &MediaJob) -> Result<(Manifest, SourcePlan), String> {
+    // A YouTube page is resolved through the video helper when it is
+    // installed, and through the in-house player clients otherwise; the page's
+    // own formats carry no usable `url`.
     if job.kind == MediaKindHint::Youtube || super::yt::is_youtube_page(&job.page_url) {
-        return resolve_youtube(job).await;
+        return resolve_youtube(app, job).await;
     }
     match infer_kind(job.kind, &job.manifest_url) {
-        MediaKindHint::Youtube => resolve_youtube(job).await,
+        MediaKindHint::Youtube => resolve_youtube(app, job).await,
         MediaKindHint::Hls => parse_hls(job).await,
         MediaKindHint::Dash => parse_dash(job).await,
         MediaKindHint::File => parse_file(job).await,
@@ -525,10 +571,11 @@ async fn parse_manifest(job: &MediaJob) -> Result<(Manifest, SourcePlan), String
 
 /// The page resolver reports typed reasons (unplayable, members only, live,
 /// SABR only); the panel shows the sentence, so the message is what travels.
-async fn resolve_youtube(job: &MediaJob) -> Result<(Manifest, SourcePlan), String> {
-    super::yt::resolve(&job.page_url, &job.title)
-        .await
-        .map_err(|error| error.to_string())
+async fn resolve_youtube(
+    app: &AppHandle,
+    job: &MediaJob,
+) -> Result<(Manifest, SourcePlan), String> {
+    super::ytdlp::resolve_page(app, &job.page_url, &job.title).await
 }
 
 async fn parse_hls(job: &MediaJob) -> Result<(Manifest, SourcePlan), String> {

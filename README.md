@@ -24,7 +24,7 @@ B Download Manager splits a file across multiple connections, writes each byte r
 Around that engine:
 
 - **Browser capture.** A Firefox extension and a Chrome/Edge build hand links and media to the app over a loopback bridge, so a download starts without pasting a URL. Settings owns the capture switch, the file types and the site list.
-- **Video and media.** HLS, MPEG-DASH and plain-file tracks are captured with the quality list; the two tracks are joined into one file by a native MP4 remuxer, with no re-encode and no external tool.
+- **Video and media.** HLS, MPEG-DASH and plain-file tracks are captured with the quality list; the two tracks are joined into one file by a native MP4 remuxer, with no re-encode. YouTube pages use the optional `yt-dlp` helper when it is installed and the in-house resolver otherwise.
 - **Site Grabber.** Walk a page, filter by extension, size and depth, and start only the files you want.
 - **Queue and recovery.** Ordered downloads with a simultaneous-download limit, categories, conflict dialogs and resume after a restart.
 - **Desktop fit.** System tray with three mark styles, toolbar packs, remembered window state, and an in-app What's New after each update.
@@ -53,7 +53,7 @@ pnpm tauri build --bundles deb,appimage     # Linux packages
 pnpm tauri build --target universal-apple-darwin --bundles app,dmg   # macOS
 ```
 
-Bundles land in `target/release/bundle/`. The media path is fully native, so a bundle needs no external video tool.
+Bundles land in `target/release/bundle/`. The installer ships no video tool; the optional YouTube helper is downloaded on demand and checked before it runs.
 
 Release builds are signed for the in-app updater. The signing key and the rotation procedure are documented in [docs/RELEASES.md](docs/RELEASES.md). The workflow publishes a **draft** release that a person reviews and publishes by hand; installed apps never see a draft.
 

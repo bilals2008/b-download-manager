@@ -264,3 +264,38 @@ export function mediaCancel(job: number): Promise<void> {
 export function mediaAllowCookies(job: number): Promise<MediaJobView> {
   return invoke<MediaJobView>("media_allow_cookies", { job });
 }
+
+/** Read the page again, for example after the video helper was installed. */
+export function mediaReparse(job: number): Promise<MediaJobView> {
+  return invoke<MediaJobView>("media_reparse", { job });
+}
+
+/** Whether the optional video helper is installed. */
+export function videoHelperStatus(): Promise<boolean> {
+  return invoke<boolean>("video_helper_status");
+}
+
+/** Download and check the optional video helper. */
+export function videoHelperInstall(): Promise<boolean> {
+  return invoke<boolean>("video_helper_install");
+}
+
+/** Keep a helper the person downloaded; `true` means it was checked. */
+export function videoHelperImport(path: string): Promise<boolean> {
+  return invoke<boolean>("video_helper_import", { path });
+}
+
+/** Whether the page is one the helper resolves better than the in-house path. */
+export function isYoutubePage(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return (
+      host === "youtu.be" ||
+      host === "youtube.com" ||
+      host.endsWith(".youtube.com") ||
+      host.endsWith(".youtube-nocookie.com")
+    );
+  } catch {
+    return false;
+  }
+}
