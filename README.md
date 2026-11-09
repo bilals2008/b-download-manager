@@ -12,7 +12,7 @@ A multi-connection desktop download manager for HTTP, HTTPS and FTP that resumes
 [![Rust](https://img.shields.io/badge/Rust-engine-000000?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Version](https://img.shields.io/badge/version-1.1.0-lightgrey?style=flat-square)](#)
+[![Version](https://img.shields.io/badge/version-1.1.1-lightgrey?style=flat-square)](#)
 [![License](https://img.shields.io/badge/license-MIT-2ea44f?style=flat-square)](LICENSE)
 
 </div>

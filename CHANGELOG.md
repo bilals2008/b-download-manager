@@ -10,6 +10,27 @@ edit one before its release ships if a bullet needs better words.
 
 ---
 
+## [1.1.1] - 9 November 2026
+
+### Added
+
+- **extension:** Follow the app theme
+- **video:** Install yt-dlp like Mister Download Manager does
+- **video:** Keep a yt-dlp the person downloaded when the release host fails
+
+### Changed
+
+- Satisfy rustfmt across the workspace
+- **whats-new:** Describe 1.1.1 for readers
+
+### Fixed
+
+- **release:** Read a changelog with Windows line endings
+- **video:** Satisfy clippy in the helper lookup
+- **video:** Resume a stopped download from its bytes
+- **video:** Repair downloads, merging and the browser panel
+
+
 ## [1.1.0] - 8 November 2026
 
 ### Added
