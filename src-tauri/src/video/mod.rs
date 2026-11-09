@@ -9,6 +9,7 @@
 pub(crate) mod capture;
 pub(crate) mod challenge;
 pub(crate) mod download;
+pub(crate) mod ffmpeg;
 pub(crate) mod lease;
 pub(crate) mod mp4;
 pub(crate) mod mux;
@@ -137,6 +138,13 @@ pub struct MediaJob {
     /// What the download is doing now: `Video`, `Audio`, `Saved`, ...
     pub stage: Option<String>,
     pub progress: idm_core::media::download::TrackProgress,
+    /// How much of the whole job is done, `0.0..=1.0`.
+    ///
+    /// A job with a separate sound track reports each track on its own, so the
+    /// byte totals of the two do not line up: the picture reaches its own total
+    /// before the sound has started. This fraction counts the finished tracks
+    /// and the part of the running one, so the percentage never walks backwards.
+    pub fraction: f64,
     pub control: Option<std::sync::Arc<TrackControl>>,
 }
 
@@ -177,6 +185,7 @@ impl MediaJob {
             done: false,
             stage: None,
             progress: Default::default(),
+            fraction: 0.0,
             control: None,
         }
     }
@@ -210,6 +219,7 @@ impl MediaJob {
             total: self.progress.total,
             segments_done: self.progress.segments_done,
             segments_total: self.progress.segments_total,
+            fraction: self.fraction.clamp(0.0, 1.0),
         }
     }
 }
@@ -239,6 +249,8 @@ pub struct MediaJobView {
     pub total: u64,
     pub segments_done: usize,
     pub segments_total: usize,
+    /// How much of the whole job is done, `0.0..=1.0`, across every track.
+    pub fraction: f64,
 }
 
 fn empty_manifest() -> Manifest {

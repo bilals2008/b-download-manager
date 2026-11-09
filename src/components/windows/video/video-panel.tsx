@@ -13,13 +13,13 @@ import { openPath } from "@/lib/ipc";
 import {
   formatDuration,
   initialQuality,
-  isYoutubePage,
   mediaAllowCookies,
   mediaCancel,
   mediaDownload,
   mediaReparse,
   mediaRows,
   videoHelperStatus,
+  type VideoHelperStatus,
 } from "@/lib/media";
 import { closeWindow, showWindowWhenPainted } from "@/lib/window";
 
@@ -37,25 +37,25 @@ export function VideoPanel({ initialJob }: { initialJob: number }) {
   const [busy, setBusy] = useState(false);
   const [consentBusy, setConsentBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [helperInstalled, setHelperInstalled] = useState<boolean | null>(null);
+  const [helperStatus, setHelperStatus] = useState<VideoHelperStatus | null>(null);
   const [offerDismissed, setOfferDismissed] = useState(false);
   const selectedFor = useRef<number | null>(null);
 
   const rows = useMemo(() => (view ? mediaRows(view) : []), [view]);
 
-  // Ask once whether the optional helper is there. A failed check is treated
-  // as "there": a status error must not turn into an install prompt.
+  // Ask once which helpers are there. A failed check is treated as "both
+  // there": a status error must not turn into an install prompt.
   useEffect(() => {
     let cancelled = false;
     videoHelperStatus()
-      .then((installed) => {
+      .then((status) => {
         if (!cancelled) {
-          setHelperInstalled(installed);
+          setHelperStatus(status);
         }
       })
       .catch(() => {
         if (!cancelled) {
-          setHelperInstalled(true);
+          setHelperStatus({ ytdlp: true, ffmpeg: true });
         }
       });
     return () => {
@@ -64,7 +64,11 @@ export function VideoPanel({ initialJob }: { initialJob: number }) {
   }, []);
 
   const offerHelper = Boolean(
-    view && helperInstalled === false && !offerDismissed && isYoutubePage(view.pageUrl),
+    view &&
+      view.state !== "parsing" &&
+      helperStatus &&
+      (!helperStatus.ytdlp || !helperStatus.ffmpeg) &&
+      !offerDismissed,
   );
 
   // A ready job opens on this host's last choice, else 1080p. Later polls
@@ -74,6 +78,9 @@ export function VideoPanel({ initialJob }: { initialJob: number }) {
       selectedFor.current = view.job;
       setSelected(initialQuality(view));
       setActionError(null);
+      // A newer video in the same window gets its own chance to set the
+      // helpers up.
+      setOfferDismissed(false);
     }
   }, [view]);
 
@@ -94,13 +101,23 @@ export function VideoPanel({ initialJob }: { initialJob: number }) {
       return;
     }
     const row = rows.find((entry) => entry.id === target);
+    // The window serves every video, so a click can land after another video
+    // replaced this one. A quality that is not in the list on screen is not
+    // this job's quality.
+    if (!row) {
+      setSelected(null);
+      setActionError("Choose a quality for this video.");
+      return;
+    }
     setBusy(true);
     setActionError(null);
     try {
       await mediaDownload(view.job, {
-        video: target,
-        audio: row?.audio ?? null,
-        name: view.title,
+        video: row.id,
+        audio: row.audio ?? null,
+        // The chosen quality belongs in the name, so two files of the same
+        // video do not replace each other.
+        name: `${view.title || "video"} ${row.label}`,
       });
       await refresh();
     } catch (error) {
@@ -126,8 +143,8 @@ export function VideoPanel({ initialJob }: { initialJob: number }) {
     }
   }
 
-  async function afterHelper() {
-    setHelperInstalled(true);
+  async function afterHelper(status: VideoHelperStatus) {
+    setHelperStatus(status);
     if (!view) {
       return;
     }
@@ -155,10 +172,9 @@ export function VideoPanel({ initialJob }: { initialJob: number }) {
     }
   }
 
-  const percent =
-    view && view.total > 0
-      ? Math.min(100, Math.max(0, (view.downloaded / view.total) * 100))
-      : 0;
+  const percent = view
+    ? Math.min(100, Math.max(0, view.fraction * 100))
+    : 0;
 
   const progressLine = view
     ? view.total > 0
@@ -228,10 +244,12 @@ export function VideoPanel({ initialJob }: { initialJob: number }) {
       ) : null}
 
       <main className="flex min-h-0 flex-1 flex-col px-4 pb-2">
-        {offerHelper ? (
+        {offerHelper && helperStatus ? (
           <HelperOffer
-            onInstalled={() => void afterHelper()}
-            onDismiss={() => setOfferDismissed(true)}
+            open={offerHelper}
+            status={helperStatus}
+            onClose={() => setOfferDismissed(true)}
+            onInstalled={(status) => void afterHelper(status)}
           />
         ) : null}
 

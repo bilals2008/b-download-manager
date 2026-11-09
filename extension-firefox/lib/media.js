@@ -211,7 +211,7 @@ function bdmMediaFileName(url, fallback) {
       .replace(/\s+/g, " ")
       .trim()
       .slice(0, 120);
-    return `${base || "video"} ${pageLabel.toLowerCase()}.mp4`;
+    return `${base || "video"} ${pageLabel.toLowerCase()}.${bdmMediaExtension(url)}`;
   }
   if (bdmIsManifestUrl(url)) return bdmManifestFileName(fallback);
   const base = String(fallback || "")

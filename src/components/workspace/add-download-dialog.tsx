@@ -311,7 +311,10 @@ export function AddDownloadDialog({
   const servedName =
     probe.kind === "ready" && probe.name ? safeFileName(probe.name) : null;
   const browserName = handed?.name ? safeFileName(handed.name) : null;
-  const name = servedName ?? browserName ?? suggestedName;
+  // The browser's name wins: the extension saw the page's own label (Facebook
+  // HD/SD, YouTube's quality) and the server's name is only the file's last
+  // path segment, which drops it.
+  const name = browserName ?? servedName ?? suggestedName;
   const category =
     categoryOverride ?? (name ? detectCategory(name, categories) : "General");
   const categoryIcon = categories.find(

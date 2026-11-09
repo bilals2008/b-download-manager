@@ -625,6 +625,37 @@ impl AppState {
         }
     }
 
+    /// Remove the media folders no running job owns.
+    ///
+    /// A media job lives in memory; a folder that no job names is the leftover
+    /// of one that was forgotten or died with the last run. Called when a row
+    /// is removed, so the reader sees the disk match the list at once instead
+    /// of after the next start.
+    pub fn sweep_media_folders(&self) {
+        let Some(staging) = self.staging() else {
+            return;
+        };
+        let claimed: Vec<String> = self
+            .media_jobs_snapshot()
+            .into_iter()
+            .filter_map(|job| job.work_dir.clone())
+            .collect();
+        let Ok(entries) = std::fs::read_dir(staging.media_root()) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+            let name = path.to_string_lossy().to_string();
+            if claimed.iter().any(|claimed| claimed == &name) {
+                continue;
+            }
+            let _ = std::fs::remove_dir_all(&path);
+        }
+    }
+
     /// Remove the parts and manifests in one old flat folder that no row in
     /// the list claims.
     ///

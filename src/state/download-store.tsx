@@ -315,6 +315,10 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
   // Cancelled tasks can emit one last update after the row was removed. Their
   // ids are never reused, so a tombstone set is enough to keep them out.
   const removed = useRef(new Set<number>());
+  // A media row the reader removed stays gone for the session. The page that
+  // created it keeps asking for it, so without this the same row would come
+  // back on the next poll.
+  const dismissedMedia = useRef(new Set<string>());
   /** When each media row first appeared, so it does not jump in the order. */
   const mediaAdded = useRef(new Map<number, number>());
   const lastMediaSignature = useRef("");
@@ -424,6 +428,10 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
         error: job.error,
         resumable: false,
         description: job.stage,
+        mediaStage: job.stage,
+        mediaSegmentsDone: job.segmentsDone,
+        mediaSegmentsTotal: job.segmentsTotal,
+        mediaProgress: job.fraction,
       };
     },
     [sampleFor],
@@ -528,17 +536,28 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
         if (cancelled) {
           return;
         }
-        const shown = jobs.filter(
-          (job) =>
+        const shown = jobs.filter((job) => {
+          if (dismissedMedia.current.has(job.pageUrl || job.title)) {
+            return false;
+          }
+          // The failure sentence of a row is not a media title. A page whose
+          // title is that sentence can otherwise hand the app a job that saves
+          // the sentence as a file name.
+          const names = `${job.title} ${job.pageUrl} ${job.dest ?? ""}`;
+          if (names.includes("open the failure details")) {
+            return false;
+          }
+          return (
             job.downloading ||
             job.done ||
             Boolean(job.error) ||
-            job.stage === "Stopped",
-        );
+            job.stage === "Stopped"
+          );
+        });
         const signature = shown
           .map(
             (job) =>
-              `${job.job}:${job.state}:${job.downloaded}:${job.error ?? ""}:${job.stage ?? ""}`,
+              `${job.job}:${job.state}:${job.downloaded}:${job.fraction}:${job.error ?? ""}:${job.stage ?? ""}`,
           )
           .join("|");
         if (signature !== lastMediaSignature.current) {
@@ -1016,6 +1035,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
   async function deleteFile(id: number) {
     const item = latest.current.downloads.find((row) => row.id === id);
     if (item?.mediaJob) {
+      dismissedMedia.current.add(item.url);
       await mediaForget(item.mediaJob, true);
       forget(id);
       return;
@@ -1475,6 +1495,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
         ids.map(async (id) => {
           const item = latest.current.downloads.find((row) => row.id === id);
           if (item?.mediaJob) {
+            dismissedMedia.current.add(item.url);
             await mediaForget(item.mediaJob, false);
             forget(id);
             return;

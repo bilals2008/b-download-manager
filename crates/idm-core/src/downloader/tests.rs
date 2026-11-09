@@ -1665,6 +1665,48 @@ async fn a_confirmed_replace_puts_the_download_over_the_old_file() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// A split can append a range whose start is before a range that was already
+/// in the list. The parts are a file only when they are joined by where they
+/// start, not by when they were planned.
+#[tokio::test]
+async fn parts_are_joined_in_file_order_not_plan_order() {
+    let dir = temp_dir("assembly-order");
+    let dest = dir.join("out.bin");
+    let data = sample_data();
+    let download = Download::new(
+        80,
+        "https://example.com/a.bin".to_string(),
+        dest.clone(),
+        4,
+        None,
+        None,
+    )
+    .expect("download");
+
+    // The first part was split after the second one was already in the list,
+    // so the list order is 0..300, 512..1024, 300..512.
+    let ranges = [(0u64, 300u64), (512, 1024), (300, 512)];
+    let mut segments = Vec::new();
+    for (index, (start, end)) in ranges.iter().enumerate() {
+        let part = segmenter::part_path(&dir, &download.stem, index as u32);
+        std::fs::write(&part, &data[*start as usize..*end as usize]).expect("part file");
+        segments.push(segmenter::Segment {
+            id: index as u32,
+            start: *start,
+            end: *end,
+            downloaded: end - start,
+            part,
+            status: SegmentStatus::Done,
+        });
+    }
+    *download.segments.lock().expect("segments lock") = segments;
+    download.total.store(data.len() as u64, Ordering::SeqCst);
+
+    assemble(&download).await.expect("the assembly");
+    assert_eq!(std::fs::read(&dest).expect("the file"), data);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn discarding_progress_removes_the_parts_and_the_manifest() {
     let dir = temp_dir("discard-progress");

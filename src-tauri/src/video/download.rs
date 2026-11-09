@@ -50,6 +50,8 @@ pub struct Delivery {
     /// progressive file is called muxed by the manifest and can still be a
     /// silent clip, which is the file the user asked for.
     pub audio_selected: bool,
+    /// The `ffmpeg` a join may use when the native muxers refuse the pair.
+    pub ffmpeg: Option<PathBuf>,
 }
 
 /// Start the chosen track(s). The work is done on a task of its own; the
@@ -81,13 +83,23 @@ pub fn start(
         return Err("that quality is not in the manifest".to_string());
     };
     let audio_format = match request.audio.as_deref() {
-        Some(id) => Some(
-            manifest
-                .formats
-                .iter()
-                .find(|format| format.id == id)
-                .ok_or_else(|| "that audio track is not in the manifest".to_string())?,
-        ),
+        Some(id) => manifest
+            .formats
+            .iter()
+            .find(|format| format.id == id)
+            // A quality list can outlive the exact sound id it was drawn
+            // from: the page was resolved again, or a second candidate was
+            // merged into the job. The sound paired with the chosen picture
+            // is the next best answer, and a download with the right picture
+            // beats one that refuses before its first byte.
+            .or_else(|| {
+                manifest
+                    .pairs
+                    .iter()
+                    .find(|pair| pair.video == request.video)
+                    .and_then(|pair| pair.audio.as_deref())
+                    .and_then(|audio| manifest.formats.iter().find(|format| format.id == audio))
+            }),
         None => None,
     };
 
@@ -128,6 +140,7 @@ pub fn start(
         audio_selected: audio_only || audio_format.is_some(),
         extension: extension.clone(),
         container,
+        ffmpeg: super::tools::ffmpeg(app),
     };
     let file_name = with_extension(&name, &extension);
     let dest = crate::bridge::dest::unique(&folder, &file_name);
@@ -158,6 +171,7 @@ pub fn start(
         job.dest = Some(dest_text.clone());
         job.stage = Some("Starting".to_string());
         job.progress = TrackProgress::default();
+        job.fraction = 0.0;
         job.control = Some(control.clone());
         job.work_dir = Some(work_dir.to_string_lossy().to_string());
     });
@@ -199,8 +213,21 @@ async fn run(
         // dead address, so what it said is written down.
         match super::ytdlp::resolve_page(app, &job.page_url, &job.title).await {
             Ok((manifest, source)) => {
-                job.manifest = Some(manifest);
-                job.source = Some(source);
+                // The page is asked again seconds after the panel listed it,
+                // and a second answer can be a shorter list (the site dropped
+                // a rendition, or the helper fell back to the in-house
+                // resolver). The quality the reader picked must survive:
+                // keeping the list they chose from is better than refusing
+                // before the first byte.
+                if keeps_selection(&manifest, &request) {
+                    job.manifest = Some(manifest);
+                    job.source = Some(source);
+                } else {
+                    idm_core::log::write(
+                        "warn",
+                        "the page was read again without the chosen quality; the list the panel showed is kept",
+                    );
+                }
             }
             Err(error) => {
                 idm_core::log::write("warn", &format!("resolving the page again failed: {error}"));
@@ -281,6 +308,16 @@ async fn run(
                 );
                 match super::ytdlp::renew_page(app, &job.page_url, &job.title).await {
                     Ok((manifest, source)) => {
+                        if !keeps_selection(&manifest, &request) {
+                            idm_core::log::write(
+                                "warn",
+                                "the renewed page lost the chosen track; the old plan is kept",
+                            );
+                            break Err(Outcome::Failed(TrackError::new(
+                                error.problem,
+                                "the page no longer offers the chosen quality".to_string(),
+                            )));
+                        }
                         let before = chosen_lease(job.source.as_ref(), &request.video).cloned();
                         let after = chosen_lease(Some(&source), &request.video).cloned();
                         match (&before, &after) {
@@ -361,8 +398,18 @@ async fn run(
                         job.stage = Some("Stopped".to_string());
                     });
                 }
-                Ok(Err(DeliverError::Failed(message))) => finish_failed(&state, job.id, message),
-                Err(error) => finish_failed(&state, job.id, error.to_string()),
+                Ok(Err(DeliverError::Failed(message))) => {
+                    // The tracks were downloaded once and could not be made
+                    // into the file that was asked for. Keeping them only
+                    // makes the next try fail in the same place; the bytes
+                    // are fetched again instead.
+                    let _ = std::fs::remove_dir_all(&work_dir);
+                    finish_failed(&state, job.id, message);
+                }
+                Err(error) => {
+                    let _ = std::fs::remove_dir_all(&work_dir);
+                    finish_failed(&state, job.id, error.to_string());
+                }
             }
         }
         Err(Outcome::Cancelled) => {
@@ -415,6 +462,12 @@ pub(super) enum DeliverError {
 /// the engine itself rather than here.
 fn worth_another_address(error: &TrackError) -> bool {
     matches!(error.problem, TrackProblem::Denied | TrackProblem::Changed)
+}
+
+/// Whether a freshly read page still names every track the reader chose.
+fn keeps_selection(manifest: &idm_core::media::Manifest, request: &DownloadRequest) -> bool {
+    let has = |id: &str| manifest.formats.iter().any(|format| format.id == id);
+    has(&request.video) && request.audio.as_deref().map_or(true, has)
 }
 
 /// The lease of the track a job is downloading, when its plan carries leases.
@@ -502,20 +555,55 @@ pub(super) fn deliver(
 
     let staged = if already {
         stage("Checking");
-        verify::check_finished(&primary, expect()).map_err(DeliverError::Failed)?;
-        primary
+        match verify::check_finished(&primary, expect()) {
+            Ok(_) => primary,
+            Err(error) => match (container, delivery.ffmpeg.as_deref()) {
+                // The bytes are the container the name promises, but their
+                // index does not describe them. ffmpeg reads the samples and
+                // writes a fresh index while copying them.
+                (Some(container), Some(ffmpeg)) => {
+                    stage("Joining");
+                    let joined = work_dir.join(format!("final.{}", delivery.extension));
+                    let _ = std::fs::remove_file(&joined);
+                    mux::join_ffmpeg(&inputs, &joined, container, ffmpeg)
+                        .map_err(delivery_error)?;
+                    stage("Checking");
+                    if let Err(second) = verify::check_finished(&joined, expect()) {
+                        let _ = std::fs::remove_file(&joined);
+                        return Err(DeliverError::Failed(second));
+                    }
+                    joined
+                }
+                _ => return Err(DeliverError::Failed(error)),
+            },
+        }
     } else if let Some(container) = container {
         stage("Joining");
         let joined = work_dir.join(format!("final.{}", delivery.extension));
         let _ = std::fs::remove_file(&joined);
-        mux::join(&inputs, &joined, work_dir, container).map_err(|error| match error {
-            mux::MuxError::Cancelled => DeliverError::Cancelled,
-            other => DeliverError::Failed(other.to_string()),
-        })?;
+        mux::join(
+            &inputs,
+            &joined,
+            work_dir,
+            container,
+            delivery.ffmpeg.as_deref(),
+        )
+        .map_err(delivery_error)?;
         stage("Checking");
         if let Err(error) = verify::check_finished(&joined, expect()) {
             let _ = std::fs::remove_file(&joined);
-            return Err(DeliverError::Failed(error));
+            let Some(ffmpeg) = delivery.ffmpeg.as_deref() else {
+                return Err(DeliverError::Failed(error));
+            };
+            // The join produced a file its own index cannot describe; ffmpeg
+            // writes the samples and the index again.
+            stage("Joining");
+            mux::join_ffmpeg(&inputs, &joined, container, ffmpeg).map_err(delivery_error)?;
+            stage("Checking");
+            if let Err(second) = verify::check_finished(&joined, expect()) {
+                let _ = std::fs::remove_file(&joined);
+                return Err(DeliverError::Failed(second));
+            }
         }
         joined
     } else {
@@ -540,6 +628,14 @@ pub(super) fn deliver(
         ))
     })?;
     Ok(dest.to_path_buf())
+}
+
+/// A failed join, in the form the delivery step answers with.
+fn delivery_error(error: mux::MuxError) -> DeliverError {
+    match error {
+        mux::MuxError::Cancelled => DeliverError::Cancelled,
+        other => DeliverError::Failed(other.to_string()),
+    }
 }
 
 /// A callback that writes the job's stage, for the blocking delivery step.
@@ -945,10 +1041,28 @@ fn progress_sink(
             segments_done: segments_before + progress.segments_done,
             segments_total,
         };
+        // The byte total of a track is only known once it has been probed, and
+        // a picture that finishes before its sound would report 100% and then
+        // drop when the sound's bytes arrive. The share of the track that is
+        // done is the stable answer: the finished tracks plus the part of this
+        // one, out of every track the job has.
+        let track = if progress.total > 0 {
+            (progress.downloaded as f64 / progress.total as f64).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        let fraction = if segments_total > 0 {
+            (segments_before as f64 + track) / segments_total as f64
+        } else {
+            0.0
+        };
         let state = app.state::<AppState>();
         state.update_media_job(id, |job| {
             job.stage = Some(stage.to_string());
             job.progress = combined;
+            // A resumed track can report the bytes it already had first; the
+            // bar follows the highest point it has reached.
+            job.fraction = job.fraction.max(fraction.clamp(0.0, 1.0));
         });
     })
 }
@@ -960,6 +1074,7 @@ fn finish_saved(state: &AppState, id: u64, dest: PathBuf) {
         job.error = None;
         job.stage = Some("Saved".to_string());
         job.dest = Some(dest.to_string_lossy().to_string());
+        job.fraction = 1.0;
     });
 }
 
@@ -1109,6 +1224,7 @@ mod tests {
             video: true,
             audio: false,
             audio_selected: false,
+            ffmpeg: None,
         }
     }
 

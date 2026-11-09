@@ -1524,6 +1524,11 @@ async fn assemble(download: &Arc<Download>) -> Result<(), String> {
         .lock()
         .expect("segments lock poisoned")
         .clone();
+    // A range split after a later one was added is appended to the list, so
+    // the list is not in file order. The parts have to be joined by where
+    // they start, not by when they were planned.
+    let mut segments = segments;
+    segments.sort_by_key(|segment| segment.start);
     let dest = download.dest.clone();
     let tmp = join_temp_path(&download.dir, &download.stem);
 

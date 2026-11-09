@@ -31,7 +31,7 @@
 
   const FAB_SIZE = 30;
   const FAB_GAP = 8;
-  const PANEL_WIDTH = 260;
+  const PANEL_WIDTH = 300;
   const EDGE = 8;
   const MIN_WIDTH = 160;
   const MIN_HEIGHT = 90;
@@ -469,8 +469,11 @@
     const height = panel.offsetHeight || 160;
 
     const fabWidth = state.fab.width || FAB_SIZE;
-    let left = state.fab.x + fabWidth - PANEL_WIDTH;
-    left = clamp(left, EDGE, Math.max(EDGE, window.innerWidth - EDGE - PANEL_WIDTH));
+    // The panel's real width, not the constant: a style or a translated
+    // title can make it wider, and the right edge must stay on the screen.
+    const panelWidth = panel.offsetWidth || PANEL_WIDTH;
+    let left = state.fab.x + fabWidth - panelWidth;
+    left = clamp(left, EDGE, Math.max(EDGE, window.innerWidth - EDGE - panelWidth));
 
     const fabHeight = state.fab.height || FAB_SIZE;
     let top = state.fab.y + fabHeight + FAB_GAP;
@@ -540,7 +543,20 @@
     state.hovered = video;
 
     const direct = bdmSourcesFor(video);
-    const sources = direct.length ? direct : bdmCapturedSources();
+    // A page that names complete files (Facebook HD/SD) lists those, not the
+    // fragments its player requested: the fragments are not qualities and
+    // their rows all look the same.
+    const fullFiles =
+      typeof bdmPageSources === "function"
+        ? bdmPageSources()
+            .filter((source) => source.fullFile)
+            .map((source) => source.url)
+        : [];
+    const sources = fullFiles.length
+      ? fullFiles
+      : direct.length
+        ? direct
+        : bdmCapturedSources();
     // A YouTube page always offers its button: the application reads the video
     // from the page itself, so a plain address is not needed first.
     if (!sources.length && !bdmOverlayYoutube()) {
@@ -581,7 +597,13 @@
   function updateHeading() {
     if (!state.ui) return;
     const first = state.sources[0];
-    const name = bdmIsCapturedMedia(first) ? bdmPageName() : bdmNameFromUrl(first) || bdmPageName();
+    const fullFile =
+      typeof bdmPageSourceIsFullFile === "function" &&
+      bdmPageSourceIsFullFile(first);
+    const name =
+      fullFile || bdmIsCapturedMedia(first)
+        ? bdmPageName()
+        : bdmNameFromUrl(first) || bdmPageName();
     state.ui.title.textContent = name;
     state.ui.fab.setAttribute("aria-label", `Download ${name} with B Download Manager`);
     state.ui.fab.title = `Download ${name}`;
@@ -1066,7 +1088,9 @@
         payload: {
           video: row.id,
           audio: row.audio,
-          name: state.qualityView.title || bdmPageName(),
+          // The quality belongs in the file name, the way the page's own
+          // complete files carry it.
+          name: `${state.qualityView.title || bdmPageName()} ${row.label.toLowerCase()}`,
         },
       });
       if (!answer || !answer.ok) {

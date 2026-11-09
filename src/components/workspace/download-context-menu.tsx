@@ -20,6 +20,7 @@ import {
   type Download,
 } from "@/lib/downloads";
 import { describeError } from "@/lib/errors";
+import { openVideoWindow } from "@/lib/media";
 import { openPath, openProgressWindow } from "@/lib/ipc";
 import { useDownloads } from "@/state/download-store";
 
@@ -142,7 +143,13 @@ export function DownloadContextMenu({
         dequeue(items.map((download) => download.id));
         break;
       case "recover":
-        onShowFailure(item);
+        if (item.mediaJob !== undefined) {
+          openVideoWindow(item.mediaJob).catch((failure: unknown) => {
+            reportError(describeError(failure));
+          });
+        } else {
+          onShowFailure(item);
+        }
         break;
       case "redownload":
         redownloadSelected();
@@ -160,9 +167,15 @@ export function DownloadContextMenu({
         open(splitPath(item.dest).dir);
         break;
       case "open-window":
-        openProgressWindow(item.id).catch((failure: unknown) => {
-          reportError(describeError(failure));
-        });
+        if (item.mediaJob !== undefined) {
+          openVideoWindow(item.mediaJob).catch((failure: unknown) => {
+            reportError(describeError(failure));
+          });
+        } else {
+          openProgressWindow(item.id).catch((failure: unknown) => {
+            reportError(describeError(failure));
+          });
+        }
         break;
       case "copy-address":
         void copyAddress();
@@ -203,7 +216,9 @@ function rowsFor(
 ): MenuRow<RowCommand>[] {
   // One row can be opened or shown in its folder; a handful of them cannot.
   const single = items.length === 1 ? items[0] : null;
-  const anyDownloading = items.some((item) => item.status === "downloading");
+  const anyDownloading = items.some(
+    (item) => item.status === "downloading" && item.mediaJob === undefined,
+  );
   const anyStoppable = items.some(
     (item) =>
       item.status === "downloading" ||
@@ -212,14 +227,20 @@ function rowsFor(
   );
   // A queued row is waiting already; a finished one has nothing to wait for.
   const canQueue = items.some(
-    (item) => item.status !== "completed" && item.status !== "queued",
+    (item) =>
+      item.mediaJob === undefined &&
+      item.status !== "completed" &&
+      item.status !== "queued",
   );
-  const canDequeue = items.some((item) => item.status === "queued");
+  const canDequeue = items.some(
+    (item) => item.mediaJob === undefined && item.status === "queued",
+  );
   const canResume = items.some(
     (item) =>
-      item.status === "paused" ||
-      item.status === "stopped" ||
-      item.status === "error",
+      item.mediaJob === undefined &&
+      (item.status === "paused" ||
+        item.status === "stopped" ||
+        item.status === "error"),
   );
   // Deleting the file is the one command that loses something on the disk, so
   // it is offered for one finished row and never for a batch.
@@ -258,7 +279,10 @@ function rowsFor(
     },
     {
       command: "recover",
-      label: "Show error and retry...",
+      label:
+        single?.mediaJob !== undefined
+          ? "Open video window"
+          : "Show error and retry...",
       icon: <WarningMark tone="red" className="size-3.5" />,
       disabled: single?.status !== "error",
     },
@@ -267,10 +291,12 @@ function rowsFor(
       label: "Redownload",
       icon: <RefreshGlyph className="size-3.5" />,
       // A running row has to be stopped first; the engine refuses to replace
-      // a row it is still writing.
-      disabled: items.some(
-        (item) => item.status === "downloading" || item.status === "queued",
-      ),
+      // a row it is still writing. A media row is started from its window.
+      disabled:
+        single?.mediaJob !== undefined ||
+        items.some(
+          (item) => item.status === "downloading" || item.status === "queued",
+        ),
     },
     "separator",
     {
@@ -287,7 +313,10 @@ function rowsFor(
     },
     {
       command: "open-window",
-      label: "Download progress window",
+      label:
+        single?.mediaJob !== undefined
+          ? "Video quality window"
+          : "Download progress window",
       icon: <DownloadGlyph className="size-3.5" />,
       disabled: single === null,
     },
@@ -332,6 +361,9 @@ function rowsFor(
       command: "properties",
       label: "Properties...",
       icon: <InfoGlyph className="size-3.5" />,
+      // A media row's file is placed by its video window, not by the engine's
+      // name and destination commands.
+      disabled: single?.mediaJob !== undefined,
     },
     "separator",
     {

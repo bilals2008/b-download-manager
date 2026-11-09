@@ -82,6 +82,7 @@ function job(overrides: Partial<MediaJobView> = {}): MediaJobView {
     total: 0,
     segmentsDone: 0,
     segmentsTotal: 0,
+    fraction: 0,
     ...overrides,
   };
 }

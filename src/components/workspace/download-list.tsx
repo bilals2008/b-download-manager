@@ -31,6 +31,7 @@ import {
   type SortKey,
 } from "@/lib/downloads";
 import { describeError } from "@/lib/errors";
+import { openVideoWindow } from "@/lib/media";
 import {
   chooseFolder,
   openProgressWindow,
@@ -125,12 +126,22 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
 
   /** Open the window that shows this download in flight. */
   function openProgress(item: Download) {
-    openProgressWindow(item.id).catch((failure: unknown) => {
+    const shown =
+      item.mediaJob === undefined
+        ? openProgressWindow(item.id)
+        : openVideoWindow(item.mediaJob);
+    shown.catch((failure: unknown) => {
       reportError(describeError(failure));
     });
   }
 
   function openFailure(item: Download) {
+    // A media row has no engine recovery; its window explains the failure and
+    // offers the download again after the cause is fixed.
+    if (item.mediaJob !== undefined) {
+      openProgress(item);
+      return;
+    }
     setRecoveryError(null);
     setFailureId(item.id);
   }

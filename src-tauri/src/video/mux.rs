@@ -119,13 +119,16 @@ impl Drop for CancelFlag<'_> {
 
 /// Join the tracks in order into `output` in `container`. **No re-encode.**
 ///
-/// MP4 and M4A are written natively; every other container is refused. An
-/// empty input list is refused; the caller never has nothing to join.
+/// The native muxers write the pairs they know. When they refuse the tracks —
+/// a WebM picture with an AAC sound, or a TS stream — `ffmpeg` copies them
+/// into the same container instead. An empty input list is refused; the caller
+/// never has nothing to join.
 pub fn join(
     inputs: &[PathBuf],
     output: &Path,
     work_dir: &Path,
     container: Container,
+    ffmpeg: Option<&Path>,
 ) -> Result<(), MuxError> {
     if inputs.is_empty() {
         return Err(MuxError::Io("there is nothing to join".to_string()));
@@ -133,10 +136,47 @@ pub fn join(
     // A flag left by a cancel that arrived before this join is stale.
     clear_cancel(output);
     let _cancel_flag = CancelFlag(output);
-    match container {
+    let native = match container {
         Container::Mp4 | Container::M4a => super::mp4::join(inputs, output, work_dir, container),
         Container::Mkv | Container::Webm => super::webm::join(inputs, output, work_dir, container),
+    };
+    match native {
+        Ok(()) => Ok(()),
+        Err(MuxError::Cancelled) => Err(MuxError::Cancelled),
+        Err(MuxError::Io(native_error)) => match ffmpeg {
+            Some(exe) => super::ffmpeg::join(exe, inputs, output, container).map_err(|error| {
+                // The native joiner's reason is the precise one for bytes it
+                // knows; ffmpeg's is the one that names what it could not copy.
+                match error {
+                    MuxError::Cancelled => MuxError::Cancelled,
+                    MuxError::Io(text) => MuxError::Io(format!("{native_error}; ffmpeg: {text}")),
+                }
+            }),
+            None => Err(MuxError::Io(format!(
+                "{native_error}; install the video helpers to join this pair"
+            ))),
+        },
     }
+}
+
+/// Join the tracks with `ffmpeg` even when the native muxers accept them.
+///
+/// The delivery step calls this when the native joiner produced a file whose
+/// index does not describe its own bytes: the bytes are readable, the index is
+/// not, and `ffmpeg` writes a fresh one while copying the streams.
+pub fn join_ffmpeg(
+    inputs: &[PathBuf],
+    output: &Path,
+    container: Container,
+    ffmpeg: &Path,
+) -> Result<(), MuxError> {
+    if inputs.is_empty() {
+        return Err(MuxError::Io("there is nothing to join".to_string()));
+    }
+    // A flag left by a cancel that arrived before this join is stale.
+    clear_cancel(output);
+    let _cancel_flag = CancelFlag(output);
+    super::ffmpeg::join(ffmpeg, inputs, output, container)
 }
 
 /// The container the research's table gives this pair of tracks.
@@ -244,9 +284,113 @@ mod tests {
             &output,
             &work,
             Container::Mp4,
+            None,
         )
         .expect_err("a missing track");
         assert!(matches!(error, MuxError::Io(_)), "{error}");
         assert!(!output.exists());
+    }
+
+    /// The real `ffmpeg`, when this machine has one. The test skips without it;
+    /// the join itself is what is being checked, not the presence of a tool.
+    fn ffmpeg() -> Option<PathBuf> {
+        std::process::Command::new("ffmpeg")
+            .arg("-version")
+            .output()
+            .ok()
+            .filter(|output| output.status.success())
+            .map(|_| PathBuf::from("ffmpeg"))
+            .or_else(|| {
+                std::process::Command::new("ffmpeg.exe")
+                    .arg("-version")
+                    .output()
+                    .ok()
+                    .filter(|output| output.status.success())
+                    .map(|_| PathBuf::from("ffmpeg.exe"))
+            })
+    }
+
+    #[test]
+    fn ffmpeg_joins_a_pair_the_native_muxer_cannot_read() {
+        let Some(ffmpeg) = ffmpeg() else { return };
+        use std::process::Command;
+
+        let dir = std::env::temp_dir().join(format!("bdm-mux-ts-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("the test folder");
+        let video = dir.join("video.track");
+        let audio = dir.join("audio.track");
+
+        // A TS picture, which the native MP4 muxer refuses, and an AAC sound
+        // in an MP4, its own file.
+        let made_video = Command::new(&ffmpeg)
+            .args([
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc=size=160x120:rate=10",
+                "-t",
+                "0.4",
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+                "-f",
+                "mpegts",
+                "-y",
+            ])
+            .arg(&video)
+            .status()
+            .map(|status| status.success())
+            .unwrap_or(false);
+        // A build without the encoder cannot make the fixture; it is not the
+        // joiner that failed.
+        if !made_video {
+            let _ = std::fs::remove_dir_all(&dir);
+            return;
+        }
+        let made_audio = Command::new(&ffmpeg)
+            .args([
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=frequency=440:sample_rate=44100",
+                "-t",
+                "0.4",
+                "-c:a",
+                "aac",
+                "-f",
+                "mp4",
+                "-y",
+            ])
+            .arg(&audio)
+            .status()
+            .map(|status| status.success())
+            .unwrap_or(false);
+        if !made_audio {
+            let _ = std::fs::remove_dir_all(&dir);
+            return;
+        }
+
+        let out = dir.join("final.mp4");
+        join(
+            &[video, audio],
+            &out,
+            &dir,
+            Container::Mp4,
+            Some(ffmpeg.as_path()),
+        )
+        .expect("ffmpeg joins the pair");
+
+        let info = super::super::verify::inspect(&out).expect("the joined file");
+        assert!(info.video_codec.is_some(), "the picture is there");
+        assert!(info.audio_codec.is_some(), "the sound is there");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

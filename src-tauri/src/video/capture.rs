@@ -205,6 +205,7 @@ pub async fn download(app: &AppHandle, id: u64, body: &[u8]) -> (u16, Value) {
     };
 
     let name = dest::sanitize(&request.name)
+        .filter(|name| !name.contains("open the failure details"))
         .or_else(|| dest::sanitize(&job.title))
         .unwrap_or_else(|| "video".to_string());
 
@@ -277,6 +278,7 @@ pub fn media_download(
         }
     };
     let name = dest::sanitize(&request.name)
+        .filter(|name| !name.contains("open the failure details"))
         .or_else(|| dest::sanitize(&media.title))
         .unwrap_or_else(|| "video".to_string());
     super::download::start(&app, &media, &request, folder, name)?;
@@ -337,6 +339,9 @@ pub fn media_forget(app: AppHandle, job: u64, delete_file: bool) -> Result<(), S
         }
     }
     state.remove_media_job(job);
+    // A removed row's folder is gone, and so is any older one no live job
+    // claims: the media tree and the list agree again.
+    state.sweep_media_folders();
     Ok(())
 }
 
@@ -403,6 +408,7 @@ pub fn media_reparse(app: AppHandle, job: u64) -> Result<MediaJobView, String> {
         job.manifest = None;
         job.source = None;
         job.progress = Default::default();
+        job.fraction = 0.0;
     });
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
@@ -414,17 +420,30 @@ pub fn media_reparse(app: AppHandle, job: u64) -> Result<MediaJobView, String> {
         .ok_or_else(|| "unknown media job".to_string())
 }
 
-/// Whether the video helper is installed.
+/// Bring the quality panel of a media job back to the front.
+///
+/// Media rows in the download list are not engine downloads, so they have no
+/// progress window of their own; their window is the quality panel.
 #[tauri::command]
-pub fn video_helper_status(app: AppHandle) -> bool {
-    super::tools::installed(&app).is_some()
+pub fn open_video_window(app: AppHandle, job: u64) -> Result<(), String> {
+    if app.state::<AppState>().media_job(job).is_none() {
+        return Err("unknown media job".to_string());
+    }
+    super::window::show(&app, job);
+    Ok(())
 }
 
-/// Download and check the video helper, then answer whether it is ready.
+/// Which video helpers are installed.
 #[tauri::command]
-pub async fn video_helper_install(app: AppHandle) -> Result<bool, String> {
+pub fn video_helper_status(app: AppHandle) -> super::tools::HelperStatus {
+    super::tools::status(&app)
+}
+
+/// Download and check the missing helpers, then answer what is ready.
+#[tauri::command]
+pub async fn video_helper_install(app: AppHandle) -> Result<super::tools::HelperStatus, String> {
     super::tools::install(&app).await?;
-    Ok(true)
+    Ok(super::tools::status(&app))
 }
 
 /// Keep a helper the person downloaded themselves; `true` means it was checked

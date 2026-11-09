@@ -30,7 +30,7 @@ const TIMEOUT: Duration = Duration::from_secs(90);
 
 /// Whether a helper is installed and may be run.
 pub fn available(app: &AppHandle) -> bool {
-    super::tools::installed(app).is_some()
+    super::tools::ytdlp(app).is_some()
 }
 
 /// Resolve a page for the first time; the cached in-house answer is used only
@@ -86,8 +86,8 @@ pub async fn resolve(
     page_url: &str,
     fallback_title: &str,
 ) -> Result<(Manifest, SourcePlan), String> {
-    let helper = super::tools::installed(app)
-        .ok_or_else(|| "the video helper is not installed".to_string())?;
+    let helper =
+        super::tools::ytdlp(app).ok_or_else(|| "the video helper is not installed".to_string())?;
     let answer = ask(app, &helper, page_url).await?;
     parse(&answer, fallback_title)
 }

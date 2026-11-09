@@ -383,7 +383,16 @@ function bdmFacebookSources(scripts) {
       }
     }
   }
-  return [...found.values()];
+  // Facebook often repeats one address per byte range, all under the same
+  // field. One row per quality is the useful list: the largest field it named
+  // (HD), then the plain file, then SD.
+  const byLabel = new Map();
+  for (const source of found.values()) {
+    if (!byLabel.has(source.label)) {
+      byLabel.set(source.label, source);
+    }
+  }
+  return [...byLabel.values()];
 }
 
 /** The object after `marker =`, with nested braces and strings read correctly. */

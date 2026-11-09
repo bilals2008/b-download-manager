@@ -24,6 +24,9 @@ futures-util = "0.3"
 # The downloaded video helper is checked against its publisher's SHA-256 list
 # before it is ever run.
 sha2 = "0.10"
+# The ffmpeg helper arrives as a zip from its publisher; only the one program
+# this app runs is taken out of it.
+zip = { version = "2", default-features = false, features = ["deflate"] }
 tauri-plugin-autostart = "2"
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-updater = "2"

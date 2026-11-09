@@ -52,6 +52,8 @@ export interface MediaJobView {
   total: number;
   segmentsDone: number;
   segmentsTotal: number;
+  /** How much of the whole job is done, `0..1`, across every track. */
+  fraction: number;
 }
 
 export type QualityKind = "video" | "audio";
@@ -270,14 +272,25 @@ export function mediaReparse(job: number): Promise<MediaJobView> {
   return invoke<MediaJobView>("media_reparse", { job });
 }
 
-/** Whether the optional video helper is installed. */
-export function videoHelperStatus(): Promise<boolean> {
-  return invoke<boolean>("video_helper_status");
+/** Bring the quality panel of a media job back to the front. */
+export function openVideoWindow(job: number): Promise<void> {
+  return invoke<void>("open_video_window", { job });
 }
 
-/** Download and check the optional video helper. */
-export function videoHelperInstall(): Promise<boolean> {
-  return invoke<boolean>("video_helper_install");
+/** Which of the two optional video helpers are installed. */
+export interface VideoHelperStatus {
+  ytdlp: boolean;
+  ffmpeg: boolean;
+}
+
+/** Whether the optional video helpers are installed. */
+export function videoHelperStatus(): Promise<VideoHelperStatus> {
+  return invoke<VideoHelperStatus>("video_helper_status");
+}
+
+/** Download and check the missing video helpers. */
+export function videoHelperInstall(): Promise<VideoHelperStatus> {
+  return invoke<VideoHelperStatus>("video_helper_install");
 }
 
 /** Keep a helper the person downloaded; `true` means it was checked. */

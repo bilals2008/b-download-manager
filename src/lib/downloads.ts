@@ -79,6 +79,8 @@ export interface Download {
   /** Completed and total segments of a media job, for a stable percentage. */
   mediaSegmentsDone?: number;
   mediaSegmentsTotal?: number;
+  /** How much of a media job is done, `0..1`, across its tracks. */
+  mediaProgress?: number;
 }
 
 /** The categories pane filter. A category name filters to that category. */
@@ -174,6 +176,12 @@ export function progressOf(download: Download): number {
   // the size and not the bytes; the status is the answer there.
   if (download.status === "completed") {
     return 100;
+  }
+  // A media job is one row for two tracks, so its byte total moves while it
+  // runs. The coordinator's own fraction counts every track and never walks
+  // backwards.
+  if (download.mediaJob !== undefined) {
+    return Math.min(100, Math.max(0, (download.mediaProgress ?? 0) * 100));
   }
   if (download.size <= 0) {
     return 0;
