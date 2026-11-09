@@ -434,6 +434,12 @@ pub async fn video_helper_import(app: AppHandle, path: String) -> Result<bool, S
     super::tools::import(&app, Path::new(&path)).await
 }
 
+/// Forget the helper the person chose; go back to the app's own copy.
+#[tauri::command]
+pub async fn video_helper_forget(app: AppHandle) -> Result<(), String> {
+    super::tools::forget(&app)
+}
+
 /* --------------------------------------------------------------- parsing */
 
 async fn parse_job(app: AppHandle, id: u64) {

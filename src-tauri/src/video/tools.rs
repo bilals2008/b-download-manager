@@ -5,7 +5,9 @@
 //! application's data folder. The installer therefore stays small, and the
 //! helper can be updated without a new build.
 
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::time::Duration;
 
 use sha2::{Digest, Sha256};
@@ -23,15 +25,81 @@ pub fn dir(app: &tauri::AppHandle) -> Option<PathBuf> {
     app.path().app_data_dir().ok().map(|dir| dir.join("tools"))
 }
 
-/// The helper that may be run right now: an explicit override, the copy the
-/// app downloaded, then one beside the executable or on `PATH` (a power user
-/// may already have it).
+/// The person's own choice of helper, remembered in `programs.json` (MDM style):
+/// the app's own download is only used when nothing was chosen.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Installed {
+    pub version: String,
+    pub exe: PathBuf,
+}
+
+fn programs_file(app: &tauri::AppHandle) -> Option<PathBuf> {
+    dir(app).map(|folder| folder.join("programs.json"))
+}
+
+/// The helper the person chose and the app verified (`--version`), if still there.
+pub fn chosen(app: &tauri::AppHandle) -> Option<Installed> {
+    let Some(file) = programs_file(app) else { return None };
+    let text = std::fs::read_to_string(&file).ok()?;
+    let map: serde_json::Value = serde_json::from_str(&text).ok()?;
+    let entry = map.get("yt-dlp")?;
+    let version = entry.get("version")?.as_str()?.to_string();
+    let exe = PathBuf::from(entry.get("exe")?.as_str()?);
+    exe.is_file().then_some(Installed { version, exe })
+}
+
+/// Keep the person's choice so the app's own download is not used instead.
+fn store_chosen(app: &tauri::AppHandle, exe: &Path, version: &str) -> Result<(), String> {
+    let Some(folder) = dir(app) else {
+        return Err("the application's data folder is not available".to_string());
+    };
+    std::fs::create_dir_all(&folder)
+        .map_err(|error| format!("the helper's folder could not be made: {error}"))?;
+    let file = folder.join("programs.json");
+    let mut map: serde_json::Value = std::fs::read_to_string(&file)
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or(serde_json::json!({}));
+    let entry = serde_json::json!({
+        "version": version,
+        "exe": exe.to_string_lossy(),
+    });
+    map.as_object_mut()
+        .ok_or("programs.json is not an object")?
+        .insert("yt-dlp".to_string(), entry);
+    let text = serde_json::to_string_pretty(&map).map_err(|error| error.to_string())?;
+    let tmp = folder.join("programs.json.tmp");
+    std::fs::write(&tmp, text).map_err(|error| error.to_string())?;
+    std::fs::rename(&tmp, &file).map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+/// Forget the person's choice and go back to the app's own copy.
+pub fn forget(app: &tauri::AppHandle) -> Result<(), String> {
+    let Some(file) = programs_file(app) else {
+        return Ok(());
+    };
+    let Ok(text) = std::fs::read_to_string(&file) else { return Ok(()) };
+    let mut map: serde_json::Value = serde_json::from_str(&text).unwrap_or(serde_json::json!({}));
+    if let Some(obj) = map.as_object_mut() {
+        obj.remove("yt-dlp");
+    }
+    let text = serde_json::to_string_pretty(&map).map_err(|error| error.to_string())?;
+    std::fs::write(&file, text).map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+/// The helper that may be run right now: the person's choice first (`programs.json`),
+/// then the copy the app downloaded, then one beside the executable or on `PATH`.
 pub fn installed(app: &tauri::AppHandle) -> Option<PathBuf> {
     if let Some(value) = std::env::var_os("BDM_YTDLP") {
         let path = PathBuf::from(value);
         if path.is_file() {
             return Some(path);
         }
+    }
+    if let Some(chosen) = chosen(app) {
+        return Some(chosen.exe);
     }
     if let Some(found) = dir(app).and_then(|folder| in_folder(&folder)) {
         return Some(found);
@@ -78,6 +146,44 @@ fn on_path() -> Option<PathBuf> {
     }
     None
 }
+
+/// Run `<exe> --version` and read the version line (`2026.11.01`). Like MDM,
+/// the app never runs a tool it has not verified as the real program.
+fn version_of(exe: &Path) -> Result<String, String> {
+    let output = Command::new(exe)
+        .arg("--version")
+        .output()
+        .map_err(|error| format!("that program could not be run: {error}"))?;
+    if !output.status.success() {
+        return Err("that program is not the video helper".to_string());
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    let version = text
+        .lines()
+        .next()
+        .ok_or("that program gave no version")?
+        .trim();
+    if version.is_empty() {
+        return Err("that program is not the video helper".to_string());
+    }
+    Ok(version.to_string())
+}
+
+/// Mark a file fetched from the internet as such (Windows shows the "opened
+/// from another computer" warning only for downloads the person chose). Like MDM.
+#[cfg(windows)]
+fn mark_downloaded(path: &Path, from: &str) {
+    let mut stream = path.as_os_str().to_owned();
+    stream.push(":Zone.Identifier");
+    let _ = std::fs::write(
+        stream,
+        format!(
+            "[ZoneTransfer]\r\nZoneId=3\r\nHostUrl={from}\r\n"
+        ),
+    );
+}
+#[cfg(not(windows))]
+fn mark_downloaded(_path: &Path, _from: &str) {}
 
 /// The proxy the rest of the app already honours, when one is configured.
 pub(crate) fn proxy(app: &tauri::AppHandle) -> Option<String> {
@@ -150,7 +256,17 @@ pub async fn import(app: &tauri::AppHandle, source: &Path) -> Result<bool, Strin
         Err(_) => false,
     };
     save(app, &bytes)?;
+    let target = target_path(app);
+    mark_downloaded(&target, HELPER_URL);
+    // MDM: never run a helper the app has not verified as the real program.
+    let version = version_of(&target)?;
+    store_chosen(app, &target, &version)?;
     Ok(checked)
+}
+
+/// Where the kept helper lives: `<data dir>/tools/yt-dlp.exe`.
+fn target_path(app: &tauri::AppHandle) -> PathBuf {
+    dir(app).unwrap_or_else(|| PathBuf::from("tools")).join("yt-dlp.exe")
 }
 
 /// The HTTP client both paths use, with the app's own proxy.

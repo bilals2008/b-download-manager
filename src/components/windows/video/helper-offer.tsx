@@ -6,7 +6,11 @@ import { DialogAction } from "@/components/ui/dialog-action";
 import { Progress } from "@/components/ui/progress";
 import { formatSize } from "@/lib/downloads";
 import { describeError } from "@/lib/errors";
-import { videoHelperImport, videoHelperInstall } from "@/lib/media";
+import {
+  videoHelperForget,
+  videoHelperImport,
+  videoHelperInstall,
+} from "@/lib/media";
 
 interface HelperEvent {
   downloaded: number;
@@ -75,6 +79,20 @@ export function HelperOffer({
     }
   }
 
+  /** Drop the person's chosen file and go back to the app's own download. */
+  async function forget() {
+    setBusy(true);
+    setError(null);
+    try {
+      await videoHelperForget();
+      setUnchecked(false);
+    } catch (forgetError) {
+      setError(describeError(forgetError));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const percent =
     progress && progress.total
       ? Math.min(100, (progress.downloaded / progress.total) * 100)
@@ -105,7 +123,10 @@ export function HelperOffer({
             The file is saved. The publisher's list could not be reached, so it
             was not checked.
           </p>
-          <div className="mt-2 flex justify-end">
+          <div className="mt-2 flex justify-end gap-2">
+            <DialogAction tone="quiet" onClick={forget}>
+              Use app's own copy
+            </DialogAction>
             <DialogAction tone="primary" onClick={onInstalled}>
               Continue
             </DialogAction>

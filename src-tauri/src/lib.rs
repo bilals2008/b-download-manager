@@ -1348,6 +1348,7 @@ pub fn run() {
             video::capture::video_helper_status,
             video::capture::video_helper_install,
             video::capture::video_helper_import,
+            video::capture::video_helper_forget,
         ])
         .build(tauri::generate_context!())
         .expect("error while building B Download Manager")

@@ -285,6 +285,11 @@ export function videoHelperImport(path: string): Promise<boolean> {
   return invoke<boolean>("video_helper_import", { path });
 }
 
+/** Forget the helper the person chose; go back to the app's own copy. */
+export function videoHelperForget(): Promise<void> {
+  return invoke<void>("video_helper_forget");
+}
+
 /** Whether the page is one the helper resolves better than the in-house path. */
 export function isYoutubePage(url: string): boolean {
   try {
