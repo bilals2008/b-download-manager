@@ -8,6 +8,12 @@
   section for its own version, and the release page uses the same words.
 -->
 
+## 1.1.1 — 9 November 2026
+
+- Video downloads now finish properly, with picture and sound in one file.
+- Stop keeps what was already downloaded; Resume continues from there.
+- The browser panel follows your app theme, and Facebook videos show HD and SD choices.
+
 ## 1.1.0 — 8 November 2026
 
 ### The browser extension adds more
