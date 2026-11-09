@@ -127,7 +127,7 @@ if (!existsSync(changelogPath)) {
     ].join("\n"),
   );
 } else {
-  const changelog = readFileSync(changelogPath, "utf8");
+  const changelog = readFileSync(changelogPath, "utf8").replace(/\r\n/g, "\n");
   const marker = "\n---\n";
   const at = changelog.indexOf(marker);
   guard(at !== -1, "CHANGELOG.md lost its `---` divider; restore it so sections can be inserted");
