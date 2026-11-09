@@ -17,6 +17,7 @@ import {
   mediaCancel,
   mediaDownload,
   mediaReparse,
+  mediaResume,
   mediaRows,
   videoHelperStatus,
   type VideoHelperStatus,
@@ -172,9 +173,37 @@ export function VideoPanel({ initialJob }: { initialJob: number }) {
     }
   }
 
+  /** Continue the stopped download from the bytes it already has. */
+  async function resume() {
+    if (!view || busy || view.downloading || view.done || !view.canResume) {
+      return;
+    }
+    setBusy(true);
+    setActionError(null);
+    try {
+      await mediaResume(view.job);
+      await refresh();
+    } catch (error) {
+      setActionError(describeError(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const percent = view
     ? Math.min(100, Math.max(0, view.fraction * 100))
     : 0;
+
+  // Resume continues the pair the stopped download used. Another quality in
+  // the list is a new download, so the primary action follows the selection.
+  const selectedRow = rows.find((row) => row.id === selected) ?? null;
+  const resumeChoice = Boolean(
+    view?.canResume &&
+      view.stage === "Stopped" &&
+      selectedRow &&
+      selectedRow.id === view.resumeVideo &&
+      (selectedRow.audio ?? null) === (view.resumeAudio ?? null),
+  );
 
   const progressLine = view
     ? view.total > 0
@@ -199,7 +228,9 @@ export function VideoPanel({ initialJob }: { initialJob: number }) {
       return "Saved";
     }
     if (view.stage === "Stopped") {
-      return "Stopped · choose Download to try again";
+      return view.canResume
+        ? "Stopped · Resume continues from the bytes on disk"
+        : "Stopped · choose Download to try again";
     }
     if (view.stage && view.error) {
       return view.stage;
@@ -237,7 +268,9 @@ export function VideoPanel({ initialJob }: { initialJob: number }) {
         </p>
       ) : null}
 
-      {view?.downloading || (view?.done && view.total > 0) ? (
+      {view?.downloading ||
+      view?.done ||
+      (view?.stage === "Stopped" && view.fraction > 0) ? (
         <div className="shrink-0 px-4 pb-2">
           <Progress value={view.done ? 100 : percent} aria-label="Download progress" />
         </div>
@@ -359,10 +392,16 @@ export function VideoPanel({ initialJob }: { initialJob: number }) {
               <DialogAction
                 tone="primary"
                 icon={<DownloadGlyph className="size-3.5" />}
-                disabled={!selected || busy}
-                onClick={() => void start()}
+                disabled={resumeChoice ? busy : !selected || busy}
+                onClick={() => (resumeChoice ? void resume() : void start())}
               >
-                {busy ? "Starting…" : "Download"}
+                {busy
+                  ? resumeChoice
+                    ? "Resuming…"
+                    : "Starting…"
+                  : resumeChoice
+                    ? "Resume"
+                    : "Download"}
               </DialogAction>
             ) : null}
           </>

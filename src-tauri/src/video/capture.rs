@@ -394,6 +394,20 @@ pub fn media_cancel(app: AppHandle, job: u64) -> Result<(), String> {
     Ok(())
 }
 
+/// Continue a stopped or failed media download from the bytes on disk.
+#[tauri::command]
+pub fn media_resume(app: AppHandle, job: u64) -> Result<MediaJobView, String> {
+    let state = app.state::<AppState>();
+    let media = state
+        .media_job(job)
+        .ok_or_else(|| "unknown media job".to_string())?;
+    super::download::resume(&app, &media)?;
+    state
+        .media_job(job)
+        .map(|job| job.view())
+        .ok_or_else(|| "unknown media job".to_string())
+}
+
 /// Read the page again, for example after the video helper was installed.
 #[tauri::command]
 pub fn media_reparse(app: AppHandle, job: u64) -> Result<MediaJobView, String> {

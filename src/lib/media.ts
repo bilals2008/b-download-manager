@@ -54,6 +54,11 @@ export interface MediaJobView {
   segmentsTotal: number;
   /** How much of the whole job is done, `0..1`, across every track. */
   fraction: number;
+  /** A stopped or failed download can continue from the bytes on disk. */
+  canResume: boolean;
+  /** The pair the resumable download was started with. */
+  resumeVideo: string | null;
+  resumeAudio: string | null;
 }
 
 export type QualityKind = "video" | "audio";
@@ -260,6 +265,11 @@ export function mediaForget(job: number, deleteFile: boolean): Promise<void> {
 
 export function mediaCancel(job: number): Promise<void> {
   return invoke<void>("media_cancel", { job });
+}
+
+/** Continue a stopped or failed media download from the bytes on disk. */
+export function mediaResume(job: number): Promise<MediaJobView> {
+  return invoke<MediaJobView>("media_resume", { job });
 }
 
 /** Allow the browser's cookies for media requests, once, and read again. */

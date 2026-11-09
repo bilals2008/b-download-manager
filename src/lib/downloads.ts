@@ -81,6 +81,8 @@ export interface Download {
   mediaSegmentsTotal?: number;
   /** How much of a media job is done, `0..1`, across its tracks. */
   mediaProgress?: number;
+  /** Whether a stopped media row can continue from its bytes on disk. */
+  mediaCanResume?: boolean;
 }
 
 /** The categories pane filter. A category name filters to that category. */

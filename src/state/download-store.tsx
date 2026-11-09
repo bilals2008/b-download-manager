@@ -71,6 +71,7 @@ import {
   listMediaJobs,
   mediaCancel as cancelMedia,
   mediaForget,
+  mediaResume as resumeMedia,
   type MediaJobView,
 } from "@/lib/media";
 import { nextMatch } from "@/lib/find";
@@ -432,6 +433,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
         mediaSegmentsDone: job.segmentsDone,
         mediaSegmentsTotal: job.segmentsTotal,
         mediaProgress: job.fraction,
+        mediaCanResume: job.canResume,
       };
     },
     [sampleFor],
@@ -1294,10 +1296,19 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
             return item;
           }
           if (item.mediaJob) {
-            // The media coordinator has no pause or resume of its own.
-            return action === "stop"
-              ? { ...item, status: "stopped", speed: 0, eta: 0 }
-              : item;
+            if (action === "stop") {
+              return { ...item, status: "stopped", speed: 0, eta: 0 };
+            }
+            if (action === "resume" && item.mediaCanResume) {
+              return {
+                ...item,
+                status: "downloading",
+                speed: 0,
+                eta: 0,
+                error: null,
+              };
+            }
+            return item;
           }
           if (action === "pause") {
             return { ...item, status: "paused", speed: 0, eta: 0 };
@@ -1316,6 +1327,8 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
         if (item.mediaJob) {
           if (action === "stop") {
             run(cancelMedia(item.mediaJob));
+          } else if (action === "resume" && item.mediaCanResume) {
+            run(resumeMedia(item.mediaJob));
           }
           continue;
         }
@@ -1367,11 +1380,11 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
       run(Promise.all(items.map((item) => pauseDownload(item.id))));
     },
     resumeAll: () => {
-      // The mirror of Pause All: everything that is holding, not the rows the
-      // queue is saving for later or the media jobs with no resume of their own.
+      // The mirror of Pause All: everything that is holding. A media job has
+      // no pause, but a stopped one continues from the bytes it kept.
       const items = latest.current.downloads.filter(
         (item) =>
-          !item.mediaJob &&
+          (item.mediaJob === undefined || item.mediaCanResume === true) &&
           (item.status === "paused" ||
             item.status === "stopped" ||
             item.status === "error"),
@@ -1382,15 +1395,22 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
       setState((current) => ({
         ...current,
         downloads: current.downloads.map((item) =>
-          !item.mediaJob &&
-          (item.status === "paused" ||
-            item.status === "stopped" ||
-            item.status === "error")
+          item.status === "paused" ||
+          item.status === "stopped" ||
+          item.status === "error"
             ? { ...item, status: "downloading", speed: 0, eta: 0, error: null }
             : item,
         ),
       }));
-      run(Promise.all(items.map((item) => resumeDownload(item.id))));
+      run(
+        Promise.all(
+          items.map((item) =>
+            item.mediaJob
+              ? resumeMedia(item.mediaJob)
+              : resumeDownload(item.id),
+          ),
+        ),
+      );
     },
     stopAll: () => {
       const items = latest.current.downloads.filter(

@@ -235,12 +235,15 @@ function rowsFor(
   const canDequeue = items.some(
     (item) => item.mediaJob === undefined && item.status === "queued",
   );
-  const canResume = items.some(
-    (item) =>
-      item.mediaJob === undefined &&
-      (item.status === "paused" ||
+  const canResume = items.some((item) =>
+    item.mediaJob !== undefined
+      ? item.mediaCanResume === true &&
+        (item.status === "stopped" ||
+          item.status === "paused" ||
+          item.status === "error")
+      : item.status === "paused" ||
         item.status === "stopped" ||
-        item.status === "error"),
+        item.status === "error",
   );
   // Deleting the file is the one command that loses something on the disk, so
   // it is offered for one finished row and never for a batch.

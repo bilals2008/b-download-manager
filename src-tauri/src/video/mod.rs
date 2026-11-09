@@ -138,6 +138,11 @@ pub struct MediaJob {
     /// What the download is doing now: `Video`, `Audio`, `Saved`, ...
     pub stage: Option<String>,
     pub progress: idm_core::media::download::TrackProgress,
+    /// The pair and folder the last download started with, so Resume continues
+    /// the same file from the bytes on disk after Stop.
+    pub request: Option<capture::DownloadRequest>,
+    /// The delivery the last download was assembled with.
+    pub delivery: Option<download::Delivery>,
     /// How much of the whole job is done, `0.0..=1.0`.
     ///
     /// A job with a separate sound track reports each track on its own, so the
@@ -186,6 +191,8 @@ impl MediaJob {
             stage: None,
             progress: Default::default(),
             fraction: 0.0,
+            request: None,
+            delivery: None,
             control: None,
         }
     }
@@ -220,6 +227,15 @@ impl MediaJob {
             segments_done: self.progress.segments_done,
             segments_total: self.progress.segments_total,
             fraction: self.fraction.clamp(0.0, 1.0),
+            can_resume: self.state == MediaState::Ready
+                && self.request.is_some()
+                && !self.downloading
+                && !self.done,
+            resume_video: self.request.as_ref().map(|request| request.video.clone()),
+            resume_audio: self
+                .request
+                .as_ref()
+                .and_then(|request| request.audio.clone()),
         }
     }
 }
@@ -251,6 +267,11 @@ pub struct MediaJobView {
     pub segments_total: usize,
     /// How much of the whole job is done, `0.0..=1.0`, across every track.
     pub fraction: f64,
+    /// A stopped or failed download can continue from the bytes on disk.
+    pub can_resume: bool,
+    /// The picture and sound the resumable download was started with.
+    pub resume_video: Option<String>,
+    pub resume_audio: Option<String>,
 }
 
 fn empty_manifest() -> Manifest {

@@ -83,6 +83,9 @@ function job(overrides: Partial<MediaJobView> = {}): MediaJobView {
     segmentsDone: 0,
     segmentsTotal: 0,
     fraction: 0,
+    canResume: false,
+    resumeVideo: null,
+    resumeAudio: null,
     ...overrides,
   };
 }

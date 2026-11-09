@@ -163,6 +163,12 @@ pub fn start(
 
     let control = TrackControl::new();
     let dest_text = dest.to_string_lossy().to_string();
+    let resume_request = DownloadRequest {
+        video: request.video.clone(),
+        audio: request.audio.clone(),
+        name: file_name.clone(),
+        dest: folder.to_string_lossy().to_string(),
+    };
     let app_state = app.state::<AppState>();
     app_state.update_media_job(job.id, |job| {
         job.downloading = true;
@@ -172,6 +178,8 @@ pub fn start(
         job.stage = Some("Starting".to_string());
         job.progress = TrackProgress::default();
         job.fraction = 0.0;
+        job.request = Some(resume_request);
+        job.delivery = Some(delivery.clone());
         job.control = Some(control.clone());
         job.work_dir = Some(work_dir.to_string_lossy().to_string());
     });
@@ -182,7 +190,10 @@ pub fn start(
     let app = app.clone();
     let dest_clone = dest.clone();
     tauri::async_runtime::spawn(async move {
-        run(&app, job, request, dest_clone, work_dir, delivery, control).await;
+        run(
+            &app, job, request, dest_clone, work_dir, delivery, control, false,
+        )
+        .await;
     });
 
     Ok(Started {
@@ -191,6 +202,61 @@ pub fn start(
     })
 }
 
+/// Continue a stopped or failed download from the bytes it already has.
+///
+/// The same destination and unfinished folder are reused, and the page is not
+/// resolved again, so a stopped download picks up where it stopped instead of
+/// asking for a new plan (and possibly a new representation).
+pub fn resume(app: &AppHandle, job: &MediaJob) -> Result<Started, String> {
+    if job.state != MediaState::Ready {
+        return Err("the manifest has not been read yet".to_string());
+    }
+    if job.downloading {
+        return Err("this video is already being downloaded".to_string());
+    }
+    if job.done {
+        return Err("this video has already been downloaded".to_string());
+    }
+    let Some(request) = job.request.clone() else {
+        return Err("this download cannot be resumed; choose a quality again".to_string());
+    };
+    let Some(dest) = job.dest.as_deref().map(PathBuf::from) else {
+        return Err("this download cannot be resumed; choose a quality again".to_string());
+    };
+    let Some(work_dir) = job.work_dir.as_deref().map(PathBuf::from) else {
+        return Err("this download cannot be resumed; choose a quality again".to_string());
+    };
+    let Some(mut delivery) = job.delivery.clone() else {
+        return Err("this download cannot be resumed; choose a quality again".to_string());
+    };
+    // A helper installed after the stop is used by the join of this run.
+    delivery.ffmpeg = super::tools::ffmpeg(app);
+
+    let control = TrackControl::new();
+    let dest_text = dest.to_string_lossy().to_string();
+    app.state::<AppState>().update_media_job(job.id, |job| {
+        job.downloading = true;
+        job.done = false;
+        job.error = None;
+        job.dest = Some(dest_text.clone());
+        job.stage = Some("Starting".to_string());
+        job.control = Some(control.clone());
+    });
+
+    let job = job.clone();
+    let id = job.id;
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        run(&app, job, request, dest, work_dir, delivery, control, true).await;
+    });
+
+    Ok(Started {
+        id,
+        dest: dest_text,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
 async fn run(
     app: &AppHandle,
     mut job: MediaJob,
@@ -199,6 +265,7 @@ async fn run(
     work_dir: PathBuf,
     delivery: Delivery,
     control: Arc<TrackControl>,
+    resume: bool,
 ) {
     let state = app.state::<AppState>();
     let limits = state.limits().clone();
@@ -208,7 +275,11 @@ async fn run(
     // identity it was signed for, and a deadline the provider chose. The plan
     // the panel parsed can be minutes old by the time the user picks a
     // quality, so the page is asked once more before the first byte.
-    if super::yt::is_youtube_page(&job.page_url) {
+    // A resume continues the bytes already on disk, so the page is not read
+    // again: a fresh answer can name another representation and the guard
+    // would drop exactly the work the person asked to keep. A refused address
+    // still renews below.
+    if !resume && super::yt::is_youtube_page(&job.page_url) {
         // A resolve that fails quietly here would send the download against a
         // dead address, so what it said is written down.
         match super::ytdlp::resolve_page(app, &job.page_url, &job.title).await {
@@ -393,7 +464,6 @@ async fn run(
                 Ok(Err(DeliverError::Cancelled)) => {
                     state.update_media_job(job.id, |job| {
                         job.downloading = false;
-                        job.dest = None;
                         job.error = None;
                         job.stage = Some("Stopped".to_string());
                     });
@@ -415,7 +485,6 @@ async fn run(
         Err(Outcome::Cancelled) => {
             state.update_media_job(job.id, |job| {
                 job.downloading = false;
-                job.dest = None;
                 job.error = None;
                 job.stage = Some("Stopped".to_string());
             });
@@ -1081,7 +1150,6 @@ fn finish_saved(state: &AppState, id: u64, dest: PathBuf) {
 fn finish_failed(state: &AppState, id: u64, error: String) {
     state.update_media_job(id, |job| {
         job.downloading = false;
-        job.dest = None;
         job.error = Some(error);
         job.stage = Some("Failed".to_string());
     });
