@@ -62,9 +62,7 @@ fn programs_file(app: &tauri::AppHandle) -> Option<PathBuf> {
 
 /// The helper the person chose and the app verified (`--version`), if still there.
 fn chosen(app: &tauri::AppHandle, tool: &str) -> Option<Installed> {
-    let Some(file) = programs_file(app) else {
-        return None;
-    };
+    let file = programs_file(app)?;
     let text = std::fs::read_to_string(&file).ok()?;
     let map: serde_json::Value = serde_json::from_str(&text).ok()?;
     let entry = map.get(tool)?;
