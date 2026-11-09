@@ -414,6 +414,19 @@ export function setTrayAppearance(light: boolean): Promise<boolean> {
 }
 
 /**
+ * Hand the appearance in force to the backend, which serves it to the browser
+ * extension. The extension has only two shipped palettes; this is how a custom
+ * theme reaches its panel too.
+ */
+export function setBrowserTheme(
+  theme: string,
+  light: boolean,
+  palette: Record<string, string>,
+): Promise<void> {
+  return invoke<void>("set_browser_theme", { theme, light, palette });
+}
+
+/**
  * The protocols a copied address has to start with to be offered.
  *
  * Resolves with the list as the backend stored it, which is the input with

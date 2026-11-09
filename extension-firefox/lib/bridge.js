@@ -167,6 +167,17 @@ async function bdmBridgeVideoButton() {
   return bdmBridgeRequest("GET", "/v1/video-button-settings", undefined, 2500);
 }
 
+/**
+ * The appearance the application's window is drawn in.
+ *
+ * `null` before the window published one; the extension then keeps its own
+ * theme. The palette holds semantic tokens, not CSS rules, so the panel can
+ * use a theme the extension never shipped.
+ */
+async function bdmBridgeTheme() {
+  return bdmBridgeRequest("GET", "/v1/theme", undefined, 1500);
+}
+
 /** Start a download in the app. `mode` is "direct" or "ask". */
 async function bdmBridgeSend(payload) {
   return bdmBridgeRequest(

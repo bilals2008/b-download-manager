@@ -140,3 +140,88 @@ function bdmApplyPageTheme(theme, root) {
   const element = root || document.documentElement;
   if (element) element.dataset.bdmTheme = bdmThemeName(theme);
 }
+
+/**
+ * The token names an app palette uses, per surface.
+ *
+ * The shadow-root panel and the extension pages name the same meanings
+ * differently; the application sends meanings, so one table per surface is
+ * enough and a new theme needs no change here.
+ */
+const BDM_OVERLAY_TOKENS = {
+  canvas: "--bdm-canvas",
+  text: "--bdm-text",
+  muted: "--bdm-muted",
+  line: "--bdm-line",
+  hover: "--bdm-hover",
+  active: "--bdm-active",
+  primary: "--bdm-primary",
+  "on-primary": "--bdm-on-primary",
+  progress: "--bdm-progress",
+  success: "--bdm-success",
+  danger: "--bdm-danger",
+  focus: "--bdm-focus",
+  radius: "--bdm-radius",
+  shadow: "--bdm-shadow",
+};
+
+const BDM_PAGE_TOKENS = {
+  canvas: "--canvas",
+  surface: "--surface",
+  text: "--text",
+  muted: "--text-muted",
+  line: "--line",
+  hover: "--hover",
+  active: "--active",
+  primary: "--primary",
+  "on-primary": "--on-primary",
+  progress: "--progress",
+  success: "--success",
+  danger: "--danger",
+  focus: "--focus",
+  radius: "--radius",
+  shadow: "--shadow",
+};
+
+/** Paint one surface in the app's tokens. Missing tokens keep the local value. */
+function bdmApplyAppPalette(appTheme, root, overlay) {
+  if (!appTheme || !appTheme.palette || !root) return false;
+  const tokens = overlay ? BDM_OVERLAY_TOKENS : BDM_PAGE_TOKENS;
+  for (const [meaning, token] of Object.entries(tokens)) {
+    const value = appTheme.palette[meaning];
+    if (value) root.style.setProperty(token, value);
+  }
+  const accent = appTheme.palette.progress || appTheme.palette.primary;
+  if (!overlay) {
+    if (accent) root.style.setProperty("--accent", accent);
+    if (appTheme.palette["on-primary"]) {
+      root.style.setProperty("--on-accent", appTheme.palette["on-primary"]);
+    }
+  }
+  if (typeof appTheme.light === "boolean") {
+    const name = appTheme.light ? "light" : "dark";
+    root.style.setProperty("color-scheme", name);
+    if (overlay) root.dataset.theme = name;
+    else root.dataset.bdmTheme = name;
+  }
+  return true;
+}
+
+/**
+ * Ask the application for the appearance it is drawn in and paint `root`.
+ *
+ * The extension's own theme setting is used until the app answers; a running
+ * application owns the palette, so a custom theme reaches the panel too.
+ */
+async function bdmSyncAppTheme(root, overlay) {
+  if (typeof browser === "undefined" || !browser.runtime?.sendMessage) {
+    return false;
+  }
+  try {
+    const answer = await browser.runtime.sendMessage({ type: "bdm:theme" });
+    if (!answer || !answer.ok || !answer.theme) return false;
+    return bdmApplyAppPalette(answer.theme, root, overlay);
+  } catch {
+    return false;
+  }
+}

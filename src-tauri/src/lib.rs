@@ -579,6 +579,21 @@ fn video_button_settings(state: State<'_, AppState>) -> state::VideoButtonSettin
     state.video_button_settings()
 }
 
+/// Publish the appearance in force, so the browser panel uses the same palette.
+#[tauri::command]
+fn set_browser_theme(
+    state: State<'_, AppState>,
+    theme: String,
+    light: bool,
+    palette: std::collections::HashMap<String, String>,
+) {
+    state.set_browser_theme(state::BrowserTheme {
+        theme,
+        light,
+        palette,
+    });
+}
+
 /// What the window can say about the browser bridge without guessing.
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -1310,6 +1325,7 @@ pub fn run() {
             set_browser_policy,
             set_video_button_settings,
             video_button_settings,
+            set_browser_theme,
             set_category_rules,
             saved_settings,
             browser_status,

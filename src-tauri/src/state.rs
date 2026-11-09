@@ -64,6 +64,23 @@ impl Default for VideoButtonSettings {
     }
 }
 
+/// The window's appearance, as the extension has to draw it.
+///
+/// The application owns the themes; the extension only has the two shipped
+/// palettes. The window publishes the tokens of the theme in force, and the
+/// bridge hands them to the panel, so a custom theme is the same colour on
+/// both sides.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct BrowserTheme {
+    /// The resolved theme name (`dark`, `cyberpunk`, `bloom`, ...).
+    pub theme: String,
+    /// Whether the theme is drawn on light surfaces.
+    pub light: bool,
+    /// The semantic tokens the extension paints with.
+    pub palette: std::collections::HashMap<String, String>,
+}
+
 /// One category and the folder its downloads save to.
 ///
 /// The window owns the list; the backend only matches a file name against it,
@@ -112,6 +129,8 @@ pub struct AppState {
     browser_policy: Mutex<BrowserPolicy>,
     /// The appearance of the floating video download button the extension draws.
     video_button_settings: Mutex<VideoButtonSettings>,
+    /// The appearance of the window, handed to the extension's panel.
+    browser_theme: Mutex<Option<BrowserTheme>>,
     /// Connections a browser hand-over gets, since it has no dialog to ask.
     browser_connections: AtomicU32,
     /// Whether the loopback bridge bound its port.
@@ -180,6 +199,7 @@ impl Default for AppState {
             browser_folder: Mutex::new(None),
             browser_policy: Mutex::new(BrowserPolicy::default()),
             video_button_settings: Mutex::new(VideoButtonSettings::default()),
+            browser_theme: Mutex::new(None),
             browser_connections: AtomicU32::new(8),
             bridge_running: AtomicBool::new(false),
             last_extension_contact: AtomicU64::new(0),
@@ -765,6 +785,23 @@ impl AppState {
             .video_button_settings
             .lock()
             .expect("video button settings lock poisoned") = value;
+    }
+
+    /// The appearance the window last settled on, for the extension's panel.
+    pub fn browser_theme(&self) -> Option<BrowserTheme> {
+        self.browser_theme
+            .lock()
+            .expect("browser theme lock poisoned")
+            .clone()
+    }
+
+    /// Record the window's appearance. A window that is still starting has
+    /// none yet, and the extension keeps its own palette until it does.
+    pub fn set_browser_theme(&self, value: BrowserTheme) {
+        *self
+            .browser_theme
+            .lock()
+            .expect("browser theme lock poisoned") = Some(value);
     }
 
     /// Connections a browser hand-over gets. Clamped to what the engine takes.

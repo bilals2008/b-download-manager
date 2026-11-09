@@ -215,6 +215,7 @@ async fn route(app: &AppHandle, request: &Request, connected: bool) -> (u16, Val
         ("GET", "/v1/capture") => (200, ok(capture_policy(app))),
         ("POST", "/v1/capture") => set_capture_policy(app, &request.body),
         ("GET", "/v1/video-button-settings") => (200, ok(video_button_settings(app))),
+        ("GET", "/v1/theme") => (200, ok(browser_theme(app))),
         ("POST", "/v1/media") => crate::video::capture::register(app, &request.body).await,
         ("GET", "/v1/downloads") => (200, ok(downloads(app))),
         ("POST", "/v1/downloads") => add_download(app, &request.body).await,
@@ -406,6 +407,11 @@ fn video_button_settings(app: &AppHandle) -> Value {
         "label": settings.label,
         "hover": settings.hover,
     })
+}
+
+/// The appearance the window last published, or `null` before it has one.
+fn browser_theme(app: &AppHandle) -> Value {
+    serde_json::to_value(app.state::<AppState>().browser_theme()).unwrap_or(Value::Null)
 }
 
 /// Start a download, or open the add dialog when the user asked to confirm.

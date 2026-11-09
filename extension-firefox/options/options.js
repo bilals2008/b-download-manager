@@ -406,6 +406,7 @@ bdmLoadSettings()
     apply();
   })
   .finally(() => {
+    void bdmSyncAppTheme(document.documentElement, false);
     pollStatus();
     void adoptAppRules();
   });

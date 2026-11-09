@@ -1,9 +1,14 @@
 import { onSettingsChanged } from "@/lib/app-events";
 import { isDesktop } from "@/lib/errors";
 import { applyFont, applyWeight } from "@/lib/fonts";
-import { setTrayAppearance } from "@/lib/ipc";
+import { setBrowserTheme, setTrayAppearance } from "@/lib/ipc";
 import { loadSettings } from "@/lib/settings";
-import { applyTheme, isLightTheme, resolveTheme } from "@/lib/theme";
+import {
+  applyTheme,
+  currentBrowserTheme,
+  isLightTheme,
+  resolveTheme,
+} from "@/lib/theme";
 import { syncWindowBackground } from "@/lib/window";
 
 /**
@@ -29,6 +34,18 @@ function applySavedAppearance(): void {
     ).catch(() => {
       // The icon keeps the drawing it has until the next time the window is up.
     });
+    // The extension's panel is drawn in a shadow root of the page, so it
+    // cannot read this window's tokens; the bridge carries them.
+    const snapshot = currentBrowserTheme();
+    if (snapshot) {
+      void setBrowserTheme(
+        snapshot.theme,
+        snapshot.light,
+        snapshot.palette,
+      ).catch(() => {
+        // A panel opened before the bridge is up keeps its own palette.
+      });
+    }
   }
 }
 

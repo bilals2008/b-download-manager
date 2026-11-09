@@ -781,6 +781,7 @@ window.addEventListener("unload", () => {
 bdmLoadSettings()
   .then((settings) => bdmApplyPageTheme(settings.theme))
   .catch(() => {});
+void bdmSyncAppTheme(document.documentElement, false);
 
 browser.storage.onChanged.addListener((_changes, area) => {
   if (area !== "local") return;

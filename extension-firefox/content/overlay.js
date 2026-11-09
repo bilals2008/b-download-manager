@@ -176,6 +176,9 @@
     qualityView: null,
     qualitySelected: "",
     qualityTimer: 0,
+    // While the panel is open, the application's theme is read again so a
+    // theme change in the window reaches the panel without reopening it.
+    appThemeTimer: 0,
     qualityBusy: false,
     // The panel is showing the page's own complete files (Facebook HD/SD)
     // instead of a quality list parsed by the application.
@@ -312,6 +315,9 @@
     root.adoptedStyleSheets = [sheet];
 
     const ui = buildUi(root);
+    // The panel is drawn in a shadow root, so it cannot see the window's
+    // tokens; the bridge carries the theme the application is using.
+    void bdmSyncAppTheme(host, true);
 
     ui.fab.addEventListener("click", () => {
       if (state.open) {
@@ -662,6 +668,13 @@
     if (state.sourceMode && !state.sources.length) return;
     ensureHost();
     if (!state.ui) return;
+    // The appearance can have changed since the host was built.
+    void bdmSyncAppTheme(state.host, true);
+    if (!state.appThemeTimer) {
+      state.appThemeTimer = setInterval(() => {
+        if (state.host && state.visible) void bdmSyncAppTheme(state.host, true);
+      }, 5000);
+    }
     state.open = true;
     state.host.dataset.open = "true";
     state.ui.fab.dataset.expanded = "true";
@@ -683,6 +696,10 @@
     if (state.qualityTimer) {
       clearTimeout(state.qualityTimer);
       state.qualityTimer = 0;
+    }
+    if (state.appThemeTimer) {
+      clearInterval(state.appThemeTimer);
+      state.appThemeTimer = 0;
     }
     if (state.host) state.host.dataset.open = "false";
     if (state.ui) {

@@ -31,6 +31,20 @@ const handedOver = new Set();
  */
 function announce() {
   void bdmBridgePing().catch(() => {});
+  void syncBadgeTheme();
+}
+
+/** The badge is the app's accent, so it follows the theme too. */
+async function syncBadgeTheme() {
+  try {
+    const theme = await bdmBridgeTheme();
+    const background = theme?.palette?.progress || BDM_BADGE_BACKGROUND;
+    const text = theme?.palette?.["on-primary"] || BDM_BADGE_TEXT;
+    await browser.action.setBadgeBackgroundColor({ color: background });
+    await browser.action.setBadgeTextColor?.({ color: text });
+  } catch {
+    // The app is not there; the shipped colours stay.
+  }
 }
 
 /* ------------------------------------------------------------------ menus */
@@ -465,6 +479,7 @@ async function handleMessage(message, sender) {
     case "bdm:status": {
       try {
         const data = await bdmBridgePing();
+        void syncBadgeTheme();
         return {
           ok: true,
           version: data.version,
@@ -726,6 +741,14 @@ async function handleMessage(message, sender) {
         hover: answer.hover,
         ...(answer.ok === true ? {} : { error: answer.error }),
       };
+    }
+
+    case "bdm:theme": {
+      try {
+        return { ok: true, theme: await bdmBridgeTheme() };
+      } catch (error) {
+        return bridgeFailure(error);
+      }
     }
 
     case "bdm:open-settings": {
