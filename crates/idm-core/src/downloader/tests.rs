@@ -1834,6 +1834,80 @@ async fn a_download_resumes_from_the_manifest() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// A split appends the tail of a range to the end of the list, so the ranges
+/// of a manifest are not in file order. Such a manifest must still be resumed
+/// from: it used to be thrown away, and the download started over from zero.
+#[tokio::test]
+async fn a_manifest_whose_ranges_are_not_in_file_order_is_resumed_from() {
+    let data = sample_data();
+    let (url, requests) = spawn_range_server(data.clone());
+    let dir = temp_dir("resume-out-of-order");
+    let dest = dir.join("out.bin");
+    let download = Download::new(81, url, dest.clone(), 4, None, None).expect("download");
+
+    // The first range was split after the other two were already in the list,
+    // so the list order is 0..300, 512..1024, 300..512.
+    let ranges = [(0u64, 300u64, 300u64), (512, 1024, 0), (300, 512, 0)];
+    let mut segments = Vec::new();
+    for (index, (start, end, downloaded)) in ranges.iter().enumerate() {
+        let part = segmenter::part_path(&dir, &download.stem, index as u32);
+        if *downloaded > 0 {
+            std::fs::write(&part, &data[*start as usize..*end as usize]).expect("part file");
+        }
+        segments.push(Segment {
+            id: index as u32,
+            start: *start,
+            end: *end,
+            downloaded: *downloaded,
+            part,
+            status: if *downloaded > 0 {
+                SegmentStatus::Done
+            } else {
+                SegmentStatus::Pending
+            },
+        });
+    }
+    let manifest = Manifest {
+        url: download.url.clone(),
+        total: data.len() as u64,
+        segments,
+        validator: None,
+    };
+    std::fs::write(
+        &download.manifest,
+        serde_json::to_string(&manifest).expect("manifest"),
+    )
+    .expect("write manifest");
+
+    run(silent(), Limits::default(), download.clone()).await;
+
+    assert_eq!(
+        download.info().status,
+        Status::Completed,
+        "error: {:?}",
+        download.info().error
+    );
+    assert_eq!(std::fs::read(&dest).expect("destination"), data);
+
+    let heads = requests_so_far(&requests);
+    assert!(
+        heads.iter().any(|head| head.contains("range: bytes=300-")),
+        "the download must continue where it stopped: {heads:?}"
+    );
+    // The only request for the first byte is the probe that asks the server
+    // for the size of the file.
+    let fetched: Vec<&String> = heads
+        .iter()
+        .filter(|head| !head.contains("range: bytes=0-0"))
+        .collect();
+    assert!(
+        !fetched.iter().any(|head| head.contains("range: bytes=0-")),
+        "the bytes that were already there must not be fetched again: {heads:?}"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// A crash can leave a plan with ranges that never started. Their part files
 /// were never created, and that must not throw away the bytes of the ranges
 /// that did run.

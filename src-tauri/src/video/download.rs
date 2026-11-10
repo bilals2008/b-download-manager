@@ -184,6 +184,8 @@ pub fn start(
         job.work_dir = Some(work_dir.to_string_lossy().to_string());
     });
 
+    show_progress(app, job.id);
+
     let job = job.clone();
     let job_id = job.id;
     let request = request.clone();
@@ -200,6 +202,24 @@ pub fn start(
         id: job_id,
         dest: dest.to_string_lossy().to_string(),
     })
+}
+
+/// Open the panel that shows the download going.
+///
+/// A media download is not an engine download: it has no progress window of
+/// its own, and the panel is the window that shows its progress. The panel is
+/// opened when the download starts, so the bytes are watched from the first
+/// one, whatever the browser asked for: a registration that came in inline
+/// never opened a window at all.
+///
+/// The window is built on the main thread, and building a webview inside the
+/// IPC handler the main thread is already in would never finish, so the build
+/// is asked for from a task of its own.
+fn show_progress(app: &AppHandle, job: u64) {
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        super::window::show(&handle, job);
+    });
 }
 
 /// Continue a stopped or failed download from the bytes it already has.
@@ -242,6 +262,8 @@ pub fn resume(app: &AppHandle, job: &MediaJob) -> Result<Started, String> {
         job.stage = Some("Starting".to_string());
         job.control = Some(control.clone());
     });
+
+    show_progress(app, job.id);
 
     let job = job.clone();
     let id = job.id;

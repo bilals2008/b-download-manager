@@ -399,21 +399,21 @@ pub fn set_meta(
 /// manifest, so a resume continues from the bytes already received. A row with
 /// a task cannot move, because the transfer would keep writing to the old
 /// file. A taken name is a question, never a silent replacement.
-pub fn set_destination(
+pub async fn set_destination(
     app: &AppHandle,
     state: &AppState,
     id: u64,
     dest: PathBuf,
     choice: Choice,
 ) -> Result<String, Refusal> {
-    let target = rewrite_destination(state, id, &dest, choice)?;
+    let target = rewrite_destination(state, id, &dest, choice).await?;
     if let Some(download) = state.get(id) {
         announce(app, &download);
     }
     Ok(target.to_string_lossy().to_string())
 }
 
-fn rewrite_destination(
+async fn rewrite_destination(
     state: &AppState,
     id: u64,
     dest: &std::path::Path,
@@ -442,10 +442,15 @@ fn rewrite_destination(
     // in the target folder would not save anything; a free name is chosen.
     let answer = if completed { choice } else { Choice::Rename };
 
-    let _gate = state.start_gate();
-    let (target, replace) = match conflict::resolve(state, dest, answer, Some(id))? {
-        conflict::Resolved::Start { dest, replace } => (dest, replace),
-        conflict::Resolved::Skip => return Ok(old.dest.clone()),
+    // The gate is held for the name that is chosen, not for the bytes that
+    // move: a copy across volumes takes a while, and the gate is a lock the
+    // whole application waits for.
+    let (target, replace) = {
+        let _gate = state.start_gate();
+        match conflict::resolve(state, dest, answer, Some(id))? {
+            conflict::Resolved::Start { dest, replace } => (dest, replace),
+            conflict::Resolved::Skip => return Ok(old.dest.clone()),
+        }
     };
 
     if completed && !old.dest.is_file() {
@@ -462,6 +467,7 @@ fn rewrite_destination(
     // Build the row while the old file is still there, so a failure here
     // leaves both the file and the row untouched.
     let moved = moved_download(state, &old, target.clone(), replace)
+        .await
         .map_err(|message| refused("invalid", message, &target))?;
     if completed && replace && target.exists() {
         // The user confirmed replacing the file at the new path. A part file
@@ -476,7 +482,7 @@ fn rewrite_destination(
         })?;
     }
     if completed {
-        move_file(&old.dest, &target).map_err(|error| {
+        move_file(&old.dest, &target).await.map_err(|error| {
             refused(
                 "invalid",
                 format!("the file could not be moved: {error}"),
@@ -495,7 +501,7 @@ fn rewrite_destination(
 /// Everything that describes the download travels with it: the metadata, the
 /// speed cap, the byte counters and the ranges. The part files are moved to
 /// the new name, and a failure puts them back before the old row is touched.
-fn moved_download(
+async fn moved_download(
     state: &AppState,
     old: &Download,
     dest: PathBuf,
@@ -527,9 +533,9 @@ fn moved_download(
         if segment.part.exists() && !conflict::same_path(&segment.part, &target) {
             // A file already at the target name belongs to the row that is
             // moving; its own part file is not a conflict with itself.
-            if let Err(error) = move_file(&segment.part, &target) {
+            if let Err(error) = move_file(&segment.part, &target).await {
                 for (from, to) in moved_files.iter().rev() {
-                    let _ = move_file(to, from);
+                    let _ = move_file(to, from).await;
                 }
                 return Err(format!("cannot move the partial file: {error}"));
             }
@@ -572,7 +578,12 @@ fn moved_download(
 /// The part files and the manifest travel with it, so a server that supports
 /// ranges continues from the bytes already received. The new name is chosen
 /// to be free: a move never replaces a file in the target folder.
-pub fn relocate(app: &AppHandle, state: &AppState, id: u64, folder: PathBuf) -> Result<(), String> {
+pub async fn relocate(
+    app: &AppHandle,
+    state: &AppState,
+    id: u64,
+    folder: PathBuf,
+) -> Result<(), String> {
     let old = state.get(id).ok_or("unknown download")?;
     if old.is_running() || matches!(old.status(), Status::Running | Status::Queued) {
         return Err("stop the download before moving it".to_string());
@@ -598,15 +609,20 @@ pub fn relocate(app: &AppHandle, state: &AppState, id: u64, folder: PathBuf) -> 
     }
     let wanted = folder.join(name);
 
-    let _gate = state.start_gate();
-    let new_dest = match conflict::resolve(state, &wanted, Choice::Rename, Some(id))
-        .map_err(|refusal| refusal.message)?
-    {
-        conflict::Resolved::Start { dest, .. } => dest,
-        conflict::Resolved::Skip => return Err("the download was not moved".to_string()),
+    // The gate is held for the name that is chosen, not for the bytes that
+    // move: a copy across volumes takes a while, and the gate is a lock the
+    // whole application waits for.
+    let new_dest = {
+        let _gate = state.start_gate();
+        match conflict::resolve(state, &wanted, Choice::Rename, Some(id))
+            .map_err(|refusal| refusal.message)?
+        {
+            conflict::Resolved::Start { dest, .. } => dest,
+            conflict::Resolved::Skip => return Err("the download was not moved".to_string()),
+        }
     };
 
-    let moved = moved_download(state, &old, new_dest, false)?;
+    let moved = moved_download(state, &old, new_dest, false).await?;
     state.replace(moved);
     state.save_index();
     let _ = app.emit(
@@ -753,12 +769,16 @@ fn delete_file_of(state: &AppState, id: u64) -> Result<(), String> {
 }
 
 /// Put `from` at `to`, across volumes as well.
-fn move_file(from: &std::path::Path, to: &std::path::Path) -> std::io::Result<()> {
-    match std::fs::rename(from, to) {
+///
+/// A rename cannot cross a volume, so the bytes are copied when it fails.
+/// The copy of a large file takes a while, so it runs on the blocking pool
+/// of the runtime: the window must stay alive while the bytes move.
+async fn move_file(from: &std::path::Path, to: &std::path::Path) -> std::io::Result<()> {
+    match tokio::fs::rename(from, to).await {
         Ok(()) => Ok(()),
         Err(_) => {
-            std::fs::copy(from, to)?;
-            std::fs::remove_file(from)
+            tokio::fs::copy(from, to).await?;
+            tokio::fs::remove_file(from).await
         }
     }
 }
@@ -881,8 +901,8 @@ mod tests {
         .expect("a download")
     }
 
-    #[test]
-    fn a_finished_file_moves_with_its_metadata() {
+    #[tokio::test]
+    async fn a_finished_file_moves_with_its_metadata() {
         let dir = temp_dir("completed");
         let source = dir.join("old").join("film.mp4");
         std::fs::create_dir_all(source.parent().expect("a folder")).expect("folder");
@@ -895,7 +915,9 @@ mod tests {
         state.insert(download);
 
         let target = dir.join("new").join("film.mp4");
-        let written = rewrite_destination(&state, 1, &target, Choice::Ask).expect("a free name");
+        let written = rewrite_destination(&state, 1, &target, Choice::Ask)
+            .await
+            .expect("a free name");
         assert_eq!(written, target);
         assert_eq!(std::fs::read(&target).expect("the moved file"), b"done");
         assert!(!source.exists(), "the old file is gone");
@@ -908,8 +930,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    #[test]
-    fn the_same_file_is_not_a_move() {
+    #[tokio::test]
+    async fn the_same_file_is_not_a_move() {
         let dir = temp_dir("same");
         let dest = dir.join("film.mp4");
         std::fs::write(&dest, b"done").expect("write");
@@ -920,6 +942,7 @@ mod tests {
         state.insert(download);
 
         let written = rewrite_destination(&state, 1, &dest, Choice::Ask)
+            .await
             .expect("its own file is no conflict");
         assert_eq!(written, dest);
         assert_eq!(std::fs::read(&dest).expect("the file"), b"done");
@@ -927,8 +950,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    #[test]
-    fn a_taken_name_asks_before_a_finished_file_moves() {
+    #[tokio::test]
+    async fn a_taken_name_asks_before_a_finished_file_moves() {
         let dir = temp_dir("taken");
         let source = dir.join("film.mp4");
         std::fs::write(&source, b"new").expect("write");
@@ -941,14 +964,18 @@ mod tests {
         download.set_status(Status::Completed);
         state.insert(download);
 
-        let refusal = rewrite_destination(&state, 1, &taken, Choice::Ask).expect_err("a question");
+        let refusal = rewrite_destination(&state, 1, &taken, Choice::Ask)
+            .await
+            .expect_err("a question");
         assert_eq!(refusal.kind, "exists");
         assert_eq!(
             std::fs::read(&taken).expect("the file that was there"),
             b"old"
         );
 
-        let moved = rewrite_destination(&state, 1, &taken, Choice::Rename).expect("a free name");
+        let moved = rewrite_destination(&state, 1, &taken, Choice::Rename)
+            .await
+            .expect("a free name");
         assert_eq!(moved, dir.join("taken").join("film (2).mp4"));
         assert_eq!(
             std::fs::read(&taken).expect("the file that was there"),
@@ -958,8 +985,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    #[test]
-    fn a_replaced_file_only_goes_after_the_answer() {
+    #[tokio::test]
+    async fn a_replaced_file_only_goes_after_the_answer() {
         let dir = temp_dir("replace");
         let source = dir.join("film.mp4");
         std::fs::write(&source, b"new").expect("write");
@@ -972,15 +999,17 @@ mod tests {
         download.set_status(Status::Completed);
         state.insert(download);
 
-        let written = rewrite_destination(&state, 1, &taken, Choice::Replace).expect("replace");
+        let written = rewrite_destination(&state, 1, &taken, Choice::Replace)
+            .await
+            .expect("replace");
         assert_eq!(written, taken);
         assert_eq!(std::fs::read(&taken).expect("the replaced file"), b"new");
         assert!(!source.exists());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    #[test]
-    fn an_unfinished_download_takes_its_parts_along() {
+    #[tokio::test]
+    async fn an_unfinished_download_takes_its_parts_along() {
         let dir = temp_dir("parts");
         let source = dir.join("film.mp4");
         let state = AppState::default();
@@ -1003,7 +1032,9 @@ mod tests {
         state.insert(download);
 
         let target = dir.join("new").join("film.mp4");
-        rewrite_destination(&state, 1, &target, Choice::Ask).expect("a free name");
+        rewrite_destination(&state, 1, &target, Choice::Ask)
+            .await
+            .expect("a free name");
 
         let info = state.get(1).expect("the row").info();
         assert_eq!(info.status, Status::Paused, "a move is not a resume");
@@ -1018,8 +1049,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    #[test]
-    fn a_row_with_a_task_cannot_change_its_file() {
+    #[tokio::test]
+    async fn a_row_with_a_task_cannot_change_its_file() {
         let dir = temp_dir("busy");
         let state = AppState::default();
         let download = row(1, &dir.join("film.mp4"));
@@ -1027,6 +1058,7 @@ mod tests {
         state.insert(download);
 
         let refusal = rewrite_destination(&state, 1, &dir.join("other.mp4"), Choice::Ask)
+            .await
             .expect_err("a running row");
         assert_eq!(refusal.kind, "busy");
         let _ = std::fs::remove_dir_all(&dir);

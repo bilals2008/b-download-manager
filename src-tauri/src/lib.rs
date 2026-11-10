@@ -155,14 +155,17 @@ fn redownload_download(
 }
 
 /// Move a download that is not running to another folder, parts included.
-#[tauri::command]
-fn relocate_download(
+///
+/// The bytes of a part file travel with it, and a copy across volumes takes a
+/// while, so the command runs off the main thread.
+#[tauri::command(async)]
+async fn relocate_download(
     app: AppHandle,
     state: State<'_, AppState>,
     id: u64,
     folder: String,
 ) -> Result<(), String> {
-    actions::relocate(&app, &state, id, PathBuf::from(folder.trim()))
+    actions::relocate(&app, &state, id, PathBuf::from(folder.trim())).await
 }
 
 /// Record the category and the note the properties window edited.
@@ -181,8 +184,10 @@ fn set_download_meta(
 ///
 /// `conflict` is the answer to the File Exists question; a taken name is not
 /// replaced without one.
-#[tauri::command]
-fn set_download_destination(
+/// Runs off the main thread: the file can be copied across volumes, and a
+/// copy of a large file takes a while.
+#[tauri::command(async)]
+async fn set_download_destination(
     app: AppHandle,
     state: State<'_, AppState>,
     id: u64,
@@ -196,6 +201,7 @@ fn set_download_destination(
         PathBuf::from(dest.trim()),
         conflict.unwrap_or_default(),
     )
+    .await
 }
 
 /// Park a download in the queue, keeping the bytes it already received.

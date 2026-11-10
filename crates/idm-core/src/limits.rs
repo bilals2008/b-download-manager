@@ -11,6 +11,7 @@
 //! does not do with it.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -20,12 +21,22 @@ use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 #[derive(Debug, Clone)]
 pub struct ConnectionBudget {
     permits: Arc<Semaphore>,
+    /// How many permits the budget was last set to.
+    ///
+    /// The semaphore only knows how many permits are free, so the total is
+    /// kept here. Resizing against the free count added the permits in use on
+    /// top of the new cap, so the cap grew every time the settings were
+    /// saved, and the application ended up with far more connections than the
+    /// reader asked for.
+    total: Arc<AtomicUsize>,
 }
 
 impl ConnectionBudget {
     pub fn new(max: u32) -> Self {
+        let max = max.max(1) as usize;
         Self {
-            permits: Arc::new(Semaphore::new(max.max(1) as usize)),
+            permits: Arc::new(Semaphore::new(max)),
+            total: Arc::new(AtomicUsize::new(max)),
         }
     }
 
@@ -50,11 +61,11 @@ impl ConnectionBudget {
     /// raised while the application runs.
     pub fn resize(&self, max: u32) {
         let target = max.max(1) as usize;
-        let available = self.permits.available_permits();
-        if target > available {
-            self.permits.add_permits(target - available);
-        } else if target < available {
-            self.permits.forget_permits(available - target);
+        let current = self.total.swap(target, Ordering::SeqCst);
+        if target > current {
+            self.permits.add_permits(target - current);
+        } else if target < current {
+            self.permits.forget_permits(current - target);
         }
     }
 }
@@ -277,6 +288,25 @@ mod tests {
         drop(first);
         budget.resize(6);
         assert!(budget.try_take().is_some(), "the cap must have grown");
+        drop(second);
+    }
+
+    #[test]
+    fn the_budget_keeps_the_cap_it_was_given() {
+        // The cap must be the number the settings ask for, not that number
+        // plus the connections that are already open: a cap that grows every
+        // time the settings are saved opens more and more connections.
+        let budget = ConnectionBudget::new(4);
+        let first = budget.try_take().expect("first slot");
+        let second = budget.try_take().expect("second slot");
+        budget.resize(4);
+        assert_eq!(budget.permits.available_permits(), 2);
+        budget.resize(6);
+        assert_eq!(budget.permits.available_permits(), 4);
+        // Lowering the cap again takes the permits back, held ones included.
+        budget.resize(2);
+        assert_eq!(budget.permits.available_permits(), 0);
+        drop(first);
         drop(second);
     }
 

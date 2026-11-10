@@ -166,7 +166,12 @@ impl Source {
             }
             let mut builder = reqwest::Client::builder()
                 .user_agent(http::USER_AGENT)
-                .redirect(reqwest::redirect::Policy::limited(10));
+                .redirect(reqwest::redirect::Policy::limited(10))
+                // A server that stops answering must not hold a connection
+                // slot for ever. The slot belongs to the whole application,
+                // so one dead server would hold every other download back.
+                .connect_timeout(Duration::from_secs(30))
+                .read_timeout(Duration::from_secs(120));
 
             if let Some(proxy) = proxy {
                 let proxy = reqwest::Proxy::all(proxy)

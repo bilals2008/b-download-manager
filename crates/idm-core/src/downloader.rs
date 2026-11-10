@@ -211,16 +211,30 @@ impl Manifest {
     /// The same damage reaches a manifest: a crash in the middle of a write
     /// can leave ranges that overlap or that are out of order. A broken list
     /// is not resumed from, the download starts over.
+    ///
+    /// The ranges are walked in file order, not in the order they were planned:
+    /// a split appends the tail of a range to the end of the list, so the
+    /// list is rarely in file order. What has to hold is that the ranges
+    /// cover the file once each, with no gap and no overlap.
     fn is_consistent(&self) -> bool {
+        let mut ranges: Vec<(u64, u64)> = self
+            .segments
+            .iter()
+            .map(|segment| (segment.start, segment.end))
+            .collect();
+        ranges.sort_unstable();
+
         let mut expected_start = 0u64;
-        for segment in &self.segments {
-            if segment.start != expected_start || segment.end < segment.start {
+        for (start, end) in ranges {
+            if start != expected_start || end < start {
                 return false;
             }
+            expected_start = end;
+        }
+        for segment in &self.segments {
             if segment.downloaded > segment.len() {
                 return false;
             }
-            expected_start = segment.end;
         }
         self.total == 0 || expected_start == self.total
     }
@@ -949,8 +963,25 @@ fn restore(download: &Arc<Download>, probe: &Probe, max_connections: u32) -> Vec
             // to the recorded length, the way the reference binary truncates
             // the file when it resumes ("Trucate at %I64d").
             for segment in &mut segments {
+                // The part file of this range is gone. The range starts over,
+                // the other ranges keep the bytes they have: one lost part
+                // costs one range, not the whole file.
+                if segment.downloaded > 0 && !segment.part.exists() {
+                    segment.downloaded = 0;
+                }
+                // The part file can be longer than the manifest says (the
+                // bytes reached the disk, the manifest did not) or shorter
+                // (the manifest was written, the bytes were not flushed).
+                // Only a longer file is cut back: `set_len` would pad a
+                // shorter one with zeros.
                 if let Ok(file) = OpenOptions::new().write(true).open(&segment.part) {
-                    let _ = file.set_len(segment.downloaded);
+                    if let Ok(length) = file.metadata().map(|meta| meta.len()) {
+                        if length > segment.downloaded {
+                            let _ = file.set_len(segment.downloaded);
+                        } else if length < segment.downloaded {
+                            segment.downloaded = length;
+                        }
+                    }
                 }
                 // The connections of a manifest are not running now.
                 segment.status = if segment.done() {
@@ -1005,14 +1036,6 @@ fn read_manifest(download: &Arc<Download>) -> Option<Manifest> {
     let manifest: Manifest = serde_json::from_str(&text).ok()?;
     if manifest.url != crate::transfer::redacted(&download.url)
         || manifest.segments.is_empty()
-        // A range that recorded bytes must still have them. A range that
-        // recorded none has nothing to lose: its part is created when the
-        // first byte arrives, so a crash before that is not a reason to
-        // throw the rest of the plan away.
-        || manifest
-            .segments
-            .iter()
-            .any(|segment| segment.downloaded > 0 && !segment.part.exists())
         || !manifest.is_consistent()
     {
         return None;
@@ -1021,11 +1044,15 @@ fn read_manifest(download: &Arc<Download>) -> Option<Manifest> {
 }
 
 pub fn save_manifest(download: &Download) {
-    let segments = download
+    let mut segments = download
         .segments
         .lock()
         .expect("segments lock poisoned")
         .clone();
+    // The list is not in file order: a split appends the tail of a range to
+    // the end. The manifest on disk is kept in file order, the order the
+    // ranges cover the file in.
+    segments.sort_by_key(|segment| segment.start);
     let manifest = Manifest {
         // The manifest lies next to the file, which may be in a folder that
         // is shared, so the password of the URL is not in it.

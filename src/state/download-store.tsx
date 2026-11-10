@@ -439,28 +439,59 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
     [sampleFor],
   );
 
+  // The engine sends a report for every running download several times a
+  // second. Every report redrew the whole list, so a window with a few
+  // downloads running spent its time in the renderer and stopped answering.
+  // The reports are collected here and put into the state once per frame:
+  // the newest report of each row is drawn, the ones before it are dropped.
+  const pending = useRef(new Map<number, DownloadInfo>());
+  const frame = useRef(0);
+
   const applyInfo = useCallback(
     (info: DownloadInfo) => {
       if (removed.current.has(info.id)) {
         return;
       }
-      const known = latest.current.downloads.find((item) => item.id === info.id);
-      const next = toDownload(info, known);
-      setState((current) => {
-        // An event can arrive before the effect above mirrors the newest state,
-        // so look again inside the updater and never append a second row.
-        const existing = current.downloads.find((item) => item.id === info.id);
-        const merged = existing
-          ? { ...next, addedAt: existing.addedAt }
-          : next;
-        return {
-          ...current,
-          downloads: existing
-            ? current.downloads.map((item) =>
-                item.id === info.id ? merged : item,
-              )
-            : [...current.downloads, merged],
-        };
+      pending.current.set(info.id, info);
+      if (frame.current) {
+        return;
+      }
+      frame.current = window.requestAnimationFrame(() => {
+        frame.current = 0;
+        const reports = [...pending.current.values()];
+        pending.current.clear();
+        if (!reports.length) {
+          return;
+        }
+        const known = latest.current.downloads;
+        const rows = reports.map((report) => ({
+          id: report.id,
+          next: toDownload(
+            report,
+            known.find((item) => item.id === report.id),
+          ),
+        }));
+        setState((current) => {
+          // An event can arrive before the effect above mirrors the newest
+          // state, so look again inside the updater and never append a
+          // second row.
+          const downloads = current.downloads.slice();
+          for (const row of rows) {
+            if (removed.current.has(row.id)) {
+              continue;
+            }
+            const index = downloads.findIndex((item) => item.id === row.id);
+            if (index < 0) {
+              downloads.push(row.next);
+            } else {
+              downloads[index] = {
+                ...row.next,
+                addedAt: downloads[index].addedAt,
+              };
+            }
+          }
+          return { ...current, downloads };
+        });
       });
     },
     [toDownload],
