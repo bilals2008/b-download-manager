@@ -8,6 +8,24 @@ started.
 
 ---
 
+## Workflow
+
+`.agents/WORKFLOW.md` is the workflow: plan in waves, implement the pieces in
+parallel, keep every source file under 800 lines, use the skills, and prove the
+change on the running application.
+
+- Read `.agents/WORKFLOW.md` before starting anything that touches more than
+  one file.
+- A source file may not grow past **800 lines**. `pnpm check:file-size` fails
+  the build when it does; split the file first, moving the code rather than
+  rewriting it.
+- Work that does not depend on each other is done in parallel, one agent per
+  piece, one set of files per piece.
+- A bug is not fixed until the running application has been driven through the
+  loopback bridge (`pnpm probe:bridge`) and the behaviour has been seen.
+
+---
+
 Project-specific rules for coding agents. Details: `docs/DEVELOPMENT.md`.
 Organize files properly: Keep folders and files logically structured by feature and responsibility.
 - Keep folders and files well-organized, modular, and maintainable.

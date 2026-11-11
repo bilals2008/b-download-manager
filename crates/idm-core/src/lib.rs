@@ -5,13 +5,16 @@
 //! can be run without a display, which is what the tests and the headless
 //! client do.
 
+pub mod checksum;
 pub mod disk;
 pub mod downloader;
 pub mod ftp;
+pub mod geo;
 pub mod http;
 pub mod limits;
 pub mod log;
 pub mod media;
+pub mod net;
 pub mod segmenter;
 pub mod session;
 pub mod transfer;

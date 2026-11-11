@@ -10,10 +10,12 @@
 //! nothing here solves a signature: a protected stream produces
 //! [`MediaError::Protected`] with one sentence the window can show.
 
+pub mod audio;
 pub mod dash;
 pub mod download;
 pub mod hls;
 pub mod quality;
+pub mod subtitles;
 mod xml;
 pub mod youtube;
 

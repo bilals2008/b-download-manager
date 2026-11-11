@@ -43,6 +43,7 @@ import {
   setProxy,
   setShowCompleteDialog,
   setShowProgressOnStart,
+  setShowVideoWindowOnStart,
   setSpeedLimit,
   setTrayDarkMode,
   setTrayHidden,
@@ -271,6 +272,9 @@ export default function App() {
       // As above; a hand-over falls back to the engine default.
     });
     void setShowProgressOnStart(settings.showProgressOnStart).catch(() => {
+      // As above.
+    });
+    void setShowVideoWindowOnStart(settings.showVideoWindowOnStart).catch(() => {
       // As above.
     });
     void setClipboardCapture(settings.clipboardCapture).catch(() => {

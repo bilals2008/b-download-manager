@@ -274,6 +274,22 @@ const PAGE_ENTRIES: readonly SettingsCatalogEntry[] = [
     keywords: ["progress", "window", "popup", "start", "download"],
   },
   {
+    id: "setting-video-window",
+    page: "downloads",
+    section: "While a download runs",
+    title: "Open the quality window when a video download starts",
+    description: "The quality window follows a video download.",
+    keywords: [
+      "video",
+      "youtube",
+      "quality",
+      "window",
+      "popup",
+      "start",
+      "media",
+    ],
+  },
+  {
     id: "setting-complete-dialog",
     page: "downloads",
     section: "When a download finishes",

@@ -212,6 +212,7 @@ async fn route(app: &AppHandle, request: &Request, connected: bool) -> (u16, Val
     let path = request.path();
     match (request.method.as_str(), path) {
         ("GET", "/v1/ping") => (200, ok(ping(connected))),
+        ("GET", "/v1/health") => (200, ok(health(app).await)),
         ("GET", "/v1/capture") => (200, ok(capture_policy(app))),
         ("POST", "/v1/capture") => set_capture_policy(app, &request.body),
         ("GET", "/v1/video-button-settings") => (200, ok(video_button_settings(app))),
@@ -263,6 +264,37 @@ async fn route(app: &AppHandle, request: &Request, connected: bool) -> (u16, Val
 }
 
 type Request = http::Request;
+
+/// How long the main thread took to answer, in milliseconds.
+///
+/// The main thread is the one that draws the window and answers the commands
+/// of the webview. When it is blocked, the window stops answering even though
+/// the bridge is still there and still says everything is fine. This is the
+/// measurement that tells a frozen window from a busy one: the answer is the
+/// time the main thread needed to pick up a task that was waiting for it.
+///
+/// A main thread that needs more than a second is in trouble: the window
+/// cannot be drawn, so nothing the reader does is seen.
+async fn health(app: &AppHandle) -> Value {
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    let started = std::time::Instant::now();
+    let _ = app.run_on_main_thread(move || {
+        let _ = sender.send(started.elapsed());
+    });
+    let answered = tokio::time::timeout(std::time::Duration::from_secs(5), receiver).await;
+    match answered {
+        Ok(Ok(waited)) => json!({
+            "mainThreadMs": waited.as_millis() as u64,
+            "frozen": false,
+        }),
+        // The main thread did not pick the task up in five seconds: it is
+        // blocked, and the window is frozen whatever the bridge says.
+        _ => json!({
+            "mainThreadMs": 5000u64,
+            "frozen": true,
+        }),
+    }
+}
 
 /// What the extension says about itself. `connected` tells a caller that the
 /// application heard the header that only the extension sends, so the popup can
@@ -586,7 +618,7 @@ fn control(app: &AppHandle, id: u64, action: &str) -> (u16, Value) {
             };
             let info = download.info();
             let handle = app.clone();
-            match app.run_on_main_thread(move || crate::progress::show(&handle, &info)) {
+            match app.run_on_main_thread(move || crate::progress::show(&handle, &info, true)) {
                 Ok(()) => Ok(()),
                 Err(error) => Err(format!("the window did not open: {error}")),
             }

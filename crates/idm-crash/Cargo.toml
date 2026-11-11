@@ -1,0 +1,12 @@
+[package]
+name = "idm-crash"
+version = "0.1.0"
+description = "The crash monitor and freeze detector of the download manager"
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "idm_crash"
+path = "src/lib.rs"
+
+[dependencies]

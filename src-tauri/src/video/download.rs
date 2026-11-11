@@ -210,12 +210,15 @@ pub fn start(
 /// its own, and the panel is the window that shows its progress. The panel is
 /// opened when the download starts, so the bytes are watched from the first
 /// one, whatever the browser asked for: a registration that came in inline
-/// never opened a window at all.
+/// never opened a window at all. The reader can turn this off in Settings.
 ///
 /// The window is built on the main thread, and building a webview inside the
 /// IPC handler the main thread is already in would never finish, so the build
 /// is asked for from a task of its own.
 fn show_progress(app: &AppHandle, job: u64) {
+    if !app.state::<AppState>().show_video_window_on_start() {
+        return;
+    }
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
         super::window::show(&handle, job);

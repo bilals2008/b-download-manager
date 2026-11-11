@@ -17,6 +17,8 @@ export interface Settings {
   showCompleteDialog: boolean;
   /** Whether a new download opens its progress window. */
   showProgressOnStart: boolean;
+  /** Whether a video download opens the quality window that follows it. */
+  showVideoWindowOnStart: boolean;
   /** Whether one tip is offered when the application is revealed at startup. */
   tipsOnStartup: boolean;
   /** Auto follows the system; the other two override it. */
@@ -95,6 +97,7 @@ export const DEFAULT_SETTINGS: Settings = {
   closeToTray: true,
   showCompleteDialog: true,
   showProgressOnStart: false,
+  showVideoWindowOnStart: true,
   tipsOnStartup: true,
   theme: "ayu",
   uiFont: "googlesans",
@@ -182,6 +185,10 @@ export function loadSettings(): Settings {
       showProgressOnStart: boolean(
         value.showProgressOnStart,
         DEFAULT_SETTINGS.showProgressOnStart,
+      ),
+      showVideoWindowOnStart: boolean(
+        value.showVideoWindowOnStart,
+        DEFAULT_SETTINGS.showVideoWindowOnStart,
       ),
       tipsOnStartup: boolean(
         value.tipsOnStartup,
@@ -341,6 +348,10 @@ export async function syncEngineSettings(): Promise<Settings | null> {
   settings.showProgressOnStart = boolean(
     saved.showProgressOnStart,
     settings.showProgressOnStart,
+  );
+  settings.showVideoWindowOnStart = boolean(
+    saved.showVideoWindowOnStart,
+    settings.showVideoWindowOnStart,
   );
   settings.clipboardCapture = boolean(
     saved.clipboardCapture,

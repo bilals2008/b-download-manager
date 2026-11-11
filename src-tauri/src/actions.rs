@@ -64,13 +64,17 @@ impl Reporter for AppReporter {
         // A finished file gets the window the reference manager opens for it,
         // unless the user
         // turned that window off in Options. The window is built on the main
-        // thread, the one the window toolkit runs on.
+        // thread, the one the window toolkit runs on, so it is handed to the
+        // shower that gives each build its own moment.
+        //
+        // The progress window of that download goes first: the completion
+        // window says the same thing better, and two windows over one file
+        // read as one that will not stay closed.
         if info.status == Status::Completed && self.0.state::<AppState>().show_complete_dialog() {
+            crate::progress::close(&self.0, info.id);
             let app = self.0.clone();
             let info = info.clone();
-            let _ = self
-                .0
-                .run_on_main_thread(move || crate::complete::show(&app, &info));
+            crate::shower::build(&app, move |app| crate::complete::show(app, &info));
         }
     }
 }

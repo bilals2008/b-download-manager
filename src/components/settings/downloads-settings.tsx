@@ -71,6 +71,16 @@ export function DownloadsSettings({ settings, onChange }: DownloadsSettingsProps
             onChange={(checked) => onChange("showProgressOnStart", checked)}
           />
         </SettingRow>
+        <SettingRow
+          settingId="setting-video-window"
+          label="Open the quality window when a video download starts"
+        >
+          <Switch
+            label="Open the quality window when a video download starts"
+            checked={settings.showVideoWindowOnStart}
+            onChange={(checked) => onChange("showVideoWindowOnStart", checked)}
+          />
+        </SettingRow>
       </Section>
 
       <Section title="When a download finishes">

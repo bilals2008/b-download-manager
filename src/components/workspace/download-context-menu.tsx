@@ -249,7 +249,7 @@ function rowsFor(
   // it is offered for one finished row and never for a batch.
   const canDelete = single !== null && canDeleteFile(single);
 
-  return [
+  const rows: MenuRow<RowCommand>[] = [
     {
       command: "resume",
       label: "Resume",
@@ -316,10 +316,7 @@ function rowsFor(
     },
     {
       command: "open-window",
-      label:
-        single?.mediaJob !== undefined
-          ? "Video quality window"
-          : "Download progress window",
+      label: "Download progress window",
       icon: <DownloadGlyph className="size-3.5" />,
       disabled: single === null,
     },
@@ -382,6 +379,31 @@ function rowsFor(
       disabled: !canDelete,
     },
   ];
+
+  // A media row has no progress window of its own: its window is the quality
+  // panel, and that panel opens on its own when the download starts. Offering
+  // it here only ever reopened a window that was already there.
+  if (single?.mediaJob !== undefined) {
+    const without = rows.filter(
+      (row) => row !== "separator" && row.command !== "open-window",
+    );
+    // A separator with nothing on one side of it would be a rule drawn in
+    // the air, so the ones left without a neighbour go too.
+    return without.filter((row, index) => {
+      if (row !== "separator") {
+        return true;
+      }
+      const before = without[index - 1];
+      const after = without[index + 1];
+      return (
+        before !== undefined &&
+        before !== "separator" &&
+        after !== undefined &&
+        after !== "separator"
+      );
+    });
+  }
+  return rows;
 }
 
 /** The entries that name how many rows they act on. */

@@ -510,6 +510,21 @@ impl Download {
         }
     }
 
+    /// The bytes that have arrived, without building the whole row.
+    ///
+    /// The tray tooltip is written on every progress report, and it shows
+    /// only a number. Building the row of every download for it would copy
+    /// every range of every download several times a second, and the copy
+    /// takes the same lock the engine takes when it records a byte.
+    pub fn downloaded(&self) -> u64 {
+        self.segments
+            .lock()
+            .expect("segments lock poisoned")
+            .iter()
+            .map(|segment| segment.downloaded)
+            .sum()
+    }
+
     /// Record the category and the note the user gave the download.
     ///
     /// Both come from a text field, so they are trimmed and cut to the length

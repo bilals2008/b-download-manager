@@ -69,6 +69,8 @@ pub struct EngineSettings {
     pub show_complete_dialog: bool,
     /// Whether a new download opens its progress window.
     pub show_progress_on_start: bool,
+    /// Whether a video download opens the quality window that follows it.
+    pub show_video_window_on_start: bool,
     /// Whether the clipboard is watched for download links.
     pub clipboard_capture: bool,
 }
@@ -88,6 +90,7 @@ impl Default for EngineSettings {
             video_button: VideoButtonSettings::default(),
             show_complete_dialog: true,
             show_progress_on_start: false,
+            show_video_window_on_start: true,
             clipboard_capture: false,
         }
     }

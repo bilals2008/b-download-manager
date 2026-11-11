@@ -164,6 +164,8 @@ pub struct AppState {
     show_complete_dialog: AtomicBool,
     /// Whether a new download opens its progress window.
     show_progress_on_start: AtomicBool,
+    /// Whether a video download opens the quality window that follows it.
+    show_video_window_on_start: AtomicBool,
     /// Whether the clipboard is watched for download links.
     clipboard_capture: AtomicBool,
     /// Which appearance the window is drawn in, as the window last said. The
@@ -213,6 +215,7 @@ impl Default for AppState {
             shutting_down: AtomicBool::new(false),
             show_complete_dialog: AtomicBool::new(true),
             show_progress_on_start: AtomicBool::new(false),
+            show_video_window_on_start: AtomicBool::new(true),
             clipboard_capture: AtomicBool::new(false),
             appearance_is_light: AtomicBool::new(false),
             staging: Mutex::new(None),
@@ -875,6 +878,19 @@ impl AppState {
         self.show_progress_on_start.store(on, Ordering::SeqCst);
     }
 
+    /// Whether a video download opens the quality window that follows it.
+    ///
+    /// A video download is not an engine download: the window that shows its
+    /// progress is the quality panel. This is the switch that decides whether
+    /// that panel comes up on its own when the download starts.
+    pub fn show_video_window_on_start(&self) -> bool {
+        self.show_video_window_on_start.load(Ordering::SeqCst)
+    }
+
+    pub fn set_show_video_window_on_start(&self, on: bool) {
+        self.show_video_window_on_start.store(on, Ordering::SeqCst);
+    }
+
     /// Whether the clipboard is watched for download links.
     pub fn clipboard_capture(&self) -> bool {
         self.clipboard_capture.load(Ordering::SeqCst)
@@ -998,6 +1014,7 @@ impl AppState {
         });
         self.set_show_complete_dialog(settings.show_complete_dialog);
         self.set_show_progress_on_start(settings.show_progress_on_start);
+        self.set_show_video_window_on_start(settings.show_video_window_on_start);
         self.set_clipboard_capture(settings.clipboard_capture);
         self.set_browser_connections(settings.default_connections);
         self.set_browser_folder(string_folder(&settings.default_folder));

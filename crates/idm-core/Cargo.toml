@@ -15,6 +15,13 @@ serde_json = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "fs", "io-util", "net"] }
 reqwest = { version = "0.12", default-features = false, features = ["stream", "rustls-tls", "socks"] }
 futures-util = "0.3"
+# The hashes a finished file is checked against.
+sha2 = { version = "0.11", default-features = false }
+md-5 = { version = "0.11", default-features = false }
+sha1 = { version = "0.11", default-features = false }
+crc32fast = { version = "1.5", default-features = false }
+# The IP-to-country table the crate carries is packed with xz.
+lzma-rust2 = { version = "0.23", default-features = false, features = ["std", "xz"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }

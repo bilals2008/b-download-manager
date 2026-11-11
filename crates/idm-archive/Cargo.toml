@@ -1,0 +1,32 @@
+[package]
+name = "idm-archive"
+version = "0.1.0"
+description = "Archive detection and safe extraction for the download engine"
+edition = "2021"
+rust-version = "1.88"
+
+[lib]
+name = "idm_archive"
+path = "src/lib.rs"
+
+[dependencies]
+# zip's Deflate, Deflate64 (Explorer writes those over 2 GB) and WinZip AES. The
+# features are named because the default set drags in bzip2, zstd, ppmd and lzma
+# decoders the download manager never needs.
+zip = { version = "9.2.2", default-features = false, features = [
+    "deflate",
+    "deflate64",
+    "aes-crypto",
+] }
+# tar without its xattr support: the entries' attributes are read from the
+# header, and xattr is a Linux-only dependency the Windows build cannot use.
+tar = { version = "0.4.46", default-features = false }
+# gzip, for `.gz` and `.tar.gz`.
+flate2 = { version = "1.1.10", default-features = false, features = ["zlib-rs"] }
+# xz, for `.xz` and `.tar.xz`: a pure Rust decoder, so no liblzma has to be
+# installed next to the application.
+lzma-rust2 = { version = "0.23.0", default-features = false, features = [
+    "std",
+    "xz",
+    "optimization",
+] }

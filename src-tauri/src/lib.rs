@@ -12,6 +12,7 @@ mod progress;
 mod queue;
 mod settings_store;
 mod share;
+mod shower;
 mod staging;
 mod state;
 mod toolbars;
@@ -102,8 +103,7 @@ pub(crate) fn show_progress_if_requested(
         return;
     };
     let info = download.info();
-    let handle = app.clone();
-    let _ = app.run_on_main_thread(move || progress::show(&handle, &info));
+    shower::build(app, move |app| progress::show(app, &info, false));
 }
 
 #[tauri::command]
@@ -282,7 +282,7 @@ async fn open_progress_window(
     let download = state.get(id).ok_or("unknown download")?;
     let info = download.info();
     let handle = app.clone();
-    app.run_on_main_thread(move || progress::show(&handle, &info))
+    app.run_on_main_thread(move || progress::show(&handle, &info, true))
         .map_err(|error| error.to_string())
 }
 
@@ -530,6 +530,13 @@ fn set_show_complete_dialog(state: State<'_, AppState>, on: bool) -> bool {
 fn set_show_progress_on_start(state: State<'_, AppState>, on: bool) -> bool {
     state.modify_settings(|settings| settings.show_progress_on_start = on);
     state.show_progress_on_start()
+}
+
+/// Whether a video download opens the quality window that follows it.
+#[tauri::command]
+fn set_show_video_window_on_start(state: State<'_, AppState>, on: bool) -> bool {
+    state.modify_settings(|settings| settings.show_video_window_on_start = on);
+    state.show_video_window_on_start()
 }
 
 /// The connections a browser hand-over gets, since it has no dialog to ask.
@@ -1268,19 +1275,12 @@ pub fn run() {
                     lifecycle::minimize_to_tray(window);
                 }
             }
-            // A progress window that really closed takes its own tray icon
-            // with it; one left behind would open nothing.
+            // The progress window that really closed takes its tray icon with
+            // it; one left behind would open nothing.
             WindowEvent::Destroyed => {
-                if let Some(id) = progress::id_of_label(window.label()) {
-                    progress::remove_tray(window.app_handle(), id);
+                if window.label() == progress::WINDOW {
+                    progress::remove_tray(window.app_handle());
                     progress::forget(window.label());
-                    // The two windows report one download, so closing either
-                    // closes both. Two reports of one row left open read as a
-                    // close that did not work.
-                    complete::close(window.app_handle(), id);
-                }
-                if let Some(id) = complete::id_of_label(window.label()) {
-                    progress::close(window.app_handle(), id);
                 }
             }
             _ => {}
@@ -1325,6 +1325,7 @@ pub fn run() {
             lifecycle::hide_main_window,
             set_show_complete_dialog,
             set_show_progress_on_start,
+            set_show_video_window_on_start,
             set_browser_connections,
             set_clipboard_capture,
             set_launch_on_startup,

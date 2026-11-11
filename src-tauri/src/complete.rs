@@ -15,23 +15,35 @@
 //! is no request to wait for and no address to encode.
 
 use idm_core::downloader::DownloadInfo;
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
+use std::sync::{Mutex, OnceLock};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
-/// The label prefix of the completion windows.
-const LABEL_PREFIX: &str = "complete";
+/// The label of the one completion window.
+pub const WINDOW: &str = "complete";
 
-/// The window label of one download.
-pub fn label(id: u64) -> String {
-    format!("{LABEL_PREFIX}-{id}")
+/// The download the one window is reporting.
+///
+/// Several downloads can finish at the same time. A window each would mean a
+/// webview each, and a webview costs about a hundred milliseconds to build on
+/// the main thread: the application froze for a second and a half whenever a
+/// few files finished together. The window reports the newest one instead,
+/// the way the reference manager shows one completion at a time.
+static SHOWING: OnceLock<Mutex<Option<u64>>> = OnceLock::new();
+
+/// The download the window is reporting.
+fn showing() -> Option<u64> {
+    *SHOWING
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
 }
 
-/// The download id a window label names, when it names one.
-pub fn id_of_label(label: &str) -> Option<u64> {
-    label
-        .strip_prefix(LABEL_PREFIX)?
-        .strip_prefix('-')?
-        .parse()
-        .ok()
+/// The download the window reports from now on.
+fn set_showing(id: u64) {
+    *SHOWING
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(|error| error.into_inner()) = Some(id);
 }
 
 /// The script that hands the finished download to the page.
@@ -44,15 +56,23 @@ fn payload(info: &DownloadInfo) -> String {
 ///
 /// Called on the main thread, where the window toolkit lives.
 pub fn show(app: &AppHandle, info: &DownloadInfo) {
-    let label = label(info.id);
-    if let Some(window) = app.get_webview_window(&label) {
-        let _ = window.unminimize();
-        let _ = window.show();
-        let _ = window.set_focus();
+    set_showing(info.id);
+    if let Some(window) = app.get_webview_window(WINDOW) {
+        // The window is already open and reports another download: it takes
+        // the newest one instead of a second window opening beside it.
+        let _ = window.emit("complete://job", info);
+        // A window that is already on screen takes the newest download
+        // quietly. Bringing it to the front again for every file that
+        // finishes reads as a window that will not stay closed.
+        if !window.is_visible().unwrap_or(false) {
+            let _ = window.unminimize();
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
         return;
     }
 
-    let _ = WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
+    let _ = WebviewWindowBuilder::new(app, WINDOW, WebviewUrl::App("index.html".into()))
         .title("Download complete")
         .inner_size(500.0, 160.0)
         .resizable(false)
@@ -70,8 +90,12 @@ pub fn show(app: &AppHandle, info: &DownloadInfo) {
 /// Close the completion window of a download that is leaving the list.
 ///
 /// The window would otherwise keep announcing a file the list no longer has.
+/// A window that already reports another download stays open.
 pub fn close(app: &AppHandle, id: u64) {
-    if let Some(window) = app.get_webview_window(&label(id)) {
+    if showing() != Some(id) {
+        return;
+    }
+    if let Some(window) = app.get_webview_window(WINDOW) {
         let _ = window.close();
     }
 }
@@ -81,16 +105,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_window_is_named_after_its_download() {
-        assert_eq!(label(42), "complete-42");
-    }
-
-    #[test]
-    fn a_label_names_its_download_or_nothing() {
-        assert_eq!(id_of_label("complete-42"), Some(42));
-        assert_eq!(id_of_label("progress-42"), None);
-        assert_eq!(id_of_label("complete-"), None);
-        assert_eq!(id_of_label("main"), None);
+    fn one_window_reports_the_newest_finished_download() {
+        assert_eq!(WINDOW, "complete");
     }
 
     #[test]

@@ -185,9 +185,7 @@ pub fn shutdown(app: &AppHandle) {
     state.save_preferences();
     bridge::stop(&state);
     tray::remove(app);
-    for download in state.list() {
-        progress::remove_tray(app, download.id);
-    }
+    progress::remove_tray(app);
 
     log::write("info", "the downloads are saved; exiting");
     app.exit(0);

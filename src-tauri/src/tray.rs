@@ -17,7 +17,7 @@
 //! Each progress window owns a tray icon of its own (`progress.rs`). This one
 //! belongs to the application and outlives every window.
 
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use tauri::image::Image;
 use tauri::include_image;
@@ -25,7 +25,7 @@ use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager};
 
-use idm_core::downloader::{DownloadInfo, Status};
+use idm_core::downloader::{Download, Status};
 use idm_core::log;
 
 use crate::actions;
@@ -68,21 +68,29 @@ impl Activity {
     }
 }
 
-/// Count the downloads as the tray should describe them.
-pub fn activity(rows: impl IntoIterator<Item = DownloadInfo>) -> Activity {
+/// Count the downloads as the tray should describe them, without building the
+/// row of any of them.
+///
+/// The tooltip is written on every progress report, and the row of a
+/// download carries every range of it. Copying all of that several times a
+/// second takes the same lock the engine takes when it records a byte, and
+/// the engine waits: the download slows down for a line of text.
+pub fn cheap_activity(downloads: &[Arc<Download>]) -> Activity {
     let mut out = Activity::default();
-    for info in rows {
-        match info.status {
+    for download in downloads {
+        let status = *download.status.lock().expect("status lock poisoned");
+        match status {
             Status::Running => {
                 out.running += 1;
-                out.downloaded = out.downloaded.saturating_add(info.downloaded);
-                if info.total == 0 {
+                out.downloaded = out.downloaded.saturating_add(download.downloaded());
+                let total = download.total.load(std::sync::atomic::Ordering::SeqCst);
+                if total == 0 {
                     out.unknown_size = true;
                 } else {
-                    out.total = out.total.saturating_add(info.total);
+                    out.total = out.total.saturating_add(total);
                 }
                 if out.first_name.is_none() {
-                    out.first_name = crate::dest::last_segment(&info.dest);
+                    out.first_name = crate::dest::last_segment(&download.dest.to_string_lossy());
                 }
             }
             Status::Queued => out.queued += 1,
@@ -305,6 +313,10 @@ pub fn show_window(app: &AppHandle) {
 /// Called whenever a download reports progress and after every action that
 /// changes a row's state. It is not a timer: with nothing happening, nothing
 /// is written.
+///
+/// The reports come several times a second for every running download, and a
+/// tooltip is a line of text: the icon is refreshed at most a few times a
+/// second, and the numbers are read without building the row of a download.
 pub fn refresh(app: &AppHandle) {
     let state = app.state::<AppState>();
     // With the icon taken away there is nothing to describe, and every progress
@@ -312,18 +324,10 @@ pub fn refresh(app: &AppHandle) {
     if !state.tray_available() {
         return;
     }
-    let rows = state
-        .list()
-        .iter()
-        .filter(|download| {
-            matches!(
-                download.status(),
-                Status::Running | Status::Queued | Status::Paused
-            )
-        })
-        .map(|download| download.info())
-        .collect::<Vec<_>>();
-    let text = tooltip_text(&activity(rows));
+    if !due_for_refresh() {
+        return;
+    }
+    let text = tooltip_text(&cheap_activity(&state.list()));
     if !remember(&text) {
         return;
     }
@@ -335,6 +339,23 @@ pub fn refresh(app: &AppHandle) {
         }
         None => log::write("warn", "the tray icon is not there to be described"),
     }
+}
+
+/// How long the icon waits before it is described again.
+const REFRESH_INTERVAL: std::time::Duration = std::time::Duration::from_millis(500);
+
+/// The last time the icon was described.
+static LAST_REFRESH: OnceLock<Mutex<std::time::Instant>> = OnceLock::new();
+
+/// Whether enough time has passed for the icon to be described again.
+fn due_for_refresh() -> bool {
+    let last = LAST_REFRESH.get_or_init(|| Mutex::new(std::time::Instant::now()));
+    let mut last = last.lock().unwrap_or_else(|error| error.into_inner());
+    if last.elapsed() < REFRESH_INTERVAL {
+        return false;
+    }
+    *last = std::time::Instant::now();
+    true
 }
 
 /// Remove the application icon. Used once, on the way out.
@@ -389,6 +410,35 @@ fn resume_all(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use idm_core::downloader::DownloadInfo;
+
+    /// Count the rows as the tray should describe them. The running app counts
+    /// them without building the rows ([`super::cheap_activity`]); this one
+    /// builds from the rows so the tests can name exact numbers.
+    fn activity(rows: impl IntoIterator<Item = DownloadInfo>) -> Activity {
+        let mut out = Activity::default();
+        for info in rows {
+            match info.status {
+                Status::Running => {
+                    out.running += 1;
+                    out.downloaded = out.downloaded.saturating_add(info.downloaded);
+                    if info.total == 0 {
+                        out.unknown_size = true;
+                    } else {
+                        out.total = out.total.saturating_add(info.total);
+                    }
+                    if out.first_name.is_none() {
+                        out.first_name = crate::dest::last_segment(&info.dest);
+                    }
+                }
+                Status::Queued => out.queued += 1,
+                Status::Paused => out.paused += 1,
+                _ => {}
+            }
+        }
+        out
+    }
 
     fn info(name: &str, status: Status, downloaded: u64, total: u64) -> DownloadInfo {
         DownloadInfo {

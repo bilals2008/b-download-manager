@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+import { listen } from "@tauri-apps/api/event";
+
 import { FileTypeIcon } from "@/components/icons/desktop-icons";
 import { CheckGlyph, CloseGlyph } from "@/components/icons/ui-icons";
 import { DialogAction } from "@/components/ui/dialog-action";
@@ -19,7 +21,8 @@ import type { DownloadInfo } from "@/types";
  * itself (`ANALYSIS.md`, section 9.4). The download is handed in by the
  * backend through `window.__BDM_COMPLETE__` before this renders.
  */
-export function DownloadCompleteWindow({ info }: { info: DownloadInfo }) {
+export function DownloadCompleteWindow({ info: initial }: { info: DownloadInfo }) {
+  const [info, setInfo] = useState(initial);
   const [error, setError] = useState<string | null>(null);
   const [categories] = useState(loadCategories);
   const { dir, base } = splitPath(info.dest);
@@ -30,6 +33,34 @@ export function DownloadCompleteWindow({ info }: { info: DownloadInfo }) {
 
   useEffect(() => {
     void showWindowWhenPainted();
+  }, []);
+
+  // The window is shared: several files can finish at the same time, and the
+  // window reports the newest one instead of a window per file.
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void listen<DownloadInfo>("complete://job", (event) => {
+      if (disposed) {
+        return;
+      }
+      setInfo(event.payload);
+    })
+      .then((stop) => {
+        if (disposed) {
+          stop();
+        } else {
+          unlisten = stop;
+        }
+      })
+      .catch(() => {
+        // The desktop runtime is not there; the copy the window was opened
+        // with is what it shows.
+      });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
   }, []);
 
   useEffect(() => {

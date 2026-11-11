@@ -354,6 +354,7 @@ export interface EngineSettings {
   videoButton: VideoButtonSettings;
   showCompleteDialog: boolean;
   showProgressOnStart: boolean;
+  showVideoWindowOnStart: boolean;
   clipboardCapture: boolean;
 }
 
@@ -465,6 +466,11 @@ export function setBrowserFolder(folder: string): Promise<string> {
 /** Whether a new download opens its progress window. */
 export function setShowProgressOnStart(on: boolean): Promise<boolean> {
   return invoke<boolean>("set_show_progress_on_start", { on });
+}
+
+/** Whether a video download opens the quality window that follows it. */
+export function setShowVideoWindowOnStart(on: boolean): Promise<boolean> {
+  return invoke<boolean>("set_show_video_window_on_start", { on });
 }
 
 /** The connections a browser hand-over gets, since it has no dialog to ask. */

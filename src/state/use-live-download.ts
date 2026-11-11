@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
+import { listen } from "@tauri-apps/api/event";
+
 import { isDesktop } from "@/lib/errors";
 import { listDownloads, onDownloadUpdate } from "@/lib/ipc";
 import { etaSeconds, nextSpeedSample, type SpeedSample } from "@/lib/speed";
@@ -22,14 +24,47 @@ export interface LiveDownload {
  * the same broadcast the list reads; events for other downloads are dropped
  * here rather than re-rendering this window.
  *
+ * The window is shared: it follows the download that was opened last, and the
+ * backend says which one that is on `progress://job`. A download that arrives
+ * there replaces the one on screen, and the rate starts again from nothing
+ * because the bytes belong to another file.
+ *
  * The rate is the difference between two reports, kept in a ref so sampling
  * does not itself cause a render. `nextSpeedSample` is shared with the list,
  * so the speed in the window and the speed in the row agree.
  */
 export function useLiveDownload(initial: DownloadInfo): LiveDownload {
+  const [id, setId] = useState(initial.id);
   const [info, setInfo] = useState(initial);
   const [rate, setRate] = useState({ speed: 0, eta: 0 });
   const sample = useRef<SpeedSample | undefined>(undefined);
+
+  // The window follows the download that was opened last.
+  useEffect(() => {
+    if (!isDesktop()) {
+      return;
+    }
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void listen<{ job: number }>("progress://job", (event) => {
+      if (disposed) {
+        return;
+      }
+      // Another file: the rate of the old one says nothing about this one.
+      sample.current = undefined;
+      setId(event.payload.job);
+    }).then((stop) => {
+      if (disposed) {
+        stop();
+      } else {
+        unlisten = stop;
+      }
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
 
   useEffect(() => {
     if (!isDesktop()) {
@@ -57,7 +92,7 @@ export function useLiveDownload(initial: DownloadInfo): LiveDownload {
     }
 
     void onDownloadUpdate((next) => {
-      if (next.id !== initial.id) {
+      if (next.id !== id) {
         return;
       }
       live = true;
@@ -77,7 +112,7 @@ export function useLiveDownload(initial: DownloadInfo): LiveDownload {
         if (disposed || live) {
           return;
         }
-        const current = all.find((item) => item.id === initial.id);
+        const current = all.find((item) => item.id === id);
         if (current) {
           apply(current);
         }
@@ -90,7 +125,7 @@ export function useLiveDownload(initial: DownloadInfo): LiveDownload {
       disposed = true;
       unlisten?.();
     };
-  }, [initial.id]);
+  }, [id]);
 
   return { info, speed: rate.speed, eta: rate.eta };
 }

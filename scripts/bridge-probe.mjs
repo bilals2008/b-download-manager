@@ -214,7 +214,7 @@ try {
   const strangerPause = await call({
     method: "POST",
     path: `/v1/downloads/${handed.id}/pause`,
-    headers: CLIENT,
+    headers: { Origin: PROBE_ORIGIN },
     body: {},
   });
   check("and the same control without the header is refused", strangerPause.status === 403);

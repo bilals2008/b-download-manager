@@ -3,29 +3,38 @@
 //! The reference download manager opens a window of its own for a download in
 //! flight: the status, the sizes, the transfer rate, the time left, the resume
 //! capability, the connections, and the pause, cancel and details controls.
-//! The clone gives every download that window, built from the same state the
-//! list reads.
+//! The clone gives the reader that window, built from the same state the list
+//! reads.
 //!
 //! Like the completion window it is a webview with its own title bar, so the
 //! main window stays usable. The download rides in as an initialization
 //! script; every later state arrives on `download://update`, which the app
 //! broadcasts to every window. Closing it hides nothing but the window: the
 //! download goes on.
+//!
+//! **One window serves every download.** A webview costs about a hundred
+//! milliseconds to build, and it has to be built on the main thread, so a
+//! window per download meant that eight downloads starting together froze the
+//! window for a second and a half before anything was drawn. The window
+//! follows the download that was opened last, the way the quality panel of a
+//! video follows the video that was opened last, and it says which one it
+//! follows on `progress://job`.
 
 use idm_core::downloader::DownloadInfo;
 use idm_core::log;
+use serde_json::json;
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, LogicalSize, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, LogicalSize, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
-/// The label prefix of the progress windows.
-const LABEL_PREFIX: &str = "progress";
+/// The label of the one progress window.
+pub const WINDOW: &str = "progress";
 
-/// The prefix of the tray icon each progress window owns.
-const TRAY_PREFIX: &str = "progress-tray";
+/// The id of the one tray icon the window owns.
+const TRAY: &str = "progress-tray";
 
 /// What the system title adds after the file name.
 const TITLE_SUFFIX: &str = " — Download progress";
@@ -92,23 +101,32 @@ pub fn forget(label: &str) {
         .remove(label);
 }
 
-/// The window label of one download.
-pub fn label(id: u64) -> String {
-    format!("{LABEL_PREFIX}-{id}")
+/// The download the one window is following.
+///
+/// The window is shared, so this is what says which row it belongs to: the
+/// page is told through `progress://job`, and the tray tooltip and the title
+/// follow the same download.
+static SHOWING: OnceLock<Mutex<Option<u64>>> = OnceLock::new();
+
+/// The download the window is following.
+fn showing() -> Option<u64> {
+    *SHOWING
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
 }
 
-/// The download id a window label names, when it names one.
-pub fn id_of_label(label: &str) -> Option<u64> {
-    label
-        .strip_prefix(LABEL_PREFIX)?
-        .strip_prefix('-')?
-        .parse()
-        .ok()
+/// The download the window follows from now on.
+fn set_showing(id: u64) {
+    *SHOWING
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(|error| error.into_inner()) = Some(id);
 }
 
-/// The tray icon of one download.
-fn tray_id(id: u64) -> String {
-    format!("{TRAY_PREFIX}-{id}")
+/// The tray icon of the one window.
+fn tray_id() -> &'static str {
+    TRAY
 }
 
 /// What the menu of a progress window's tray icon can do.
@@ -166,9 +184,11 @@ fn window_title(info: &DownloadInfo) -> String {
     }
 }
 
-/// Bring an existing progress window back from the tray or the taskbar.
-pub fn reveal(app: &AppHandle, id: u64) {
-    if let Some(window) = app.get_webview_window(&label(id)) {
+/// Bring the existing progress window back from the tray or the taskbar.
+///
+/// The window is shared, so it is brought back whichever download it follows.
+pub fn reveal(app: &AppHandle, _id: u64) {
+    if let Some(window) = app.get_webview_window(WINDOW) {
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
@@ -176,8 +196,14 @@ pub fn reveal(app: &AppHandle, id: u64) {
 }
 
 /// Close the progress window, leaving the download running.
+///
+/// A row that leaves the list closes the window only when the window follows
+/// that row: the window may already be showing another download.
 fn close_window(app: &AppHandle, id: u64) {
-    if let Some(window) = app.get_webview_window(&label(id)) {
+    if showing() != Some(id) {
+        return;
+    }
+    if let Some(window) = app.get_webview_window(WINDOW) {
         let _ = window.close();
     }
 }
@@ -211,10 +237,22 @@ fn tray_tip(info: &DownloadInfo) -> String {
 /// Driven by the same state report that updates the window, so a hidden
 /// progress window still has an honest tooltip without a timer.
 pub fn refresh_tray(app: &AppHandle, info: &DownloadInfo) {
-    let Some(tray) = app.tray_by_id(&tray_id(info.id)) else {
+    // The icon belongs to the one window, so it describes the download that
+    // window follows and nothing else.
+    if showing() != Some(info.id) {
+        return;
+    }
+    let Some(tray) = app.tray_by_id(tray_id()) else {
         return;
     };
     let text = tray_tip(info);
+    // A running download changes its percentage several times a second, and
+    // each change is a synchronous call into the window toolkit. The tip is
+    // refreshed at most twice a second; a row that is no longer running is
+    // written at once, so the icon never ends the run on a stale number.
+    if matches!(info.status, idm_core::downloader::Status::Running) && !due_for_tip(info.id) {
+        return;
+    }
     {
         let mut tips = TIPS
             .get_or_init(Default::default)
@@ -228,15 +266,37 @@ pub fn refresh_tray(app: &AppHandle, info: &DownloadInfo) {
     let _ = tray.set_tooltip(Some(&text));
 }
 
-/// Give a progress window its own tray icon.
+/// How long a running download's tooltip waits before it is written again.
+const TIP_INTERVAL: Duration = Duration::from_millis(500);
+
+/// The last time each progress window's tooltip was written.
+static LAST_TIP: OnceLock<Mutex<HashMap<u64, std::time::Instant>>> = OnceLock::new();
+
+/// Whether enough time has passed to write this download's tooltip again.
+fn due_for_tip(id: u64) -> bool {
+    let mut last = LAST_TIP
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let now = std::time::Instant::now();
+    match last.get(&id) {
+        Some(prev) if now.duration_since(*prev) < TIP_INTERVAL => false,
+        _ => {
+            last.insert(id, now);
+            true
+        }
+    }
+}
+
+/// Give the progress window its tray icon.
 ///
 /// The icon is the application's, labelled with the file. Clicking it brings
 /// the window back from the tray; its menu closes the window without touching
-/// the download. One icon per window is what keeps a hidden progress window
-/// findable without a trip through the download list.
+/// the download. One icon for the one window is what keeps a hidden progress
+/// window findable without a trip through the download list.
 fn add_tray(app: &AppHandle, info: &DownloadInfo) -> tauri::Result<()> {
-    let id = tray_id(info.id);
-    if app.tray_by_id(&id).is_some() {
+    let id = tray_id();
+    if app.tray_by_id(id).is_some() {
         return Ok(());
     }
 
@@ -287,14 +347,18 @@ fn add_tray(app: &AppHandle, info: &DownloadInfo) -> tauri::Result<()> {
     Ok(())
 }
 
-/// Remove the tray icon of a progress window that really closed.
-pub fn remove_tray(app: &AppHandle, id: u64) {
+/// Remove the tray icon of the progress window that really closed.
+pub fn remove_tray(app: &AppHandle) {
     // Dropping the icon that comes back removes it from the notification area.
-    let _ = app.remove_tray_by_id(&tray_id(id));
+    let _ = app.remove_tray_by_id(tray_id());
     TIPS.get_or_init(Default::default)
         .lock()
         .unwrap_or_else(|error| error.into_inner())
-        .remove(&id);
+        .clear();
+    *SHOWING
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(|error| error.into_inner()) = None;
 }
 
 /// The script that hands the download to the page before it renders.
@@ -303,14 +367,33 @@ fn payload(info: &DownloadInfo) -> String {
     format!("window.__BDM_PROGRESS__ = {json};")
 }
 
-/// Show the progress window of a download, or bring it to the front when it
-/// is already open.
+/// Show the progress window of a download, or bring it back to the front when
+/// it is already open.
 ///
 /// Called on the main thread, where the window toolkit lives.
-pub fn show(app: &AppHandle, info: &DownloadInfo) {
-    let label = label(info.id);
-    if app.get_webview_window(&label).is_some() {
-        reveal(app, info.id);
+///
+/// The window is shared: when it is already open it follows the download that
+/// was named here, and the page is told which one that is. Building a webview
+/// takes about a hundred milliseconds on the main thread, so a window per
+/// download froze the application whenever several downloads started at once.
+///
+/// `focus` says whether the window may take the focus. A window that opens by
+/// itself does not: eight downloads starting together would otherwise pull
+/// the window to the front eight times, and a window that keeps pulling
+/// itself forward reads as one that will not stay closed.
+pub fn show(app: &AppHandle, info: &DownloadInfo, focus: bool) {
+    set_showing(info.id);
+    if let Some(window) = app.get_webview_window(WINDOW) {
+        let title = window_title(info);
+        let _ = window.set_title(&title);
+        let _ = window.emit("progress://job", json!({ "job": info.id }));
+        if focus {
+            reveal(app, info.id);
+        } else if !window.is_visible().unwrap_or(false) {
+            // The reader sent the window to the tray; a download that starts
+            // brings it back, but it does not steal the focus.
+            let _ = window.show();
+        }
         // A window that was opened before its tray icon could be built gets
         // one now rather than staying without a way back from the tray.
         if let Err(error) = add_tray(app, info) {
@@ -323,7 +406,7 @@ pub fn show(app: &AppHandle, info: &DownloadInfo) {
         return;
     }
 
-    let built = WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
+    let built = WebviewWindowBuilder::new(app, WINDOW, WebviewUrl::App("index.html".into()))
         .title(window_title(info))
         .inner_size(WIDTH, DETAILS_HEIGHT)
         .resizable(false)
@@ -441,26 +524,15 @@ mod tests {
     }
 
     #[test]
-    fn a_window_is_named_after_its_download() {
-        assert_eq!(label(42), "progress-42");
+    fn one_window_serves_every_download() {
+        // A webview costs about a hundred milliseconds to build on the main
+        // thread, so a window per download froze the application.
+        assert_eq!(WINDOW, "progress");
     }
 
     #[test]
-    fn a_label_names_its_download_or_nothing() {
-        assert_eq!(id_of_label("progress-42"), Some(42));
-        assert_eq!(id_of_label("complete-42"), None);
-        assert_eq!(id_of_label("progress-"), None);
-        assert_eq!(id_of_label("main"), None);
-    }
-
-    #[test]
-    fn every_progress_window_owns_a_tray_icon() {
-        assert_eq!(tray_id(7), "progress-tray-7");
-        assert_ne!(
-            tray_id(7),
-            tray_id(8),
-            "two windows must not share one tray icon"
-        );
+    fn the_window_owns_one_tray_icon() {
+        assert_eq!(tray_id(), "progress-tray");
     }
 
     #[test]

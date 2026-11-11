@@ -21,6 +21,7 @@ import { fileURLToPath } from "node:url";
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 
 const CHECKS = [
+  "check-file-size",
   "check-palette",
   "check-fonts",
   "check-tooltip",

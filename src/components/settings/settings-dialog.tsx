@@ -47,6 +47,7 @@ import {
   setProxy,
   setShowCompleteDialog,
   setShowProgressOnStart,
+  setShowVideoWindowOnStart,
   setSpeedLimit,
   setVideoButtonSettings,
   onBrowserPolicy,
@@ -88,6 +89,7 @@ const ENGINE_KEYS: readonly (keyof Settings)[] = [
   "closeToTray",
   "showCompleteDialog",
   "showProgressOnStart",
+  "showVideoWindowOnStart",
   "clipboardCapture",
   "defaultFolder",
   "defaultConnections",
@@ -461,6 +463,7 @@ async function applyEngine(next: Settings): Promise<void> {
     setCloseToTray(next.closeToTray),
     setShowCompleteDialog(next.showCompleteDialog),
     setShowProgressOnStart(next.showProgressOnStart),
+    setShowVideoWindowOnStart(next.showVideoWindowOnStart),
     setClipboardCapture(next.clipboardCapture),
     setBrowserFolder(next.defaultFolder),
     // The category folders decide where a start writes, so the engine needs
