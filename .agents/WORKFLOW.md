@@ -81,3 +81,43 @@ until the probe says so.
 3. `pnpm tauri build` — the bundle still builds.
 4. The probe against the running app, for anything that touches the engine,
    the bridge or the window.
+
+## 6. The waves
+
+`planning/REMAINING-FEATURES.md` is the list: what is done, what the engine
+already has but nothing can reach, and what is still missing, wave by wave.
+
+The work ahead is large, so it is cut into waves. A wave is one set of pieces
+that do not touch each other's files; the pieces inside a wave run in parallel.
+The split list is the allowlist in `scripts/check-file-size.mjs`: an entry is
+removed when that file has been split, not when the wave starts.
+
+- **Wave 0 — the small windows work.** `progress` and `complete` must stay
+  listed by exact label in `src-tauri/capabilities/default.json`. A window
+  missing there still opens (app commands are not gated) but cannot be dragged,
+  cannot be closed, and never hears `download://update` — it reads as a freeze.
+- **Wave 1 — splits only.** Move code, never rewrite it: `lib.rs` → commands /
+  setup, `state.rs` → downloads / settings / queue, `actions.rs` → one module
+  per action family, `downloader.rs` → probe / ranges / assembly / resume,
+  `download-store.tsx` → store / selectors / effects, `App.tsx` → one hook per
+  concern. `cargo test --workspace` and `pnpm test` are the proof of a split.
+- **Wave 2 — engine reliability.** Checksum verification of a finished file
+  (paste a hash, `sha2`), per-host learned connection caps, slow-connection
+  shedding and rebalancing, server location (country + RTT) per download.
+- **Wave 3 — the wire.** DoH/DoT (hickory via `reqwest::dns_resolver`, with
+  reqwest 0.13's `DohResolver`/`DotResolver` when the version allows it),
+  adapter binding with `IP_UNICAST_IF`/`IPV6_UNICAST_IF` plus
+  `NotifyIpInterfaceChange` for the kill switch, and PAC through WinHTTP's
+  `WinHttpGetProxyForUrl` (per URL, never a cached global route).
+- **Wave 4 — media.** Soft subtitles into MP4 (`mov_text`) and MKV
+  (`S_TEXT/UTF8`), audio extraction to mp3/opus/flac, image galleries,
+  Google Drive/Docs, and DRM *detection* (refuse, never touch). All of it goes
+  through a pinned FFmpeg fetched and checksum-verified like the yt-dlp helper;
+  no transcode of video.
+- **Wave 5 — the outside world.** Debrid services (Real-Debrid, AllDebrid,
+  Premiumize, TorBox: API key in the OS credential store, never in
+  `settings.json`, never in a log), and archive handling.
+
+A wave is done when `pnpm verify`, `cargo test --workspace`, `pnpm tauri build`
+and the probe against the running app all pass, and `WHATS_NEW.md` has the
+reader-facing line for it.

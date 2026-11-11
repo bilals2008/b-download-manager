@@ -113,8 +113,63 @@ export function pauseDownload(id: number): Promise<void> {
   return invoke<void>("pause_download", { id });
 }
 
+/** What checking a finished file against a pasted hash found. */
+export interface ChecksumReport {
+  /** The algorithm that was used, named for the reader. */
+  algorithm: string;
+  /** Whether the file's hash is the one that was expected. */
+  matches: boolean;
+  /** The expected hash, as it is compared. */
+  expected: string;
+  /** The hash the file actually has. */
+  actual: string;
+}
+
+/**
+ * Check a finished file against the hash its publisher gave.
+ *
+ * The hash is pasted as the page copied it (spaces, colons, a `sha256:`
+ * prefix and a file name are all read), and the algorithm is either named or
+ * read from the hash's length.
+ */
+export function verifyDownloadChecksum(
+  id: number,
+  expected: string,
+  algorithm?: string,
+): Promise<ChecksumReport> {
+  return invoke<ChecksumReport>("verify_download_checksum", {
+    id,
+    expected,
+    algorithm: algorithm ?? null,
+  });
+}
+
 export function resumeDownload(id: number): Promise<void> {
   return invoke<void>("resume_download", { id });
+}
+
+/** What unpacking a finished archive put in place. */
+export interface ExtractReport {
+  /** The folder the contents went into. */
+  folder: string;
+  /** How many files were put in place. */
+  files: number;
+  /** How many bytes were written. */
+  bytes: number;
+  /** Entries left out: a link, a device, a folder that goes outside. */
+  skipped: number;
+  /** Entries refused because their name would leave the folder. */
+  refused: number;
+}
+
+/**
+ * Unpack a finished archive beside itself, into a folder of its own name.
+ *
+ * 7z and RAR need 7-Zip on the machine; everything else is read in the
+ * application. The archive is left in place.
+ */
+export function extractDownload(id: number): Promise<ExtractReport> {
+  return invoke<ExtractReport>("extract_download", { id });
 }
 
 /**

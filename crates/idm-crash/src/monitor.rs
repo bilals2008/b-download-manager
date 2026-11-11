@@ -54,16 +54,19 @@ impl Monitor {
     ///
     /// The call returns when the application is gone.
     pub fn watch(&self, pid: u32) {
-        let mut frozen = false;
+        let mut episodes = crate::hang::Episodes::new();
         loop {
             if !alive(pid) {
                 break;
             }
-            if !frozen && self.heartbeat.is_frozen() {
-                frozen = true;
-                self.write(Finding::Frozen {
-                    quiet_for: crate::FREEZE_AFTER,
-                });
+            // A quiet heartbeat is asked one more question: does the window
+            // still answer? A machine that went to sleep looks quiet and
+            // answers at once; a stuck message loop does not answer at all.
+            match episodes.observe(self.heartbeat.quiet_for(), crate::hang::ask(pid)) {
+                crate::hang::Episode::Frozen { quiet_for } => {
+                    self.write(Finding::Frozen { quiet_for });
+                }
+                crate::hang::Episode::Recovered | crate::hang::Episode::Quiet => {}
             }
             std::thread::sleep(LOOK);
         }

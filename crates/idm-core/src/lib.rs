@@ -15,6 +15,7 @@ pub mod limits;
 pub mod log;
 pub mod media;
 pub mod net;
+pub mod pace;
 pub mod segmenter;
 pub mod session;
 pub mod transfer;

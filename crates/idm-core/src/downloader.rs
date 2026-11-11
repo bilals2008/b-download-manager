@@ -137,6 +137,13 @@ pub struct DownloadInfo {
     pub category: Option<String>,
     /// The note the user typed for this download, when they typed one.
     pub description: Option<String>,
+    /// The number of connections this host allowed the last time it was
+    /// asked, when it was asked before.
+    pub learned_connections: Option<u32>,
+    /// The country the answering server is in, as a two-letter code.
+    pub country: Option<String>,
+    /// The round trip to the server, in milliseconds.
+    pub rtt_ms: Option<u64>,
 }
 
 /// Pause state shared by every task of one download.
@@ -313,6 +320,16 @@ pub struct Download {
     category: Mutex<Option<String>>,
     description: Mutex<Option<String>>,
     last_emit: Mutex<Instant>,
+    /// What each connection has taken, and when, for the pacing rules.
+    pace: Mutex<crate::pace::Watch>,
+    /// The cap learned for this host, kept for the row.
+    learned_connections: Mutex<Option<u32>>,
+    /// The country of the server that answers, and the round trip to it.
+    country: Mutex<Option<String>>,
+    rtt_ms: Mutex<Option<u64>>,
+    /// The ranges whose tail was handed to a new connection in this run, so a
+    /// range is not split over and over.
+    redirected: Mutex<Vec<u32>>,
     /// The status the server last refused a request with, kept as a number.
     /// A caller that has to decide whether an address must be renewed cannot
     /// read that decision back out of the message it was rendered into.
@@ -427,6 +444,11 @@ impl Download {
             category: Mutex::new(None),
             description: Mutex::new(None),
             last_emit: Mutex::new(last_emit),
+            pace: Mutex::new(crate::pace::Watch::new()),
+            learned_connections: Mutex::new(None),
+            country: Mutex::new(None),
+            rtt_ms: Mutex::new(None),
+            redirected: Mutex::new(Vec::new()),
             last_status: AtomicU16::new(0),
         }))
     }
@@ -507,6 +529,12 @@ impl Download {
                 .lock()
                 .expect("description lock poisoned")
                 .clone(),
+            learned_connections: *self
+                .learned_connections
+                .lock()
+                .expect("learned connections lock poisoned"),
+            country: self.country.lock().expect("country lock poisoned").clone(),
+            rtt_ms: *self.rtt_ms.lock().expect("rtt lock poisoned"),
         }
     }
 
@@ -824,11 +852,37 @@ impl Download {
 
     /// Record how far a connection has got and what it is doing, in one lock.
     fn record_progress(&self, id: u32, downloaded: u64, status: SegmentStatus) {
-        let mut segments = self.segments.lock().expect("segments lock poisoned");
-        if let Some(segment) = segments.iter_mut().find(|s| s.id == id) {
-            segment.downloaded = downloaded.min(segment.len());
-            segment.status = status;
-        }
+        let recorded = {
+            let mut segments = self.segments.lock().expect("segments lock poisoned");
+            match segments.iter_mut().find(|s| s.id == id) {
+                Some(segment) => {
+                    segment.downloaded = downloaded.min(segment.len());
+                    segment.status = status;
+                    segment.downloaded
+                }
+                None => return,
+            }
+        };
+        // The pacing rules read what each range has taken. The segments lock
+        // is released first: the rules take their own snapshot.
+        self.pace
+            .lock()
+            .expect("pace lock poisoned")
+            .record(id, recorded);
+    }
+
+    /// Keep the cap this host allowed the last time, for the row to show.
+    fn set_learned_connections(&self, connections: Option<u32>) {
+        *self
+            .learned_connections
+            .lock()
+            .expect("learned connections lock poisoned") = connections;
+    }
+
+    /// Record where the server that answers is.
+    fn set_location(&self, country: Option<String>, rtt_ms: Option<u64>) {
+        *self.country.lock().expect("country lock poisoned") = country;
+        *self.rtt_ms.lock().expect("rtt lock poisoned") = rtt_ms;
     }
 
     /// Set the state of one connection.
@@ -1157,6 +1211,7 @@ fn maybe_grow(
         return;
     }
 
+    let source_id = segments[index].id;
     let new_id = download.next_segment_id.fetch_add(1, Ordering::SeqCst);
     let Some(new_segment) =
         segmenter::split(&mut segments[index], new_id, &download.dir, &download.stem)
@@ -1165,6 +1220,13 @@ fn maybe_grow(
     };
     segments.push(new_segment.clone());
     drop(segments);
+    // The range was handed over here too, so the pacing rules do not hand the
+    // same range over a second time on the next tick.
+    download
+        .redirected
+        .lock()
+        .expect("redirected lock poisoned")
+        .push(source_id);
 
     // The new range starts empty, even when an earlier run left a file with
     // the same name behind.
@@ -1178,6 +1240,169 @@ fn maybe_grow(
         epoch,
     ));
     emit(reporter, download);
+}
+
+/// Hand the tail of one range to a new connection.
+///
+/// The range keeps the bytes it has and stops at the boundary, so the
+/// connection that is still on it has nothing left to fetch when its next
+/// chunk arrives; the new range starts at that boundary and reaches to the
+/// old end. This is the shed of a stalled range and the rebalance of a lagging
+/// one, which are the same move made for two reasons.
+fn hand_over(
+    reporter: &Arc<dyn Reporter>,
+    limits: &Limits,
+    download: &Arc<Download>,
+    set: &mut tokio::task::JoinSet<Result<(), String>>,
+    index: usize,
+    epoch: u64,
+) -> bool {
+    let new_id = download.next_segment_id.fetch_add(1, Ordering::SeqCst);
+    let new_segment = {
+        let mut segments = download.segments.lock().expect("segments lock poisoned");
+        let Some(segment) = segments.get_mut(index) else {
+            return false;
+        };
+        let Some(new_segment) =
+            segmenter::split(segment, new_id, &download.dir, &download.stem)
+        else {
+            return false;
+        };
+        segment.status = SegmentStatus::Stopped;
+        segments.push(new_segment.clone());
+        new_segment
+    };
+
+    // The new range starts empty, even when an earlier run left a file with
+    // the same name behind.
+    let _ = std::fs::remove_file(&new_segment.part);
+    set.spawn(segment_task(
+        reporter.clone(),
+        limits.clone(),
+        download.clone(),
+        new_segment.id,
+        epoch,
+    ));
+    emit(reporter, download);
+    true
+}
+
+/// Give a stalled or lagging range's tail to a new connection.
+///
+/// A range that stops arriving holds the file back: its bytes are handed to a
+/// connection that is moving. A range that merely lags gets the same treatment
+/// when a connection slot is free, because the bytes left on it are bytes the
+/// other connections could be fetching.
+fn maybe_redirect(
+    reporter: &Arc<dyn Reporter>,
+    limits: &Limits,
+    download: &Arc<Download>,
+    set: &mut tokio::task::JoinSet<Result<(), String>>,
+    epoch: u64,
+) {
+    if download.degraded.load(Ordering::SeqCst) {
+        return;
+    }
+    let segments = download
+        .segments
+        .lock()
+        .expect("segments lock poisoned")
+        .clone();
+    // Two moving ranges say nothing about a third: one of them is always the
+    // slower one.
+    let active = segments.iter().filter(|segment| !segment.done()).count();
+    if active < 3 {
+        return;
+    }
+
+    let mut redirected = download
+        .redirected
+        .lock()
+        .expect("redirected lock poisoned");
+    if redirected.len() >= REDIRECT_LIMIT {
+        return;
+    }
+    let rates = download
+        .pace
+        .lock()
+        .expect("pace lock poisoned")
+        .rates(Instant::now());
+
+    // A free slot is what a rebalance needs; a stalled range is handed over
+    // even when every slot is busy, because its connection is holding one
+    // without using it.
+    let free = (set.len() as u32) < download.max_connections;
+    let candidate = crate::pace::stalled(&segments, &rates).or_else(|| {
+        if free {
+            crate::pace::lagging(&segments, &rates)
+        } else {
+            None
+        }
+    });
+    let Some(id) = candidate.filter(|id| !redirected.contains(id)) else {
+        return;
+    };
+    let Some(index) = segments.iter().position(|segment| segment.id == id) else {
+        return;
+    };
+    // The range is noted before the hand-over, so a tick that arrives while
+    // the new task is starting does not hand the same range over again.
+    redirected.push(id);
+    drop(redirected);
+    drop(rates);
+
+    if hand_over(reporter, limits, download, set, index, epoch) {
+        log::write(
+            "info",
+            &format!("the tail of range {id} was given to another connection"),
+        );
+    }
+}
+
+/// Measure where the server that answers is, without holding the download.
+///
+/// The measurement opens one connection of its own, so it runs beside the
+/// transfer and reports into the row when it is done.
+fn measure_location(download: &Arc<Download>, host: Option<String>) {
+    let Some(host) = host.filter(|host| measurable(host)) else {
+        return;
+    };
+    let Ok(url) = reqwest::Url::parse(&download.url) else {
+        return;
+    };
+    let Some(port) = url.port_or_known_default() else {
+        return;
+    };
+    let download = download.clone();
+    tokio::spawn(async move {
+        let Ok(reach) = crate::geo::measure(&host, port).await else {
+            return;
+        };
+        let country = reach
+            .address
+            .parse::<std::net::IpAddr>()
+            .ok()
+            .and_then(crate::geo::country)
+            .map(|country| country.code().to_string());
+        download.set_location(country, Some(reach.rtt_ms));
+    });
+}
+
+/// Whether asking a server where it is tells the reader anything.
+///
+/// A server on this computer is not far away and is in no country: a probe of
+/// the loopback interface spends a connection to learn nothing. That is also
+/// where the test servers live, and a download from them must not open a
+/// second connection of its own.
+fn measurable(host: &str) -> bool {
+    let host = host.trim_matches(['[', ']']).to_ascii_lowercase();
+    if host == "localhost" {
+        return false;
+    }
+    match host.parse::<std::net::IpAddr>() {
+        Ok(address) => !address.is_loopback() && !address.is_unspecified(),
+        Err(_) => true,
+    }
 }
 
 /// Request one byte range and write it into the segment's part file.
@@ -1384,6 +1609,12 @@ const CORRUPT_MESSAGE: &str =
 
 /// The message a task uses when the range it was working on was given up.
 const ROLLED_BACK_MESSAGE: &str = "the range was rolled back";
+
+/// How many ranges one run may hand to another connection.
+///
+/// A fast connection would otherwise shred a plan into hundreds of tiny
+/// ranges, and every hand-over costs a connection slot and a request.
+const REDIRECT_LIMIT: usize = 4;
 
 /// Give up on the other connections and fetch the file with one.
 ///
@@ -1991,7 +2222,15 @@ async fn drive(
         .as_deref()
         .map(|host| limits.sites.resolve(host, download.max_connections))
         .unwrap_or(download.max_connections);
-    let allowed = site_max.min(download.max_connections);
+    // What this host allowed the last time is the starting point, so a host
+    // that refused eight of ten ranges is not asked for ten again.
+    let allowed = match host.as_deref() {
+        Some(host) => {
+            download.set_learned_connections(limits.learned.get(host));
+            limits.learned.resolve(host, site_max.min(download.max_connections))
+        }
+        None => site_max.min(download.max_connections),
+    };
     // The number of connections a file deserves: one per 10 KB that is left,
     // the way the reference binary counts them.
     let max_connections = if probe.ranges {
@@ -2010,6 +2249,13 @@ async fn drive(
     // and splitting the plan turned a working download into "the file changed".
     if !probe.ranges {
         download.degraded.store(true, Ordering::SeqCst);
+        // A host that answered a range request with the whole file allows one
+        // connection; that is worth remembering.
+        if let Some(host) = host.as_deref() {
+            limits
+                .learned
+                .observe(host, download.max_connections, 1);
+        }
     }
 
     check_free_space(download, probe.total)?;
@@ -2033,6 +2279,16 @@ async fn drive(
             probe.ranges
         ),
     );
+
+    // A new run starts from a clean slate: the ranges it hands over and the
+    // rates it measures belong to this run, not to the last one.
+    download.pace.lock().expect("pace lock poisoned").clear();
+    download
+        .redirected
+        .lock()
+        .expect("redirected lock poisoned")
+        .clear();
+    measure_location(download, host.clone());
 
     let mut set = tokio::task::JoinSet::new();
     for segment in &segments {
@@ -2133,6 +2389,7 @@ async fn drive(
                 // reason to look at the free space of the disk.
                 if !download.control.is_paused() {
                     maybe_grow(reporter, limits, download, &mut set, epoch);
+                    maybe_redirect(reporter, limits, download, &mut set, epoch);
                     // The manifest is the resume state. Writing it on every
                     // tick would rewrite the same JSON several times a second
                     // for the length of the download; a couple of seconds of
@@ -2168,6 +2425,14 @@ async fn drive(
     }
 
     assemble(download).await?;
+    // Every range of the plan finished: the host honoured what it was asked
+    // for, so the next download from it starts at that number.
+    if let Some(host) = host.as_deref() {
+        if !download.degraded.load(Ordering::SeqCst) {
+            let planned = segments.len() as u32;
+            limits.learned.observe(host, planned, planned);
+        }
+    }
     Ok(())
 }
 

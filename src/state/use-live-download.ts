@@ -50,6 +50,10 @@ export function useLiveDownload(initial: DownloadInfo): LiveDownload {
       if (disposed) {
         return;
       }
+      // The same download: nothing for this window to do.
+      if (event.payload.job === id) {
+        return;
+      }
       // Another file: the rate of the old one says nothing about this one.
       sample.current = undefined;
       setId(event.payload.job);

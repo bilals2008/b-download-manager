@@ -11,10 +11,12 @@
 //! does not do with it.
 
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use serde::{Deserialize, Serialize};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 /// The number of connections the whole application may have open at once.
@@ -105,6 +107,156 @@ pub fn host_of(url: &str) -> Option<String> {
     parsed.host_str().map(|host| host.to_ascii_lowercase())
 }
 
+/// What one host allowed the last time it was asked.
+///
+/// The reference manager keeps a per-site number in the registry; this is the
+/// same idea, written by the server's own answer rather than by the reader.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LearnedCap {
+    /// The most connections the host honoured.
+    pub connections: u32,
+    /// When it was last seen, in seconds since the epoch.
+    pub seen_at: u64,
+}
+
+/// How many days a learned cap is trusted.
+///
+/// A host that was capped years ago may have been replaced; a cap that lives
+/// forever would keep a fixed server slow forever.
+pub const LEARNED_CAP_DAYS: u64 = 30;
+
+/// The caps learned from what each server actually allowed.
+///
+/// A host that answered two ranges and refused the rest is asked for two the
+/// next time, instead of being asked for eight and failing eight times. The
+/// user's own setting stays the ceiling: learning can only lower what a host
+/// gets, never raise it past what the reader asked for.
+#[derive(Debug, Clone, Default)]
+pub struct LearnedCaps {
+    hosts: Arc<Mutex<HashMap<String, LearnedCap>>>,
+    /// Where the caps are kept between runs, when they are kept at all.
+    path: Arc<Mutex<Option<PathBuf>>>,
+}
+
+impl LearnedCaps {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Keep the caps in a file, and read what is there already.
+    ///
+    /// A file that cannot be read is not an error: the caps are an
+    /// optimisation, and a first run has none.
+    pub fn open(&self, path: &Path) {
+        if let Ok(text) = std::fs::read_to_string(path) {
+            if let Ok(hosts) = serde_json::from_str::<HashMap<String, LearnedCap>>(&text) {
+                *self.hosts.lock().expect("learned caps lock poisoned") = hosts;
+            }
+        }
+        *self.path.lock().expect("learned path lock poisoned") = Some(path.to_path_buf());
+    }
+
+    /// The cap learned for a host, when it is still fresh.
+    pub fn get(&self, host: &str) -> Option<u32> {
+        let key = host.to_ascii_lowercase();
+        let now = now_seconds();
+        let mut hosts = self.hosts.lock().expect("learned caps lock poisoned");
+        let cap = hosts.get(&key).copied()?;
+        if now.saturating_sub(cap.seen_at) > LEARNED_CAP_DAYS * 24 * 60 * 60 {
+            hosts.remove(&key);
+            return None;
+        }
+        Some(cap.connections.max(1))
+    }
+
+    /// The number of connections to start with for a host.
+    ///
+    /// Never more than the user asked for, at least one.
+    pub fn resolve(&self, host: &str, asked: u32) -> u32 {
+        let asked = asked.max(1);
+        self.get(host).map(|cap| cap.min(asked)).unwrap_or(asked)
+    }
+
+    /// Record what a host allowed: `honoured` connections of `asked`.
+    ///
+    /// Nothing is learned from a plan of one range: a small file that fits in
+    /// one connection says nothing about how many the host would allow.
+    pub fn observe(&self, host: &str, asked: u32, honoured: u32) {
+        let asked = asked.max(1);
+        if asked < 2 {
+            return;
+        }
+        let connections = honoured.clamp(1, asked);
+        let key = host.to_ascii_lowercase();
+        let was = self.get(&key);
+        if was == Some(connections) {
+            return;
+        }
+        {
+            let mut hosts = self.hosts.lock().expect("learned caps lock poisoned");
+            hosts.insert(
+                key,
+                LearnedCap {
+                    connections,
+                    seen_at: now_seconds(),
+                },
+            );
+        }
+        self.save();
+        crate::log::write(
+            "info",
+            &format!(
+                "{host} honoured {connections} of {asked} connections, the next download starts there"
+            ),
+        );
+    }
+
+    /// Forget what was learned about a host.
+    pub fn reset(&self, host: &str) {
+        let removed = self
+            .hosts
+            .lock()
+            .expect("learned caps lock poisoned")
+            .remove(&host.to_ascii_lowercase())
+            .is_some();
+        if removed {
+            self.save();
+        }
+    }
+
+    /// Write the caps down, when there is somewhere to write them.
+    fn save(&self) {
+        let path = self
+            .path
+            .lock()
+            .expect("learned path lock poisoned")
+            .clone();
+        let Some(path) = path else {
+            return;
+        };
+        let hosts = self.hosts.lock().expect("learned caps lock poisoned").clone();
+        let Ok(text) = serde_json::to_string_pretty(&hosts) else {
+            return;
+        };
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        let temporary = path.with_extension("json.new");
+        if std::fs::write(&temporary, text).is_ok() {
+            let _ = std::fs::rename(&temporary, &path);
+        }
+    }
+}
+
+/// The moment now, in seconds since the epoch.
+fn now_seconds() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|since| since.as_secs())
+        .unwrap_or(0)
+}
+
 /// The limits that apply to the whole application.
 #[derive(Debug, Clone)]
 pub struct Limits {
@@ -112,6 +264,8 @@ pub struct Limits {
     pub budget: ConnectionBudget,
     /// Per-site connection overrides.
     pub sites: SiteLimits,
+    /// What each host allowed the last time it was asked.
+    pub learned: LearnedCaps,
     /// The bandwidth cap that applies to every download.
     pub global_speed: SpeedLimiter,
     /// The proxy that new downloads go through, when the user set one.
@@ -123,6 +277,7 @@ impl Default for Limits {
         Self {
             budget: ConnectionBudget::new(DEFAULT_MAX_CONNECTIONS),
             sites: SiteLimits::default(),
+            learned: LearnedCaps::default(),
             global_speed: SpeedLimiter::unlimited(),
             proxy: Arc::new(Mutex::new(None)),
         }
@@ -317,6 +472,60 @@ mod tests {
         limits.set("Example.COM", 2);
         assert_eq!(limits.resolve("example.com", 8), 2);
         assert_eq!(limits.resolve("other.com", 8), 8);
+    }
+
+    #[test]
+    fn a_learned_cap_lowers_what_a_host_is_asked_for() {
+        let caps = LearnedCaps::new();
+        caps.observe("Example.com", 8, 3);
+        assert_eq!(caps.get("example.com"), Some(3));
+        assert_eq!(caps.resolve("EXAMPLE.COM", 8), 3);
+        // The user's setting is a ceiling, not a floor: a later plan of four
+        // does not raise the cap the host refused.
+        assert_eq!(caps.resolve("example.com", 4), 3);
+        assert_eq!(caps.resolve("other.example", 8), 8);
+    }
+
+    #[test]
+    fn a_plan_of_one_range_teaches_nothing() {
+        let caps = LearnedCaps::new();
+        caps.observe("example.com", 1, 1);
+        assert_eq!(caps.get("example.com"), None);
+    }
+
+    #[test]
+    fn a_cap_that_was_refused_six_ways_is_remembered_as_one() {
+        let caps = LearnedCaps::new();
+        caps.observe("example.com", 8, 0);
+        assert_eq!(caps.get("example.com"), Some(1));
+    }
+
+    #[test]
+    fn a_cap_is_forgotten_when_the_reader_asks() {
+        let caps = LearnedCaps::new();
+        caps.observe("example.com", 8, 2);
+        caps.reset("example.com");
+        assert_eq!(caps.get("example.com"), None);
+    }
+
+    #[test]
+    fn a_cap_survives_the_file_it_was_written_to() {
+        let dir = std::env::temp_dir().join(format!(
+            "bdm-learned-caps-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("a folder");
+        let path = dir.join("host-caps.json");
+
+        let caps = LearnedCaps::new();
+        caps.open(&path);
+        caps.observe("example.com", 8, 2);
+
+        let again = LearnedCaps::new();
+        again.open(&path);
+        assert_eq!(again.get("example.com"), Some(2));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

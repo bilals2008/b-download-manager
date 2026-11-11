@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 
 import { CopyGlyph, FolderGlyph } from "@/components/icons/action-icons";
 import { WarningMark } from "@/components/icons/desktop-icons";
-import { SpinnerGlyph } from "@/components/icons/ui-icons";
+import { SpinnerGlyph, CheckGlyph } from "@/components/icons/ui-icons";
 import { Dialog } from "@/components/ui/dialog";
 import { DialogAction } from "@/components/ui/dialog-action";
 import { FIELD } from "@/components/ui/field";
@@ -23,7 +23,7 @@ import {
   type Download,
 } from "@/lib/downloads";
 import { describeError, isDesktop } from "@/lib/errors";
-import { chooseFolder, type ConflictChoice, type StartRefusal } from "@/lib/ipc";
+import { chooseFolder, verifyDownloadChecksum, type ChecksumReport, type ConflictChoice, type StartRefusal } from "@/lib/ipc";
 import { useDownloads } from "@/state/download-store";
 
 const LABEL = "mb-1.5 block text-xs text-chrome-muted";
@@ -62,6 +62,30 @@ export function DownloadPropertiesDialog({
   // A second click in the same tick reaches the command before React has
   // re-rendered the disabled button; this is the guard that holds.
   const running = useRef(false);
+  // The publisher's hash, and the answer once the file has been checked
+  // against it. A new hash clears the last answer, so a green line can never
+  // describe a hash that is no longer in the field.
+  const [hash, setHash] = useState("");
+  const [checking, setChecking] = useState(false);
+  const [checkReport, setCheckReport] = useState<ChecksumReport | null>(null);
+  const [checkError, setCheckError] = useState<string | null>(null);
+
+  async function checkHash() {
+    const pasted = hash.trim();
+    if (!pasted || checking) {
+      return;
+    }
+    setChecking(true);
+    setCheckError(null);
+    setCheckReport(null);
+    try {
+      setCheckReport(await verifyDownloadChecksum(item.id, pasted));
+    } catch (failure) {
+      setCheckError(describeError(failure));
+    } finally {
+      setChecking(false);
+    }
+  }
 
   const chosenName = name.trim();
   const chosenFolder = folder.trim();
@@ -355,6 +379,83 @@ export function DownloadPropertiesDialog({
             <WarningMark tone="red" className="mt-px size-3.5 shrink-0" />
             <span className="min-w-0 break-words">{error}</span>
           </p>
+        ) : null}
+
+        {item.status === "completed" ? (
+          <div>
+            <label htmlFor="download-properties-checksum" className={LABEL}>
+              Checksum <span className="text-chrome-muted">(optional)</span>
+            </label>
+            <div className="flex items-start gap-2">
+              <input
+                id="download-properties-checksum"
+                className={`${FIELD} h-9 min-w-0 flex-1 font-mono`}
+                value={hash}
+                disabled={checking}
+                spellCheck={false}
+                autoComplete="off"
+                placeholder="Paste the publisher's hash"
+                onChange={(event) => {
+                  setHash(event.target.value);
+                  setCheckReport(null);
+                  setCheckError(null);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    void checkHash();
+                  }
+                }}
+              />
+              <DialogAction
+                onClick={() => void checkHash()}
+                disabled={checking || hash.trim() === ""}
+                icon={
+                  checking ? (
+                    <SpinnerGlyph className="size-3.5 motion-safe:animate-spin" />
+                  ) : undefined
+                }
+              >
+                {checking ? "Checking…" : "Verify"}
+              </DialogAction>
+            </div>
+            {checkReport ? (
+              checkReport.matches ? (
+                <p className="mt-1.5 flex items-start gap-1.5 text-chrome-micro text-chrome-menu-text">
+                  <CheckGlyph className="mt-px size-3.5 shrink-0 text-success" />
+                  <span>The file matches its {checkReport.algorithm} hash.</span>
+                </p>
+              ) : (
+                <div className="mt-1.5 text-chrome-micro text-chrome-menu-text">
+                  <p className="flex items-start gap-1.5 text-chrome-error">
+                    <WarningMark tone="red" className="mt-px size-3.5 shrink-0" />
+                    <span>The file does not match that hash.</span>
+                  </p>
+                  <dl className="mt-1 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5">
+                    <dt className="text-chrome-muted">Expected</dt>
+                    <dd className="font-mono break-all">{checkReport.expected}</dd>
+                    <dt className="text-chrome-muted">This file</dt>
+                    <dd className="font-mono break-all">{checkReport.actual}</dd>
+                  </dl>
+                </div>
+              )
+            ) : null}
+            {checkError ? (
+              <p
+                role="alert"
+                className="mt-1.5 flex items-start gap-1.5 text-chrome-micro text-chrome-error"
+              >
+                <WarningMark tone="red" className="mt-px size-3.5 shrink-0" />
+                <span className="min-w-0 break-words">{checkError}</span>
+              </p>
+            ) : null}
+            {!checkReport && !checkError ? (
+              <p className="mt-1.5 text-chrome-micro text-chrome-muted">
+                CRC32, MD5, SHA-1, SHA-256 or SHA-512, read from the hash's
+                length.
+              </p>
+            ) : null}
+          </div>
         ) : null}
 
         <div className="pt-1">

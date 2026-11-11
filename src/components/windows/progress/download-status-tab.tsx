@@ -153,6 +153,7 @@ export function DownloadStatusTab({
           {info.status === "completed" ? "—" : resumeLabel(info.resumable)}
         </Field>
         <Field label="Speed limit">{limitLabel(info.speedLimit)}</Field>
+        <Field label="Server">{serverLabel(info)}</Field>
       </dl>
 
       {problem ? (
@@ -248,11 +249,45 @@ export function DownloadStatusTab({
         // The panel unfolds as the window grows into it: the height travels on
         // the shell side, so the content only has to step out of its own way.
         <div className="flex min-h-0 flex-1 flex-col motion-safe:animate-details-in motion-reduce:animate-none">
-          <ConnectionDetails segments={info.segments} status={info.status} />
+          <ConnectionDetails
+            segments={info.segments}
+            status={info.status}
+            learnedConnections={info.learnedConnections}
+          />
         </div>
       ) : null}
     </section>
   );
+}
+
+/**
+ * Where the server is: the country it answers from and how long a round trip
+ * takes. `null` until the measurement is done, and for a server this computer
+ * cannot place.
+ */
+function serverLabel(info: {
+  country?: string | null;
+  rttMs?: number | null;
+}): string {
+  const parts: string[] = [];
+  if (info.country) {
+    parts.push(regionName(info.country));
+  }
+  if (typeof info.rttMs === "number") {
+    parts.push(`${info.rttMs} ms`);
+  }
+  return parts.length > 0 ? parts.join(" \u00b7 ") : "\u2014";
+}
+
+/** The English name of a two-letter country code, or the code itself. */
+function regionName(code: string): string {
+  try {
+    return (
+      new Intl.DisplayNames(["en"], { type: "region" }).of(code) ?? code
+    );
+  } catch {
+    return code;
+  }
 }
 
 /** A label and its value: the engine said it, so the value is monospaced digits. */

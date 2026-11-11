@@ -178,8 +178,12 @@ in `lib.rs`, the download-complete window in `complete.rs`, each progress
 window in `progress.rs` and the Site Grabber in `grabber/window.rs`.
 
 A window label must also be in `src-tauri/capabilities/default.json`. The
-grabber is `grabber` and the quality panel is `video`; without them, dragging
-and the close button do nothing.
+shared windows are `progress`, `complete`, `grabber` and `video`; without them
+the window cannot be dragged or closed, and — because `core:default` is what
+grants `core:event:allow-listen` — it never receives `download://update`, so
+its figures stop where they were opened. A label that is missing fails
+silently: the window still opens, because the app's own commands are not
+gated by the capability.
 
 The frame owns the corners. Small windows must **not** put `rounded-lg` (or any
 other radius) on their root: a second, different radius inside the compositor's

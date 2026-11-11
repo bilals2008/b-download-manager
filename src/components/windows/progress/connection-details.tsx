@@ -47,9 +47,12 @@ const TONE: Record<SegmentStatus, string> = {
 export function ConnectionDetails({
   segments,
   status,
+  learnedConnections = null,
 }: {
   segments: DownloadSegment[];
   status: DownloadStatus;
+  /** The cap this host allowed last time, when one was learned. */
+  learnedConnections?: number | null;
 }) {
   // A download restored from the index has no ranges: they were joined and
   // removed when it finished. That is not a plan waiting to be made.
@@ -66,6 +69,9 @@ export function ConnectionDetails({
         </h3>
         <span className="text-chrome-micro tabular-nums text-chrome-muted">
           {joined ? "No connections open" : connectionSummary(segments)}
+          {learnedConnections && learnedConnections > 0
+            ? ` \u00b7 this server allowed ${learnedConnections} last time`
+            : ""}
         </span>
       </div>
 

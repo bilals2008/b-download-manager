@@ -21,7 +21,7 @@ import {
 } from "@/lib/downloads";
 import { describeError } from "@/lib/errors";
 import { openVideoWindow } from "@/lib/media";
-import { openPath, openProgressWindow } from "@/lib/ipc";
+import { openPath, openProgressWindow, extractDownload } from "@/lib/ipc";
 import { useDownloads } from "@/state/download-store";
 
 /** What the menu of a download can do. */
@@ -38,6 +38,7 @@ type RowCommand =
   | "open-file"
   | "open-folder"
   | "open-window"
+  | "extract"
   | "copy-address"
   | "copy-path"
   | "category"
@@ -117,6 +118,20 @@ export function DownloadContextMenu({
     }
   }
 
+  /**
+   * Unpack a finished archive into a folder of its own name and show it. The
+   * backend refuses anything that is not finished, and 7z or RAR without
+   * 7-Zip installed says so in its own words.
+   */
+  async function extract(archive: Download) {
+    try {
+      const report = await extractDownload(archive.id);
+      open(report.folder);
+    } catch (failure) {
+      reportError(describeError(failure));
+    }
+  }
+
   function choose(command: RowCommand) {
     if (command.startsWith("category:")) {
       assignCategory(
@@ -176,6 +191,9 @@ export function DownloadContextMenu({
             reportError(describeError(failure));
           });
         }
+        break;
+      case "extract":
+        void extract(item);
         break;
       case "copy-address":
         void copyAddress();
@@ -320,6 +338,17 @@ function rowsFor(
       icon: <DownloadGlyph className="size-3.5" />,
       disabled: single === null,
     },
+    {
+      command: "extract",
+      label: "Extract here",
+      icon: <FolderGlyph className="size-3.5" />,
+      // Only a finished archive: a running file has no last byte yet, and a
+      // video is not something to unpack.
+      disabled:
+        single === null ||
+        single.status !== "completed" ||
+        !isArchive(single.fileName),
+    },
     "separator",
     {
       command: "copy-address",
@@ -406,9 +435,32 @@ function rowsFor(
   return rows;
 }
 
+/**
+ * The suffixes the archive crate unpacks by itself or through 7-Zip. The name
+ * is what the menu can see; whether the bytes really are an archive is the
+ * backend's question, and it answers with a reason when they are not.
+ */
+const ARCHIVE_SUFFIXES = [
+  ".zip",
+  ".7z",
+  ".rar",
+  ".tar",
+  ".tar.gz",
+  ".tgz",
+  ".tar.xz",
+  ".txz",
+  ".gz",
+  ".xz",
+];
+
+/** Whether a finished file is an archive this build can unpack. */
+function isArchive(name: string): boolean {
+  const lower = name.toLowerCase();
+  return ARCHIVE_SUFFIXES.some((suffix) => lower.endsWith(suffix));
+}
+
 /** The entries that name how many rows they act on. */
-function labelsFor(count: number): Partial<Record<RowCommand, string>> {
-  if (count < 2) {
+function labelsFor(count: number): Partial<Record<RowCommand, string>> {  if (count < 2) {
     return {};
   }
   return {

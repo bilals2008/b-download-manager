@@ -12,6 +12,7 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+pub mod hang;
 pub mod monitor;
 
 pub use monitor::{FLAG, Monitor};
@@ -50,6 +51,11 @@ impl Heartbeat {
         // the quiet time is the difference between it and now.
         let quiet = now_seconds().saturating_sub(seconds);
         Some(Instant::now() - Duration::from_secs(quiet))
+    }
+
+    /// How long the application has been quiet, when it has beaten at all.
+    pub fn quiet_for(&self) -> Option<Duration> {
+        self.last().map(|last| last.elapsed())
     }
 
     /// Whether the application has been quiet for longer than it should.

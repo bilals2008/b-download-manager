@@ -75,9 +75,26 @@ export function DownloadProgressWindow({ initial }: { initial: DownloadInfo }) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // If the engine does not answer a control within this many milliseconds,
+  // the window frees its buttons again instead of leaving them disabled until
+  // the application is restarted. The command may still finish in the
+  // background; the error tells the reader what happened.
+  const ACTION_TIMEOUT_MS = 10_000;
+
   async function act(action: ProgressAction) {
     setBusy(action);
     setActionError(null);
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        setBusy(null);
+        setActionError({
+          message: "The download engine did not answer in time.",
+          status: info.status,
+        });
+      }
+    }, ACTION_TIMEOUT_MS);
     try {
       if (action === "pause") {
         await pauseDownload(info.id);
@@ -92,6 +109,8 @@ export function DownloadProgressWindow({ initial }: { initial: DownloadInfo }) {
     } catch (failure) {
       setActionError({ message: describeError(failure), status: info.status });
     } finally {
+      clearTimeout(timer);
+      settled = true;
       setBusy(null);
     }
   }

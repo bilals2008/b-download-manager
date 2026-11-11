@@ -47,6 +47,12 @@ export interface DownloadInfo {
   category: string | null;
   /** A note kept with the download. */
   description: string | null;
+  /** The connections this host allowed the last time it was asked. */
+  learnedConnections?: number | null;
+  /** The country of the answering server, as a two-letter code. */
+  country?: string | null;
+  /** The round trip to the server, in milliseconds. */
+  rttMs?: number | null;
 }
 
 export const ACTIVE_STATUSES: DownloadStatus[] = ["queued", "running", "paused"];

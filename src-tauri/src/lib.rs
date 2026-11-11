@@ -2,9 +2,11 @@ mod actions;
 mod bridge;
 pub mod crash;
 mod clipboard;
+mod checksum;
 mod complete;
 mod conflict;
 mod dest;
+mod extract;
 mod grabber;
 mod lifecycle;
 mod migrate;
@@ -1187,6 +1189,10 @@ pub fn run() {
             let _ = std::fs::create_dir_all(&log_dir);
             idm_core::log::open(log_dir.join("idm-clone.log"));
             carry_log_over_from_data_dir(&dir, &log_dir);
+            // What each host allowed the last time it was asked lives beside
+            // the settings, so a server that refused ranges is not asked for
+            // them again after a restart.
+            state.limits().learned.open(&dir.join("host-caps.json"));
             // A second copy of the application watches this one from the
             // outside and writes a report when it ends badly. It is the
             // monitor, not this copy, that writes the report: a program that
@@ -1358,6 +1364,8 @@ pub fn run() {
             show_ready,
             set_window_background,
             open_path,
+            checksum::verify_download_checksum,
+            extract::extract_download,
             open_url,
             share::share_app,
             updater::check_update,

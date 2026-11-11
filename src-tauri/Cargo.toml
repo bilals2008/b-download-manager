@@ -14,6 +14,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 idm-core = { path = "../crates/idm-core" }
+idm-archive = { path = "../crates/idm-archive" }
 idm-crash = { path = "../crates/idm-crash" }
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-dialog = "2"

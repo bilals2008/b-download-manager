@@ -85,6 +85,11 @@ pub fn algorithm_for_length(length: usize) -> Option<Algorithm> {
 
 /// Whether a hash is one this engine can check: hex digits, and as many of
 /// them as one of the algorithms has.
+///
+/// The digits are counted as characters and halved before the length is read:
+/// a hash is two hex digits a byte, so an MD5 (32 digits) is 16 bytes and not a
+/// truncated SHA-256. Remembering that is what keeps SHA-1 and SHA-512 hashes
+/// from being refused.
 pub fn is_hash(text: &str) -> bool {
     let mut digits = 0usize;
     for c in text.chars() {
@@ -94,7 +99,7 @@ pub fn is_hash(text: &str) -> bool {
             return false;
         }
     }
-    algorithm_for_length(digits).is_some()
+    digits % 2 == 0 && algorithm_for_length(digits / 2).is_some()
 }
 
 /// Why a hash could not be read or used.
@@ -312,8 +317,22 @@ mod tests {
 
     #[test]
     fn a_hash_is_told_from_its_length() {
-        assert!(is_hash("d41d8cd98f00b204e9800998ecf8427e"));
+        assert!(is_hash("d41d8cd98f00b204e9800998ecf8427e"), "an MD5 hash");
+        assert!(
+            is_hash("d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592"),
+            "a SHA-256 hash"
+        );
+        assert!(
+            is_hash("2fd4e1c67a2d28fced849ee1bb76e7391b93eb12"),
+            "a SHA-1 hash is 40 digits, which is 20 bytes"
+        );
+        assert!(
+            is_hash(&"a".repeat(128)),
+            "a SHA-512 hash is 128 digits, which is 64 bytes"
+        );
+        assert!(is_hash("414fa339"), "a CRC32 hash");
         assert!(!is_hash("not a hash"));
+        assert!(!is_hash(&"a".repeat(33)), "an odd number of digits is no hash");
     }
 
     #[test]
