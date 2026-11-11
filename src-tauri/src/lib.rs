@@ -1,5 +1,6 @@
 mod actions;
 mod bridge;
+pub mod crash;
 mod clipboard;
 mod complete;
 mod conflict;
@@ -1186,6 +1187,11 @@ pub fn run() {
             let _ = std::fs::create_dir_all(&log_dir);
             idm_core::log::open(log_dir.join("idm-clone.log"));
             carry_log_over_from_data_dir(&dir, &log_dir);
+            // A second copy of the application watches this one from the
+            // outside and writes a report when it ends badly. It is the
+            // monitor, not this copy, that writes the report: a program that
+            // is already falling over cannot be trusted to write one.
+            crash::start(log_dir.clone());
             // The staging tree is the only place an unfinished download may
             // write. Without it a start refuses rather than letting its bytes
             // land beside the finished file.

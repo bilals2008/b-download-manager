@@ -64,6 +64,7 @@ const ALLOWLIST = new Map([
   ["src/App.tsx", "wave 1"],
   ["scripts/check-extension.mjs", "wave 1"],
   ["src-tauri/src/bridge/mod.rs", "wave 1"],
+  ["crates/idm-core/src/net/pac/js.rs", "wave 2"],
 ]);
 
 const SOURCE_EXTENSIONS = new Set([".rs", ".ts", ".tsx", ".mjs"]);

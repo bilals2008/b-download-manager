@@ -186,6 +186,11 @@ pub fn shutdown(app: &AppHandle) {
     bridge::stop(&state);
     tray::remove(app);
     progress::remove_tray(app);
+    // The monitor outside writes a report when the application ends badly.
+    // This file says that the end was deliberate.
+    if let Ok(dir) = app.path().app_log_dir() {
+        crate::crash::say_goodbye(&dir);
+    }
 
     log::write("info", "the downloads are saved; exiting");
     app.exit(0);

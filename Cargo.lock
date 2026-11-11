@@ -1804,6 +1804,9 @@ dependencies = [
 [[package]]
 name = "idm-crash"
 version = "0.1.0"
+dependencies = [
+ "windows-sys 0.61.2",
+]
 
 [[package]]
 name = "idm-debrid"
@@ -2315,6 +2318,7 @@ dependencies = [
  "futures-util",
  "getrandom 0.4.3",
  "idm-core",
+ "idm-crash",
  "reqwest 0.12.28",
  "serde",
  "serde_json",

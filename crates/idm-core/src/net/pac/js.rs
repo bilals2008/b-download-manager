@@ -536,7 +536,7 @@ fn tokenize(src: &str) -> Result<Vec<Token>, PacError> {
 
 /// The orders two values can be compared in.
 #[derive(Debug, Clone, Copy)]
-enum Order {
+pub enum Order {
     /// `<`
     Less,
     /// `<=`
