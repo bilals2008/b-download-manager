@@ -22,6 +22,22 @@ sha1 = { version = "0.11", default-features = false }
 crc32fast = { version = "1.5", default-features = false }
 # The IP-to-country table the crate carries is packed with xz.
 lzma-rust2 = { version = "0.23", default-features = false, features = ["std", "xz"] }
+# DNS over TLS and DNS over HTTPS (RFC 7858, RFC 8484), through hickory.
+hickory-resolver = { version = "0.26", default-features = false, features = ["tokio", "tls-ring", "https-ring", "rustls-platform-verifier"] }
+# The certificate verifier hickory hands to rustls. The system's store, as
+# reqwest uses for HTTPS.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-platform-verifier = { version = "0.7", default-features = false }
+rustls-pki-types = { version = "1.10", default-features = false }
+
+[dev-dependencies]
+# The tests' own certificate authority and server for the local DoH test server.
+rcgen = "0.14"
+# The local DoH test server is HTTP/2 over TLS, the way a real one is.
+h2 = "0.4"
+http = "1"
+bytes = "1"
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }

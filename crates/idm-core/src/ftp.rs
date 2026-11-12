@@ -10,6 +10,8 @@
 //! (assertion strings in the reference binary). The strings are quoted here so
 //! the module carries its own evidence.
 
+use std::net::{IpAddr, SocketAddr};
+
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader, ReadHalf, WriteHalf};
 use tokio::net::TcpStream;
 
@@ -29,6 +31,35 @@ pub struct Ftp {
     password: String,
 }
 
+/// Open a connection to the server, asking the reader's resolver for the
+/// address when one is in force.
+///
+/// An FTP server is named too, so the name is looked up the same way every
+/// other name is: through the resolver the reader chose, or through the
+/// system's when they chose that one. An address needs no lookup at all.
+async fn connect(host: &str, port: u16) -> Result<TcpStream, String> {
+    fn unreachable(error: impl std::fmt::Display) -> String {
+        format!("cannot reach the server: {error}")
+    }
+    if let Ok(address) = host.trim_matches(['[', ']']).parse::<IpAddr>() {
+        return TcpStream::connect(SocketAddr::new(address, port))
+            .await
+            .map_err(unreachable);
+    }
+    let Some(dns) = crate::net::resolver::current() else {
+        return TcpStream::connect((host, port)).await.map_err(unreachable);
+    };
+    let addresses = dns.addresses(host).await.map_err(unreachable)?;
+    let mut last = String::new();
+    for address in addresses {
+        match TcpStream::connect(SocketAddr::new(address, port)).await {
+            Ok(stream) => return Ok(stream),
+            Err(error) => last = error.to_string(),
+        }
+    }
+    Err(unreachable(last))
+}
+
 impl Ftp {
     /// Open the control connection and log in.
     pub async fn connect(
@@ -37,9 +68,7 @@ impl Ftp {
         user: &str,
         password: &str,
     ) -> Result<Self, String> {
-        let stream = TcpStream::connect((host, port))
-            .await
-            .map_err(|e| format!("cannot reach the server: {e}"))?;
+        let stream = connect(host, port).await?;
         let (reader, writer) = tokio::io::split(stream);
 
         let mut ftp = Ftp {
@@ -181,9 +210,9 @@ pub async fn open_range(
     let mut ftp = Ftp::connect(host, port, user, password).await?;
 
     let (data_host, data_port) = ftp.passive().await?;
-    let data = TcpStream::connect((data_host, data_port))
+    let data = connect(&data_host, data_port)
         .await
-        .map_err(|e| format!("cannot open the data connection: {e}"))?;
+        .map_err(|error| format!("cannot open the data connection: {error}"))?;
 
     // A range that does not start at the first byte asks the server to start
     // there.

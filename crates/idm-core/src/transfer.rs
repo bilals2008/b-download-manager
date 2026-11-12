@@ -164,7 +164,7 @@ impl Source {
             if parsed.host_str().is_none() {
                 return Err("the URL has no host".to_string());
             }
-            let mut builder = reqwest::Client::builder()
+            let mut builder = crate::net::client_builder(proxy, None)?
                 .user_agent(http::USER_AGENT)
                 .redirect(reqwest::redirect::Policy::limited(10))
                 // A server that stops answering must not hold a connection
@@ -172,12 +172,6 @@ impl Source {
                 // so one dead server would hold every other download back.
                 .connect_timeout(Duration::from_secs(30))
                 .read_timeout(Duration::from_secs(120));
-
-            if let Some(proxy) = proxy {
-                let proxy = reqwest::Proxy::all(proxy)
-                    .map_err(|e| format!("the proxy address is not usable: {e}"))?;
-                builder = builder.proxy(proxy);
-            }
 
             let mut defaults = reqwest::header::HeaderMap::new();
             // The referer comes from the browser, so it is untrusted input.

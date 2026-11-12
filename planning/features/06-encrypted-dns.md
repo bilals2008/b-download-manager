@@ -1,6 +1,7 @@
 # Encrypted DNS: DoH, DoT, NextDNS
 
-**Wave 3 · Status:** 🔧 `net/dns.rs` exists, nothing calls it
+**Wave 3 · Status:** ✅ done — `net/dns.rs` holds the choice, `net/resolver.rs`
+asks it, the settings file keeps it and the window edits it
 
 ## Goal
 
@@ -61,3 +62,33 @@ and read the log to confirm the mode in force.
 ## Out of scope
 
 The adapter binding (its own plan); DNS is about names, not routes.
+
+## What landed
+
+- `crates/idm-core/src/net/dns.rs` — the choice (`DnsSettings`, `DnsMode`),
+  the rules (`who_answers`, `may_fall_back`), and the checks: an https://
+  endpoint without credentials for DoH, a hostname for DoT, a NextDNS
+  configuration id of six hex digits.
+- `crates/idm-core/src/net/resolver.rs` — the asking, over TLS (RFC 7858) or
+  HTTPS (RFC 8484) through hickory, with the system's certificate verifier.
+  The names a public server cannot know stay with the system's resolver; a
+  name the chosen resolver says does not exist never falls back; a resolver
+  that cannot be reached may, and only when the reader allowed it. A failed
+  lookup is logged with the mode, never with the name that was asked for.
+- `crates/idm-core/src/net.rs` — `client_builder`, the one place a client is
+  given the proxy and the resolver in force, so no client can quietly use the
+  system's resolver instead.
+- `crates/idm-core/src/ftp.rs` — an FTP server is named too, so its address is
+  looked up the same way.
+- `src-tauri/src/settings_store.rs` — the `dns` block in the engine's file,
+  checked before it is kept.
+- `src-tauri/src/state.rs` — the resolver is built when the settings are
+  applied and put in force for the whole application.
+- `src-tauri/src/dns.rs` — the commands: store the choice, read it, and test
+  it by asking one name.
+- `src/components/settings/dns-settings.tsx` — the page: the mode, one field
+  per mode, the fallback switch and the test button.
+
+The bridge's PAC fetch does not exist in this build yet (its own plan), and
+the debrid crate is not a dependency of the application yet (wave 5), so
+those two clients are still built without the reader's resolver.

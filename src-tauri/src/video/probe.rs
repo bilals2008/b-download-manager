@@ -184,7 +184,7 @@ pub async fn probe_file(
 }
 
 fn client() -> Result<reqwest::Client, String> {
-    reqwest::Client::builder()
+    idm_core::net::client_builder(None, None)?
         .user_agent(http::USER_AGENT)
         .redirect(Policy::none())
         .timeout(REQUEST_TIMEOUT)

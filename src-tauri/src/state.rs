@@ -1012,6 +1012,28 @@ impl AppState {
         } else {
             Some(&settings.proxy_url)
         });
+        // One resolver, built here and put in force for the whole
+        // application: every client the engine and the application build
+        // looks names up through it. A mode whose endpoint cannot be used
+        // reads as the system's, and the file says why in the log rather than
+        // failing the download.
+        let choice = settings.dns.choice();
+        if let Err(error) = settings.dns.validated() {
+            idm_core::log::write(
+                "warn",
+                &format!(
+                    "the saved DNS settings cannot be used, the system's resolver is in force: {error}"
+                ),
+            );
+        }
+        idm_core::net::resolver::set_current(if choice.is_system() {
+            None
+        } else {
+            Some(Arc::new(idm_core::net::Dns::new(
+                &idm_core::net::Hosts::default(),
+                &choice,
+            )))
+        });
         self.set_show_complete_dialog(settings.show_complete_dialog);
         self.set_show_progress_on_start(settings.show_progress_on_start);
         self.set_show_video_window_on_start(settings.show_video_window_on_start);

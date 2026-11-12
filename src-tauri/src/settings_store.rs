@@ -73,6 +73,11 @@ pub struct EngineSettings {
     pub show_video_window_on_start: bool,
     /// Whether the clipboard is watched for download links.
     pub clipboard_capture: bool,
+    /// Which DNS answers names, and whether the system's may answer when
+    /// the chosen one cannot be reached. The engine applies it to every
+    /// client it builds — downloads, the grabber, video tracks, the update
+    /// check — so the one setting governs all of them.
+    pub dns: idm_core::net::DnsSettings,
 }
 
 impl Default for EngineSettings {
@@ -92,6 +97,7 @@ impl Default for EngineSettings {
             show_progress_on_start: false,
             show_video_window_on_start: true,
             clipboard_capture: false,
+            dns: idm_core::net::DnsSettings::default(),
         }
     }
 }
@@ -167,7 +173,34 @@ pub fn sanitize(mut settings: EngineSettings) -> EngineSettings {
         settings.speed_limit_bytes = 0;
     }
     settings.proxy_url = strip_credentials(&settings.proxy_url);
+    clean_dns(&mut settings.dns);
     settings
+}
+
+/// Clean the DNS the file stores. A mode this build does not know reads as
+/// the system's resolver; an endpoint that cannot be asked is dropped rather
+/// than kept: a resolver that fails to start leaks nothing, and neither does
+/// one that was never valid.
+fn clean_dns(dns: &mut idm_core::net::DnsSettings) {
+    let mode = dns.mode.trim().to_ascii_lowercase();
+    dns.mode = match mode.as_str() {
+        "system" | "doh" | "dot" | "nextdns" => mode,
+        _ => idm_core::net::DnsMode::System.stored().to_string(),
+    };
+    // A URL with credentials is never written down; what cannot be asked is
+    // never kept either.
+    dns.doh_url = match idm_core::net::dns::check_doh_url(&dns.doh_url) {
+        Ok(url) => url,
+        Err(_) => String::new(),
+    };
+    dns.dot_host = match idm_core::net::dns::check_dot_host(&dns.dot_host) {
+        Ok(host) => host,
+        Err(_) => String::new(),
+    };
+    dns.nextdns_profile = dns.nextdns_profile.trim().to_ascii_lowercase();
+    if !idm_core::net::dns::valid_nextdns_profile(&dns.nextdns_profile) {
+        dns.nextdns_profile.clear();
+    }
 }
 
 /// A proxy address that cannot be used to look up who owns it.
@@ -365,8 +398,48 @@ mod tests {
     }
 
     #[test]
-    fn an_older_version_of_the_file_still_reads() {
-        let path = temp_file("version");
+    fn the_dns_the_file_stores_is_checked_before_it_is_kept() {
+        let path = temp_file("dns");
+        std::fs::write(
+            &path,
+            br#"{"version":2,"dns":{"mode":"doh","dohUrl":"https://cloudflare-dns.com/dns-query","dotHost":"One.One.One.One.","nextdnsProfile":"A1B2C3","fallback":true}}"#,
+        )
+        .expect("a written file");
+        let dns = load(&path).dns;
+        assert_eq!(dns.mode, "doh");
+        assert_eq!(dns.doh_url, "https://cloudflare-dns.com/dns-query");
+        assert_eq!(dns.dot_host, "one.one.one.one");
+        assert_eq!(dns.nextdns_profile, "a1b2c3");
+        assert!(dns.fallback);
+
+        // An endpoint that cannot be asked is not kept, and a mode this build
+        // does not know reads as the system's resolver.
+        std::fs::write(
+            &path,
+            br#"{"version":2,"dns":{"mode":"whatever","dohUrl":"http://not-https.example.com/x","dotHost":"1.1.1.1","nextdnsProfile":"zz"}}"#,
+        )
+        .expect("a written file");
+        let dns = load(&path).dns;
+        assert_eq!(dns.mode, "system");
+        assert_eq!(dns.doh_url, "");
+        assert_eq!(dns.dot_host, "");
+        assert_eq!(dns.nextdns_profile, "");
+        assert!(!dns.fallback);
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn a_file_without_the_dns_reads_the_system_resolver() {
+        let path = temp_file("no-dns");
+        std::fs::write(&path, br#"{"version":2,"defaultFolder":""}"#).expect("a written file");
+        let dns = load(&path).dns;
+        assert_eq!(dns.mode, "system");
+        assert!(!dns.fallback);
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn an_older_version_of_the_file_still_reads() {        let path = temp_file("version");
         let folder = sample_folder("older");
         std::fs::write(
             &path,

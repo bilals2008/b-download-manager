@@ -126,6 +126,9 @@ mod tests {
             speed_limit: 0,
             category: None,
             description: None,
+            learned_connections: None,
+            country: None,
+            rtt_ms: None,
         };
         let script = payload(&info);
         assert!(script.starts_with("window.__BDM_COMPLETE__ = {"));

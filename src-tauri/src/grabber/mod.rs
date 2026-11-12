@@ -256,18 +256,12 @@ impl Grabber {
 /// the client must not follow them silently. The timeout covers the body as
 /// well, so one slow server cannot hold the crawl open forever.
 fn build_client(proxy: Option<&str>) -> Result<reqwest::Client, String> {
-    let mut builder = reqwest::Client::builder()
+    let builder = idm_core::net::client_builder(proxy, None)?
         .user_agent(policy::USER_AGENT)
         .redirect(reqwest::redirect::Policy::none())
         .timeout(policy::REQUEST_TIMEOUT)
         .connect_timeout(Duration::from_secs(10))
         .pool_max_idle_per_host(2);
-
-    if let Some(proxy) = proxy.map(str::trim).filter(|proxy| !proxy.is_empty()) {
-        let proxy = reqwest::Proxy::all(proxy)
-            .map_err(|error| format!("The proxy address is not usable: {error}"))?;
-        builder = builder.proxy(proxy);
-    }
 
     builder
         .build()

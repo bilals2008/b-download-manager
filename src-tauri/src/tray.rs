@@ -456,6 +456,9 @@ mod tests {
             speed_limit: 0,
             category: None,
             description: None,
+            learned_connections: None,
+            country: None,
+            rtt_ms: None,
         }
     }
 

@@ -13,6 +13,7 @@
 //! the server's `Content-Length` when it sent one, and nothing is called
 //! installed until the plugin has verified and started the package.
 
+use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -23,6 +24,43 @@ use tauri::{AppHandle, State};
 use tauri_plugin_updater::UpdaterExt;
 
 use crate::state::AppState;
+
+/// The resolver the update check looks names up with.
+///
+/// The updater plugin brings its own `reqwest`, a newer major than the
+/// engine's, so the engine's resolver is wrapped in the trait that one
+/// wants. The names are asked exactly as the engine asks them: the reader's
+/// resolver, or the system's for the local ones.
+struct UpdateResolver {
+    dns: Arc<idm_core::net::Dns>,
+}
+
+impl reqwest13::dns::Resolve for UpdateResolver {
+    fn resolve(&self, name: reqwest13::dns::Name) -> reqwest13::dns::Resolving {
+        let dns = self.dns.clone();
+        let host = name.as_str().to_ascii_lowercase();
+        Box::pin(async move {
+            let ips = dns.addresses(&host).await.map_err(|error| {
+                Box::new(std::io::Error::other(error)) as Box<dyn std::error::Error + Send + Sync>
+            })?;
+            // Port 0: reqwest substitutes the URL's port at connect time.
+            let addrs: reqwest13::dns::Addrs =
+                Box::new(ips.into_iter().map(|ip| SocketAddr::new(ip, 0)));
+            Ok(addrs)
+        })
+    }
+}
+
+/// The updater, built with the reader's resolver in force.
+fn updater(app: &AppHandle) -> Result<tauri_plugin_updater::Updater, String> {
+    app.updater_builder()
+        .configure_client(|builder| match idm_core::net::resolver::current() {
+            Some(dns) => builder.dns_resolver(Arc::new(UpdateResolver { dns })),
+            None => builder,
+        })
+        .build()
+        .map_err(|error| error.to_string())
+}
 
 /// How often a running download sends its byte count to the window. Chunks
 /// arrive faster than a 60 Hz repaint, so reporting each one would only queue
@@ -103,7 +141,7 @@ pub async fn check_update(app: AppHandle) -> Found {
         error: Some(error),
     };
 
-    let updater = match app.updater() {
+    let updater = match updater(&app) {
         Ok(updater) => updater,
         Err(error) => return fail(format!("the updater is not set up: {error}")),
     };
@@ -146,7 +184,7 @@ pub async fn install_update(
     state: State<'_, AppState>,
     on_progress: Channel<UpdateProgress>,
 ) -> Result<Installed, String> {
-    let updater = app.updater().map_err(|error| error.to_string())?;
+    let updater = updater(&app)?;
     let update = updater
         .check()
         .await

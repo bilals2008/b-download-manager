@@ -1,4 +1,5 @@
 import { NumberInput } from "@/components/settings/fields";
+import { DnsSettings } from "@/components/settings/dns-settings";
 import {
   Section,
   SettingRow,
@@ -72,6 +73,8 @@ export function ConnectionsSettings({
           />
         </SettingRow>
       </Section>
+
+      <DnsSettings />
     </SettingsPage>
   );
 }

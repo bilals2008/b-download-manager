@@ -370,13 +370,23 @@ is added:
 - **`settings.json`** (`src-tauri/src/settings_store.rs`) is the engine's own
   versioned file: proxy, speed cap, connection counts, the browser hand-over
   folder and connection count, the extension's capture rules, the video-button
-  appearance, the unfinished folder and category folders, and the
-  complete/progress/clipboard switches. It is loaded and applied once during
-  setup — **before the bridge binds** — so a hand-over arriving at start-up
-  meets the reader's settings, not the defaults. A proxy stored there never
-  carries a username or password: a credential is stripped on both write and
-  read (`sanitize`, `strip_credentials`), matching `validate_proxy`, which
+  appearance, the unfinished folder and category folders, the DNS the engine
+  asks, and the complete/progress/clipboard switches. It is loaded and applied
+  once during setup — **before the bridge binds** — so a hand-over arriving at
+  start-up meets the reader's settings, not the defaults. A proxy stored there
+  never carries a username or password: a credential is stripped on both write
+  and read (`sanitize`, `strip_credentials`), matching `validate_proxy`, which
   refuses one.
+- **The DNS** (`crates/idm-core/src/net/dns.rs`, `crates/idm-core/src/net/resolver.rs`)
+  is one resolver for the whole application: `AppState::apply_engine_settings`
+  builds it and puts it in force (`idm_core::net::resolver::set_current`), and
+  every client is built through `idm_core::net::client_builder`, which gives
+  it the proxy and that resolver. A client built any other way would quietly
+  use the system's resolver; the FTP client looks its server up the same way,
+  through `idm_core::net::resolver::current()`. The choice is stored in
+  `settings.json` under `dns`; the window edits it through the `set_dns`
+  command, which checks the endpoint before it is kept. A failed lookup is
+  logged with the mode, never with the name that was asked for.
 - Every write to these goes through `AppState::modify_settings`, which
   sanitizes, applies the whole object to the running engine, and saves the
   file. Never set a runtime field and a file field separately; never read the

@@ -22,6 +22,11 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "fs", "io-util", "net", "process"] }
 reqwest = { version = "0.12", default-features = false, features = ["stream", "rustls-tls", "socks"] }
+# The updater plugin brings its own `reqwest`, a newer major than the engine's.
+# It is named here only so the update check can be given the reader's resolver
+# (see `src/updater.rs`); no feature is added, so the plugin's TLS stays as it
+# is.
+reqwest13 = { package = "reqwest", version = "0.13", default-features = false }
 futures-util = "0.3"
 # The downloaded video helper is checked against its publisher's SHA-256 list
 # before it is ever run.

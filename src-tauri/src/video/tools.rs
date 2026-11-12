@@ -400,12 +400,9 @@ fn ffmpeg_from_zip(bytes: &[u8]) -> Result<Vec<u8>, String> {
 /// The HTTP client both paths use, with the app's own proxy.
 fn client(app: &tauri::AppHandle) -> Result<reqwest::Client, String> {
     // ffmpeg's archive is about 100 MB; a slow link must be allowed to finish.
-    let mut builder = reqwest::Client::builder().timeout(Duration::from_secs(30 * 60));
-    if let Some(proxy) = proxy(app) {
-        let proxy = reqwest::Proxy::all(&proxy)
-            .map_err(|error| format!("the proxy address is not usable: {error}"))?;
-        builder = builder.proxy(proxy);
-    }
+    let proxy = proxy(app);
+    let builder = idm_core::net::client_builder(proxy.as_deref(), None)?
+        .timeout(Duration::from_secs(30 * 60));
     builder
         .build()
         .map_err(|error| format!("the download could not be set up: {error}"))

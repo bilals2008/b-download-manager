@@ -42,8 +42,12 @@ Legend: ✅ done · 🔧 the engine code exists but nothing in the app can reach
 
 ## Wave 3 — the wire
 
-- 🔧 Encrypted DNS: DoH, DoT, NextDNS profile. `crates/idm-core/src/net/dns.rs`
-  exists and nothing calls it. Settings → Connection has no page for it.
+- ✅ Encrypted DNS: DoH, DoT, NextDNS profile. `crates/idm-core/src/net/dns.rs`
+  holds the choice and the rules, `crates/idm-core/src/net/resolver.rs` asks it
+  (hickory, over TLS or HTTPS, with the system's verifier). The engine builds
+  one resolver when the settings are applied and every client it builds looks
+  names up through it. Settings → Connections has the mode, one field per
+  mode, the visible fallback and a test button.
 - 🔧 Network adapter binding with kill switch: `net/adapter.rs` exists unwired.
   Windows needs `IP_UNICAST_IF` / `IPV6_UNICAST_IF` plus `NotifyIpInterfaceChange`
   to notice the adapter leaving; on loss, fail closed.
@@ -103,7 +107,6 @@ Kept here so nothing is lost. Each is a crate MDM has and this project lacks:
    itself driven by hand for anything that draws.
 
 ## Wave 2, done
-
 - ✅ **Per-host learned caps** — `LearnedCaps` in `crates/idm-core/src/limits.rs`
   records what a host honoured, keeps it in `<data>/host-caps.json`, and starts
   the next download from it. Shown in the progress window's connection details.
@@ -118,6 +121,23 @@ Kept here so nothing is lost. Each is a crate MDM has and this project lacks:
 - ✅ **Freeze detector** — the monitor asks the main window whether it answers
   (`SendMessageTimeoutW`), so a suspended machine is not called frozen and a
   stuck message loop is reported once per episode.
+
+## Wave 3, done
+
+- ✅ **Encrypted DNS** — the reader chooses how names are resolved: the
+  system's, DNS over HTTPS, DNS over TLS or a NextDNS profile. The choice
+  lives in the engine's settings file (`dns` in `settings.json`), the engine
+  builds one resolver when the settings are applied, and every client it
+  builds — downloads, the grabber, video tracks, the update check — looks
+  names up through it (`idm_core::net::client_builder`). The names a public
+  server cannot know stay with the system's resolver; the chosen one may
+  fall back only when the reader allows it, and only when it could not be
+  reached. Settings → Connections has the mode, one field per mode, the
+  fallback switch and a button that asks one name through the resolver and
+  says how long it took.
+  - The reader's line for the release notes: "Names can now be looked up
+    through an encrypted resolver, so the sites you download from cannot see
+    the names you ask for."
 
 ## The plans
 

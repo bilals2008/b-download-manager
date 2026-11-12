@@ -6,6 +6,7 @@ mod checksum;
 mod complete;
 mod conflict;
 mod dest;
+mod dns;
 mod extract;
 mod grabber;
 mod lifecycle;
@@ -1229,6 +1230,17 @@ pub fn run() {
                 }
             }
             state.set_index(index);
+            // The engine's settings come back the same way, and are applied
+            // before the bridge binds: a link caught the moment the
+            // application opens must land in the folder the reader chose,
+            // through the proxy the reader set, at the connection counts the
+            // reader chose. The webview pushes its own copy over these as it
+            // still does; that push is what repairs the file after an
+            // upgrade, and the file wins after that. This runs before the
+            // downloads of an earlier run are brought back, so a resumed
+            // download looks names up through the resolver the reader chose,
+            // like a new one.
+            state.set_settings_path(dir.join(settings_store::FILE_NAME), dir.clone());
             state.restore_downloads();
             state.restore_queue();
             // The sweep of abandoned staging folders waits until the restored
@@ -1240,14 +1252,6 @@ pub fn run() {
             // are consulted before a page has loaded, and a webview that has
             // not painted yet must not decide whether closing exits.
             state.set_preferences_path(dir.join(prefs::FILE_NAME));
-            // The engine's settings come back the same way, and are applied
-            // before the bridge binds: a link caught the moment the
-            // application opens must land in the folder the reader chose,
-            // through the proxy the reader set, at the connection counts the
-            // reader chose. The webview pushes its own copy over these as it
-            // still does; that push is what repairs the file after an
-            // upgrade, and the file wins after that.
-            state.set_settings_path(dir.join(settings_store::FILE_NAME), dir.clone());
             // The icon goes up unless the reader took it away in an earlier
             // run. Without it the close and minimize choices fall back to
             // closing and minimizing, which is what `tray_available` says.
@@ -1351,6 +1355,9 @@ pub fn run() {
             folder_status,
             app_paths,
             validate_proxy,
+            dns::set_dns,
+            dns::dns_settings,
+            dns::test_dns,
             set_browser_folder,
             quit_app,
             default_destination,
