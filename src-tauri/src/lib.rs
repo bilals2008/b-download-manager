@@ -13,6 +13,7 @@ mod lifecycle;
 mod migrate;
 mod network;
 mod prefs;
+mod proxy;
 mod progress;
 mod queue;
 mod settings_store;
@@ -1267,6 +1268,9 @@ pub fn run() {
             // stops the downloads instead of letting them take the normal
             // route.
             network::watch(app.handle().clone());
+            // The proxy script is fetched with the same client policy as
+            // everything else, and fetched again now and then.
+            proxy::start(app.handle().clone());
             // A copied link is offered while the application is in the tray.
             clipboard::start(app.handle().clone());
             Ok(())
@@ -1363,6 +1367,9 @@ pub fn run() {
             dns::set_dns,
             dns::dns_settings,
             dns::test_dns,
+            proxy::set_proxy_script,
+            proxy::reload_proxy_script,
+            proxy::proxy_script_state,
             network::network_adapters,
             network::network_state,
             network::set_network_adapter,

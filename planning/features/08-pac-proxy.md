@@ -1,6 +1,7 @@
 # PAC proxy execution
 
-**Wave 3 · Status:** 🔧 `net/pac.rs` (+ `net/pac/js.rs`, 1499 lines) exists, nothing calls it
+**Wave 3 · Status:** ✅ done — the script is fetched, asked per address, and
+the route it names is the one the download takes
 
 ## Goal
 
@@ -59,3 +60,31 @@ watching each download take the route the script chose.
 ## Out of scope
 
 Writing a PAC editor; the user brings a file or an address.
+
+## What landed
+
+- `crates/idm-core/src/net/pac.rs` — the script in force (`set_script`,
+  `script`) and the route for an address (`route_for`): the script is asked
+  for every address, and its answers are kept per script and per address.
+- `crates/idm-core/src/net.rs` — `Clients`, the clients a download may use.
+  A client carries one proxy and a script decides per address, so the engine
+  keeps a client for each proxy the script names and hands out the one the
+  script chose. `DIRECT` means the client that goes straight to the server.
+- `crates/idm-core/src/transfer.rs` — the source asks the clients for the
+  route of the address it is about, for the probe and for every range.
+- `src-tauri/src/proxy.rs` — the script is fetched with the engine's own
+  client (so the encrypted DNS and the chosen adapter apply to it), kept in
+  force, and fetched again when the settings are applied, when the reader
+  asks for it, and now and then while the application runs.
+- `src-tauri/src/settings_store.rs` — the script's address (`proxyScript`).
+- `src/components/settings/proxy-settings.tsx` — the address, the state of
+  the script, and a button that fetches it again.
+- `src/lib/ipc-proxy.ts` — the commands.
+
+The system proxy (WinHTTP's own configuration) is not read yet: the reader
+points at a script, and a system that keeps its auto-proxy setting to itself
+is a separate job.
+
+A redirected hop takes the route of the address that was asked for: the
+client that follows the redirect is the one the script chose for the first
+address, because reqwest follows redirects inside the request.

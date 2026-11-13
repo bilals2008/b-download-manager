@@ -57,9 +57,13 @@ Legend: ✅ done · 🔧 the engine code exists but nothing in the app can reach
   instead of taking the normal route. The status bar shows the adapter's
   state. Windows is the system it was built for; the enumeration is empty on
   Linux and macOS yet.
-- 🔧 PAC proxy execution: `net/pac.rs` (+ `net/pac/js.rs`, 1499 lines) exists
-  unwired. MDM evaluates PAC per URL (`WinHttpGetProxyForUrl`); a cached global
-  route is wrong.
+- ✅ PAC proxy execution: the reader points at a proxy auto-config script, the
+  application fetches it (with the same DNS and adapter as everything else),
+  and the script decides per address which proxy a download uses — the way a
+  browser decides it. The route it names is the one the download takes, and
+  `DIRECT` means straight to the server.
+- 🔧 The system's own auto-proxy setting (WinHTTP's configuration) is not read
+  yet: only a script the reader points at is.
 
 ## Wave 4 — media
 
@@ -152,6 +156,12 @@ Kept here so nothing is lost. Each is a crate MDM has and this project lacks:
   - The reader's line for the release notes: "Downloads can be held to one
     network adapter, so they stop when that adapter goes away instead of
     taking another route."
+- ✅ **PAC proxy** — a proxy auto-config script decides, for every address,
+  whether a download goes through a proxy or straight to the server. The
+  script is fetched with the same DNS and adapter as everything else, and
+  the answer is asked per address, the way a browser asks it.
+  - The reader's line for the release notes: "A proxy auto-config script now
+    decides, for each address, whether a download goes through a proxy."
 
 ## The plans
 

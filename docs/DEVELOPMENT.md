@@ -387,6 +387,13 @@ is added:
   `settings.json` under `dns`; the window edits it through the `set_dns`
   command, which checks the endpoint before it is kept. A failed lookup is
   logged with the mode, never with the name that was asked for.
+- **The proxy auto-config script** (`crates/idm-core/src/net/pac.rs`,
+  `src-tauri/src/proxy.rs`) is fetched by the application and kept in force
+  (`pac::set_script`); the engine asks it for every address
+  (`pac::route_for`) and `net::Clients` hands out the client that carries the
+  route it chose. The script's address is in `settings.json` as
+  `proxyScript`; the window edits it through `set_proxy_script`, which
+  fetches the file before it stores it.
 - **The network adapter** (`crates/idm-core/src/net/adapter.rs`) is one route
   for the whole application: the same `client_builder` holds every client to
   the adapter the reader chose (`set_route`, `route`), the resolver hands out

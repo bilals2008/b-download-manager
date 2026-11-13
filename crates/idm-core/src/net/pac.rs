@@ -157,6 +157,43 @@ type Answers = HashMap<(u64, String), Vec<ProxyRoute>>;
 
 static CACHE: Mutex<Option<Answers>> = Mutex::new(None);
 
+/// The script in force, if the reader has chosen one.
+///
+/// The script decides per address, so it is asked for every address and its
+/// answers are kept. The text is the script's own: the application fetches it
+/// (a PAC file is a document, like any other) and hands it here.
+static SCRIPT: Mutex<Option<String>> = Mutex::new(None);
+
+/// Put a script in force. `None` means the reader has chosen none.
+pub fn set_script(script: Option<String>) {
+    let mut slot = match SCRIPT.lock() {
+        Ok(slot) => slot,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    *slot = script;
+}
+
+/// The script in force, if there is one.
+pub fn script() -> Option<String> {
+    match SCRIPT.lock() {
+        Ok(slot) => slot.clone(),
+        Err(poisoned) => poisoned.into_inner().clone(),
+    }
+}
+
+/// The route for `url`: what the script in force says about it.
+///
+/// Without a script the route is direct, and the static proxy the reader set
+/// applies as it always did. A script that cannot answer is an error the
+/// caller sees, never a silent fall-through to a route the script did not
+/// choose.
+pub fn route_for(url: &str) -> Result<ProxyRoute, PacError> {
+    let Some(script) = script() else {
+        return Ok(ProxyRoute::Direct);
+    };
+    Ok(pick(&routes(&script, url)?))
+}
+
 /// The answers kept so far. A poisoned cache is still a cache: the answers
 /// in it are the ones that were read successfully.
 fn cache() -> MutexGuard<'static, Option<Answers>> {
@@ -224,6 +261,31 @@ mod tests {
                 return "PROXY proxy.corp:8080; DIRECT";
             return "DIRECT";
         }"#;
+
+    #[test]
+    fn a_script_in_force_decides_per_address() {
+        // The script is asked for every address: the answer for one says
+        // nothing about another.
+        set_script(Some(
+            "function FindProxyForURL(url, host) { if (host == 'proxied.test') return 'PROXY 127.0.0.1:8080'; return 'DIRECT'; }"
+                .into(),
+        ));
+        assert_eq!(
+            route_for("http://proxied.test/a").expect("the script answers"),
+            ProxyRoute::Proxy("http://127.0.0.1:8080".into())
+        );
+        assert_eq!(
+            route_for("http://other.test/a").expect("the script answers"),
+            ProxyRoute::Direct
+        );
+        // Without a script the route is direct, and the reader's own proxy
+        // setting is the route as it always was.
+        set_script(None);
+        assert_eq!(
+            route_for("http://proxied.test/a").expect("no script"),
+            ProxyRoute::Direct
+        );
+    }
 
     #[test]
     fn a_typical_script_is_run() {

@@ -116,7 +116,9 @@ impl Probe {
 pub enum Source {
     Http {
         url: String,
-        client: reqwest::Client,
+        /// The clients the requests may use: the reader's own route, and the
+        /// ones a proxy script names for the addresses it decides about.
+        clients: std::sync::Arc<crate::net::Clients>,
     },
     Ftp {
         host: String,
@@ -197,7 +199,7 @@ impl Source {
             let client = builder.build().map_err(|e| e.to_string())?;
             return Ok(Source::Http {
                 url: url.to_string(),
-                client,
+                clients: std::sync::Arc::new(crate::net::Clients::new(client)?),
             });
         }
         Err("the URL must start with http://, https:// or ftp://".to_string())
@@ -247,7 +249,10 @@ impl Source {
     /// Ask the server how big the file is.
     pub async fn probe(&self) -> Result<Probe, TransferError> {
         match self {
-            Source::Http { url, client } => http::probe(client, url).await,
+            Source::Http { url, clients } => {
+                let client = clients.for_url(url).map_err(TransferError::permanent)?;
+                http::probe(&client, url).await
+            }
             Source::Ftp {
                 host,
                 port,
@@ -285,8 +290,9 @@ impl Source {
         total: Option<u64>,
     ) -> Result<ByteStream, TransferError> {
         match self {
-            Source::Http { url, client } => {
-                http::open_range(client, url, from, to, covers_all, if_range, total).await
+            Source::Http { url, clients } => {
+                let client = clients.for_url(url).map_err(TransferError::permanent)?;
+                http::open_range(&client, url, from, to, covers_all, if_range, total).await
             }
             Source::Ftp {
                 host,

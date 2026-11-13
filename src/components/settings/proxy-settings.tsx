@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { TextInput } from "@/components/settings/fields";
+import { SettingsButton } from "@/components/settings/settings-button";
 import {
   Section,
   SettingRow,
@@ -8,6 +9,12 @@ import {
 } from "@/components/settings/settings-page";
 import { describeError, isDesktop } from "@/lib/errors";
 import { validateProxy } from "@/lib/ipc";
+import {
+  proxyScriptState,
+  reloadProxyScript,
+  setProxyScript,
+  type ScriptState,
+} from "@/lib/ipc-proxy";
 import type { Settings } from "@/lib/settings";
 
 interface ProxySettingsProps {
@@ -26,6 +33,29 @@ export function ProxySettings({ settings, onChange }: ProxySettingsProps) {
   const [synced, setSynced] = useState(settings.proxyUrl);
   const [problem, setProblem] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
+  const [script, setScript] = useState<ScriptState | null>(null);
+  const [scriptDraft, setScriptDraft] = useState("");
+
+  // What the engine has for the script, and the address it was fetched from.
+  useEffect(() => {
+    if (!isDesktop()) {
+      return;
+    }
+    let active = true;
+    proxyScriptState()
+      .then((state) => {
+        if (active) {
+          setScript(state);
+          setScriptDraft(state.url);
+        }
+      })
+      .catch(() => {
+        // An engine that does not answer leaves the page as it is.
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // A reset from another page, or the committed value, replaces the draft.
   if (synced !== settings.proxyUrl) {
@@ -81,6 +111,31 @@ export function ProxySettings({ settings, onChange }: ProxySettingsProps) {
     }
   }
 
+  async function commitScript() {
+    if (!isDesktop()) {
+      setProblem("Proxy settings are only available in the desktop app.");
+      return;
+    }
+    try {
+      const state = await setProxyScript(scriptDraft.trim());
+      setScript(state);
+      setScriptDraft(state.url);
+      setProblem(null);
+    } catch (failure) {
+      setProblem(describeError(failure));
+    }
+  }
+
+  async function reloadScript() {
+    try {
+      const state = await reloadProxyScript();
+      setScript(state);
+      setProblem(null);
+    } catch (failure) {
+      setProblem(describeError(failure));
+    }
+  }
+
   return (
     <SettingsPage page="proxy">
       <Section title="Proxy address">
@@ -123,6 +178,42 @@ export function ProxySettings({ settings, onChange }: ProxySettingsProps) {
           <p className="mt-1 text-chrome-micro text-chrome-muted">
             A user name or password in the address does not work.
           </p>
+        </SettingRow>
+      </Section>
+
+      <Section title="Proxy auto-config">
+        <SettingRow
+          settingId="setting-proxy-script"
+          stacked
+          label="Script address"
+          htmlFor="proxy-script"
+        >
+          <TextInput
+            id="proxy-script"
+            mono
+            value={scriptDraft}
+            placeholder="http://proxy.example.org/proxy.pac"
+            invalid={problem !== null}
+            onChange={(value) => setScriptDraft(value)}
+            onBlur={() => void commitScript()}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void commitScript();
+              }
+            }}
+          />
+          <p className="mt-1.5 text-chrome-micro text-chrome-muted">
+            {script?.note ??
+              "The script decides, for every address, whether the download goes through a proxy or straight to the server."}
+          </p>
+          {script?.loaded ? (
+            <div className="mt-2">
+              <SettingsButton onClick={() => void reloadScript()}>
+                Fetch again
+              </SettingsButton>
+            </div>
+          ) : null}
         </SettingRow>
       </Section>
     </SettingsPage>

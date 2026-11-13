@@ -574,6 +574,21 @@ const PAGE_ENTRIES: readonly SettingsCatalogEntry[] = [
     ],
   },
   {
+    id: "setting-proxy-script",
+    page: "proxy",
+    section: "Proxy auto-config",
+    title: "Proxy auto-config script",
+    description: "The script that decides, per address, which proxy a download uses.",
+    keywords: [
+      "pac",
+      "auto-config",
+      "script",
+      "proxy",
+      "wpad",
+      "findproxyforurl",
+    ],
+  },
+  {
     id: "setting-data-folder",
     page: "advanced",
     section: "Application data",

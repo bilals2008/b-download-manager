@@ -96,8 +96,7 @@ pub async fn probe(client: &reqwest::Client, url: &str) -> Result<Probe, Transfe
 
 /// The header value that proves a later request gets the same bytes.
 ///
-/// `If-Range` needs a strong validator. A weak entity tag (`W/"..."`) may
-/// name a semantically equal copy that differs byte for byte, so it is not
+/// `If-Range` needs a strong validator. A weak entity tag (`W/"..."`) may/// name a semantically equal copy that differs byte for byte, so it is not
 /// used; the modification date is the fallback.
 pub fn validator(etag: Option<&str>, last_modified: Option<&str>) -> Option<String> {
     let etag = etag.map(str::trim).filter(|etag| !etag.is_empty());

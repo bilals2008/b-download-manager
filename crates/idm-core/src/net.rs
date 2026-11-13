@@ -42,6 +42,90 @@ pub fn is_this_computer(host: &str) -> bool {
             .is_ok_and(|ip| ip.is_loopback())
 }
 
+/// The clients a download may use.
+///
+/// A proxy auto-config script decides per address, and a client carries one
+/// proxy, so the engine keeps a client for each proxy the script names and
+/// hands out the one the script chose. Without a script the reader's own
+/// proxy setting is the route, as it always was.
+#[derive(Debug)]
+pub struct Clients {
+    /// The client for the route the reader set.
+    base: reqwest::Client,
+    /// The client that goes straight to the server: what a script's
+    /// `DIRECT` means.
+    direct: reqwest::Client,
+    /// One client per proxy the script named.
+    by_proxy: std::sync::Mutex<std::collections::HashMap<String, reqwest::Client>>,
+}
+
+impl Clone for Clients {
+    fn clone(&self) -> Self {
+        // The clients are cheap to clone and the map is only a cache: the
+        // clone starts with the routes it knows and learns the rest again.
+        Self {
+            base: self.base.clone(),
+            direct: self.direct.clone(),
+            by_proxy: std::sync::Mutex::new(std::collections::HashMap::new()),
+        }
+    }
+}
+
+impl Clients {
+    /// The clients for a download: the one the reader's setting gives, and
+    /// the one that goes straight to the server.
+    pub fn new(base: reqwest::Client) -> Result<Self, String> {
+        let direct = client_builder(None, None, None)?.no_proxy().build().map_err(
+            |error| format!("the client that goes straight to the server could not be made: {error}"),
+        )?;
+        Ok(Self {
+            base,
+            direct,
+            by_proxy: std::sync::Mutex::new(std::collections::HashMap::new()),
+        })
+    }
+
+    /// The client for this address: the script decides when one is in
+    /// force.
+    ///
+    /// A script that cannot answer is an error the caller sees: a download
+    /// must not quietly take a route the script did not choose.
+    pub fn for_url(&self, url: &str) -> Result<reqwest::Client, String> {
+        if pac::script().is_none() {
+            return Ok(self.base.clone());
+        }
+        match pac::route_for(url).map_err(|error| error.to_string())? {
+            pac::ProxyRoute::Direct => Ok(self.direct.clone()),
+            pac::ProxyRoute::Proxy(address) => self.client_for(&address, url),
+        }
+    }
+
+    /// The client that goes through the proxy the script named.
+    fn client_for(&self, address: &str, url: &str) -> Result<reqwest::Client, String> {
+        let mut known = self.by_proxy.lock().expect("proxy lock poisoned");
+        if let Some(client) = known.get(address) {
+            return Ok(client.clone());
+        }
+        // A credential in the script's answer is refused, as the static
+        // proxy's is: it would be written down in the request's own headers.
+        if let Ok(parsed) = reqwest::Url::parse(address) {
+            if !parsed.username().is_empty() || parsed.password().is_some() {
+                return Err(
+                    "the proxy script chose a proxy with a user name or a password".to_string(),
+                );
+            }
+        }
+        let host = reqwest::Url::parse(url).ok().and_then(|url| url.host_str().map(str::to_owned));
+        let client = client_builder(host.as_deref(), Some(address), None)?
+            .build()
+            .map_err(|error| {
+                format!("the proxy script chose an address that cannot be used: {address} ({error})")
+            })?;
+        known.insert(address.to_owned(), client.clone());
+        Ok(client)
+    }
+}
+
 /// The builder every outbound HTTP client in the application starts from.
 ///
 /// This is the one place a client is given the reader's network choices: the

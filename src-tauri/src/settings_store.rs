@@ -78,6 +78,8 @@ pub struct EngineSettings {
     /// client it builds — downloads, the grabber, video tracks, the update
     /// check — so the one setting governs all of them.
     pub dns: idm_core::net::DnsSettings,
+    /// The proxy auto-config script the reader points at, empty for none.
+    pub proxy_script: String,
     /// The network adapter every connection leaves through, kept by the
     /// adapter's own identity (its GUID on Windows) so a renamed connection is
     /// still the one that was chosen. Empty means the system's own route.
@@ -102,6 +104,7 @@ impl Default for EngineSettings {
             show_video_window_on_start: true,
             clipboard_capture: false,
             dns: idm_core::net::DnsSettings::default(),
+            proxy_script: String::new(),
             network_adapter: String::new(),
         }
     }
@@ -179,6 +182,7 @@ pub fn sanitize(mut settings: EngineSettings) -> EngineSettings {
     }
     settings.proxy_url = strip_credentials(&settings.proxy_url);
     settings.network_adapter = settings.network_adapter.trim().to_string();
+    settings.proxy_script = settings.proxy_script.trim().to_string();
     clean_dns(&mut settings.dns);
     settings
 }
@@ -445,8 +449,25 @@ mod tests {
     }
 
     #[test]
-    fn the_chosen_adapter_is_kept_by_its_identity() {
-        let path = temp_file("adapter");
+    fn the_proxy_script_is_kept_as_it_was_typed() {
+        let path = temp_file("script");
+        std::fs::write(
+            &path,
+            br#"{"version":2,"proxyScript":"  http://proxy.example.org/proxy.pac  "}"#,
+        )
+        .expect("a written file");
+        assert_eq!(
+            load(&path).proxy_script,
+            "http://proxy.example.org/proxy.pac"
+        );
+        let path = temp_file("no-script");
+        std::fs::write(&path, br#"{"version":2}"#).expect("a written file");
+        assert_eq!(load(&path).proxy_script, "");
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn the_chosen_adapter_is_kept_by_its_identity() {        let path = temp_file("adapter");
         std::fs::write(
             &path,
             br#"{"version":2,"networkAdapter":"  {2E9F7A11-1111-2222-3333-444455556666}  "}"#,
