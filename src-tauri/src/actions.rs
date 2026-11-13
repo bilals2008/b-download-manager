@@ -97,7 +97,7 @@ fn refused(kind: &str, message: String, dest: &std::path::Path) -> Refusal {
 /// The engine reports on its own while bytes arrive; this is the same news
 /// for the changes the commands make, so a pause or a queue move is reflected
 /// in a progress window's tray tooltip without waiting for the next report.
-fn announce(app: &AppHandle, download: &Download) {
+pub fn announce(app: &AppHandle, download: &Download) {
     let info = download.info();
     let _ = app.emit(UPDATE_EVENT, info.clone());
     crate::progress::refresh_tray(app, &info);

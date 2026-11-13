@@ -1460,6 +1460,26 @@ async fn a_restarted_download_does_not_keep_its_old_error() {
 }
 
 #[test]
+fn a_download_stopped_with_a_reason_says_why() {
+    let dir = temp_dir("fail-with");
+    let dest = dir.join("out.bin");
+    let download =
+        Download::new(90, "https://example.com/a.bin".to_string(), dest, 1, None, None)
+            .expect("download");
+    download.set_status(Status::Running);
+
+    download.fail_with("the network adapter VPN is not connected");
+
+    let info = download.info();
+    assert_eq!(info.status, Status::Failed);
+    assert_eq!(
+        info.error.as_deref(),
+        Some("the network adapter VPN is not connected")
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn the_bandwidth_cap_of_one_download_is_reported() {
     let dir = temp_dir("speed-limit-info");
     let download = Download::new(

@@ -256,7 +256,7 @@ impl Grabber {
 /// the client must not follow them silently. The timeout covers the body as
 /// well, so one slow server cannot hold the crawl open forever.
 fn build_client(proxy: Option<&str>) -> Result<reqwest::Client, String> {
-    let builder = idm_core::net::client_builder(proxy, None)?
+    let builder = idm_core::net::client_builder(None, proxy, None)?
         .user_agent(policy::USER_AGENT)
         .redirect(reqwest::redirect::Policy::none())
         .timeout(policy::REQUEST_TIMEOUT)

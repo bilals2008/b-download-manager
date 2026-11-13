@@ -32,18 +32,37 @@ pub use resolver::{test as test_resolver, Dns};
 
 use serde::{Deserialize, Serialize};
 
+/// Whether a host is this computer: a connection to it never leaves, so it
+/// is not held to an adapter.
+pub fn is_this_computer(host: &str) -> bool {
+    let host = host.trim_matches(['[', ']']);
+    host.eq_ignore_ascii_case("localhost")
+        || host
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|ip| ip.is_loopback())
+}
+
 /// The builder every outbound HTTP client in the application starts from.
 ///
 /// This is the one place a client is given the reader's network choices: the
-/// proxy it goes through and the DNS resolver it looks names up with. The
-/// resolver is the one in force (see [`resolver::set_current`]); `dns`
-/// overrides it, for the tests that bring a resolver of their own. A client
-/// that builds around this gets the reader's resolver by default, so this is
-/// not optional plumbing — a call site that does not use it will silently
-/// ignore the choice. A proxy the engine cannot dial is refused, never
-/// silently ignored either: a silent drop is how a reader ends up downloading
-/// directly while believing traffic goes through their proxy.
+/// proxy it goes through, the DNS resolver it looks names up with, and the
+/// adapter it leaves through. The resolver is the one in force (see
+/// [`resolver::set_current`]); `dns` overrides it, for the tests that bring a
+/// resolver of their own. A client that builds around this gets the reader's
+/// choices by default, so this is not optional plumbing — a call site that
+/// does not use it will silently ignore them. A proxy the engine cannot dial
+/// is refused, never silently ignored either: a silent drop is how a reader
+/// ends up downloading directly while believing traffic goes through their
+/// proxy.
+///
+/// `target` is the host the client will ask, when the caller knows it: a
+/// connection to this computer, or through a proxy on this computer, is not
+/// held to the adapter — it never leaves, and binding it would break it.
+///
+/// A chosen adapter that is gone refuses the client: that is the kill
+/// switch, and it fails closed.
 pub fn client_builder(
+    target: Option<&str>,
     proxy: Option<&str>,
     dns: Option<&std::sync::Arc<resolver::Dns>>,
 ) -> Result<reqwest::ClientBuilder, String> {
@@ -57,7 +76,60 @@ pub fn client_builder(
     if let Some(dns) = dns {
         builder = builder.dns_resolver(dns);
     }
+    builder = bind_to_adapter(builder, target, proxy)?;
     Ok(builder)
+}
+
+/// Hold a client to the adapter the reader chose.
+///
+/// Windows binds the adapter's own address: from Vista on, a packet with that
+/// source address leaves only through that adapter. The systems that route by
+/// destination bind the interface itself.
+fn bind_to_adapter(
+    builder: reqwest::ClientBuilder,
+    target: Option<&str>,
+    proxy: Option<&str>,
+) -> Result<reqwest::ClientBuilder, String> {
+    let route = adapter::route();
+    if matches!(route, adapter::Route::Any) {
+        return Ok(builder);
+    }
+    // A connection that does not leave this computer is not held to the
+    // adapter: it cannot, and binding it would only break it.
+    let local = target.is_some_and(is_this_computer)
+        || proxy
+            .and_then(|proxy| reqwest::Url::parse(proxy).ok())
+            .and_then(|url| url.host_str().map(str::to_owned))
+            .is_some_and(|host| is_this_computer(&host));
+    if local {
+        return Ok(builder);
+    }
+    match route {
+        adapter::Route::Down { label } => Err(format!(
+            "the network adapter {label} is not connected, so nothing is downloaded"
+        )),
+        adapter::Route::Bound(binding) => {
+            #[cfg(windows)]
+            {
+                let Some(local) = binding
+                    .v4
+                    .map(std::net::IpAddr::V4)
+                    .or(binding.v6.map(std::net::IpAddr::V6))
+                else {
+                    return Err(format!(
+                        "the network adapter {} has no address to leave from",
+                        binding.label
+                    ));
+                };
+                Ok(builder.local_address(local))
+            }
+            #[cfg(not(windows))]
+            {
+                Ok(builder)
+            }
+        }
+        adapter::Route::Any => Ok(builder),
+    }
 }
 
 /// The proxy the connections go through.

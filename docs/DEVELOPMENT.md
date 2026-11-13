@@ -387,6 +387,18 @@ is added:
   `settings.json` under `dns`; the window edits it through the `set_dns`
   command, which checks the endpoint before it is kept. A failed lookup is
   logged with the mode, never with the name that was asked for.
+- **The network adapter** (`crates/idm-core/src/net/adapter.rs`) is one route
+  for the whole application: the same `client_builder` holds every client to
+  the adapter the reader chose (`set_route`, `route`), the resolver hands out
+  only the addresses that adapter can reach, and the FTP client binds its own
+  socket the same way. A chosen adapter that is gone is a route that is down:
+  the clients refuse to be built and nothing takes the normal route. The
+  choice is stored in `settings.json` as `networkAdapter`, by the adapter's
+  identity (its GUID), so a renamed connection is still the one that was
+  chosen. `src-tauri/src/network.rs` watches the adapters
+  (`NotifyIpInterfaceChange`) and stops the running downloads when the chosen
+  one goes away. A connection to this computer, or through a proxy on it, is
+  not held to the adapter: it never leaves, and binding it would break it.
 - Every write to these goes through `AppState::modify_settings`, which
   sanitizes, applies the whole object to the running engine, and saves the
   file. Never set a runtime field and a file field separately; never read the

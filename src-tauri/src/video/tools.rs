@@ -401,7 +401,7 @@ fn ffmpeg_from_zip(bytes: &[u8]) -> Result<Vec<u8>, String> {
 fn client(app: &tauri::AppHandle) -> Result<reqwest::Client, String> {
     // ffmpeg's archive is about 100 MB; a slow link must be allowed to finish.
     let proxy = proxy(app);
-    let builder = idm_core::net::client_builder(proxy.as_deref(), None)?
+    let builder = idm_core::net::client_builder(None, proxy.as_deref(), None)?
         .timeout(Duration::from_secs(30 * 60));
     builder
         .build()

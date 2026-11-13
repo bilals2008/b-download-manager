@@ -8,8 +8,7 @@
 //! family the server has, the connection fails instead of quietly taking the
 //! normal route.
 //!
-//! Each system needs its own call, and this crate may not add a dependency
-//! for them, so the socket is not bound here yet:
+//! Each system needs its own call, and the calls are in [`socket`]:
 //!
 //! - **Windows**: `setsockopt(IP_UNICAST_IF, index)`; the adapter's
 //!   addresses are read with `GetAdaptersAddresses` (iphlpapi.h). From Vista
@@ -27,6 +26,13 @@
 //! refused rather than sent around the adapter.
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+
+#[cfg(windows)]
+mod windows;
+
+mod socket;
+
+pub use socket::open;
 
 /// The platform call that would hold a socket to the adapter.
 #[cfg(windows)]
@@ -208,11 +214,20 @@ impl Route {
 /// A network adapter of this computer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Adapter {
+    /// The system's identity for it, and what the settings file keeps.
+    ///
+    /// Windows' GUID survives a rename and a restart; the display name
+    /// changes and the interface index does not have to be the same after a
+    /// reboot, so neither of those is an identity.
+    pub id: String,
     /// The name shown in Network Connections ("Ethernet", "ProtonVPN"); on
     /// Linux and macOS the interface's name ("wg0", "utun4").
     pub name: String,
     /// The system's index for it.
     pub index: u32,
+    /// Whether the system says it is up. A VPN that is off is listed, so the
+    /// reader can see it and see that it is carrying nothing.
+    pub up: bool,
     /// Its addresses that can reach other computers (no link-local
     /// 169.254.x.x or fe80::).
     pub v4: Vec<Ipv4Addr>,
@@ -249,11 +264,12 @@ impl Adapter {
 
 /// The route for the adapter named by `choice`.
 ///
-/// `choice` is "" (any), the name of an adapter (any case), or one of its
-/// addresses (that address is bound, even a link-local one). A choice that
-/// is not there, or has no address, is [`Route::Down`]: it never becomes
-/// [`Route::Any`], because a reader who chose an adapter wants that adapter
-/// and not a silent fallback to the normal route.
+/// `choice` is "" (any), the adapter's identity (its GUID on Windows), its
+/// name (any case), or one of its addresses (that address is bound, even a
+/// link-local one). A choice that is not there, or has no address, is
+/// [`Route::Down`]: it never becomes [`Route::Any`], because a reader who
+/// chose an adapter wants that adapter and not a silent fallback to the
+/// normal route.
 pub fn route_for(choice: &str, adapters: &[Adapter]) -> Route {
     let choice = choice.trim();
     if choice.is_empty() {
@@ -283,9 +299,16 @@ pub fn route_for(choice: &str, adapters: &[Adapter]) -> Route {
             v6,
         });
     }
+    // The identity first: it is what the settings file keeps, and a renamed
+    // adapter is still the adapter the reader chose.
     let found = adapters
         .iter()
-        .find(|a| a.name.eq_ignore_ascii_case(choice));
+        .find(|a| a.id.eq_ignore_ascii_case(choice))
+        .or_else(|| {
+            adapters
+                .iter()
+                .find(|a| a.name.eq_ignore_ascii_case(choice))
+        });
     let Some(a) = found else {
         return down();
     };
@@ -299,12 +322,62 @@ pub fn route_for(choice: &str, adapters: &[Adapter]) -> Route {
 
 /// The computer's network adapters, in the system's order.
 ///
-/// Not wired yet: the enumeration needs the system's own call —
-/// `GetAdaptersAddresses` on Windows, `getifaddrs` on Linux and macOS — and
-/// this crate may not add a dependency for it. The list is therefore empty
-/// and the reader names the adapter by hand until it is.
+/// Adapters without an address are listed too: a VPN that is off is a choice
+/// the reader made, and it must be visible as "not connected" rather than
+/// missing.
 pub fn adapters() -> Vec<Adapter> {
-    Vec::new()
+    #[cfg(windows)]
+    {
+        windows::adapters()
+    }
+    #[cfg(not(windows))]
+    {
+        Vec::new()
+    }
+}
+
+/// The route in force for the whole application.
+///
+/// The reader chose one adapter, so there is one: the application builds the
+/// route when the settings are applied and puts it here, and every client
+/// built after that leaves through it. A route that is [`Route::Down`] is the
+/// kill switch: nothing may connect.
+static CURRENT: std::sync::OnceLock<std::sync::Mutex<Route>> = std::sync::OnceLock::new();
+
+fn slot() -> &'static std::sync::Mutex<Route> {
+    CURRENT.get_or_init(|| std::sync::Mutex::new(Route::Any))
+}
+
+/// The route in force.
+pub fn route() -> Route {
+    slot().lock().expect("route lock poisoned").clone()
+}
+
+/// Put a route in force. [`Route::Down`] is what a chosen adapter that is
+/// gone becomes.
+pub fn set_route(route: Route) {
+    let mut guard = slot().lock().expect("route lock poisoned");
+    *guard = route;
+}
+
+/// The bytes of the interface option for a connection to `ip`.
+///
+/// Windows takes the index in network byte order for IPv4 and in host byte
+/// order for IPv6, and the two options have the same number.
+pub fn interface_option(ip: IpAddr, index: u32) -> Option<(i32, [u8; 4])> {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::Networking::WinSock::{IP_UNICAST_IF, IPV6_UNICAST_IF};
+        match ip {
+            IpAddr::V4(_) => Some((IP_UNICAST_IF, index.to_be_bytes())),
+            IpAddr::V6(_) => Some((IPV6_UNICAST_IF, index.to_ne_bytes())),
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (ip, index);
+        None
+    }
 }
 
 #[cfg(test)]
@@ -313,11 +386,63 @@ mod tests {
 
     fn nic(name: &str, v4: &[&str], v6: &[&str], local: &[&str]) -> Adapter {
         Adapter {
+            id: format!("{{{name}}}"),
             name: name.into(),
             index: 7,
+            up: true,
             v4: v4.iter().map(|s| s.parse().unwrap()).collect(),
             v6: v6.iter().map(|s| s.parse().unwrap()).collect(),
             local_only: local.iter().map(|s| s.parse().unwrap()).collect(),
+        }
+    }
+
+    #[test]
+    fn the_identity_finds_the_adapter_the_reader_chose() {
+        let list = [nic("Ethernet", &["192.168.1.11"], &[], &["fe80::1"])];
+        // The identity is what the settings file keeps, and it survives a
+        // rename: the adapter is still the one the reader chose.
+        let Route::Bound(b) = route_for("{Ethernet}", &list) else {
+            panic!("the adapter is there");
+        };
+        assert_eq!(b.label, "Ethernet");
+        // The name still works, for a file written by hand.
+        let Route::Bound(b) = route_for("ethernet", &list) else {
+            panic!("the adapter is there");
+        };
+        assert_eq!(b.v4, Some("192.168.1.11".parse().unwrap()));
+    }
+
+    #[test]
+    fn the_route_follows_the_adapter_through_bound_lost_and_recovered() {
+        let up = [nic("VPN", &["10.8.0.2"], &[], &[])];
+        let gone: [Adapter; 0] = [];
+        // Bound: the adapter is there and carries the address.
+        assert!(matches!(route_for("{VPN}", &up), Route::Bound(_)));
+        // Lost: the adapter is gone. The route is down, never the normal one.
+        assert!(matches!(route_for("{VPN}", &gone), Route::Down { .. }));
+        // Recovered: it is back, and the route is bound again.
+        assert!(matches!(route_for("{VPN}", &up), Route::Bound(_)));
+    }
+
+    #[test]
+    fn the_interface_option_takes_the_index_in_its_own_byte_order() {
+        // Windows takes the IPv4 index in network byte order and the IPv6 one
+        // in host byte order: the same number, two orders.
+        let (option4, bytes4) = interface_option("93.184.216.34".parse().unwrap(), 7)
+            .expect("the IPv4 option");
+        let (option6, bytes6) = interface_option("2606:2800::1".parse().unwrap(), 7)
+            .expect("the IPv6 option");
+        #[cfg(windows)]
+        {
+            use windows_sys::Win32::Networking::WinSock::{IP_UNICAST_IF, IPV6_UNICAST_IF};
+            assert_eq!(option4, IP_UNICAST_IF);
+            assert_eq!(option6, IPV6_UNICAST_IF);
+            assert_eq!(bytes4, [0, 0, 0, 7]);
+            assert_eq!(bytes6, 7u32.to_ne_bytes());
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = (option4, bytes4, option6, bytes6);
         }
     }
 

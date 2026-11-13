@@ -164,7 +164,7 @@ impl Source {
             if parsed.host_str().is_none() {
                 return Err("the URL has no host".to_string());
             }
-            let mut builder = crate::net::client_builder(proxy, None)?
+            let mut builder = crate::net::client_builder(parsed.host_str(), proxy, None)?
                 .user_agent(http::USER_AGENT)
                 .redirect(reqwest::redirect::Policy::limited(10))
                 // A server that stops answering must not hold a connection

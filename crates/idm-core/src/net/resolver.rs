@@ -115,17 +115,23 @@ impl Dns {
     /// The addresses of `host`. Local names and pinned names stay with the
     /// system's resolver and the pinned map; everything else asks the chosen
     /// resolver, falling back to the system's only as `choice` allows.
+    ///
+    /// The addresses are then held to the adapter the reader chose: an
+    /// address the adapter cannot reach is dropped, and a chosen adapter that
+    /// is gone stops the lookup instead of letting the download take the
+    /// normal route.
     pub async fn addresses(&self, host: &str) -> Result<Vec<IpAddr>, String> {
         let host = host.trim_end_matches('.').to_ascii_lowercase();
         if let Some(pinned) = self.pinned.get(&host) {
-            return Ok(pinned.clone());
+            return self.keep(pinned.clone());
         }
         let choice = &self.shared.choice;
         if choice.is_system() || is_local_name(&host) {
-            return system(&host).await;
+            let found = system(&host).await?;
+            return self.keep(found);
         }
         match self.ask(&host).await {
-            Ok(ips) => Ok(ips),
+            Ok(ips) => self.keep(ips),
             Err(failure) => {
                 // The query stays out of the log; the failure and the mode do not.
                 crate::log::write(
@@ -139,9 +145,31 @@ impl Dns {
                 if failure == Failure::Unreachable
                     && may_fall_back(choice, LookupFailure::Unreachable)
                 {
-                    return system(&host).await;
+                    let found = system(&host).await?;
+                    return self.keep(found);
                 }
                 Err(failure.as_str().to_string())
+            }
+        }
+    }
+
+    /// The addresses the chosen adapter can reach, or the reason it cannot
+    /// carry them.
+    fn keep(&self, ips: Vec<IpAddr>) -> Result<Vec<IpAddr>, String> {
+        let route = crate::net::adapter::route();
+        match route {
+            crate::net::adapter::Route::Any => Ok(ips),
+            crate::net::adapter::Route::Down { label } => Err(format!(
+                "the network adapter {label} is not connected, so nothing is downloaded"
+            )),
+            crate::net::adapter::Route::Bound(_) => {
+                let kept = route.keep(ips);
+                if kept.is_empty() {
+                    return Err(format!(
+                        "the chosen network adapter cannot reach the address of the server"
+                    ));
+                }
+                Ok(kept)
             }
         }
     }

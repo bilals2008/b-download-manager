@@ -200,7 +200,7 @@ async fn a_download_goes_through_the_encrypted_resolver() {
         vec![authority.root.clone()],
     ));
 
-    let client = crate::net::client_builder(None, Some(&dns))
+    let client = crate::net::client_builder(None, None, Some(&dns))
         .expect("a builder")
         .build()
         .expect("a client");

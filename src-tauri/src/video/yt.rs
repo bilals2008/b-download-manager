@@ -351,7 +351,7 @@ async fn remember(
 
 /// Read the watch page, ask each client, and keep the best answer.
 async fn read_page(id: &str, fallback_title: &str) -> Result<(Manifest, SourcePlan), YtError> {
-    let client = idm_core::net::client_builder(None, None)
+    let client = idm_core::net::client_builder(None, None, None)
         .map_err(|error| YtError::Page(error))?
         .build()
         .map_err(|error| YtError::Page(error.to_string()))?;

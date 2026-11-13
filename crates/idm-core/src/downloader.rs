@@ -741,6 +741,17 @@ impl Download {
         self.control.resume();
     }
 
+    /// Stop this download and say why, in one sentence.
+    ///
+    /// Used when the network the reader asked for is gone: the bytes stop,
+    /// and the row says what happened instead of a connection error nobody
+    /// can make sense of.
+    pub fn fail_with(&self, reason: impl Into<String>) {
+        self.stop();
+        *self.error.lock().expect("error lock poisoned") = Some(reason.into());
+        self.set_status(Status::Failed);
+    }
+
     /// Whether the task with this epoch was stopped.
     pub fn is_cancelled(&self, epoch: u64) -> bool {
         epoch <= self.cancelled_epoch.load(Ordering::SeqCst)

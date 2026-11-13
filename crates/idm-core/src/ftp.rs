@@ -32,7 +32,7 @@ pub struct Ftp {
 }
 
 /// Open a connection to the server, asking the reader's resolver for the
-/// address when one is in force.
+/// address when one is in force and holding it to the chosen adapter.
 ///
 /// An FTP server is named too, so the name is looked up the same way every
 /// other name is: through the resolver the reader chose, or through the
@@ -41,23 +41,56 @@ async fn connect(host: &str, port: u16) -> Result<TcpStream, String> {
     fn unreachable(error: impl std::fmt::Display) -> String {
         format!("cannot reach the server: {error}")
     }
-    if let Ok(address) = host.trim_matches(['[', ']']).parse::<IpAddr>() {
-        return TcpStream::connect(SocketAddr::new(address, port))
-            .await
-            .map_err(unreachable);
-    }
-    let Some(dns) = crate::net::resolver::current() else {
-        return TcpStream::connect((host, port)).await.map_err(unreachable);
+    let route = crate::net::adapter::route();
+    let addresses: Vec<IpAddr> = match host.trim_matches(['[', ']']).parse::<IpAddr>() {
+        Ok(address) => vec![address],
+        Err(_) => match crate::net::resolver::current() {
+            Some(dns) => dns.addresses(host).await.map_err(unreachable)?,
+            None => vec![tokio::net::lookup_host((host, port))
+                .await
+                .map_err(unreachable)?
+                .next()
+                .map(|address| address.ip())
+                .ok_or_else(|| unreachable("the name has no address"))?],
+        },
     };
-    let addresses = dns.addresses(host).await.map_err(unreachable)?;
     let mut last = String::new();
     for address in addresses {
-        match TcpStream::connect(SocketAddr::new(address, port)).await {
+        match dial(address, port, &route).await {
             Ok(stream) => return Ok(stream),
-            Err(error) => last = error.to_string(),
+            Err(error) => last = error,
         }
     }
     Err(unreachable(last))
+}
+
+/// Open one connection, held to the adapter when one is chosen.
+async fn dial(
+    address: IpAddr,
+    port: u16,
+    route: &crate::net::adapter::Route,
+) -> Result<TcpStream, String> {
+    let target = SocketAddr::new(address, port);
+    // A connection to this computer never leaves it, so it is not held to the
+    // adapter: binding it would only break it.
+    if address.is_loopback() {
+        return TcpStream::connect(target)
+            .await
+            .map_err(|error| error.to_string());
+    }
+    match route {
+        crate::net::adapter::Route::Bound(binding) => {
+            let socket = crate::net::adapter::open(target, binding)
+                .map_err(|error| error.to_string())?;
+            socket
+                .connect(target)
+                .await
+                .map_err(|error| error.to_string())
+        }
+        _ => TcpStream::connect(target)
+            .await
+            .map_err(|error| error.to_string()),
+    }
 }
 
 impl Ftp {

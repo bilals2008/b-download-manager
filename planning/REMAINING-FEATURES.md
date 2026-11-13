@@ -48,9 +48,15 @@ Legend: ✅ done · 🔧 the engine code exists but nothing in the app can reach
   one resolver when the settings are applied and every client it builds looks
   names up through it. Settings → Connections has the mode, one field per
   mode, the visible fallback and a test button.
-- 🔧 Network adapter binding with kill switch: `net/adapter.rs` exists unwired.
-  Windows needs `IP_UNICAST_IF` / `IPV6_UNICAST_IF` plus `NotifyIpInterfaceChange`
-  to notice the adapter leaving; on loss, fail closed.
+- ✅ Network adapter binding with kill switch: the reader chooses a connection
+  (a VPN, usually) and every client leaves through it. The choice is kept by
+  the adapter's identity, so a renamed connection is still the one that was
+  chosen. The socket is bound to the adapter's address and its interface
+  (`IP_UNICAST_IF`), the system is watched (`NotifyIpInterfaceChange`), and
+  when the adapter goes away the running downloads stop with one sentence
+  instead of taking the normal route. The status bar shows the adapter's
+  state. Windows is the system it was built for; the enumeration is empty on
+  Linux and macOS yet.
 - 🔧 PAC proxy execution: `net/pac.rs` (+ `net/pac/js.rs`, 1499 lines) exists
   unwired. MDM evaluates PAC per URL (`WinHttpGetProxyForUrl`); a cached global
   route is wrong.
@@ -138,6 +144,14 @@ Kept here so nothing is lost. Each is a crate MDM has and this project lacks:
   - The reader's line for the release notes: "Names can now be looked up
     through an encrypted resolver, so the sites you download from cannot see
     the names you ask for."
+- ✅ **Adapter binding with a kill switch** — the reader chooses the network
+  adapter every download leaves through, usually a VPN. The socket is bound
+  to it (address and interface), the system is watched, and when the adapter
+  goes away the downloads stop rather than quietly taking the normal route.
+  The status bar shows the adapter, so a lost one is seen and not inferred.
+  - The reader's line for the release notes: "Downloads can be held to one
+    network adapter, so they stop when that adapter goes away instead of
+    taking another route."
 
 ## The plans
 

@@ -1034,6 +1034,14 @@ impl AppState {
                 &choice,
             )))
         });
+        // The adapter every connection leaves through. A chosen adapter that
+        // is not there is a route that is down: the clients refuse to be
+        // built, and nothing takes the normal route instead.
+        let route = idm_core::net::adapter::route_for(
+            &settings.network_adapter,
+            &idm_core::net::adapter::adapters(),
+        );
+        idm_core::net::adapter::set_route(route);
         self.set_show_complete_dialog(settings.show_complete_dialog);
         self.set_show_progress_on_start(settings.show_progress_on_start);
         self.set_show_video_window_on_start(settings.show_video_window_on_start);

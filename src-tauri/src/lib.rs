@@ -11,6 +11,7 @@ mod extract;
 mod grabber;
 mod lifecycle;
 mod migrate;
+mod network;
 mod prefs;
 mod progress;
 mod queue;
@@ -1262,6 +1263,10 @@ pub fn run() {
             }
             // The browser extension talks to the application through this.
             bridge::start(app.handle().clone());
+            // The adapters are watched, so a chosen adapter that goes away
+            // stops the downloads instead of letting them take the normal
+            // route.
+            network::watch(app.handle().clone());
             // A copied link is offered while the application is in the tray.
             clipboard::start(app.handle().clone());
             Ok(())
@@ -1358,6 +1363,9 @@ pub fn run() {
             dns::set_dns,
             dns::dns_settings,
             dns::test_dns,
+            network::network_adapters,
+            network::network_state,
+            network::set_network_adapter,
             set_browser_folder,
             quit_app,
             default_destination,

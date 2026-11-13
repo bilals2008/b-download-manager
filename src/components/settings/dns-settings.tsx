@@ -12,7 +12,7 @@ import {
   testDns,
   type DnsMode,
   type DnsSettings,
-} from "@/lib/ipc";
+} from "@/lib/ipc-dns";
 
 /** The ways names can be resolved, as the picker offers them. */
 const MODES: { value: DnsMode; label: string }[] = [

@@ -78,6 +78,10 @@ pub struct EngineSettings {
     /// client it builds — downloads, the grabber, video tracks, the update
     /// check — so the one setting governs all of them.
     pub dns: idm_core::net::DnsSettings,
+    /// The network adapter every connection leaves through, kept by the
+    /// adapter's own identity (its GUID on Windows) so a renamed connection is
+    /// still the one that was chosen. Empty means the system's own route.
+    pub network_adapter: String,
 }
 
 impl Default for EngineSettings {
@@ -98,6 +102,7 @@ impl Default for EngineSettings {
             show_video_window_on_start: true,
             clipboard_capture: false,
             dns: idm_core::net::DnsSettings::default(),
+            network_adapter: String::new(),
         }
     }
 }
@@ -173,6 +178,7 @@ pub fn sanitize(mut settings: EngineSettings) -> EngineSettings {
         settings.speed_limit_bytes = 0;
     }
     settings.proxy_url = strip_credentials(&settings.proxy_url);
+    settings.network_adapter = settings.network_adapter.trim().to_string();
     clean_dns(&mut settings.dns);
     settings
 }
@@ -435,6 +441,26 @@ mod tests {
         let dns = load(&path).dns;
         assert_eq!(dns.mode, "system");
         assert!(!dns.fallback);
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn the_chosen_adapter_is_kept_by_its_identity() {
+        let path = temp_file("adapter");
+        std::fs::write(
+            &path,
+            br#"{"version":2,"networkAdapter":"  {2E9F7A11-1111-2222-3333-444455556666}  "}"#,
+        )
+        .expect("a written file");
+        let settings = load(&path);
+        assert_eq!(
+            settings.network_adapter,
+            "{2E9F7A11-1111-2222-3333-444455556666}"
+        );
+        // No adapter is the system's own route.
+        let path = temp_file("no-adapter");
+        std::fs::write(&path, br#"{"version":2}"#).expect("a written file");
+        assert_eq!(load(&path).network_adapter, "");
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 
