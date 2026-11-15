@@ -30,9 +30,9 @@
 
 - Names can be looked up through an encrypted resolver or NextDNS, downloads can be held to one network adapter, and every download shows its server and its round trip.
 
-### Host links, your accounts and torrents
+### Host links and your accounts
 
-- Real-Debrid, AllDebrid and Premiumize unlock the links they take, and magnet links download like everything else.
+- Real-Debrid, AllDebrid and Premiumize unlock the links they take. Magnet links and .torrent files are coming soon.
 
 ### Your phone, and your assistant
 

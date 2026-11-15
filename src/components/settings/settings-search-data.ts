@@ -680,7 +680,7 @@ const PAGE_ENTRIES: readonly SettingsCatalogEntry[] = [
     page: "torrent",
     section: "BitTorrent",
     title: "Keep uploading after the download finishes",
-    description: "Uploading a finished torrent back to the swarm.",
+    description: "Coming soon: uploading a finished torrent back to the swarm.",
     keywords: [
       "torrent",
       "bittorrent",

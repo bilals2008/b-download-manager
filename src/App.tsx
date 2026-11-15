@@ -12,7 +12,6 @@ import { cycleSectionFocus } from "@/components/shell/section-focus";
 import { TipOfTheDayDialog } from "@/components/tips/tip-of-the-day-dialog";
 import { AboutDialog } from "@/components/workspace/about-dialog";
 import { AddDownloadDialog } from "@/components/workspace/add-download-dialog";
-import { AddTorrentDialog } from "@/components/workspace/add-torrent-dialog";
 import { CloseConfirmDialog } from "@/components/workspace/close-confirm-dialog";
 import { UpdateDialog } from "@/components/workspace/update-dialog";
 import { UpdateNotice } from "@/components/updates/update-notice";
@@ -85,8 +84,6 @@ export default function App() {
   );
   const [categoriesVisible, setCategoriesVisible] = useState(true);
   const [addDownloadOpen, setAddDownloadOpen] = useState(false);
-  // Torrents are a job of their own, so they have a dialog of their own.
-  const [torrentOpen, setTorrentOpen] = useState(false);
   const [clipboardLink, setClipboardLink] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
@@ -129,7 +126,6 @@ export default function App() {
     activeDownloads,
     blocked:
       addDownloadOpen ||
-      torrentOpen ||
       settingsOpen ||
       aboutOpen ||
       tipsOpen ||
@@ -555,9 +551,6 @@ export default function App() {
       case "add-download":
         setAddDownloadOpen(true);
         break;
-      case "add-torrent":
-        setTorrentOpen(true);
-        break;
       case "options":
         setSettingsOpen(true);
         break;
@@ -702,10 +695,6 @@ export default function App() {
         open={addDownloadOpen}
         seedUrl={clipboardLink}
         onClose={closeAddDownload}
-      />
-      <AddTorrentDialog
-        open={torrentOpen}
-        onClose={() => setTorrentOpen(false)}
       />
       <SettingsDialog
         open={settingsOpen}

@@ -1,5 +1,3 @@
-import { open as pickFile } from "@tauri-apps/plugin-dialog";
-
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { FolderGlyph } from "@/components/icons/action-icons";
@@ -36,7 +34,6 @@ import {
   debridAskUnlock,
   debridServices,
 } from "@/lib/ipc-debrid";
-import { torrentStart } from "@/lib/ipc-torrent";
 import {
   chooseFolder,
   defaultDestination,
@@ -256,15 +253,15 @@ export function AddDownloadDialog({
     clearBrowserRequest();
   }, [open, browserRequest, clearBrowserRequest]);
 
+  // Torrents are not out yet, so a magnet link or a .torrent file is a
+  // problem, not a job: say so instead of starting one.
   const address = url.trim();
-  // A magnet link is a torrent, not an address of a file: the engine starts
-  // a job that finds its own files instead of fetching one.
-  const isMagnet = address.toLowerCase().startsWith("magnet:");
-  const isTorrentFile =
-    address.toLowerCase().endsWith(".torrent") &&
-    (address.includes(":\\") || address.startsWith("/"));
-  const torrentish = isMagnet || isTorrentFile;
-  const problem = torrentish ? null : urlProblem(address);
+  const lower = address.toLowerCase();
+  const torrentish =
+    lower.startsWith("magnet:") ||
+    (lower.endsWith(".torrent") &&
+      (address.includes(":\\") || address.startsWith("/")));
+  const problem = torrentish ? "Torrents are coming soon." : urlProblem(address);
   const valid = problem === null;
   // A hand-over only describes the link it carried, not whatever was pasted
   // over it.
@@ -523,18 +520,6 @@ export function AddDownloadDialog({
     }
   }
 
-  async function pickTorrentFile() {
-    const picked = await pickFile({
-      multiple: false,
-      directory: false,
-      filters: [{ name: "Torrent", extensions: ["torrent"] }],
-    });
-    if (typeof picked === "string" && picked) {
-      setUrl(picked);
-      setError(null);
-    }
-  }
-
   async function submit() {
     if (running.current) {
       return;
@@ -560,24 +545,6 @@ export function AddDownloadDialog({
     }
     if (!isDesktop()) {
       setError("Downloading works only in the desktop app.");
-      return;
-    }
-
-    if (torrentish) {
-      running.current = true;
-      setBusy(true);
-      try {
-        // A magnet link or a .torrent file is a job of its own, not an
-        // ordinary download: the engine starts a job and the torrent
-        // window shows what it does.
-        await torrentStart(address, chosenFolder);
-        onClose();
-      } catch (failure) {
-        setError(describeError(failure));
-      } finally {
-        running.current = false;
-        setBusy(false);
-      }
       return;
     }
 
@@ -771,26 +738,10 @@ export function AddDownloadDialog({
           ) : null}
         </div>
 
-        {valid && torrentish ? (
-          <div className="flex flex-wrap items-center justify-between gap-2 text-chrome-micro text-chrome-menu-text">
-            <p className="min-w-0">
-              Files land in a folder named after the torrent. The torrent
-              window shows the files, the peers and what the job is doing.
-            </p>
-            <button
-              type="button"
-              className="shrink-0 underline"
-              onClick={() => void pickTorrentFile()}
-            >
-              Pick a .torrent file
-            </button>
-          </div>
-        ) : null}
-
         {/* What the address adds up to, before anything starts: the file it
             becomes, its size and whether it can be resumed. It is the answer
             to "did I paste the right link"; the category below it. */}
-        {valid && !torrentish ? (
+        {valid ? (
           <div className="flex min-w-0 items-center gap-2.5">
             <FileTypeIcon
               category={category}
