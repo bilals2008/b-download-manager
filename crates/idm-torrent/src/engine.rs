@@ -141,12 +141,17 @@ pub(crate) async fn run(job: Arc<Job>) {
     let mut interval = Duration::from_secs(1800);
     let mut session: Option<PeerSession> = None;
     let mut metainfo = job.metainfo().cloned();
-    let mut storage: Option<Storage> = None;
+    let mut storage: Option<Arc<Storage>> = None;
     let mut have: Vec<bool> = Vec::new();
     let mut downloaded = 0u64;
     let mut uploaded = 0u64;
+    // A peer learns what we have once per session; a new peer learns it again.
+    let mut announced = false;
 
     loop {
+        if session.is_none() {
+            announced = false;
+        }
         if job.control.cancelled() {
             break;
         }
@@ -213,7 +218,7 @@ pub(crate) async fn run(job: Arc<Job>) {
             let peer = session.as_mut().expect("a peer");
             match peer.fetch_metadata().await {
                 Ok(metadata) => {
-                    match metainfo_from_metadata(&metadata, job.trackers()) {
+                    match metainfo_from_metadata(&metadata, job.trackers(), Some(job.id.as_str())) {
                         Ok(found) => {
                             metainfo = Some(found);
                             if let Ok(mut state) = job.state.lock() {
@@ -225,9 +230,11 @@ pub(crate) async fn run(job: Arc<Job>) {
                             }
                             continue;
                         }
-                        Err(error) => {
-                            set_failed(&job, error.to_string());
+                        Err(_) => {
+                            // A peer that serves metadata of another torrent is
+                            // not a peer of this one; ask the next one.
                             session = None;
+                            tokio::time::sleep(Duration::from_secs(1)).await;
                             continue;
                         }
                     }
@@ -249,7 +256,7 @@ pub(crate) async fn run(job: Arc<Job>) {
             match Storage::new(&job.directory, metainfo, &chosen).await {
                 Ok(files) => {
                     have = vec![false; piece_map.count as usize];
-                    storage = Some(files);
+                    storage = Some(Arc::new(files));
                     if let Ok(mut state) = job.state.lock() {
                         state.have = have.clone();
                     }
@@ -265,8 +272,22 @@ pub(crate) async fn run(job: Arc<Job>) {
         // Every piece is there: the job is done.
         if have.iter().all(|has| *has) {
             if job.control.seeding() {
+                // A seeder still wants a peer to talk to; without one there is
+                // nobody to give the pieces to.
+                if session.is_none() {
+                    let _ = connect(
+                        &mut session,
+                        &addresses,
+                        &mut tried,
+                        &job.id,
+                        &peer_id,
+                        piece_map.count,
+                    )
+                    .await;
+                    attach_source(&mut session, &storage);
+                }
                 set_status(&job, JobStatus::Seeding);
-                seed(&mut session, &job, &mut uploaded, &known).await;
+                seed(&mut session, &job, &mut uploaded, &known, &have, &mut announced).await;
             } else {
                 set_status(&job, JobStatus::Completed);
             }
@@ -283,9 +304,12 @@ pub(crate) async fn run(job: Arc<Job>) {
 
         // The peer has to have it.
         if session.is_none() {
-            match connect(&mut session, &addresses, &mut tried, &job.id, &peer_id, piece_map.count).await
+            match connect(&mut session, &addresses, &mut tried, &job.id, &peer_id, piece_map.count)
+                .await
             {
-                Ok(()) => {}
+                Ok(()) => {
+                    attach_source(&mut session, &storage);
+                }
                 Err(_) => {
                     set_status(&job, JobStatus::NoPeers);
                     tokio::time::sleep(Duration::from_secs(2)).await;
@@ -324,7 +348,7 @@ pub(crate) async fn run(job: Arc<Job>) {
                     session = None;
                     continue;
                 }
-                let storage = storage.as_mut().expect("the files");
+                let storage = storage.as_ref().expect("the files");
                 if storage.write_piece(wanted, &data).await.is_err() {
                     set_failed(&job, "the file could not be written".into());
                     session = None;
@@ -376,34 +400,57 @@ async fn connect(
     Ok(())
 }
 
-/// Stay with the peer and give it what it asks for.
+/// Hand the peer the files to serve, so a request is answered from disk
+/// instead of from a session that is not allowed to read it.
+fn attach_source(session: &mut Option<PeerSession>, storage: &Option<Arc<Storage>>) {
+    if let (Some(peer), Some(storage)) = (session.as_mut(), storage) {
+        peer.set_source(storage.clone());
+    }
+}
+
+/// Stay with the peer and give it what it asks for. The peer learns what we
+/// have before it can ask: a bitfield, and the unchoke that answers for it.
 async fn seed(
     session: &mut Option<PeerSession>,
     job: &Arc<Job>,
     uploaded: &mut u64,
     known: &[PeerInfo],
+    have: &[bool],
+    announced: &mut bool,
 ) {
     let Some(peer) = session.as_mut() else {
+        *announced = false;
         return;
     };
-    match tokio::time::timeout(Duration::from_secs(120), peer.read_message()).await {
+    if !*announced {
+        let _ = peer.send_bitfield(have).await;
+        let _ = peer.send(&Message::Unchoke).await;
+        *announced = true;
+    }
+    let hung_up = match tokio::time::timeout(Duration::from_secs(120), peer.read_message()).await {
         Ok(Ok(Message::Request {
             index,
             begin,
             length,
         })) => {
             let _ = peer.serve_request(index, begin, length).await;
+            false
         }
-        Ok(Ok(_)) => {}
-        Ok(Err(_)) => {}
+        Ok(Ok(_)) => false,
+        Ok(Err(_)) => true,
         Err(_) => {
             let _ = peer.send(&Message::KeepAlive).await;
+            false
         }
-    }
+    };
     *uploaded = peer.uploaded;
     if let Ok(mut state) = job.state.lock() {
         state.uploaded = *uploaded;
         state.peers = peers_of(&known, session);
+    }
+    if hung_up {
+        *session = None;
+        *announced = false;
     }
 }
 
@@ -434,6 +481,166 @@ fn set_status(job: &Arc<Job>, status: JobStatus) {
         if state.status != status {
             state.status = status;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::bencode::{bencode_encode, BencodeValue};
+    use crate::session::{JobRequest, JobSource, TorrentClient};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+
+    fn content() -> Vec<u8> {
+        (0u8..=255).cycle().take(2048).collect()
+    }
+
+    fn a_torrent(announce: &str, bytes: &[u8]) -> Vec<u8> {
+        let pieces = [&bytes[..1024], &bytes[1024..]]
+            .iter()
+            .flat_map(|chunk| sha1_bytes(chunk))
+            .collect();
+        let info = BencodeValue::Dict(vec![
+            ("length".into(), BencodeValue::Integer(2048)),
+            ("name".into(), BencodeValue::Bytes(b"hello.txt".to_vec())),
+            ("piece length".into(), BencodeValue::Integer(1024)),
+            ("pieces".into(), BencodeValue::Bytes(pieces)),
+        ]);
+        bencode_encode(&BencodeValue::Dict(vec![
+            (
+                "announce".into(),
+                BencodeValue::Bytes(announce.as_bytes().to_vec()),
+            ),
+            ("info".into(), info),
+        ]))
+    }
+
+    async fn a_tracker(peer: std::net::SocketAddr) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let bytes = peer.ip().to_string().parse::<std::net::Ipv4Addr>().unwrap();
+        let port = peer.port();
+        tokio::spawn(async move {
+            for _ in 0..8 {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                let mut request = vec![0u8; 2048];
+                let read = socket.read(&mut request).await.unwrap_or(0);
+                if read == 0 {
+                    continue;
+                }
+                // The announce names the torrent; the answer names the one peer.
+                let body = bencode_encode(&BencodeValue::Dict(vec![
+                    ("interval".into(), BencodeValue::Integer(1800)),
+                    (
+                        "peers".into(),
+                        BencodeValue::Bytes(
+                            [bytes.octets().as_slice(), port.to_be_bytes().as_slice()].concat(),
+                        ),
+                    ),
+                ]));
+                let head = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                let _ = socket.write_all(head.as_bytes()).await;
+                let _ = socket.write_all(&body).await;
+            }
+        });
+        format!("http://{address}/announce")
+    }
+
+    /// One peer that has both pieces and answers what is asked of it.
+    async fn a_peer(bytes: Vec<u8>) -> std::net::SocketAddr {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut hello = [0u8; 68];
+            socket.read_exact(&mut hello).await.unwrap();
+            let info_hash: [u8; 20] = hello[28..48].try_into().unwrap();
+            let mut response = vec![19u8];
+            response.extend_from_slice(b"BitTorrent protocol");
+            response.extend_from_slice(&hello[20..28]);
+            response.extend_from_slice(&info_hash);
+            response.extend_from_slice(&[9u8; 20]);
+            socket.write_all(&response).await.unwrap();
+            // Both pieces are there.
+            let bitfield = Message::to_wire(&Message::Bitfield(vec![0b1100_0000]));
+            socket.write_all(&bitfield).await.unwrap();
+            loop {
+                let mut length = [0u8; 4];
+                if socket.read_exact(&mut length).await.is_err() {
+                    return;
+                }
+                let length = u32::from_be_bytes(length) as usize;
+                if length == 0 {
+                    continue; // a keep-alive
+                }
+                let mut body = vec![0u8; length];
+                if socket.read_exact(&mut body).await.is_err() {
+                    return;
+                }
+                if body[0] != 6 {
+                    continue; // not a request; nothing owed back
+                }
+                let index = u32::from_be_bytes(body[1..5].try_into().unwrap()) as u64;
+                let begin = u32::from_be_bytes(body[5..9].try_into().unwrap()) as u64;
+                let amount = u32::from_be_bytes(body[9..13].try_into().unwrap()) as u64;
+                let start = (index * 1024 + begin) as usize;
+                let data = bytes[start..start + amount as usize].to_vec();
+                let piece = Message::to_wire(&Message::Piece {
+                    index: index as u32,
+                    begin: begin as u32,
+                    data,
+                });
+                if socket.write_all(&piece).await.is_err() {
+                    return;
+                }
+            }
+        });
+        address
+    }
+
+    #[tokio::test]
+    async fn a_job_downloads_its_pieces_from_a_peer() {
+        let bytes = content();
+        let peer = a_peer(bytes.clone()).await;
+        let tracker = a_tracker(peer).await;
+        let torrent = a_torrent(&tracker, &bytes);
+        let directory = std::env::temp_dir().join(format!("idm-torrent-e2e-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&directory);
+
+        let client = TorrentClient::new();
+        let id = client
+            .add_job(JobRequest {
+                source: JobSource::Bytes(torrent),
+                directory: directory.clone(),
+                wanted: Vec::new(),
+            })
+            .await
+            .expect("the job was added");
+
+        let mut finished = None;
+        for _ in 0..100 {
+            if let Some(job) = client.job(&id) {
+                match job.status {
+                    JobStatus::Completed => {
+                        finished = Some(job);
+                        break;
+                    }
+                    JobStatus::Failed(why) => panic!("the job failed: {why}"),
+                    _ => {}
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        let job = finished.expect("the job did not finish in time");
+        assert_eq!(job.downloaded, 2048);
+        let written = std::fs::read(directory.join("hello.txt")).expect("the file is there");
+        assert_eq!(written, bytes);
+        let _ = client.remove(&id, true).await;
+        let _ = std::fs::remove_dir_all(&directory);
     }
 }
 

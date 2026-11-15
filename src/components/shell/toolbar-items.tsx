@@ -18,6 +18,7 @@ import {
   StopIcon,
   StopQueueIcon,
   TellFriendIcon,
+  TorrentIcon,
   type ToolbarIconProps,
 } from "./toolbar-icons";
 
@@ -32,6 +33,7 @@ export interface ToolbarItem extends ToolbarItemMeta {
  */
 const ICONS: Record<ToolbarCommand, ComponentType<ToolbarIconProps>> = {
   "add-download": AddIcon,
+  "add-torrent": TorrentIcon,
   resume: ResumeIcon,
   stop: StopIcon,
   "stop-all": StopAllIcon,

@@ -6,6 +6,7 @@
 export type ShellCommand =
   // Tasks
   | "add-download"
+  | "add-torrent"
   | "add-batch"
   | "add-batch-clipboard"
   | "run-grabber"

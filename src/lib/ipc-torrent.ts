@@ -76,12 +76,40 @@ export interface TorrentJob {
   seeding: boolean;
 }
 
-/** Start a torrent: a magnet link or a `.torrent` file path. */
+/** What a torrent holds, before it is started. */
+export interface TorrentInfo {
+  /** The info hash, the id of the torrent. */
+  infoHash: string;
+  /** The name of the torrent. */
+  name: string;
+  /** How many bytes the torrent holds. */
+  totalLength: number;
+  /** The files of the torrent. */
+  files: TorrentFile[];
+}
+
+/**
+ * Read a torrent: its name and its files, before any byte is written. A
+ * `.torrent` file answers at once; a magnet asks its peers for the list.
+ */
+export function torrentLookup(source: string): Promise<TorrentInfo> {
+  return invoke<TorrentInfo>("torrent_lookup", { source });
+}
+
+/**
+ * Start a torrent: a magnet link or a `.torrent` file path. `wanted` lists the
+ * files the reader kept; every file is taken when it is left out.
+ */
 export function torrentStart(
   source: string,
   folder?: string,
+  wanted?: readonly number[],
 ): Promise<TorrentJob> {
-  return invoke<TorrentJob>("torrent_start", { source, folder: folder ?? null });
+  return invoke<TorrentJob>("torrent_start", {
+    source,
+    folder: folder ?? null,
+    wanted: wanted ? [...wanted] : null,
+  });
 }
 
 /** Every job of the client. */

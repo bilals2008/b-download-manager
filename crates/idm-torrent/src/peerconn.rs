@@ -38,6 +38,8 @@ pub struct PeerSession {
     pub address: SocketAddr,
     /// The id the peer says.
     pub peer_id: [u8; 20],
+    /// Whether the peer speaks the extension protocol (BEP 10).
+    extension: bool,
     piece_count: u64,
     have: Vec<bool>,
     choked: bool,
@@ -71,6 +73,7 @@ impl PeerSession {
             writer: Mutex::new(writer),
             address,
             peer_id: [0; 20],
+            extension: false,
             piece_count,
             have: vec![false; piece_count as usize],
             choked: false,
@@ -95,13 +98,50 @@ impl PeerSession {
             ));
         }
         session.peer_id = handshake.peer_id;
+        session.extension = handshake.speaks_extensions();
+        session.read_initial().await?;
         Ok(session)
     }
 
-    /// Where the blocks of a piece come from when this peer asks for them.
-    pub fn with_source(mut self, source: Arc<dyn BlockSource>) -> Self {
+    /// Read what the peer says before anything else, so its bitfield is
+    /// known before a piece is asked for. Peers answer hello with the
+    /// bitfield; a peer that sends nothing is kept, it just has nothing
+    /// this job can use yet.
+    async fn read_initial(&mut self) -> Result<(), TorrentError> {
+        let window = Duration::from_secs(5);
+        let deadline = std::time::Instant::now() + window;
+        loop {
+            let left = deadline.saturating_duration_since(std::time::Instant::now());
+            if left.is_zero() {
+                return Ok(());
+            }
+            match tokio::time::timeout(left, self.read_message()).await {
+                // The bitfield is the answer; the rest can wait for the
+                // exchange that actually needs it.
+                Ok(Ok(Message::Bitfield(bytes))) => {
+                    self.set_bitfield(&bytes);
+                    return Ok(());
+                }
+                Ok(Ok(Message::Have(piece))) => self.set_have(piece),
+                Ok(Ok(Message::Unchoke)) => self.choked = false,
+                Ok(Ok(Message::Choke)) => self.choked = true,
+                Ok(Ok(Message::Request {
+                    index,
+                    begin,
+                    length,
+                })) => {
+                    self.serve_request(index, begin, length).await?;
+                }
+                Ok(Ok(_)) => {}
+                Ok(Err(error)) => return Err(error),
+                Err(_) => return Ok(()),
+            }
+        }
+    }
+
+    /// Where the blocks of a piece come from once the job has them.
+    pub fn set_source(&mut self, source: Arc<dyn BlockSource>) {
         self.source = Some(source);
-        self
     }
 
     /// Whether the peer says it has a piece.
@@ -229,6 +269,7 @@ impl PeerSession {
                 } => self.serve_request(piece, at, block).await?,
                 Message::NotInterested | Message::KeepAlive | Message::Interested => {}
                 Message::Cancel { .. } | Message::Port(_) | Message::Extended { .. } => {}
+                Message::Unknown { .. } => {}
             }
         }
         Ok(data)
@@ -236,6 +277,15 @@ impl PeerSession {
 
     /// Ask the peer for the metadata of the torrent (BEP 9).
     pub async fn fetch_metadata(&mut self) -> Result<Vec<u8>, TorrentError> {
+        /// The largest metadata this crate will hold in memory. A torrent of a
+        /// hundred thousand files is a couple of megabytes; past this the
+        /// peer is asking for a memory allocation this machine cannot honour.
+        const MAX_METADATA: usize = 16 * 1024 * 1024;
+        if !self.extension {
+            return Err(TorrentError::Unsupported(
+                "the peer does not speak the extension protocol".into(),
+            ));
+        }
         let hello = BencodeValue::Dict(vec![
             (
                 "m".into(),
@@ -249,31 +299,36 @@ impl PeerSession {
         })
         .await?;
 
-        let mut size: Option<usize> = None;
-        loop {
-            let message = self.read_message().await?;
-            if let Message::Extended { id: 0, payload } = message {
-                let value = bencode_decode(&payload)?;
-                let speaks = value
-                    .get("m")
-                    .and_then(|m| m.get("ut_metadata"))
-                    .and_then(|v| v.as_int())
-                    .unwrap_or(0);
-                if speaks == 0 {
-                    return Err(TorrentError::Unsupported(
-                        "the peer does not have the metadata of the torrent".into(),
-                    ));
+        let size = loop {
+            match self.read_message().await? {
+                Message::Extended { id: 0, payload } => {
+                    let value = bencode_decode(&payload)?;
+                    let speaks = value
+                        .get("m")
+                        .and_then(|m| m.get("ut_metadata"))
+                        .and_then(|v| v.as_int())
+                        .unwrap_or(0);
+                    if speaks == 0 {
+                        return Err(TorrentError::Unsupported(
+                            "the peer does not have the metadata of the torrent".into(),
+                        ));
+                    }
+                    break value
+                        .get("metadata_size")
+                        .and_then(|v| v.as_int())
+                        .map(|size| size as usize);
                 }
-                size = value
-                    .get("metadata_size")
-                    .and_then(|v| v.as_int())
-                    .map(|size| size as usize);
-                break;
+                other => self.handle_control(other).await?,
             }
         }
-        let size = size.ok_or_else(|| {
+        .ok_or_else(|| {
             TorrentError::Unsupported("the peer does not have the metadata of the torrent".into())
         })?;
+        if size > MAX_METADATA {
+            return Err(TorrentError::Unsupported(
+                "the metadata of the torrent is larger than this machine will hold".into(),
+            ));
+        }
 
         let mut metadata = vec![0u8; size];
         let mut got = 0usize;
@@ -288,21 +343,57 @@ impl PeerSession {
             })
             .await?;
             loop {
-                let message = self.read_message().await?;
-                if let Message::Extended { id: 1, payload } = message {
-                    let value = bencode_decode(&payload)?;
-                    let piece = value.get("piece").and_then(|v| v.as_int()).unwrap_or(0) as usize;
-                    let data = value.get("data").and_then(|v| v.as_bytes()).unwrap_or(&[]);
-                    let at = piece * BLOCK_SIZE;
-                    if at + data.len() <= metadata.len() {
-                        metadata[at..at + data.len()].copy_from_slice(data);
-                        got += data.len();
+                match self.read_message().await? {
+                    Message::Extended { id: 1, payload } => {
+                        let value = bencode_decode(&payload)?;
+                        if value.get("msg_type").and_then(|v| v.as_int()) == Some(2) {
+                            return Err(TorrentError::Network(
+                                "the peer rejected the metadata request".into(),
+                            ));
+                        }
+                        let piece = value.get("piece").and_then(|v| v.as_int()).unwrap_or(0) as usize;
+                        let data = value.get("data").and_then(|v| v.as_bytes()).unwrap_or(&[]);
+                        let at = piece * BLOCK_SIZE;
+                        if at + data.len() <= metadata.len() {
+                            metadata[at..at + data.len()].copy_from_slice(data);
+                            got += data.len();
+                        }
+                        break;
                     }
-                    break;
+                    other => self.handle_control(other).await?,
                 }
             }
         }
         Ok(metadata)
+    }
+
+    /// The messages that are not the exchange at hand: what the peer has,
+    /// what it wants, and a block it is owed.
+    async fn handle_control(&mut self, message: Message) -> Result<(), TorrentError> {
+        match message {
+            Message::Have(piece) => {
+                self.set_have(piece);
+                Ok(())
+            }
+            Message::Bitfield(bytes) => {
+                self.set_bitfield(&bytes);
+                Ok(())
+            }
+            Message::Unchoke => {
+                self.choked = false;
+                Ok(())
+            }
+            Message::Choke => {
+                self.choked = true;
+                Ok(())
+            }
+            Message::Request {
+                index,
+                begin,
+                length,
+            } => self.serve_request(index, begin, length).await,
+            _ => Ok(()),
+        }
     }
 
     /// Give the peer the block it asked for.
@@ -312,6 +403,12 @@ impl PeerSession {
         begin: u32,
         length: u32,
     ) -> Result<(), TorrentError> {
+        /// The largest block this crate will send to a peer; a block larger
+        /// than this is never a legitimate request.
+        const MAX_BLOCK: u32 = 1 << 20;
+        if length == 0 || length > MAX_BLOCK {
+            return Ok(());
+        }
         let Some(source) = self.source.clone() else {
             return Ok(());
         };
@@ -340,5 +437,45 @@ impl PeerSession {
             let byte = bytes.get(index / 8).copied().unwrap_or(0);
             *slot = byte & (1 << (7 - index % 8)) != 0;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The peer of a torrent: it answers hello, then says what it has, then
+    /// waits. The test drives the client against it over a loopback socket.
+    #[tokio::test]
+    async fn a_peer_names_the_pieces_it_has_before_any_piece_is_asked() {
+        use tokio::io::AsyncWriteExt;
+        use tokio::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let info_hash = [7u8; 20];
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut hello = vec![19u8];
+            hello.extend_from_slice(b"BitTorrent protocol");
+            let mut reserved = [0u8; 8];
+            reserved[5] = 0x10;
+            hello.extend_from_slice(&reserved);
+            hello.extend_from_slice(&info_hash);
+            hello.extend_from_slice(&[9u8; 20]);
+            socket.write_all(&hello).await.unwrap();
+            let bitfield = Message::to_wire(&Message::Bitfield(vec![0b1010_0000]));
+            socket.write_all(&bitfield).await.unwrap();
+            // Hold the connection open so the read succeeds.
+            std::future::pending::<()>().await;
+        });
+
+        let session = PeerSession::connect(address, info_hash, [8u8; 20], 3)
+            .await
+            .expect("the peer said hello");
+        assert!(session.has_piece(0));
+        assert!(!session.has_piece(1));
+        assert!(session.has_piece(2));
+        assert!(session.extension);
     }
 }

@@ -706,7 +706,7 @@ const PAGE_ENTRIES: readonly SettingsCatalogEntry[] = [
     page: "advanced",
     section: "AI assistants",
     title: "Let AI assistants drive this app",
-    description: "The MCP door an assistant starts beside the app.",
+    description: "Coming soon: the MCP door an assistant will start.",
     keywords: [
       "mcp",
       "assistant",

@@ -54,6 +54,14 @@ export const TOOLBAR_ICONS_CLASSIC: Record<ToolbarCommand, string> = {
 <path d="M24 20.4v6.2M20.9 23.5h6.2" stroke="#fff" stroke-width="2" stroke-linecap="round"/>`,
   ),
 
+  "add-torrent": toolbarIconDataUrl(
+    `<path d="M8 5v9.5a8 8 0 0 0 16 0V5" fill="none" stroke="${OUTLINE}" stroke-width="8.4"/>
+<path d="M8 5v9.5a8 8 0 0 0 16 0V5" fill="none" stroke="${YELLOW}" stroke-width="6.4"/>
+<path d="M8 3.8v5.4M24 3.8v5.4" stroke="${OUTLINE}" stroke-width="8.4"/>
+<path d="M8 3.8v5.4M24 3.8v5.4" stroke="${STEEL}" stroke-width="6.4"/>
+<path d="M8.7 10.6v3.9a7.2 7.2 0 0 0 1.7 4.3" fill="none" stroke="${YELLOW_DARK}" stroke-width="1.4" stroke-linecap="round"/>`,
+  ),
+
   resume: toolbarIconDataUrl(
     `${GLOBE}
 <circle cx="23.5" cy="23.5" r="6.3" fill="${GREEN}" stroke="${OUTLINE}" stroke-width="1.5"/>

@@ -100,8 +100,9 @@ application does not already have.
 
 ### Commands
 
-`add-download`, `resume`, `stop`, `stop-all`, `delete`, `delete-completed`,
-`options`, `scheduler`, `start-queue`, `stop-queue`, `tell-friend`.
+`add-download`, `add-torrent`, `resume`, `stop`, `stop-all`, `delete`,
+`delete-completed`, `options`, `scheduler`, `start-queue`, `stop-queue`,
+`tell-friend`.
 
 Unknown commands are dropped. A command may appear once; separators are
 collapsed at the edges and between each other.

@@ -36,6 +36,49 @@ fn torrents() -> &'static Torrents {
     })
 }
 
+/// What a torrent holds, before anything is downloaded.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TorrentInfo {
+    /// The info hash, the id of the torrent.
+    info_hash: String,
+    /// The name of the torrent.
+    name: String,
+    /// How many bytes the whole torrent holds.
+    total_length: u64,
+    /// The files of the torrent, in the order they come in.
+    files: Vec<idm_torrent::TorrentFile>,
+}
+
+/// Read a torrent: its name and its files, before a byte is written.
+///
+/// A `.torrent` file answers at once. A magnet link has no file list of its
+/// own, so its peers are asked for it, which is the same exchange a running
+/// job makes. The dialog shows the list, and the reader decides what to take.
+#[tauri::command]
+pub async fn torrent_lookup(source: String) -> Result<TorrentInfo, String> {
+    let source = source.trim();
+    if source.is_empty() {
+        return Err("there is no link to look up".to_string());
+    }
+    let request = if source.to_ascii_lowercase().starts_with("magnet:") {
+        JobSource::Magnet(source.to_string())
+    } else {
+        let bytes = std::fs::read(PathBuf::from(source))
+            .map_err(|error| format!("the .torrent file could not be read: {error}"))?;
+        JobSource::Bytes(bytes)
+    };
+    let metainfo = idm_torrent::lookup(&request)
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(TorrentInfo {
+        info_hash: metainfo.info_hash,
+        name: metainfo.name,
+        total_length: metainfo.total_length,
+        files: metainfo.files,
+    })
+}
+
 /// Start a torrent: a magnet link or a `.torrent` file.
 ///
 /// The folder the files land in is named after the torrent, under the one
@@ -46,17 +89,19 @@ pub async fn torrent_start(
     state: State<'_, AppState>,
     source: String,
     folder: Option<String>,
+    wanted: Option<Vec<usize>>,
 ) -> Result<TorrentJob, String> {
     let source = source.trim();
     if source.is_empty() {
         return Err("there is no link to start".to_string());
     }
     let directory = directory_for(&app, &state, source, folder.as_deref()).await?;
+    let chosen = wanted.unwrap_or_default();
     let request = if source.to_ascii_lowercase().starts_with("magnet:") {
         JobRequest {
             source: JobSource::Magnet(source.to_string()),
             directory: directory.clone(),
-            wanted: Vec::new(),
+            wanted: chosen,
         }
     } else {
         let path = PathBuf::from(source);
@@ -66,7 +111,7 @@ pub async fn torrent_start(
         JobRequest {
             source: JobSource::Bytes(bytes),
             directory: directory.clone(),
-            wanted: Vec::new(),
+            wanted: chosen,
         }
     };
     let seeding = state.engine_settings().torrent_seeding;

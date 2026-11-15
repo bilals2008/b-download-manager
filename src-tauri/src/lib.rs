@@ -234,6 +234,7 @@ pub fn run() {
             remote::remote_pairing_code,
             remote::remote_revoke,
             torrent::torrent_start,
+            torrent::torrent_lookup,
             torrent::torrent_jobs,
             torrent::torrent_job,
             torrent::torrent_pause,

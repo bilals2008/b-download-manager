@@ -34,6 +34,8 @@ const STEEL_DEFS = `<linearGradient id="steel" x1="0" y1="0" x2="0" y2="1"><stop
 const ORANGE_DEFS = `<linearGradient id="bell" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffd43b"/><stop offset="1" stop-color="#f08c00"/></linearGradient>`;
 const PAPER_DEFS = `<linearGradient id="paper" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e8edf2"/></linearGradient>`;
 
+const MAGNET_DEFS = `<linearGradient id="magnet" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffd75e"/><stop offset=".55" stop-color="#e8a415"/><stop offset="1" stop-color="#a2650a"/></linearGradient>`;
+
 const SHADOW = `<ellipse cx="16" cy="29" rx="10.5" ry="2" fill="#000" opacity=".16"/>`;
 
 function gear(x: number, y: number, scale: number): string {
@@ -61,6 +63,15 @@ export const TOOLBAR_ICONS_3D: Record<ToolbarCommand, string> = {
     `<linearGradient id="folder" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe873"/><stop offset="1" stop-color="#f0b400"/></linearGradient>
 <linearGradient id="tray" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#86b9ea"/><stop offset="1" stop-color="#2f6fb3"/></linearGradient>
 <linearGradient id="plus" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5cd663"/><stop offset="1" stop-color="#1e8f36"/></linearGradient>`,
+  ),
+
+  "add-torrent": toolbarIconDataUrl(
+    `<ellipse cx="16" cy="29" rx="9.6" ry="1.9" fill="#000" opacity=".16"/>
+<path d="M8 5v9.5a8 8 0 0 0 16 0V5" fill="none" stroke="url(#magnet)" stroke-width="7"/>
+<path d="M8 4v5" stroke="url(#steel)" stroke-width="7"/>
+<path d="M24 4v5" stroke="url(#steel)" stroke-width="7"/>
+<path d="M6.4 10.3v3.8a9.6 9.6 0 0 0 2.2 6" fill="none" stroke="#fff" stroke-opacity=".42" stroke-width="1.4" stroke-linecap="round"/>`,
+    MAGNET_DEFS + STEEL_DEFS,
   ),
 
   resume: toolbarIconDataUrl(

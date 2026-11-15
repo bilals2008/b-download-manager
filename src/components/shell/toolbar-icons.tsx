@@ -49,6 +49,46 @@ export function AddIcon({ className }: ToolbarIconProps) {
   );
 }
 
+/**
+ * A magnet, the one sign everyone reads as "torrent": a link is the address,
+ * a magnet is the swarm. The tips are the metal poles, not a decoration.
+ */
+export function TorrentIcon({ className }: ToolbarIconProps) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 32 32"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <defs>
+        <Gloss id="grad-torrent" from="--icon-amber-bright" to="--icon-amber" />
+      </defs>
+      <path
+        d="M8 5v9.5a8 8 0 0 0 16 0V5"
+        fill="none"
+        stroke="url(#grad-torrent)"
+        strokeWidth="7"
+        strokeLinecap="butt"
+      />
+      <path
+        d="M8 3.6v5.2M24 3.6v5.2"
+        stroke="var(--icon-silver-bright)"
+        strokeWidth="7"
+        strokeLinecap="butt"
+      />
+      <path
+        d="M6.1 10.4v3.9a9.9 9.9 0 0 0 2.4 6.5"
+        fill="none"
+        stroke="#fff"
+        strokeOpacity=".32"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 export function ResumeIcon({ className }: ToolbarIconProps) {
   return (
     <svg

@@ -188,13 +188,23 @@ fn trackers_of(value: &BencodeValue) -> Vec<String> {
 }
 
 /// Read the info dictionary a peer sent, with the trackers of the magnet it
-/// came from.
+/// came from. A magnet's info hash is trusted over whatever the peer says
+/// the metadata is; metadata that hashes to anything else is the metadata of
+/// another torrent, and is refused.
 pub(crate) fn metainfo_from_metadata(
     metadata: &[u8],
     trackers: Vec<String>,
+    expected_info_hash: Option<&str>,
 ) -> Result<Metainfo, TorrentError> {
     let info = bencode_decode(metadata)?;
     let info_hash = hex_encode(&sha1_bytes(metadata));
+    if let Some(expected) = expected_info_hash {
+        if !info_hash.eq_ignore_ascii_case(expected) {
+            return Err(TorrentError::Malformed(
+                "the peer sent the metadata of another torrent".into(),
+            ));
+        }
+    }
     let mut metainfo = metainfo_from_info(&info, info_hash)?;
     if metainfo.trackers.is_empty() {
         metainfo.trackers = trackers;
@@ -276,6 +286,23 @@ mod tests {
         // The info dictionary stands on its own as well.
         let alone = metainfo_from_info(info, metainfo.info_hash.clone()).unwrap();
         assert_eq!(alone.total_length, metainfo.total_length);
+    }
+
+    #[test]
+    fn the_metadata_of_another_torrent_is_refused() {
+        // The torrent is of one file; the hash a magnet carries belongs to a
+        // different one.
+        let info = BencodeValue::Dict(vec![
+            ("length".into(), BencodeValue::Integer(4)),
+            ("name".into(), BencodeValue::Bytes(b"other.bin".to_vec())),
+            ("piece length".into(), BencodeValue::Integer(16)),
+            ("pieces".into(), BencodeValue::Bytes(vec![0u8; 20])),
+        ]);
+        let metadata = bencode_encode(&info);
+        let found = metainfo_from_metadata(&metadata, Vec::new(), Some(&"0".repeat(40)));
+        assert!(found.is_err());
+        let accepted = metainfo_from_metadata(&metadata, Vec::new(), None);
+        assert!(accepted.is_ok());
     }
 
     #[test]

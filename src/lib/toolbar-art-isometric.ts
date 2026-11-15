@@ -127,6 +127,13 @@ ${slab(circle(49, 47, 8), p.ok, p.deep, 3, 3)}
 ${detail("M49 43v8M45 47h8", p.white, 3.4)}`,
     ),
 
+    "add-torrent": data(
+      `${slab("M20 10V26A12 12 0 0 0 44 26V10H36V26A4 4 0 0 1 28 26V10Z", p.gold, p.hot)}
+${slab(rect(20, 4, 8, 7, 2), p.paper, p.grey, 3, 3)}
+${slab(rect(36, 4, 8, 7, 2), p.paper, p.grey, 3, 3)}
+${detail("M24 19v9", p.ink, 2.5)}`,
+    ),
+
     resume: data(
       `${slab(rect(10, 12, 44, 34, 8), p.deep, p.main)}
 ${frame(rect(16, 18, 32, 22, 4), p.paper, 2.5)}

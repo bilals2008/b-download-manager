@@ -85,8 +85,10 @@ impl Storage {
         &self.root
     }
 
-    /// Write a piece that has been checked against its hash.
-    pub async fn write_piece(&mut self, index: u64, data: &[u8]) -> Result<(), TorrentError> {
+    /// Write a piece that has been checked against its hash. Everything the
+    /// files share lives behind a mutex, so reading and writing can happen
+    /// on the same storage at the same time.
+    pub async fn write_piece(&self, index: u64, data: &[u8]) -> Result<(), TorrentError> {
         let start = index * self.piece_map.piece_length;
         let end = start + data.len() as u64;
         for file in &self.files {
@@ -224,7 +226,7 @@ mod tests {
     async fn a_piece_is_written_into_the_files() {
         let folder = std::env::temp_dir().join("idm-torrent-storage-test");
         let _ = tokio::fs::remove_dir_all(&folder).await;
-        let mut storage = Storage::new(&folder, &a_metainfo(), &[0, 1]).await.unwrap();
+        let storage = Storage::new(&folder, &a_metainfo(), &[0, 1]).await.unwrap();
         storage.write_piece(0, b"abcd").await.unwrap();
         storage.write_piece(1, b"efgh").await.unwrap();
         for index in storage.finished_files(&[true, true]) {

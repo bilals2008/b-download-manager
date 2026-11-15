@@ -40,8 +40,7 @@
 
 ### Small stuff
 
-- The Add URL window no longer sticks on "Starting…": your download begins straight away, even when a download service is slow to answer.
-- Archives unpack after they finish, an encrypted one asks for its password, and a frozen window is reported on the next start.
+- The Add URL window starts downloads straight away; archives unpack after they finish, asking a password when needed; a frozen window is reported on the next start.
 
 ## 1.1.1 - 9 November 2026
 

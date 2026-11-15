@@ -16,6 +16,7 @@
 mod bencode;
 mod engine;
 mod error;
+mod lookup;
 mod magnet;
 mod metainfo;
 mod peer;
@@ -29,6 +30,7 @@ mod util;
 
 pub use crate::bencode::{bencode_decode, bencode_encode, BencodeValue};
 pub use crate::error::TorrentError;
+pub use crate::lookup::lookup;
 pub use crate::magnet::{parse_magnet, MagnetInfo};
 pub use crate::metainfo::{parse_torrent, Metainfo, TorrentFile};
 pub use crate::peer::PeerInfo;

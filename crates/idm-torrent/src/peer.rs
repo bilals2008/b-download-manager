@@ -132,6 +132,13 @@ pub enum Message {
     },
     /// Nothing, sent to say that the connection is still there.
     KeepAlive,
+    /// A message this crate does not act on; kept, not mistaken for a failure.
+    Unknown {
+        /// The id the peer used.
+        id: u8,
+        /// The bytes behind it.
+        payload: Vec<u8>,
+    },
 }
 
 impl Message {
@@ -197,6 +204,11 @@ impl Message {
                 out
             }
             Message::KeepAlive => Vec::new(),
+            Message::Unknown { id, payload } => {
+                let mut out = vec![*id];
+                out.extend_from_slice(payload);
+                out
+            }
         }
     }
 
@@ -274,9 +286,10 @@ impl Message {
                 }
             }
             other => {
-                return Err(TorrentError::Unsupported(format!(
-                    "the message {other} is not one this crate reads"
-                )))
+                Message::Unknown {
+                    id: other,
+                    payload: payload.to_vec(),
+                }
             }
         })
     }
