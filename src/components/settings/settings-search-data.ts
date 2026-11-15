@@ -645,7 +645,7 @@ const PAGE_ENTRIES: readonly SettingsCatalogEntry[] = [
     page: "remote",
     section: "Phone and LAN",
     title: "Let a phone on this network drive the app",
-    description: "A phone pairs once, then lists, adds, pauses, resumes and removes downloads.",
+    description: "Coming soon: A phone pairs once, then lists, adds, pauses, resumes and removes downloads.",
     keywords: [
       "remote",
       "phone",
@@ -663,7 +663,7 @@ const PAGE_ENTRIES: readonly SettingsCatalogEntry[] = [
     page: "remote",
     section: "Phone and LAN",
     title: "Pair a phone",
-    description: "A one-time code that is good for one phone.",
+    description: "Coming soon: A one-time code that is good for one phone.",
     keywords: [
       "remote",
       "pair",

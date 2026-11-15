@@ -36,7 +36,7 @@
 
 ### Your phone, and your assistant
 
-- A phone on your home network can add and control downloads after one pairing; an AI assistant can help too, once you let it.
+- A phone on your home network and an AI assistant will help next; both are coming soon.
 
 ### Small stuff
 
