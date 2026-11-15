@@ -156,17 +156,10 @@ pub fn run() {
             // The proxy script is fetched with the same client policy as
             // everything else, and fetched again now and then.
             proxy::start(app.handle().clone());
-            // The phone remote is off until the reader turns it on; when it
-            // is on, it starts with the application so a paired phone finds
-            // it on the same address.
-            if state.engine_settings().remote_enabled {
-                if let Err(error) = remote::start(app.handle(), &state) {
-                    idm_core::log::write(
-                        "warn",
-                        &format!("the phone remote is on but could not start: {error}"),
-                    );
-                }
-            }
+            // The phone remote is marked coming soon in the settings window,
+            // so a saved `remote_enabled` does not start the listener. The
+            // setting is kept for when the feature ships.
+            // shortcut: drop this comment and start when the remote ships
             // A copied link is offered while the application is in the tray.
             clipboard::start(app.handle().clone());
             // The queue's schedule is read on a clock, so a window that opens
