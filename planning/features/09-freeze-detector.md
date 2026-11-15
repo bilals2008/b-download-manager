@@ -1,5 +1,7 @@
 # Freeze detector beside the crash monitor
 
+> **Nov 2026:** implemented, including the freeze report and its next-start offer in Settings -> About. See REMAINING-FEATURES.md for the current proof.
+
 **Wave 2 · Status:** ✅ shipped (`hang::ask` + one report per episode; a suspended machine is not a freeze)
 
 Left: showing the frozen report on the next start, and a stack sample.

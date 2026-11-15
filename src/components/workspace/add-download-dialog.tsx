@@ -1,3 +1,5 @@
+import { open as pickFile } from "@tauri-apps/plugin-dialog";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { FolderGlyph } from "@/components/icons/action-icons";
@@ -5,7 +7,9 @@ import { FileTypeIcon, WarningMark } from "@/components/icons/desktop-icons";
 import { ChevronDown, DownloadGlyph, SpinnerGlyph } from "@/components/icons/ui-icons";
 import { MenuPopup, type MenuRow } from "@/components/shell/menu-popup";
 import { Dialog } from "@/components/ui/dialog";
+import { ListBox } from "@/components/ui/listbox";
 import { DialogAction } from "@/components/ui/dialog-action";
+import { Switch } from "@/components/ui/switch";
 import { FIELD } from "@/components/ui/field";
 import { Tooltip } from "@/components/ui/tooltip";
 import {
@@ -24,6 +28,16 @@ import {
 } from "@/lib/downloads";
 import { describeError, isDesktop } from "@/lib/errors";
 import {
+  galleryDownload,
+  galleryInspect,
+  type GalleryInspect,
+} from "@/lib/ipc-gallery";
+import {
+  debridAskUnlock,
+  debridServices,
+} from "@/lib/ipc-debrid";
+import { torrentStart } from "@/lib/ipc-torrent";
+import {
   chooseFolder,
   defaultDestination,
   inspectDestination,
@@ -36,6 +50,12 @@ import {
   saveLastFolder,
   saveSettings,
 } from "@/lib/settings";
+import {
+  driveExports,
+  driveExportEndpoint,
+  driveFileEndpoint,
+  parseDriveLink,
+} from "@/lib/drive";
 import { useDownloads } from "@/state/download-store";
 
 interface AddDownloadDialogProps {
@@ -103,6 +123,9 @@ export function AddDownloadDialog({
     null,
   );
   const [probe, setProbe] = useState<Probe>({ kind: "idle" });
+  const [gallery, setGallery] = useState<GalleryInspect | null>(null);
+  const [debridAvailable, setDebridAvailable] = useState(false);
+  const [debridUnlock, setDebridUnlock] = useState(false);
   const [destination, setDestination] = useState<DestinationInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [touched, setTouched] = useState(false);
@@ -234,16 +257,55 @@ export function AddDownloadDialog({
   }, [open, browserRequest, clearBrowserRequest]);
 
   const address = url.trim();
-  const problem = urlProblem(address);
+  // A magnet link is a torrent, not an address of a file: the engine starts
+  // a job that finds its own files instead of fetching one.
+  const isMagnet = address.toLowerCase().startsWith("magnet:");
+  const isTorrentFile =
+    address.toLowerCase().endsWith(".torrent") &&
+    (address.includes(":\\") || address.startsWith("/"));
+  const torrentish = isMagnet || isTorrentFile;
+  const problem = torrentish ? null : urlProblem(address);
   const valid = problem === null;
   // A hand-over only describes the link it carried, not whatever was pasted
   // over it.
   const handed = handedOver && sameAddress(handedOver.url, address) ? handedOver : null;
   const referer = handed?.referer ?? "";
 
+  // A Drive address is a page, not a file: the export format decides which
+  // endpoint carries the bytes, and that is the endpoint the dialog probes.
+  const drive = useMemo(
+    () => (open ? parseDriveLink(address) : null),
+    [open, address],
+  );
+  const driveDocument =
+    drive?.kind === "document" ? drive.document : null;
+  const [driveExport, setDriveExport] = useState("pdf");
+  const driveProbeAddress =
+    drive?.kind === "document" && drive.id && driveDocument
+      ? driveExportEndpoint(drive.id, driveDocument, driveExport)
+      : drive?.kind === "file" && drive.id
+        ? driveFileEndpoint(drive.id)
+        : address;
+
+  // Each editor is offered its own export list, so a sheet never shows a
+  // PowerPoint entry that was never there.
+  useEffect(() => {
+    if (!driveDocument) {
+      return;
+    }
+    setDriveExport((current) => {
+      const options = driveExports(driveDocument);
+      return options.some((option) => option.value === current)
+        ? current
+        : options[0].value;
+    });
+  }, [driveDocument]);
+
   // Ask the server what the address holds once it has settled: the name it
   // gives the file, the size, and whether a stop could resume. The probe is
   // advice, not a gate: a server that does not answer still gets a download.
+  // For a Drive link it asks the endpoint the export will actually be fetched
+  // from, so the name and the size are the real ones.
   useEffect(() => {
     if (!open) {
       return;
@@ -262,7 +324,7 @@ export function AddDownloadDialog({
       const tooLong = new Promise<"too long">((resolve) => {
         deadline = setTimeout(() => resolve("too long"), 8_000);
       });
-      Promise.race([probeLink(url.trim(), referer), tooLong])
+      Promise.race([probeLink(driveProbeAddress, referer), tooLong])
         .then((answer) => {
           if (!active) {
             return;
@@ -303,7 +365,62 @@ export function AddDownloadDialog({
         clearTimeout(deadline);
       }
     };
-  }, [open, url, referer]);
+  }, [open, driveProbeAddress, referer]);
+
+  // A signed-in debrid service unlocks the host links it takes before the
+  // download starts; the toggle asks for this one.
+  useEffect(() => {
+    setDebridUnlock(false);
+    if (!open) {
+      setDebridAvailable(false);
+      return;
+    }
+    if (!isDesktop()) {
+      return;
+    }
+    let active = true;
+    void debridServices()
+      .then((services) => {
+        if (active) {
+          setDebridAvailable(services.some((service) => service.signedIn));
+        }
+      })
+      .catch(() => {
+        // No debrid accounts, or the engine gave no answer; the toggle stays
+        // hidden.
+      });
+    return () => {
+      active = false;
+    };
+  }, [open]);
+
+  // A page that reads as a gallery is offered as one: the same link, the
+  // count of images, one click. The fetch is the dialog's own, advice only.
+  useEffect(() => {
+    setGallery(null);
+    if (!open) {
+      return;
+    }
+    if (!isDesktop() || !downloadUrl(url.trim())) {
+      return;
+    }
+    let active = true;
+    const timer = setTimeout(() => {
+      galleryInspect(url.trim(), referer || undefined)
+        .then((answer) => {
+          if (active) {
+            setGallery(answer);
+          }
+        })
+        .catch(() => {
+          // A page that does not answer still gets an ordinary download.
+        });
+    }, 450);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [open, driveProbeAddress, referer]);
 
   // The name and the category follow what was detected until the user picks a
   // category. Nothing here is typed.
@@ -406,6 +523,18 @@ export function AddDownloadDialog({
     }
   }
 
+  async function pickTorrentFile() {
+    const picked = await pickFile({
+      multiple: false,
+      directory: false,
+      filters: [{ name: "Torrent", extensions: ["torrent"] }],
+    });
+    if (typeof picked === "string" && picked) {
+      setUrl(picked);
+      setError(null);
+    }
+  }
+
   async function submit() {
     if (running.current) {
       return;
@@ -434,6 +563,32 @@ export function AddDownloadDialog({
       return;
     }
 
+    if (torrentish) {
+      running.current = true;
+      setBusy(true);
+      try {
+        // A magnet link or a .torrent file is a job of its own, not an
+        // ordinary download: the engine starts a job and the torrent
+        // window shows what it does.
+        await torrentStart(address, chosenFolder);
+        onClose();
+      } catch (failure) {
+        setError(describeError(failure));
+      } finally {
+        running.current = false;
+        setBusy(false);
+      }
+      return;
+    }
+
+    if (debridUnlock && address) {
+      try {
+        await debridAskUnlock(address);
+      } catch {
+        // The toggle is advice; losing it is not a reason to hold the start.
+      }
+    }
+
     running.current = true;
     setBusy(true);
     try {
@@ -443,6 +598,7 @@ export function AddDownloadDialog({
         category,
         savePath: chosenFolder,
         referer: referer || undefined,
+        driveExport: driveDocument ? driveExport : undefined,
       });
       // A dismissed destination question leaves the dialog as it was, with
       // the address and the folder still in it.
@@ -460,6 +616,24 @@ export function AddDownloadDialog({
       void inspectDestination(joinPath(chosenFolder, chosenName))
         .then(setDestination)
         .catch(() => undefined);
+    } finally {
+      running.current = false;
+      setBusy(false);
+    }
+  }
+
+  async function downloadGallery() {
+    if (!gallery?.isGallery || running.current) {
+      return;
+    }
+    running.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      await galleryDownload(url.trim(), undefined, referer || undefined);
+      onClose();
+    } catch (failure) {
+      setError(describeError(failure));
     } finally {
       running.current = false;
       setBusy(false);
@@ -523,7 +697,7 @@ export function AddDownloadDialog({
             type="submit"
             form="add-url-form"
             tone="primary"
-            disabled={busy}
+            disabled={busy || drive?.kind === "folder"}
             icon={
               busy ? (
                 <SpinnerGlyph className="size-3.5 motion-safe:animate-spin" />
@@ -597,10 +771,26 @@ export function AddDownloadDialog({
           ) : null}
         </div>
 
+        {valid && torrentish ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 text-chrome-micro text-chrome-menu-text">
+            <p className="min-w-0">
+              Files land in a folder named after the torrent. The torrent
+              window shows the files, the peers and what the job is doing.
+            </p>
+            <button
+              type="button"
+              className="shrink-0 underline"
+              onClick={() => void pickTorrentFile()}
+            >
+              Pick a .torrent file
+            </button>
+          </div>
+        ) : null}
+
         {/* What the address adds up to, before anything starts: the file it
             becomes, its size and whether it can be resumed. It is the answer
             to "did I paste the right link"; the category below it. */}
-        {valid ? (
+        {valid && !torrentish ? (
           <div className="flex min-w-0 items-center gap-2.5">
             <FileTypeIcon
               category={category}
@@ -630,6 +820,63 @@ export function AddDownloadDialog({
           >
             <WarningMark tone="amber" className="mt-px size-3.5 shrink-0" />
             <span className="min-w-0 break-words">{probe.reason}</span>
+          </p>
+        ) : null}
+
+        {valid && gallery?.isGallery ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-chrome bg-chrome-canvas px-3 py-2.5">
+            <p className="min-w-0 text-chrome-micro text-chrome-menu-text">
+              This page looks like a gallery of{" "}
+              <span className="tabular-nums">{gallery.count}</span> images.
+              {gallery.truncated ? " Only the first images are offered." : null}
+            </p>
+            <DialogAction
+              tone="quiet"
+              disabled={busy}
+              onClick={() => void downloadGallery()}
+            >
+              Download gallery
+            </DialogAction>
+          </div>
+        ) : null}
+
+        {valid && debridAvailable ? (
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-chrome-micro text-chrome-muted">
+              Unlock this link when a service can
+            </span>
+            <Switch
+              label="Unlock this link when a service can"
+              checked={debridUnlock}
+              onChange={setDebridUnlock}
+            />
+          </div>
+        ) : null}
+
+        {valid && driveDocument ? (
+          <div>
+            <span className={LABEL}>Export as</span>
+            <div className="w-52">
+              <ListBox
+                label="Export as"
+                value={driveExport}
+                onChange={setDriveExport}
+                options={driveExports(driveDocument)}
+              />
+            </div>
+          </div>
+        ) : null}
+
+        {valid && drive?.kind === "folder" ? (
+          <p
+            role="status"
+            className="flex items-start gap-1.5 text-chrome-micro text-chrome-menu-text"
+          >
+            <WarningMark tone="amber" className="mt-px size-3.5 shrink-0" />
+            <span className="min-w-0 break-words">
+              This build cannot open a shared Drive folder yet. Pick a file
+              link instead.
+            </span>
           </p>
         ) : null}
 

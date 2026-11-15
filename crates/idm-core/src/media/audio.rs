@@ -126,7 +126,6 @@ impl AudioSelector {
             AudioSelector::Best | AudioSelector::Source => None,
         }
     }
-
     /// The constant rate this choice is written at, when it has one.
     ///
     /// `None` for the choices that are not written at a fixed rate: a
@@ -136,6 +135,52 @@ impl AudioSelector {
         match self {
             AudioSelector::Mp3(Mp3Quality::Constant(kbps)) => Some(kbps),
             _ => None,
+        }
+    }
+
+    /// The extension the output file is written with.
+    ///
+    /// A conversion names its own extension. The original track keeps the
+    /// container it came in, so its extension is read from that track with
+    /// [`AudioSelector::extension_for`].
+    pub fn extension(self) -> &'static str {
+        match self {
+            AudioSelector::Mp3(_) => "mp3",
+            AudioSelector::Opus => "opus",
+            AudioSelector::Flac => "flac",
+            AudioSelector::Best | AudioSelector::Source => "",
+        }
+    }
+
+    /// The extension the output file is written with, for a track that came
+    /// in a container of its own.
+    ///
+    /// The original track is written out as it was downloaded, so the file
+    /// keeps the container it came in (`m4a`, `webm`, `mp4`).
+    pub fn extension_for(self, container: &str) -> String {
+        match self {
+            AudioSelector::Best | AudioSelector::Source => {
+                let container = container.trim().trim_start_matches('.').to_ascii_lowercase();
+                match container.as_str() {
+                    "m4a" | "aac" | "mp4" | "m4v" | "m4s" | "webm" | "opus" | "ogg" | "mp3"
+                    | "flac" | "wav" | "ts" => container,
+                    _ => "m4a".to_string(),
+                }
+            }
+            _ => self.extension().to_string(),
+        }
+    }
+
+    /// The FFmpeg codec the conversion uses, when a conversion happens.
+    ///
+    /// `None` for the original track: no conversion happens at all, so no
+    /// codec is named and FFmpeg is never called.
+    pub fn ffmpeg_codec(self) -> Option<&'static str> {
+        match self {
+            AudioSelector::Mp3(_) => Some("libmp3lame"),
+            AudioSelector::Opus => Some("libopus"),
+            AudioSelector::Flac => Some("flac"),
+            AudioSelector::Best | AudioSelector::Source => None,
         }
     }
 
@@ -579,5 +624,45 @@ mod tests {
     #[test]
     fn a_video_without_a_sound_track_offers_no_sounds() {
         assert!(preferences(&[video("137", 1080)]).is_empty());
+    }
+
+    #[test]
+    fn a_video_without_a_sound_track_offers_no_conversion() {
+        let offered = preferences(&[video("137", 1080)]);
+        assert!(
+            offered.iter().all(|row| !row.selector.is_conversion()),
+            "a conversion needs a sound to convert"
+        );
+    }
+
+    #[test]
+    fn every_output_names_the_file_it_is_written_as() {
+        assert_eq!(AudioSelector::Mp3(Mp3Quality::Constant(320)).extension(), "mp3");
+        assert_eq!(AudioSelector::Opus.extension(), "opus");
+        assert_eq!(AudioSelector::Flac.extension(), "flac");
+    }
+
+    #[test]
+    fn the_original_track_keeps_the_container_it_came_in() {
+        assert_eq!(AudioSelector::Source.extension_for("m4a"), "m4a");
+        assert_eq!(AudioSelector::Source.extension_for("webm"), "webm");
+        assert_eq!(AudioSelector::Source.extension_for("mp4"), "mp4");
+        assert_eq!(
+            AudioSelector::Source.extension_for("something-else"),
+            "m4a",
+            "a container nobody knows is not a file name"
+        );
+    }
+
+    #[test]
+    fn the_original_track_is_not_converted_at_all() {
+        assert_eq!(AudioSelector::Source.ffmpeg_codec(), None);
+        assert_eq!(AudioSelector::Best.ffmpeg_codec(), None);
+        assert_eq!(
+            AudioSelector::Mp3(Mp3Quality::Variable).ffmpeg_codec(),
+            Some("libmp3lame")
+        );
+        assert_eq!(AudioSelector::Opus.ffmpeg_codec(), Some("libopus"));
+        assert_eq!(AudioSelector::Flac.ffmpeg_codec(), Some("flac"));
     }
 }

@@ -212,8 +212,15 @@ fn install(app: &AppHandle) -> tauri::Result<()> {
         true,
         None::<&str>,
     )?;
+    let remote = MenuItem::with_id(
+        app,
+        "remote-toggle",
+        "Phone remote: on or off",
+        true,
+        None::<&str>,
+    )?;
     let quit = MenuItem::with_id(app, "quit", "Exit", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show, &pause, &resume, &quit])?;
+    let menu = Menu::with_items(app, &[&show, &pause, &resume, &remote, &quit])?;
 
     TrayIconBuilder::with_id(TRAY_ID)
         .menu(&menu)
@@ -224,6 +231,8 @@ fn install(app: &AppHandle) -> tauri::Result<()> {
             "show" => show_window(app),
             "pause-all" => pause_all(app),
             "resume-all" => resume_all(app),
+            // The phone remote goes off (or on) from here, without a window.
+            "remote-toggle" => crate::remote::toggle_from_tray(app),
             "quit" => crate::lifecycle::shutdown(app),
             // The menu of a progress window's own tray icon. Tauri's menu
             // listener is global, so this is the one place those items are

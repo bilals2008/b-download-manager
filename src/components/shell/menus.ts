@@ -176,6 +176,16 @@ export function buildMenus(
         ],
       },
       {
+        command: "language-en",
+        label: "Language",
+        submenu: [
+          { command: "language:en", label: "English", radio: true },
+          { command: "language:fr", label: "Français", radio: true },
+          { command: "language:de", label: "Deutsch", radio: true },
+          { command: "language:ar", label: "العربية", radio: true },
+        ],
+      },
+      {
         command: "font-reset",
         label: "Font",
         submenu: [

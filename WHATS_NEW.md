@@ -2,13 +2,48 @@
 
 <!--
   Plain-language notes for each version of B Download Manager, newest first.
-  Before tagging a release, add a new `## x.y.z — date` section above the
+  Before tagging a release, add a new `## x.y.z - date` section above the
   previous one. Write for someone who never reads a changelog: short
   sentences, no developer words, no commit subjects. The app reads the
   section for its own version, and the release page uses the same words.
 -->
 
-## 1.1.1 — 9 November 2026
+## 1.2.0 - 15 November 2026
+
+### Your words, your language
+
+- The window reads in English, French, German and Arabic; Arabic reads right to left.
+
+### Your queue on your schedule
+
+- Tell the queue which days and hours it runs; it runs and stops by itself, and powers the computer off only when you say so.
+
+### Videos come with captions
+
+- Pick the captions a page offers, or save the sound of a video as MP3, Opus or FLAC.
+
+### Google Drive in one click
+
+- Drive files download as files, documents as PDF or Word, and image boards as a folder of pictures.
+
+### A smarter network
+
+- Names can be looked up through an encrypted resolver or NextDNS, downloads can be held to one network adapter, and every download shows its server and its round trip.
+
+### Host links, your accounts and torrents
+
+- Real-Debrid, AllDebrid and Premiumize unlock the links they take, and magnet links download like everything else.
+
+### Your phone, and your assistant
+
+- A phone on your home network can add and control downloads after one pairing; an AI assistant can help too, once you let it.
+
+### Small stuff
+
+- The Add URL window no longer sticks on "Starting…": your download begins straight away, even when a download service is slow to answer.
+- Archives unpack after they finish, an encrypted one asks for its password, and a frozen window is reported on the next start.
+
+## 1.1.1 - 9 November 2026
 
 - Video downloads now finish properly, with picture and sound in one file.
 - Stop keeps what was already downloaded; Resume continues from there.

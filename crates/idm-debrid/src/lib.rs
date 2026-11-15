@@ -11,20 +11,28 @@
 
 pub mod all_debrid;
 pub mod credential;
+pub mod os_store;
 pub mod premiumize;
 pub mod rate_limit;
 pub mod real_debrid;
+pub mod rules;
 pub mod service;
+pub mod session;
 
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-pub use credential::{Account, AccountStore, Credential, Secret};
+use serde::{Deserialize, Serialize};
+
+pub use credential::{scrub, Account, AccountState, AccountStore, Credential, Secret};
 pub use rate_limit::RateLimiter;
+pub use rules::{service_for, should_unlock};
 pub use service::{AccountInfo, DebridError, Http, Service, UnlockedLink};
+pub use session::{Prepared, Session};
 
 /// The services the engine knows.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum ServiceKind {
     /// Real-Debrid.
     RealDebrid,
@@ -60,6 +68,12 @@ impl ServiceKind {
         }
     }
 
+    /// The service of a short name, when the name is one of ours.
+    pub fn from_id(id: &str) -> Option<Self> {
+        let id = id.trim().to_ascii_lowercase().replace('_', "-");
+        ServiceKind::ALL.into_iter().find(|kind| kind.id() == id)
+    }
+
     /// The page where the user finds the key of their account.
     pub fn token_page(self) -> &'static str {
         match self {
@@ -86,6 +100,16 @@ impl ServiceKind {
             ServiceKind::RealDebrid => 120,
             ServiceKind::AllDebrid => 300,
             ServiceKind::Premiumize => 60,
+        }
+    }
+
+    /// The requests a second the app allows itself to this service, for the
+    /// services that publish such a limit.
+    pub fn per_second(self) -> Option<usize> {
+        match self {
+            // AllDebrid publishes twelve requests a second.
+            ServiceKind::AllDebrid => Some(12),
+            _ => None,
         }
     }
 }
@@ -131,7 +155,9 @@ impl Debrid {
     /// Sign in with a key the user pasted, as Premiumize asks for.
     ///
     /// The key is checked against the service before it is kept, so the app
-    /// never shows an account as signed in that cannot be used.
+    /// never shows an account as signed in that cannot be used. The key is
+    /// then kept in the operating system's own store, so the reader does not
+    /// have to paste it again after a restart.
     pub async fn sign_in_with_key(
         &self,
         kind: ServiceKind,
@@ -149,11 +175,44 @@ impl Debrid {
             Credential::Token { token: key.clone() },
         );
         let info = service.account_info().await?;
-        self.sign_in(Account {
-            kind,
-            credential: Credential::Token { token: key },
-        });
+        let credential = Credential::Token { token: key };
+        os_store::save(kind, &credential).map_err(|message| DebridError::Service { kind, message })?;
+        self.sign_in(Account { kind, credential });
+        self.accounts
+            .set_state(AccountState::new(kind, &info));
         Ok(info)
+    }
+
+    /// Bring the accounts of the last run back from the operating system's
+    /// store.
+    ///
+    /// The accounts are signed in, but nothing is known about them yet: the
+    /// service is asked when it matters.
+    pub fn restore(&self) -> usize {
+        ServiceKind::ALL
+            .into_iter()
+            .filter(|kind| match os_store::load(*kind) {
+                Some(credential) => {
+                    self.accounts.set(Account {
+                        kind: *kind,
+                        credential,
+                    });
+                    true
+                }
+                None => false,
+            })
+            .count()
+    }
+
+    /// Forget an account, in the app and in the operating system's store.
+    pub fn sign_out(&self, kind: ServiceKind) -> Result<(), DebridError> {
+        self.accounts.remove(kind);
+        os_store::remove(kind).map_err(|message| DebridError::Service { kind, message })
+    }
+
+    /// What the service last said about the account of one service.
+    pub fn state(&self, kind: ServiceKind) -> Option<AccountState> {
+        self.accounts.state(kind)
     }
 
     /// The service of an account, when the app is signed in to it.
@@ -182,12 +241,27 @@ impl Debrid {
     }
 
     /// What the service says about the account the app is signed in with.
+    ///
+    /// The answer is remembered, so the window can show it without asking
+    /// the service again.
     pub async fn account_info(&self, kind: ServiceKind) -> Result<AccountInfo, DebridError> {
         let service = self.service(kind).ok_or(DebridError::NotSignedIn {
             kind,
             message: "the app is not signed in".into(),
         })?;
-        service.account_info().await
+        let info = service.account_info().await?;
+        self.accounts
+            .set_state(AccountState::new(kind, &info));
+        Ok(info)
+    }
+
+    /// The account of one service, in the shape the window shows it.
+    pub async fn account_state(&self, kind: ServiceKind) -> Result<AccountState, DebridError> {
+        let info = self.account_info(kind).await?;
+        Ok(self
+            .accounts
+            .state(kind)
+            .unwrap_or_else(|| AccountState::new(kind, &info)))
     }
 
     fn write_services(

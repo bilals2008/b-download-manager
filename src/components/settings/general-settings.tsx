@@ -5,9 +5,11 @@ import {
   SettingsPage,
 } from "@/components/settings/settings-page";
 import { Switch } from "@/components/ui/switch";
+import { ListBox } from "@/components/ui/listbox";
 import { APP_NAME } from "@/lib/brand";
 import type { Settings } from "@/lib/settings";
 import type { TrayPreferences } from "@/lib/tray";
+import { LANGUAGES, setLanguage, useLanguage, useT } from "@/i18n";
 
 interface GeneralSettingsProps {
   settings: Settings;
@@ -30,8 +32,25 @@ export interface TraySettingsProps {
  */
 export function GeneralSettings({ settings, onChange, tray }: GeneralSettingsProps) {
   const { preferences } = tray;
+  const t = useT();
+  const language = useLanguage();
   return (
     <SettingsPage page="general">
+      <Section title="Language">
+        <SettingRow settingId="setting-language" label={t("settings.language")}>
+          <ListBox
+            label={t("settings.language")}
+            value={language}
+            onChange={(value) => {
+              setLanguage(value as typeof language);
+            }}
+            options={LANGUAGES.map((entry) => ({
+              value: entry.code,
+              label: entry.label,
+            }))}
+          />
+        </SettingRow>
+      </Section>
       <Section title="Startup">
         <SettingRow
           settingId="setting-launch-startup"

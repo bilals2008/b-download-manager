@@ -83,9 +83,8 @@ fn fault_of(code: &str, message: &str) -> DebridError {
 /// Read an answer: the data of the answer, or what its error means.
 fn read<T: serde::de::DeserializeOwned>(status: u16, body: &[u8]) -> Result<T, DebridError> {
     if status == 429 {
-        return Err(DebridError::Service {
+        return Err(DebridError::RateLimited {
             kind: ServiceKind::Premiumize,
-            message: "too many requests".into(),
         });
     }
     let parsed: Status = serde_json::from_slice(body).map_err(|_| DebridError::Service {

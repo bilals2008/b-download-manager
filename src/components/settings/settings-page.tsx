@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
 
+import { useT } from "@/i18n";
 import {
-  settingsPageDescription,
-  settingsPageLabel,
+  settingsPageDescriptionKey,
+  settingsPageLabelKey,
   type SettingsPageId,
 } from "@/components/settings/settings-nav";
 import { cn } from "@/lib/utils";
@@ -20,14 +21,15 @@ export function SettingsPage({
   page: SettingsPageId;
   children: ReactNode;
 }) {
+  const t = useT();
   return (
     <div className="flex w-full flex-col px-6 pt-4 pb-8">
       <header className="pb-1">
         <h2 className="text-base leading-6 font-medium text-chrome-title-text">
-          {settingsPageLabel(page)}
+          {t(settingsPageLabelKey(page))}
         </h2>
         <p className="max-w-prose text-xs leading-5 text-chrome-muted">
-          {settingsPageDescription(page)}
+          {t(settingsPageDescriptionKey(page))}
         </p>
       </header>
       <div className="flex flex-col">{children}</div>

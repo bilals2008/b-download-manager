@@ -134,9 +134,8 @@ fn fault_of(code: &str, message: &str) -> DebridError {
 /// Read an answer: the data of the envelope, or what its error means.
 fn read<T: serde::de::DeserializeOwned>(status: u16, body: &[u8]) -> Result<T, DebridError> {
     if status == 429 {
-        return Err(DebridError::Service {
+        return Err(DebridError::RateLimited {
             kind: ServiceKind::AllDebrid,
-            message: "too many requests".into(),
         });
     }
     let envelope: Envelope<T> = serde_json::from_slice(body).map_err(|_| DebridError::Service {
@@ -361,7 +360,7 @@ mod tests {
         );
         assert!(matches!(
             read::<Unlock>(429, b"").unwrap_err(),
-            DebridError::Service { .. }
+            DebridError::RateLimited { .. }
         ));
     }
 }

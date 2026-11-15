@@ -1,5 +1,7 @@
 # Per-host learned connection caps
 
+> **Nov 2026:** implemented, including a reset button in the Properties window. See REMAINING-FEATURES.md for the current proof.
+
 **Wave 2 · Status:** ✅ shipped (`LearnedCaps`, `host-caps.json`, shown in the window)
 
 Left: a reset button in the properties dialog; the engine can already forget a host.

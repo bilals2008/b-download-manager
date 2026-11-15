@@ -14,7 +14,7 @@ pub(crate) mod lease;
 pub(crate) mod mp4;
 pub(crate) mod mux;
 pub(crate) mod policy;
-mod probe;
+pub(crate) mod probe;
 pub(crate) mod tools;
 pub(crate) mod verify;
 pub(crate) mod webm;
@@ -215,6 +215,17 @@ impl MediaJob {
             duration: manifest.duration,
             formats: manifest.formats.clone(),
             pairs: manifest.pairs.clone(),
+            subtitles: manifest
+                .subtitles
+                .iter()
+                .map(|rendition| SubtitleView {
+                    id: rendition.id.clone(),
+                    name: rendition.name.clone(),
+                    language: rendition.language.clone(),
+                    container: rendition.container.clone(),
+                    is_default: rendition.is_default,
+                })
+                .collect(),
             preferred: self.preferred.clone(),
             cookies_offered: self.cookies_offered,
             cookie_consent: self.cookie_consent,
@@ -240,6 +251,17 @@ impl MediaJob {
     }
 }
 
+/// One caption rendition, as the panel shows it.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubtitleView {
+    pub id: String,
+    pub name: String,
+    pub language: Option<String>,
+    pub container: String,
+    pub is_default: bool,
+}
+
 /// The JSON shape of a job: the contract's fields, plus what the panel needs
 /// while the download runs.
 #[derive(Debug, Clone, Serialize)]
@@ -254,6 +276,8 @@ pub struct MediaJobView {
     pub duration: Option<f64>,
     pub formats: Vec<Format>,
     pub pairs: Vec<Pair>,
+    /// The caption tracks the manifest offered, when it offered any.
+    pub subtitles: Vec<SubtitleView>,
     pub preferred: Option<String>,
     pub cookies_offered: bool,
     pub cookie_consent: bool,
@@ -281,6 +305,7 @@ fn empty_manifest() -> Manifest {
         formats: Vec::new(),
         pairs: Vec::new(),
         container_hint: None,
+        subtitles: Vec::new(),
     }
 }
 

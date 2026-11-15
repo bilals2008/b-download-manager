@@ -1,5 +1,7 @@
 # Languages and right-to-left layouts
 
+> **Nov 2026:** partly implemented (the shell and settings window in English, French, German and Arabic; the rest is still English). See REMAINING-FEATURES.md for the current proof.
+
 **Wave 7 · Status:** ❌ not written (the reference build has `i18n/`, 86 languages)
 
 ## Goal

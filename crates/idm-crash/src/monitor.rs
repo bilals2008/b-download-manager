@@ -28,6 +28,10 @@ pub struct Monitor {
     log: PathBuf,
     /// Where the report is written.
     report: PathBuf,
+    /// Where the report of a freeze is written, apart from a crash.
+    freeze_report: PathBuf,
+    /// Where the stacks of a frozen program are written.
+    dump: PathBuf,
     /// The version of the application.
     version: String,
 }
@@ -40,6 +44,8 @@ impl Monitor {
             goodbye: folder.join("goodbye.txt"),
             log: folder.join("idm-clone.log"),
             report: folder.join("crash-report.md"),
+            freeze_report: folder.join("freeze-report.md"),
+            dump: folder.join("freeze-stacks.dmp"),
             version: version.to_owned(),
         }
     }
@@ -47,6 +53,11 @@ impl Monitor {
     /// Where the report is written.
     pub fn report_path(&self) -> &Path {
         &self.report
+    }
+
+    /// Where the report of a freeze is written.
+    pub fn freeze_report_path(&self) -> &Path {
+        &self.freeze_report
     }
 
     /// Watch the application until it ends, and write a report when it ends
@@ -64,7 +75,7 @@ impl Monitor {
             // answers at once; a stuck message loop does not answer at all.
             match episodes.observe(self.heartbeat.quiet_for(), crate::hang::ask(pid)) {
                 crate::hang::Episode::Frozen { quiet_for } => {
-                    self.write(Finding::Frozen { quiet_for });
+                    self.write_freeze(pid, quiet_for);
                 }
                 crate::hang::Episode::Recovered | crate::hang::Episode::Quiet => {}
             }
@@ -79,12 +90,27 @@ impl Monitor {
 
     /// Write the report down.
     fn write(&self, finding: Finding) {
-        let report = Report {
-            finding,
-            version: self.version.clone(),
-            log_tail: log_tail(&self.log, 40),
-        };
+        let mut report = Report::new(finding, self.version.clone());
+        report.log_tail = log_tail(&self.log, 40);
         let _ = std::fs::write(&self.report, report.text());
+    }
+
+    /// Write down what was seen of a program that stopped answering.
+    ///
+    /// The program is only read: a sample of its threads and its stacks, so
+    /// the reader can see where it was when it stopped.
+    fn write_freeze(&self, pid: u32, quiet_for: Duration) {
+        let sample = crate::sample::sample(pid, Some(&self.dump));
+        let mut report = Report::new(
+            Finding::Frozen { quiet_for },
+            self.version.clone(),
+        );
+        report.log_tail = log_tail(&self.log, 40);
+        if let Some(sample) = sample {
+            report.threads = sample.table();
+            report.dump = sample.dump;
+        }
+        let _ = std::fs::write(&self.freeze_report, report.text());
     }
 }
 
@@ -163,6 +189,7 @@ mod tests {
         std::fs::create_dir_all(&dir).expect("a folder");
         let monitor = Monitor::new(&dir, "1.1.1");
         assert!(monitor.report_path().ends_with("crash-report.md"));
+        assert!(monitor.freeze_report_path().ends_with("freeze-report.md"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

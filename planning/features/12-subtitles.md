@@ -1,5 +1,7 @@
 # Subtitles: manual and automatic captions
 
+> **Nov 2026:** implemented (rendition or local file, muxed into MP4/MKV/WebM). See REMAINING-FEATURES.md for the current proof.
+
 **Wave 4 · Status:** 🔧 `media/subtitles.rs` exists, nothing calls it
 
 ## Goal

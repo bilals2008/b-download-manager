@@ -62,6 +62,26 @@ pub enum DebridError {
         /// What was wrong with it.
         message: String,
     },
+    /// The service says the app is asking too often.
+    ///
+    /// This is not a failed download: the service is asking the app to
+    /// slow down, and the app does.
+    RateLimited {
+        /// Which service asked.
+        kind: ServiceKind,
+    },
+    /// The account has no paid time left.
+    ///
+    /// Unlocking with it would start a slow download, so it is not used.
+    NotPremium {
+        /// Which service the account belongs to.
+        kind: ServiceKind,
+    },
+    /// The app could not prepare the services.
+    Internal {
+        /// What went wrong.
+        message: String,
+    },
 }
 
 impl std::fmt::Display for DebridError {
@@ -83,6 +103,46 @@ impl std::fmt::Display for DebridError {
             }
             DebridError::Transport { message } => write!(f, "cannot reach the service: {message}"),
             DebridError::InvalidLink { message } => write!(f, "not a link to unlock: {message}"),
+            DebridError::RateLimited { kind } => {
+                write!(f, "{} is asking the app to slow down", kind.name())
+            }
+            DebridError::NotPremium { kind } => {
+                write!(f, "the {} account has no paid time left", kind.name())
+            }
+            DebridError::Internal { message } => write!(f, "{message}"),
+        }
+    }
+}
+
+impl DebridError {
+    /// The sentence a reader sees.
+    ///
+    /// A refusal reads as a sentence and not as the service's own wording:
+    /// the reader has to know what to do next.
+    pub fn sentence(&self) -> String {
+        match self {
+            DebridError::RateLimited { kind } => format!(
+                "{} is asking us to slow down. Try again in a minute.",
+                kind.name()
+            ),
+            DebridError::NotPremium { kind } => format!(
+                "the {} account has no paid time left.",
+                kind.name()
+            ),
+            DebridError::NotSignedIn { kind, .. } => {
+                format!("{} did not take the key. Sign in again.", kind.name())
+            }
+            DebridError::Unsupported { kind, .. } => {
+                format!("{} does not take this file host.", kind.name())
+            }
+            DebridError::Transport { .. } => {
+                "the service could not be reached. Try again later.".to_string()
+            }
+            DebridError::InvalidLink { .. } => "that is not a link to unlock.".to_string(),
+            DebridError::Service { kind, message } => {
+                format!("{} refused: {}", kind.name(), message)
+            }
+            DebridError::Internal { message } => message.clone(),
         }
     }
 }
@@ -155,7 +215,46 @@ pub struct Reply {
 /// one account does with it.
 pub struct Http {
     client: reqwest::Client,
-    limiters: Mutex<HashMap<ServiceKind, Arc<RateLimiter>>>,
+    limiters: Mutex<HashMap<ServiceKind, Arc<Budget>>>,
+}
+
+/// The request budget of one service.
+///
+/// A service that publishes a limit for the second as well gets a second
+/// window, so a burst of unlocks cannot spend the minute's share in one
+/// go.
+#[derive(Debug)]
+struct Budget {
+    minute: RateLimiter,
+    second: Option<RateLimiter>,
+}
+
+impl Budget {
+    /// The budget of one service, from what it publishes.
+    fn new(kind: ServiceKind) -> Self {
+        Self {
+            minute: RateLimiter::new(kind.per_minute()),
+            second: kind
+                .per_second()
+                .map(|limit| RateLimiter::with_window(limit, Duration::from_secs(1))),
+        }
+    }
+
+    /// Take a slot of the budget, waiting for one when it is full.
+    async fn acquire(&self) {
+        self.minute.acquire().await;
+        if let Some(second) = &self.second {
+            second.acquire().await;
+        }
+    }
+
+    /// The service said "too many requests": nothing goes to it until then.
+    fn pause(&self, wait: Duration) {
+        self.minute.pause(wait);
+        if let Some(second) = &self.second {
+            second.pause(wait);
+        }
+    }
 }
 
 impl Http {
@@ -230,7 +329,7 @@ impl Http {
     }
 
     /// The budget of one service, made on first use.
-    fn limiter(&self, kind: ServiceKind) -> Arc<RateLimiter> {
+    fn limiter(&self, kind: ServiceKind) -> Arc<Budget> {
         let mut limiters = match self.limiters.lock() {
             Ok(guard) => guard,
             Err(poisoned) => poisoned.into_inner(),
@@ -238,7 +337,7 @@ impl Http {
         Arc::clone(
             limiters
                 .entry(kind)
-                .or_insert_with(|| Arc::new(RateLimiter::new(kind.per_minute()))),
+                .or_insert_with(|| Arc::new(Budget::new(kind))),
         )
     }
 }

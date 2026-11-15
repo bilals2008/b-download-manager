@@ -1,4 +1,5 @@
 import { NumberInput } from "@/components/settings/fields";
+import { ScheduleSettings } from "@/components/settings/schedule-settings";
 import {
   Section,
   SettingRow,
@@ -94,7 +95,29 @@ export function DownloadsSettings({ settings, onChange }: DownloadsSettingsProps
             onChange={(checked) => onChange("showCompleteDialog", checked)}
           />
         </SettingRow>
+        <SettingRow
+          settingId="setting-extract-archive"
+          label="Unpack a finished archive beside itself"
+        >
+          <Switch
+            label="Unpack a finished archive beside itself"
+            checked={settings.extractAfterDone}
+            onChange={(checked) => onChange("extractAfterDone", checked)}
+          />
+        </SettingRow>
+        <SettingRow
+          settingId="setting-delete-archive"
+          label="Remove the archive after a clean unpack"
+        >
+          <Switch
+            label="Remove the archive after a clean unpack"
+            checked={settings.deleteArchiveAfterExtract}
+            onChange={(checked) => onChange("deleteArchiveAfterExtract", checked)}
+          />
+        </SettingRow>
       </Section>
+
+      <ScheduleSettings />
     </SettingsPage>
   );
 }

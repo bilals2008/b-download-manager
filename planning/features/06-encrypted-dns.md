@@ -1,5 +1,7 @@
 # Encrypted DNS: DoH, DoT, NextDNS
 
+> **Nov 2026:** implemented (DoH, DoT, NextDNS in Settings -> Connections). See REMAINING-FEATURES.md for the current proof.
+
 **Wave 3 · Status:** ✅ done — `net/dns.rs` holds the choice, `net/resolver.rs`
 asks it, the settings file keeps it and the window edits it
 

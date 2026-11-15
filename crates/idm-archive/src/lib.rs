@@ -36,6 +36,7 @@ pub use format::Format;
 pub use listing::{Entry, list};
 pub use safe::{Guard, Limits, Refusal};
 pub use subfolder::Subfolder;
+pub use unpack::is_archive;
 pub use volumes::{Volume, VolumeKind, volume_key};
 
 use std::path::{Path, PathBuf};

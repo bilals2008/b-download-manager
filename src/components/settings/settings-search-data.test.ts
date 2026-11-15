@@ -16,10 +16,15 @@ function readSettingsSource(): string {
   const pages = readdirSync(SETTINGS_DIR)
     .filter((file) => file.endsWith("-settings.tsx"))
     .map((file) => readFileSync(join(SETTINGS_DIR, file), "utf8"));
-  const shortcuts = readFileSync(
-    join(process.cwd(), "src", "lib", "shortcuts.ts"),
-    "utf8",
-  );
+  // The registry's data lives beside the barrel that re-exports it: the
+  // command ids the anchors are built from are in the definitions file.
+  const shortcuts = [
+    readFileSync(join(process.cwd(), "src", "lib", "shortcuts.ts"), "utf8"),
+    readFileSync(
+      join(process.cwd(), "src", "lib", "shortcut-definitions.ts"),
+      "utf8",
+    ),
+  ].join("\n");
   return [...pages, shortcuts].join("\n");
 }
 

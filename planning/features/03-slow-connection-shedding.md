@@ -1,5 +1,7 @@
 # Slow-connection shedding
 
+> **Nov 2026:** implemented (pace::stalled). See REMAINING-FEATURES.md for the current proof.
+
 **Wave 2 · Status:** ✅ shipped (`pace::stalled`, four hand-overs per run at most)
 
 ## Goal

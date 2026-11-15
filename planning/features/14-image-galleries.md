@@ -1,5 +1,7 @@
 # Image galleries (gallery-dl)
 
+> **Nov 2026:** implemented (page reader, dedupe, caps, folder named after the page). See REMAINING-FEATURES.md for the current proof.
+
 **Wave 4 · Status:** ❌ not written
 
 ## Goal

@@ -42,10 +42,11 @@ impl RateLimiter {
         }
     }
 
-    /// A limiter with a window of its own, for the tests that must not wait a
-    /// minute for the window to pass.
-    #[cfg(test)]
-    fn with_window(limit: usize, window: Duration) -> Self {
+    /// A limiter with a window of its own.
+    ///
+    /// A service that publishes a limit for the second as well as for the
+    /// minute gets a limiter with a window of a second.
+    pub fn with_window(limit: usize, window: Duration) -> Self {
         Self {
             limit,
             window,
@@ -135,5 +136,14 @@ mod tests {
         limiter.pause(Duration::from_secs(30));
         let wait = limiter.try_acquire().expect("a paused limiter waits");
         assert!(wait > Duration::from_secs(25), "{wait:?}");
+    }
+
+    #[test]
+    fn a_second_window_is_its_own_window() {
+        let limiter = RateLimiter::with_window(2, Duration::from_secs(1));
+        assert!(limiter.try_acquire().is_none());
+        assert!(limiter.try_acquire().is_none());
+        let wait = limiter.try_acquire().expect("the third request waits");
+        assert!(wait <= Duration::from_secs(1), "{wait:?}");
     }
 }

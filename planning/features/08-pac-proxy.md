@@ -1,5 +1,7 @@
 # PAC proxy execution
 
+> **Nov 2026:** implemented. See REMAINING-FEATURES.md for the current proof.
+
 **Wave 3 · Status:** ✅ done — the script is fetched, asked per address, and
 the route it names is the one the download takes
 

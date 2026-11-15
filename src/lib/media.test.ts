@@ -71,6 +71,7 @@ function job(overrides: Partial<MediaJobView> = {}): MediaJobView {
       { video: "v1080", audio: "a1", label: "1080p" },
       { video: "v720", audio: null, label: "720p" },
     ],
+    subtitles: [],
     preferred: null,
     cookiesOffered: false,
     cookieConsent: false,

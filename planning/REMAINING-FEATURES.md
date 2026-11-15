@@ -28,17 +28,20 @@ Legend: ✅ done · 🔧 the engine code exists but nothing in the app can reach
 
 ## Wave 2 — engine reliability
 
-- ❌ Per-host learned connection caps: remember what a host actually allows and
-  cap the next download to it (IDM opens 480 on a 2-connection server; MDM keeps
-  the cap it learned).
-- ❌ Slow-connection shedding: drop a range that is far behind and give its
-  bytes to a faster connection.
-- ❌ Connection rebalancing until the last byte (partly in `segmenter.rs`).
-- 🔧 Server location per download: country flag + RTT. `crates/idm-core/src/geo.rs`
-  and `geo/ipcountry.bin.xz` exist; `DownloadInfo` has no field and the progress
-  window shows nothing. MDM: `crates/geo`, `crates/app/src/countries.rs`.
-- 🔧 Freeze detector beside the crash monitor: `crates/idm-crash` writes a report
-  when the process ends badly; a window that stops answering is not detected.
+- ✅ Per-host learned connection caps: remember what a host actually allows and
+  cap the next download to it. `host-caps.json` aside, the Properties window
+  has a button that forgets what the host allowed, so a changed network is
+  not capped forever.
+- ✅ Slow-connection shedding: drop a range that is far behind and give its
+  bytes to a faster connection (`pace::stalled`, four hand-overs per run at most).
+- ✅ Connection rebalancing until the last byte (`pace::lagging`).
+- ✅ Server location per download: country code and RTT, shown in the status
+  tab. No probe of loopback or local hosts.
+- ✅ Freeze detector beside the crash monitor: a suspended machine is not
+  called frozen (sendmessage with a timeout), a stuck one is reported once.
+  The monitor writes a freeze report with a thread table and the stacks
+  (`freeze-report.md`, `freeze-stacks.dmp`), and the About page shows it on
+  the next start.
 
 ## Wave 3 — the wire
 
@@ -67,45 +70,76 @@ Legend: ✅ done · 🔧 the engine code exists but nothing in the app can reach
 
 ## Wave 4 — media
 
-- 🔧 Soft subtitles into MP4 (`mov_text`) and MKV (`S_TEXT/UTF8`):
-  `crates/idm-core/src/media/subtitles.rs` exists, nothing references it. Needs
-  a pinned, checksum-verified FFmpeg (the yt-dlp helper is the model), auto or
-  manual captions, `-c:v copy`.
-- 🔧 Audio extraction / conversion to mp3, opus, flac:
-  `crates/idm-core/src/media/audio.rs` exists unwired. B downloads the track
-  as-is; conversion never re-encodes video.
-- ❌ gallery-dl image galleries: absent. MDM: `crates/tools/src/gallery.rs`.
-- ❌ Google Drive / Docs special handling: absent. MDM:
-  `crates/engine/src/sites/gdrive.rs`.
-- 🔧 DRM detection: only a content-type refusal in `video/capture.rs`. MDM
-  refuses `#EXT-X-KEY`, MPD `ContentProtection`, `vnd.yt-ump`, encrypted init —
-  detection only, never a bypass.
+- ✅ Soft subtitles into MP4 (`mov_text`) and MKV (`S_TEXT/UTF8`):
+  `media/subtitles.rs` parses the renditions, the manifest carries them
+  (`Manifest::subtitles`), the quality panel lists them, and an FFmpeg built
+  beside the tracks writes them into the container — WebVTT converts to
+  SRT, timings are never shifted. A local caption file wins over a
+  rendition.
+- ✅ Audio extraction / conversion to mp3, opus, flac: the panel offers the
+  original track or a conversion; the track is written out with its own
+  extension, or FFmpeg re-writes it to MP3/Opus/FLAC — never the picture,
+  never a re-encode of video.
+- ✅ Image galleries: `media/gallery.rs` reads a page, resolves its images,
+  dedupes and caps them (500), and the add dialog offers a download of every
+  image into a folder named after the page, one ordinary resumable download
+  per picture.
+- ✅ Google Drive / Docs links: `sites/gdrive.rs` resolves file, export and
+  editor links; the add dialog offers the export the document supports and
+  probes the endpoint the bytes come from. A private file and an over-quota
+  owner are named, never downloaded as an error page. A shared folder is
+  refused with a sentence, not a download of a listing page.
+- ✅ DRM detection: one place (`media/drm.rs`) reads `#EXT-X-KEY`, DASH
+  `ContentProtection`, `vnd.yt-ump` and encrypted init segments, refuses with
+  a reader's sentence naming the scheme, and never decrypts anything.
 
 ## Wave 5 — the outside world
 
-- 🔧 Debrid accounts (Real-Debrid, AllDebrid, Premiumize; TorBox in MDM is web
-  downloads only). `crates/idm-debrid` exists but is **not a dependency of
-  `src-tauri`**, so nothing can call it. Needs: dependency, a settings page,
-  the key in the OS credential store (never `settings.json`, never a log),
-  unrestrict before the start, rate limits respected (RD 250/min, AD 12/s).
-- ✅ Archive handling, first half: `idm-archive` is a dependency of the app and
-  a finished archive can be unpacked from the row menu (**Extract here**), into
-  a folder of its own name, through the crate's traversal-safe policy. Still
-  to do: the extract-when-done setting, removing the archive after a verified
-  extract, and the password prompt for an encrypted archive. 7z and RAR go
-  through 7-Zip when it is installed.
+- ✅ Debrid accounts (Real-Debrid, AllDebrid, Premiumize): `idm-debrid` is a
+  dependency of the app, the accounts live in the OS credential store, the
+  settings page shows only the account's name and its paid days, host links
+  are unlocked before the start, and rate limits are respected. An
+  "unlock this link" switch in the add dialog asks for this one, and the
+  automatic switch in Settings → Services unlocks matching links.
+  The generated URL never reaches the log or the downloads index.
+- ✅ Archive handling, the rest: a finished archive unpacks itself when the
+  setting asks, into a folder of its own name; the archive is deleted only
+  after a clean extract with no refused entries; an encrypted archive holds
+  the job and asks for its password in the completion window (twice, then
+  sent to another tool); progress counts files while it unpacks; the outcome
+  window says files, bytes, skipped and refused. 7z and RAR go through
+  7-Zip when it is installed.
 
 ## Also in MDM, not in your list
 
 Kept here so nothing is lost. Each is a crate MDM has and this project lacks:
 
-- ❌ BitTorrent (magnet links, `.torrent`, seeding) — MDM: `crates/torrent` on
-  librqbit.
-- ❌ MCP server for AI assistants — MDM: `crates/mcp`.
-- ❌ Phone / LAN remote control — MDM: `crates/remote`.
-- ❌ Queue scheduler (start and stop on a clock, wake the machine) — MDM:
-  `crates/app/src/queue.rs`.
-- ❌ 86 languages and right-to-left layouts — MDM: `i18n/`.
+- ✅ BitTorrent (magnet links, `.torrent`, seeding) — `crates/idm-torrent`
+  speaks the peer protocol itself; the add dialog accepts a magnet link or
+  a `.torrent` file; the torrent window shows files, peers and pieces; the
+  piece order is the plain order, so a film plays while it comes in; seeding
+  is off by default and asks before the upload stops.
+- ✅ MCP server for AI assistants — `crates/idm-mcp`, a separate program
+  speaking MCP over stdio, shipped beside the app (`externalBin`). The
+  bridge answers its routes only while the Advanced page lets it, deletes a
+  file only on the second explicit call, and the assistant is refused the
+  rest while the door is closed.
+- ✅ Phone / LAN remote control — a second listener, off by default, bound to
+  one local interface, refusing every request whose source or `Host` header
+  names something else. Pairing is a one-time code, the token is stored as a
+  hash, and a device is revocable in Settings → Services. The tray can
+  switch the whole server off.
+- ✅ Queue scheduler — days of the week, a start and stop minute, an action
+  at the end (keep running, pause the queue, power the computer off after a
+  separate explicit confirmation and only when every download is saved).
+  The app checks the window on a clock, so an app that opens mid-window
+  starts the queue. Missed windows do not fire at noon; the status bar says
+  when the queue runs next.
+- 🔧 86 languages and right-to-left layouts — the window's chrome (the
+  settings window, the menus' shell, the status bar) reads in English,
+  French, German and Arabic, and Arabic mirrors it. The rest of the
+  interface is still English; the catalogue (`src/i18n/`) and the checker
+  (`scripts/check-i18n.mjs`) hold the door open.
 - ❌ Portable build and a headless server mode — MDM: `docker/`, `--headless`.
 
 ## How each one is proven
@@ -119,8 +153,8 @@ Kept here so nothing is lost. Each is a crate MDM has and this project lacks:
 ## Wave 2, done
 - ✅ **Per-host learned caps** — `LearnedCaps` in `crates/idm-core/src/limits.rs`
   records what a host honoured, keeps it in `<data>/host-caps.json`, and starts
-  the next download from it. Shown in the progress window's connection details.
-  Reset is engine-only for now (no button).
+  the next download from it. Shown in the progress window's connection details,
+  and the host cap can be forgotten from the Properties window.
 - ✅ **Slow-connection shedding** — `crates/idm-core/src/pace.rs` decides which
   range stopped moving; its tail is handed to a new connection, capped at four
   hand-overs per run.

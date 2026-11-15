@@ -1,5 +1,7 @@
 # Debrid accounts (Real-Debrid, AllDebrid, Premiumize)
 
+> **Nov 2026:** implemented (Settings -> Services, add dialog switch, unlock before start). See REMAINING-FEATURES.md for the current proof.
+
 **Wave 5 · Status:** 🔧 `crates/idm-debrid` exists, not a dependency of the app
 
 ## Goal

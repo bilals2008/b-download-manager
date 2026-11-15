@@ -39,6 +39,18 @@
       } catch {
         // Storage can be blocked; the default is the Ayu appearance.
       }
+      // The language, before the first paint, so a window that reads right to
+      // left is never laid out in the wrong direction first. The same key and
+      // the same table as `src/i18n/`; keep the two in step.
+      try {
+        var stored = localStorage.getItem("idm-clone.language");
+        var rtl = stored === "ar";
+        document.documentElement.dir = rtl ? "rtl" : "ltr";
+        document.documentElement.lang =
+          stored === "fr" || stored === "de" || stored === "ar" ? stored : "en";
+      } catch {
+        // Storage can be blocked; the window reads as English, left to right.
+      }
     </script>
   </head>
   <body>

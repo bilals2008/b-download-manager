@@ -24,6 +24,7 @@ import {
 } from "@/lib/downloads";
 import { describeError, isDesktop } from "@/lib/errors";
 import { chooseFolder, verifyDownloadChecksum, type ChecksumReport, type ConflictChoice, type StartRefusal } from "@/lib/ipc";
+import { resetLearnedHost } from "@/lib/ipc-learned";
 import { useDownloads } from "@/state/download-store";
 
 const LABEL = "mb-1.5 block text-xs text-chrome-muted";
@@ -69,6 +70,7 @@ export function DownloadPropertiesDialog({
   const [checking, setChecking] = useState(false);
   const [checkReport, setCheckReport] = useState<ChecksumReport | null>(null);
   const [checkError, setCheckError] = useState<string | null>(null);
+  const [resettingCap, setResettingCap] = useState(false);
 
   async function checkHash() {
     const pasted = hash.trim();
@@ -168,6 +170,24 @@ export function DownloadPropertiesDialog({
     } finally {
       running.current = false;
       setBusy(false);
+    }
+  }
+
+  async function resetCap() {
+    if (!isDesktop()) {
+      return;
+    }
+    let host = "";
+    try {
+      host = new URL(item.url).host;
+    } catch {
+      return;
+    }
+    setResettingCap(true);
+    try {
+      await resetLearnedHost(host);
+    } finally {
+      setResettingCap(false);
     }
   }
 
@@ -466,10 +486,17 @@ export function DownloadPropertiesDialog({
             <Field label="Address">
               <span className="font-mono break-all">{item.url}</span>
             </Field>
-            <Field label="Size">
-              {item.size > 0
-                ? `${formatSize(item.size)} (${item.size.toLocaleString()} bytes)`
-                : "Not known yet"}
+            <Field label="Host connections">
+              <button
+                type="button"
+                className="text-chrome-micro text-chrome-muted underline disabled:cursor-default disabled:opacity-45"
+                disabled={resettingCap}
+                onClick={() => void resetCap()}
+              >
+                {resettingCap
+                  ? "Forgetting…"
+                  : "Forget this host's cap"}
+              </button>
             </Field>
             <Field label="Downloaded">
               {item.size > 0

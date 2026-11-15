@@ -41,31 +41,7 @@ const ROOTS = ["src", "src-tauri/src", "crates", "scripts"];
  * Files that are over the limit and are being split. Each entry names the
  * wave that splits it; the entry goes when the split has landed.
  */
-const ALLOWLIST = new Map([
-  ["crates/idm-core/src/downloader.rs", "wave 1"],
-  ["crates/idm-core/src/downloader/tests.rs", "wave 1"],
-  ["crates/idm-core/src/media/download.rs", "wave 1"],
-  ["crates/idm-core/src/media/dash.rs", "wave 1"],
-  ["crates/idm-core/src/media/hls.rs", "wave 1"],
-  ["crates/idm-core/src/http.rs", "wave 1"],
-  ["src-tauri/src/video/mp4.rs", "wave 1"],
-  ["src-tauri/src/video/verify.rs", "wave 1"],
-  ["src-tauri/src/video/webm.rs", "wave 1"],
-  ["src-tauri/src/video/download.rs", "wave 1"],
-  ["src-tauri/src/video/yt.rs", "wave 1"],
-  ["src-tauri/src/video/capture.rs", "wave 1"],
-  ["src-tauri/src/grabber/crawl.rs", "wave 1"],
-  ["src-tauri/src/grabber/policy.rs", "wave 1"],
-  ["src-tauri/src/actions.rs", "wave 1"],
-  ["src-tauri/src/state.rs", "wave 1"],
-  ["src-tauri/src/lib.rs", "wave 1"],
-  ["src/state/download-store.tsx", "wave 1"],
-  ["src/lib/shortcuts.ts", "wave 1"],
-  ["src/App.tsx", "wave 1"],
-  ["scripts/check-extension.mjs", "wave 1"],
-  ["src-tauri/src/bridge/mod.rs", "wave 1"],
-  ["crates/idm-core/src/net/pac/js.rs", "wave 2"],
-]);
+const ALLOWLIST = new Map([]);
 
 const SOURCE_EXTENSIONS = new Set([".rs", ".ts", ".tsx", ".mjs"]);
 

@@ -1,5 +1,7 @@
 # Archive handling, the rest
 
+> **Nov 2026:** implemented (progress, password prompt, delete-after-clean-extract, outcome). See REMAINING-FEATURES.md for the current proof.
+
 **Wave 5 · Status:** 🔧 first half shipped (row menu → Extract here)
 
 ## Goal

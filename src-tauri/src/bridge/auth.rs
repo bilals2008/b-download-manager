@@ -19,6 +19,12 @@ use super::http::Request;
 pub const CLIENT_HEADER: &str = "x-bdm-client";
 pub const CLIENT_VALUE: &str = "browser-extension";
 
+/// The client another program on this machine uses, when the reader turned
+/// "let AI assistants drive the app" on in the Advanced page. It is a program,
+/// not a page: it carries no `Origin`, and every route it reaches is refused
+/// while the setting is off.
+pub const MCP_CLIENT_VALUE: &str = "mcp-server";
+
 /// The port the bridge listens on, which is the only port a `Host` header may
 /// name. A name that resolves to loopback but is not the app's own address is a
 /// DNS-rebinding attempt and is refused at once.
@@ -57,6 +63,23 @@ pub fn check(request: &Request) -> Result<(), Denial> {
             "forbidden",
             "this address is not the application's bridge",
         ));
+    }
+
+    // Another program on this machine, not a browser page: it names itself
+    // instead of sending an Origin, and its routes are refused one by one
+    // while the reader keeps the assistant door closed.
+    if request.header(CLIENT_HEADER) == Some(MCP_CLIENT_VALUE) {
+        if request.method == "POST"
+            && !request.body.is_empty()
+            && !is_json(request.header("content-type"))
+        {
+            return Err(Denial::new(
+                415,
+                "unsupported_media_type",
+                "a request body must be JSON",
+            ));
+        }
+        return Ok(());
     }
 
     if let Some(origin) = request.header("origin") {

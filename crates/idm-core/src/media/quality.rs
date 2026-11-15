@@ -69,6 +69,7 @@ pub fn manifest_from_hls(master: &hls::Master, duration: Option<f64>) -> Manifes
         formats,
         pairs,
         container_hint: Some("hls".to_string()),
+        subtitles: master.subtitles.clone(),
     }
 }
 
@@ -108,7 +109,9 @@ pub fn finish(formats: &mut [Format], pairs: &mut [Pair], duration: Option<f64>)
     let show_container = {
         let mut containers: Vec<&str> = formats
             .iter()
-            .filter(|format| format.kind != MediaKind::Audio)
+            .filter(|format| {
+                format.kind != MediaKind::Audio && format.kind != MediaKind::Subtitle
+            })
             .map(|format| format.container.as_str())
             .collect();
         containers.sort_unstable();
@@ -141,10 +144,11 @@ pub fn finish(formats: &mut [Format], pairs: &mut [Pair], duration: Option<f64>)
         .collect();
 
     for (index, format) in formats.iter_mut().enumerate() {
-        format.label = if format.kind == MediaKind::Audio {
-            audio_label(format.bandwidth)
-        } else {
-            visual_label(format, show_container, high[index])
+        format.label = match format.kind {
+            MediaKind::Audio => audio_label(format.bandwidth),
+            // A caption row says its own name and language.
+            MediaKind::Subtitle => continue,
+            _ => visual_label(format, show_container, high[index]),
         };
     }
 

@@ -1,5 +1,7 @@
 # Network adapter binding with a kill switch
 
+> **Nov 2026:** implemented. See REMAINING-FEATURES.md for the current proof.
+
 **Wave 3 · Status:** ✅ done — the adapter is enumerated, chosen by its
 identity, held to, and watched
 

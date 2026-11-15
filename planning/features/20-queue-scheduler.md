@@ -1,5 +1,7 @@
 # Queue scheduler
 
+> **Nov 2026:** implemented (days, start and stop, end action, next run in the status bar). See REMAINING-FEATURES.md for the current proof.
+
 **Wave 6 · Status:** ❌ not written (the reference build has `app/src/queue.rs`)
 
 ## Goal

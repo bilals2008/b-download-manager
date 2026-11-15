@@ -1,0 +1,20 @@
+[package]
+name = "idm-remote"
+version = "0.1.0"
+description = "Phone and LAN remote control for the download manager"
+edition = "2021"
+rust-version = "1.77"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "io-util", "net"] }
+# The token is stored as a hash, so a stolen settings file does not hand the
+# remote over.
+sha2 = { version = "0.11", default-features = false }
+# The codes and the tokens come from the operating system's random source, not
+# from a seeded generator.
+getrandom = "0.4"
+# The pairing code is compared in a time that does not depend on how much of
+# it matched.
+subtle = "2"

@@ -1,5 +1,7 @@
 # Audio extraction and conversion
 
+> **Nov 2026:** implemented (original track, MP3, Opus, FLAC). See REMAINING-FEATURES.md for the current proof.
+
 **Wave 4 · Status:** 🔧 `media/audio.rs` exists, nothing calls it
 
 ## Goal

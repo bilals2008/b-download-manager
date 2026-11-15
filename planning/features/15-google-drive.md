@@ -1,5 +1,7 @@
 # Google Drive and Docs links
 
+> **Nov 2026:** implemented for files and editors (export formats); shared folders are refused with a sentence. See REMAINING-FEATURES.md for the current proof.
+
 **Wave 4 · Status:** ❌ not written
 
 ## Goal

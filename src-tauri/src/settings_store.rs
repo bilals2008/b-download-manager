@@ -73,6 +73,11 @@ pub struct EngineSettings {
     pub show_video_window_on_start: bool,
     /// Whether the clipboard is watched for download links.
     pub clipboard_capture: bool,
+    /// Whether a finished archive is unpacked beside itself as soon as the
+    /// download completes.
+    pub extract_after_done: bool,
+    /// Whether the archive is removed once it was unpacked cleanly.
+    pub delete_archive_after_extract: bool,
     /// Which DNS answers names, and whether the system's may answer when
     /// the chosen one cannot be reached. The engine applies it to every
     /// client it builds — downloads, the grabber, video tracks, the update
@@ -84,6 +89,27 @@ pub struct EngineSettings {
     /// adapter's own identity (its GUID on Windows) so a renamed connection is
     /// still the one that was chosen. Empty means the system's own route.
     pub network_adapter: String,
+    /// When the queue is allowed to run. Off by default: an empty schedule
+    /// never opens a window, so the queue runs only when the reader starts it.
+    pub schedule: idm_core::schedule::Schedule,
+    /// Whether the computer may be powered off when the queue's window
+    /// closes. Off by default: powering off is a separate, explicit choice.
+    pub power_off_after_queue: bool,
+    /// Whether every host link a signed-in debrid service can take is
+    /// unlocked before the download starts, without being asked.
+    pub debrid_auto_unlock: bool,
+    /// Whether an AI assistant on this machine may list, add, pause, resume
+    /// and remove downloads through the MCP server beside the bridge.
+    /// Off by default: the door opens only when the reader opens it.
+    pub mcp_enabled: bool,
+    /// Whether a phone on the same home network may list, add, pause, resume
+    /// and remove downloads after a one-time pairing. Off by default: the
+    /// listener binds only when the reader turns it on.
+    pub remote_enabled: bool,
+    /// Whether a finished BitTorrent download keeps uploading to the swarm.
+    /// Off by default: uploading after the file is complete is a choice with
+    /// a cost the reader sees coming.
+    pub torrent_seeding: bool,
 }
 
 impl Default for EngineSettings {
@@ -103,9 +129,17 @@ impl Default for EngineSettings {
             show_progress_on_start: false,
             show_video_window_on_start: true,
             clipboard_capture: false,
+            extract_after_done: false,
+            delete_archive_after_extract: false,
             dns: idm_core::net::DnsSettings::default(),
             proxy_script: String::new(),
             network_adapter: String::new(),
+            schedule: idm_core::schedule::Schedule::default(),
+            power_off_after_queue: false,
+            debrid_auto_unlock: false,
+            mcp_enabled: false,
+            remote_enabled: false,
+            torrent_seeding: false,
         }
     }
 }
@@ -184,6 +218,7 @@ pub fn sanitize(mut settings: EngineSettings) -> EngineSettings {
     settings.network_adapter = settings.network_adapter.trim().to_string();
     settings.proxy_script = settings.proxy_script.trim().to_string();
     clean_dns(&mut settings.dns);
+    settings.schedule = settings.schedule.clone().sanitized();
     settings
 }
 

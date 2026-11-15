@@ -1,12 +1,13 @@
 import type { SettingsGlyphKind } from "@/components/icons/ui-icons";
+import type { StringKey } from "@/i18n/catalogue";
 
 /** One page of the options window. */
 export interface SettingsPageEntry {
   id: SettingsPageId;
-  label: string;
+  labelKey: StringKey;
   glyph: SettingsGlyphKind;
-  /** The one line under the page title: what this page is about. */
-  description: string;
+  /** The catalogue key of the one line under the page title. */
+  descriptionKey: StringKey;
 }
 
 export type SettingsPageId =
@@ -21,113 +22,139 @@ export type SettingsPageId =
   | "video-download-button"
   | "connections"
   | "proxy"
+  | "debrid"
+  | "remote"
+  | "torrent"
   | "advanced"
   | "about";
 
 /**
- * The pages, grouped the way the window reads: what the application is, what a
- * download does, how it reaches the network, and the maintenance behind it.
- * The order is also the order the sidebar draws.
+ * The pages, grouped the way the window reads. The order is also the order
+ * the sidebar draws. Every word here is a catalogue key, so the window
+ * reads in the language the reader chose.
  */
 export const SETTINGS_GROUPS: readonly {
-  label: string;
+  labelKey: StringKey;
   pages: readonly SettingsPageEntry[];
 }[] = [
   {
-    label: "Basics",
+    labelKey: "settings.sidebar.basics",
     pages: [
       {
         id: "general",
-        label: "General",
+        labelKey: "settings.general",
         glyph: "general",
-        description: "Startup, clipboard and the tray.",
+        descriptionKey: "settings.general.description",
       },
       {
         id: "appearance",
-        label: "Appearance",
+        labelKey: "settings.appearance",
         glyph: "appearance",
-        description: "The theme, the typeface and how heavy the text is.",
+        descriptionKey: "settings.appearance.description",
       },
       {
         id: "toolbar",
-        label: "Toolbar",
+        labelKey: "settings.toolbar",
         glyph: "toolbar",
-        description: "The bar under the menu.",
+        descriptionKey: "settings.toolbar.description",
       },
       {
         id: "shortcuts",
-        label: "Shortcuts",
+        labelKey: "settings.shortcuts",
         glyph: "shortcuts",
-        description: "Every command's key, and how to change it.",
+        descriptionKey: "settings.shortcuts.description",
       },
       {
         id: "tips",
-        label: "Tips",
+        labelKey: "settings.tips",
         glyph: "tips",
-        description: "The hints shown when the application starts.",
+        descriptionKey: "settings.tips.description",
       },
     ],
   },
   {
-    label: "Downloads",
+    labelKey: "settings.sidebar.downloads",
     pages: [
       {
         id: "downloads",
-        label: "Downloads",
+        labelKey: "settings.downloads",
         glyph: "downloads",
-        description: "How a download starts, and what happens when it ends.",
+        descriptionKey: "settings.downloads.description",
       },
       {
         id: "save-locations",
-        label: "Save locations",
+        labelKey: "settings.save-locations",
         glyph: "save-to",
-        description: "Where finished files are written.",
+        descriptionKey: "settings.save-locations.description",
       },
       {
         id: "browser",
-        label: "Browser integration",
+        labelKey: "settings.browser",
         glyph: "browser",
-        description: "Hand links over from your browser.",
+        descriptionKey: "settings.browser.description",
       },
       {
         id: "video-download-button",
-        label: "Video download button",
+        labelKey: "settings.video-download-button",
         glyph: "downloads",
-        description: "The floating button the extension draws on a video.",
+        descriptionKey: "settings.video-download-button.description",
       },
     ],
   },
   {
-    label: "Network",
+    labelKey: "settings.sidebar.services",
+    pages: [
+      {
+        id: "debrid",
+        labelKey: "settings.debrid",
+        glyph: "sites",
+        descriptionKey: "settings.debrid.description",
+      },
+      {
+        id: "remote",
+        labelKey: "settings.remote",
+        glyph: "dial-up",
+        descriptionKey: "settings.remote.description",
+      },
+      {
+        id: "torrent",
+        labelKey: "settings.torrent",
+        glyph: "downloads",
+        descriptionKey: "settings.torrent.description",
+      },
+    ],
+  },
+  {
+    labelKey: "settings.sidebar.network",
     pages: [
       {
         id: "connections",
-        label: "Connections",
+        labelKey: "settings.connections",
         glyph: "connection",
-        description: "Parallel connections and the speed cap.",
+        descriptionKey: "settings.connections.description",
       },
       {
         id: "proxy",
-        label: "Proxy",
+        labelKey: "settings.proxy",
         glyph: "proxy",
-        description: "The server every download passes through.",
+        descriptionKey: "settings.proxy.description",
       },
     ],
   },
   {
-    label: "Application",
+    labelKey: "settings.sidebar.application",
     pages: [
       {
         id: "advanced",
-        label: "Advanced",
+        labelKey: "settings.advanced",
         glyph: "advanced",
-        description: "Application data, and a full reset.",
+        descriptionKey: "settings.advanced.description",
       },
       {
         id: "about",
-        label: "About",
+        labelKey: "settings.about",
         glyph: "about",
-        description: "This build, and how it keeps itself up to date.",
+        descriptionKey: "settings.about.description",
       },
     ],
   },
@@ -142,12 +169,12 @@ function pageEntry(id: SettingsPageId): SettingsPageEntry | undefined {
   return SETTINGS_PAGES.find((page) => page.id === id);
 }
 
-/** The name of a page, for the region the reader is in. */
-export function settingsPageLabel(id: SettingsPageId): string {
-  return pageEntry(id)?.label ?? "Settings";
+/** The key of the name of a page, for the region the reader is in. */
+export function settingsPageLabelKey(id: SettingsPageId): StringKey {
+  return pageEntry(id)?.labelKey ?? "settings.title";
 }
 
-/** The line under the page title, so a page explains itself on arrival. */
-export function settingsPageDescription(id: SettingsPageId): string {
-  return pageEntry(id)?.description ?? "";
+/** The key of the line under the page title. */
+export function settingsPageDescriptionKey(id: SettingsPageId): StringKey {
+  return pageEntry(id)?.descriptionKey ?? "settings.title";
 }

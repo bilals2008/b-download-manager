@@ -1,5 +1,7 @@
 # Phone and LAN remote control
 
+> **Nov 2026:** implemented (second listener, pairing, device revocation, tray switch). See REMAINING-FEATURES.md for the current proof.
+
 **Wave 6 · Status:** ❌ not written (the reference build has `crates/remote`)
 
 ## Goal

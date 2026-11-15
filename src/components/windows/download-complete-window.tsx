@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 
 import { FileTypeIcon } from "@/components/icons/desktop-icons";
+import { ExtractBlock } from "@/components/windows/extract-block";
 import { CheckGlyph, CloseGlyph } from "@/components/icons/ui-icons";
 import { DialogAction } from "@/components/ui/dialog-action";
 import { categoryIcon, categoryOfFile, loadCategories } from "@/lib/categories";
@@ -128,6 +129,7 @@ export function DownloadCompleteWindow({ info: initial }: { info: DownloadInfo }
           </div>
         </div>
 
+        {info.id != null && <ExtractBlock id={info.id} />}
         {error ? (
           <p role="alert" className="break-words text-chrome-micro text-chrome-error">
             {error}

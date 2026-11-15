@@ -83,6 +83,8 @@ export interface StartDownloadInput {
   description?: string;
   /** The answer to a destination conflict. The default asks the window. */
   conflict?: ConflictChoice;
+  /** The export format the reader picked for a Drive editor link, when it is one. */
+  driveExport?: string | null;
 }
 
 /** What the engine did with a start. A rename changes the destination. */
@@ -111,6 +113,7 @@ export function startDownload(input: StartDownloadInput): Promise<StartOutcome> 
       category: input.category?.trim() || null,
       description: input.description?.trim() || null,
       conflict: input.conflict ?? null,
+      driveExport: input.driveExport?.trim() || null,
     },
   });
 }
@@ -422,6 +425,10 @@ export interface EngineSettings {
   showCompleteDialog: boolean;
   showProgressOnStart: boolean;
   showVideoWindowOnStart: boolean;
+  /** Whether a finished archive is unpacked beside itself. */
+  extractAfterDone: boolean;
+  /** Whether the archive is removed after a clean unpack. */
+  deleteArchiveAfterExtract: boolean;
   clipboardCapture: boolean;
   /** The DNS the engine asks names with. */
   dns: DnsSettings;
@@ -530,6 +537,16 @@ export function setShowCompleteDialog(on: boolean): Promise<boolean> {
  */
 export function setBrowserFolder(folder: string): Promise<string> {
   return invoke<string>("set_browser_folder", { folder });
+}
+
+/** Whether a finished archive is unpacked beside itself. */
+export function setExtractAfterDone(on: boolean): Promise<boolean> {
+  return invoke<boolean>("set_extract_after_done", { on });
+}
+
+/** Whether the archive is removed once it was unpacked cleanly. */
+export function setDeleteArchiveAfterExtract(on: boolean): Promise<boolean> {
+  return invoke<boolean>("set_delete_archive_after_extract", { on });
 }
 
 /** Whether a new download opens its progress window. */

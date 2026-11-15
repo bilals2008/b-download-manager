@@ -16,6 +16,135 @@ use std::time::Duration;
 use reqwest::header::RETRY_AFTER;
 use serde::{Deserialize, Serialize};
 
+use super::{Format, Manifest, MediaKind};
+
+/// The caption codec of a container that keeps the text as it is.
+///
+/// An MPEG-TS file has no caption codec of its own, and a container nobody
+/// knows is not a reason to convert the text either.
+pub const TEXT_AS_IS: &str = "text";
+
+/// One caption rendition a manifest offered.
+///
+/// The renditions a manifest names become rows of their own in the quality
+/// panel, so the language and the default flag travel with the row.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubtitleRendition {
+    /// The manifest's own name for the rendition.
+    pub id: String,
+    /// The name the panel shows.
+    pub name: String,
+    /// The language the rendition is in, when the manifest says.
+    pub language: Option<String>,
+    /// Where the bytes are.
+    pub url: String,
+    /// The format the bytes are in (`vtt`, `srt`, `ttml`).
+    pub container: String,
+    /// Whether the manifest marks this one as the default.
+    pub is_default: bool,
+}
+
+impl SubtitleRendition {
+    /// The id the quality row carries.
+    ///
+    /// The row has no language field of its own, so the language travels in
+    /// the id and in the label.
+    pub fn row_id(&self) -> String {
+        let language = self.language.as_deref().unwrap_or("und");
+        let mut id = format!("{}-{language}", self.id);
+        if self.is_default {
+            id.push_str("-default");
+        }
+        id
+    }
+
+    /// The text the quality row shows.
+    pub fn row_label(&self) -> String {
+        match (&self.language, self.is_default) {
+            (Some(language), true) => format!("{} ({language}, default)", self.name),
+            (Some(language), false) => format!("{} ({language})", self.name),
+            (None, true) => format!("{} (default)", self.name),
+            (None, false) => self.name.clone(),
+        }
+    }
+
+    /// The quality row this rendition becomes.
+    pub fn format(&self) -> Format {
+        let mut format = Format::new(self.row_id(), MediaKind::Subtitle, &self.container);
+        format.label = self.row_label();
+        format
+    }
+}
+
+/// A manifest and the caption renditions it offered.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubtitleManifest {
+    /// The rows the quality panel shows.
+    pub manifest: Manifest,
+    /// The caption renditions behind the caption rows.
+    pub renditions: Vec<SubtitleRendition>,
+}
+
+/// Add the caption rows of these renditions to a manifest.
+pub fn add_formats(manifest: &mut Manifest, renditions: &[SubtitleRendition]) {
+    for rendition in renditions {
+        manifest.formats.push(rendition.format());
+    }
+}
+
+/// The caption codec a container wants.
+///
+/// An MP4 wants `mov_text`, which is SubRip's text; a Matroska file wants
+/// `S_TEXT/UTF8`, which is WebVTT's text. Any other container keeps the text
+/// as it is, so nothing is converted for it.
+pub fn container_codec(container: &str) -> &str {
+    match container.trim().trim_start_matches('.').to_ascii_lowercase().as_str() {
+        "mp4" | "m4a" | "m4v" | "m4s" | "mov" => "mov_text",
+        "mkv" | "webm" => "S_TEXT/UTF8",
+        _ => TEXT_AS_IS,
+    }
+}
+
+/// The format a caption file must be written in for a container.
+///
+/// An MP4 wants `mov_text`, which is SubRip's text; a Matroska file wants
+/// `S_TEXT/UTF8`, which is WebVTT's text.
+pub fn format_for_container(container: &str) -> SubtitleFormat {
+    match container.trim().trim_start_matches('.').to_ascii_lowercase().as_str() {
+        "mp4" | "m4a" | "m4v" | "m4s" | "mov" => SubtitleFormat::Srt,
+        _ => SubtitleFormat::Vtt,
+    }
+}
+
+/// The caption file a rendition needs for a container, written out.
+///
+/// A WebVTT rendition for an MP4 is written as SubRip, because that is the
+/// text `mov_text` holds. A file that holds no cue is left as it is rather
+/// than replaced by an empty one.
+pub fn render_for_container(text: &str, from: SubtitleFormat, container: &str) -> String {
+    let to = format_for_container(container);
+    if to == from {
+        return text.to_string();
+    }
+    convert(text, from, to).unwrap_or_else(|_| text.to_string())
+}
+
+/// The caption format an address names.
+///
+/// A file that names no format is read as WebVTT, because that is what a
+/// site serves when it has nothing else to offer.
+pub fn container_of(url: &str) -> String {
+    let path = url.split(['?', '#']).next().unwrap_or(url);
+    let extension = path.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
+    match extension.as_str() {
+        "srt" | "subrip" => "srt".to_string(),
+        "ttml" | "dfxp" | "xml" => "ttml".to_string(),
+        _ => "vtt".to_string(),
+    }
+}
+
 /// Where a subtitle track came from.
 ///
 /// The uploader's own subtitles were written and checked by a person; the
@@ -750,5 +879,79 @@ The third line\n\
             cues: parse_srt(SRT),
         };
         assert_eq!(file.file_name("movie"), "movie.pt-BR.srt");
+    }
+
+    #[test]
+    fn every_container_names_the_caption_codec_it_wants() {
+        assert_eq!(container_codec("mp4"), "mov_text");
+        assert_eq!(container_codec("m4a"), "mov_text");
+        assert_eq!(container_codec("mkv"), "S_TEXT/UTF8");
+        assert_eq!(container_codec("webm"), "S_TEXT/UTF8");
+        assert_eq!(container_codec("ts"), TEXT_AS_IS);
+        assert_eq!(
+            container_codec("something-nobody-knows"),
+            TEXT_AS_IS,
+            "an unknown container keeps the text as it is"
+        );
+    }
+
+    #[test]
+    fn a_webvtt_rendition_is_written_as_subrip_for_an_mp4() {
+        let rendered = render_for_container(VTT, SubtitleFormat::Vtt, "mp4");
+        assert!(!rendered.starts_with("WEBVTT"));
+        assert_eq!(parse_srt(&rendered), parse_vtt(VTT));
+        assert_eq!(container_codec("mp4"), "mov_text");
+    }
+
+    #[test]
+    fn a_manifest_caption_row_says_its_language_and_its_default() {
+        let rendition = SubtitleRendition {
+            id: "s0".to_string(),
+            name: "English".to_string(),
+            language: Some("en".to_string()),
+            url: "https://cdn.example.org/subs/en.vtt".to_string(),
+            container: "vtt".to_string(),
+            is_default: true,
+        };
+        assert_eq!(rendition.row_id(), "s0-en-default");
+        assert_eq!(rendition.row_label(), "English (en, default)");
+
+        let format = rendition.format();
+        assert_eq!(format.kind, MediaKind::Subtitle);
+        assert_eq!(format.id, "s0-en-default");
+        assert_eq!(format.container, "vtt");
+    }
+
+    #[test]
+    fn the_caption_rows_are_added_to_the_manifest() {
+        let mut manifest = Manifest {
+            title: String::new(),
+            duration: None,
+            formats: Vec::new(),
+            pairs: Vec::new(),
+            container_hint: Some("hls".to_string()),
+            subtitles: Vec::new(),
+        };
+        add_formats(
+            &mut manifest,
+            &[SubtitleRendition {
+                id: "s0".to_string(),
+                name: "English".to_string(),
+                language: Some("en".to_string()),
+                url: "https://cdn.example.org/subs/en.vtt".to_string(),
+                container: "vtt".to_string(),
+                is_default: false,
+            }],
+        );
+        assert_eq!(manifest.formats.len(), 1);
+        assert_eq!(manifest.formats[0].kind, MediaKind::Subtitle);
+    }
+
+    #[test]
+    fn the_caption_format_is_read_from_the_address() {
+        assert_eq!(container_of("https://x.example/a.vtt"), "vtt");
+        assert_eq!(container_of("https://x.example/a.srt"), "srt");
+        assert_eq!(container_of("https://x.example/a.ttml"), "ttml");
+        assert_eq!(container_of("https://x.example/a"), "vtt");
     }
 }

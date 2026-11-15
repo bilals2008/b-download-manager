@@ -5,8 +5,10 @@ import App from "./App";
 import { DownloadCompleteWindow } from "./components/windows/download-complete-window";
 import { GrabberWindow } from "./components/windows/grabber-window";
 import { VideoPanel } from "./components/windows/video/video-panel";
+import { TorrentWindow } from "./components/windows/torrent/torrent-window";
 import { DownloadProgressWindow } from "./components/windows/progress/download-progress-window";
 import { startAppearanceSync } from "./lib/appearance";
+import { applyLanguage } from "./i18n";
 import { DownloadProvider } from "./state/download-store";
 import type { DownloadInfo } from "./types";
 import "./index.css";
@@ -16,6 +18,7 @@ import "./index.css";
 // call makes this window follow changes made in the settings window, which is
 // what keeps a progress window in the theme it was opened beside.
 startAppearanceSync();
+applyLanguage();
 
 // The backend opens its extra windows with an initialization script, so the
 // page knows what it is before it renders: the completion window gets a
@@ -31,11 +34,13 @@ const grabber = (window as Window & { __BDM_GRABBER__?: boolean })
   .__BDM_GRABBER__;
 const video = (window as Window & { __BDM_VIDEO__?: { job: number } })
   .__BDM_VIDEO__;
+const torrent = (window as Window & { __BDM_TORRENT__?: { id: string } })
+  .__BDM_TORRENT__;
 
 // The small windows round their own corners. The page behind them has to
 // be the same surface, or the curve shows a sliver of the app canvas outside
 // it. The token is overridden here, before the first paint.
-if (progress || completed || grabber || video) {
+if (progress || completed || grabber || video || torrent) {
   document.documentElement.style.setProperty(
     "--background",
     "var(--chrome-popup)",
@@ -52,6 +57,8 @@ createRoot(document.getElementById("root")!).render(
       <GrabberWindow />
     ) : video ? (
       <VideoPanel initialJob={video.job} />
+    ) : torrent ? (
+      <TorrentWindow />
     ) : (
       <DownloadProvider>
         <App />

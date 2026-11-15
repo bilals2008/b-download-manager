@@ -496,6 +496,7 @@ pub async fn grabber_download(
                 // A grabber has no dialog to choose a folder, so the folder
                 // its category saves to decides where the file lands.
                 use_category_folder: true,
+            drive_export: None,
                 description: None,
                 // A grabber has no dialog to ask about a taken name, so it
                 // never replaces a file: the next free name is used.

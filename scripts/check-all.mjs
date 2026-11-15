@@ -41,6 +41,7 @@ const CHECKS = [
   "check-grabber",
   "check-extension",
   "check-whats-new",
+  "check-i18n",
   "check-release-integrity",
 ];
 

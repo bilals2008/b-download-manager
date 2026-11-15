@@ -1,5 +1,7 @@
 # Server location: country and RTT
 
+> **Nov 2026:** implemented (country code and RTT in the status tab). See REMAINING-FEATURES.md for the current proof.
+
 **Wave 2 · Status:** ✅ shipped (country code and RTT in the status tab; no probe of a loopback or local host)
 
 ## Goal

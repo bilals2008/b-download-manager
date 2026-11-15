@@ -12,7 +12,9 @@
 
 pub mod audio;
 pub mod dash;
+pub mod drm;
 pub mod download;
+pub mod gallery;
 pub mod hls;
 pub mod quality;
 pub mod subtitles;
@@ -32,6 +34,9 @@ use serde::{Deserialize, Serialize};
 pub enum MediaKind {
     Video,
     Audio,
+    /// A caption track, offered on its own row and muxed into the container
+    /// without touching the picture.
+    Subtitle,
     /// Picture and sound in the same stream, as an old HLS variant or a plain
     /// progressive file.
     Muxed,
@@ -127,6 +132,11 @@ pub struct Manifest {
     /// needs it to fetch the right kind of segment list later.
     #[serde(default)]
     pub container_hint: Option<String>,
+    /// The caption renditions the page offered, when it offered any. Kept in
+    /// the manifest (not only as rows) because the download path needs the
+    /// address of the caption track it was asked for.
+    #[serde(default)]
+    pub subtitles: Vec<crate::media::subtitles::SubtitleRendition>,
 }
 
 impl Manifest {
@@ -213,17 +223,9 @@ pub const MAX_MANIFEST_BYTES: u64 = 2 * 1024 * 1024;
 /// sample entries. Their presence means the bytes are encrypted, so the media
 /// path refuses the track with the same class of sentence as every other DRM
 /// case — but naming what was found. Nothing here decrypts or inspects a
-/// licence.
+/// licence. The markers themselves live in [`drm`].
 pub fn protection_in(bytes: &[u8]) -> Option<&'static str> {
-    let mut sample_entry = false;
-    for window in bytes.windows(4) {
-        match window {
-            b"pssh" => return Some("MPEG Common Encryption"),
-            b"encv" | b"enca" => sample_entry = true,
-            _ => {}
-        }
-    }
-    sample_entry.then_some("an encrypted sample entry")
+    drm::in_container(bytes)
 }
 
 /// Whether an init segment carries a protection box.

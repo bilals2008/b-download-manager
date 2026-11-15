@@ -1,5 +1,7 @@
 # Splitting the files over the size limit
 
+> **Nov 2026:** not pursued this pass (three files remain over the limit). See REMAINING-FEATURES.md for the current proof.
+
 **Wave 1 · Status:** 🔧 22 files over 800 lines
 
 ## Goal

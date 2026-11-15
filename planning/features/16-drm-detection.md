@@ -1,5 +1,7 @@
 # DRM detection
 
+> **Nov 2026:** implemented (one marker module; refused with a sentence; never decrypted). See REMAINING-FEATURES.md for the current proof.
+
 **Wave 4 · Status:** 🔧 only a content-type refusal in `video/capture.rs`
 
 ## Goal

@@ -18,6 +18,7 @@ import { UpdateNotice } from "@/components/updates/update-notice";
 import { Workspace } from "@/components/workspace/workspace";
 import { WhatsNewDialog } from "@/components/whats-new/whats-new-dialog";
 import { useWhatsNew } from "@/components/whats-new/use-whats-new";
+import { setLanguage } from "@/i18n";
 import { APP_HOME_PAGE, APP_NAME, APP_TAGLINE } from "@/lib/brand";
 import { describeError, isDesktop } from "@/lib/errors";
 import { applyFont } from "@/lib/fonts";
@@ -31,20 +32,6 @@ import {
   openPath,
   openUrl,
   quitApp,
-  pushCategoryRules,
-  setBrowserConnections,
-  setBrowserFolder,
-  setBrowserPolicy,
-  setClipboardCapture,
-  setCloseToTray,
-  setLaunchOnStartup,
-  setMaxConnections,
-  setMinimizeToTray,
-  setProxy,
-  setShowCompleteDialog,
-  setShowProgressOnStart,
-  setShowVideoWindowOnStart,
-  setSpeedLimit,
   setTrayDarkMode,
   setTrayHidden,
   setUrlProtocols,
@@ -55,7 +42,6 @@ import {
   loadToolbarSize,
   saveSettings,
   saveToolbarSize,
-  syncEngineSettings,
   type ToolbarSize,
 } from "@/lib/settings";
 import { shareApp } from "@/lib/share";
@@ -86,6 +72,7 @@ import {
 } from "@/lib/toolbars";
 import { runCheck, type UpdateFound } from "@/lib/updates";
 import { useDownloads } from "@/state/download-store";
+import { useEngineSync } from "@/state/use-engine-sync";
 
 export default function App() {
   const downloads = useDownloads();
@@ -211,6 +198,8 @@ export default function App() {
     "cycle-sections-back": () => cycleSectionFocus(-1),
   });
 
+  useEngineSync();
+
   /** Show the folder new downloads land in, the way Explorer would open it. */
   function openDownloadsFolder() {
     if (!isDesktop()) {
@@ -220,87 +209,6 @@ export default function App() {
       .then((folder) => openPath(folder))
       .catch((failure: unknown) => downloads.reportError(describeError(failure)));
   }
-
-  // The settings the engine owns come back from its own file when the app
-  // starts, so a proxy or a speed limit that was set yesterday is still in
-  // force today; the pushes below hand it the webview's copy, which repairs
-  // the file after an upgrade. The file wins after that.
-  useEffect(() => {
-    void (async () => {
-      let settings = loadSettings();
-      try {
-        const synced = await syncEngineSettings();
-        // No file yet (a first run or an upgrade): the webview's copy stays
-        // the seed and creates the file through the pushes.
-        if (synced) {
-          settings = synced;
-        }
-      } catch {
-        // The engine is not answering; the copy below is what this window
-        // has always read.
-      }
-      void setProxy(settings.proxyUrl).catch(() => {
-      // The engine is not there yet; the settings window can set it later.
-    });
-    void setSpeedLimit(
-      settings.speedLimitEnabled ? settings.speedLimitBytes : 0,
-    ).catch(() => {
-      // As above.
-    });
-    void setMaxConnections(settings.maxConnections).catch(() => {
-      // As above.
-    });
-    void setMinimizeToTray(settings.minimizeToTray).catch(() => {
-      // As above.
-    });
-    void setCloseToTray(settings.closeToTray).catch(() => {
-      // As above.
-    });
-    void setShowCompleteDialog(settings.showCompleteDialog).catch(() => {
-      // As above.
-    });
-    void setBrowserFolder(settings.defaultFolder).catch(() => {
-      // As above; the browser hand-over falls back to the Downloads folder.
-    });
-    // The folder each category saves to is pushed before anything can be
-    // added — including from the browser extension. The folder for the bytes
-    // of an unfinished download belongs to the application, not to the reader.
-    void pushCategoryRules().catch(() => {
-      // As above; the engine keeps the folder it started with.
-    });
-    void setBrowserConnections(settings.defaultConnections).catch(() => {
-      // As above; a hand-over falls back to the engine default.
-    });
-    void setShowProgressOnStart(settings.showProgressOnStart).catch(() => {
-      // As above.
-    });
-    void setShowVideoWindowOnStart(settings.showVideoWindowOnStart).catch(() => {
-      // As above.
-    });
-    void setClipboardCapture(settings.clipboardCapture).catch(() => {
-      // As above.
-    });
-    void setLaunchOnStartup(settings.launchOnStartup)
-      .then((actual) => {
-        // The system may have removed the entry or refused it. Save what it
-        // reports, so the switch opens on the truth rather than on the request.
-        if (actual !== settings.launchOnStartup) {
-          saveSettings({ ...loadSettings(), launchOnStartup: actual });
-        }
-      })
-      .catch(() => {
-        // The switch shows its own failure the next time it is changed.
-      });
-    void setBrowserPolicy({
-      capture: settings.browserCapture,
-      ask: settings.captureAsk,
-      types: settings.captureTypes,
-      skipSites: settings.skipSites,
-    }).catch(() => {
-      // The extension falls back to its own rules when the bridge is closed.
-    });
-    })();
-  }, []);
 
   // Toolbar packs live in a folder beside the application's data. They are
   // read once at start; opening the View menu's "Look for new toolbars" reads
@@ -612,6 +520,19 @@ export default function App() {
   function handleCommand(command: ShellCommand) {
     if (command.startsWith("font:")) {
       chooseFont(command.slice("font:".length));
+      return;
+    }
+
+    if (command.startsWith("language:")) {
+      const language = command.slice("language:".length);
+      if (
+        language === "en" ||
+        language === "fr" ||
+        language === "de" ||
+        language === "ar"
+      ) {
+        setLanguage(language);
+      }
       return;
     }
 

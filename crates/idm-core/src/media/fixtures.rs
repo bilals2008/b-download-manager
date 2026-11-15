@@ -4,11 +4,14 @@
 //! test can read them without a fixture folder on disk and without a network.
 
 pub const HLS_MASTER: &str = include_str!("fixtures/hls/master.m3u8");
+pub const HLS_MASTER_SUBTITLES: &str = include_str!("fixtures/hls/master-subtitles.m3u8");
 pub const HLS_MEDIA: &str = include_str!("fixtures/hls/media.m3u8");
 pub const HLS_BAD: &str = include_str!("fixtures/hls/bad.m3u8");
 pub const HLS_ENCRYPTED: &str = include_str!("fixtures/hls/encrypted.m3u8");
 pub const DASH_MANIFEST: &str = include_str!("fixtures/dash/manifest.mpd");
 pub const DASH_BAD: &str = include_str!("fixtures/dash/bad.mpd");
+pub const DASH_PROTECTED: &str = include_str!("fixtures/dash/protected.mpd");
+pub const DASH_SUBTITLES: &str = include_str!("fixtures/dash/subtitles.mpd");
 
 /// The bytes of a segment, small enough to compare in a test.
 pub fn segment(tag: &str) -> Vec<u8> {

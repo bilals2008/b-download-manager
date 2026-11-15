@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { open as pickFile } from "@tauri-apps/plugin-dialog";
+
 import { CloseGlyph, DownloadGlyph } from "@/components/icons/ui-icons";
 import { DialogAction } from "@/components/ui/dialog-action";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip } from "@/components/ui/tooltip";
+import { ListBox } from "@/components/ui/listbox";
 import { FormatList } from "@/components/windows/video/format-list";
 import { HelperOffer } from "@/components/windows/video/helper-offer";
 import { useMediaJob } from "@/components/windows/video/use-media-job";
@@ -35,6 +38,11 @@ import { closeWindow, showWindowWhenPainted } from "@/lib/window";
 export function VideoPanel({ initialJob }: { initialJob: number }) {
   const { view, failure, refresh } = useMediaJob(initialJob);
   const [selected, setSelected] = useState<string | null>(null);
+  const [subtitle, setSubtitle] = useState<string | null>(null);
+  const [subtitleFile, setSubtitleFile] = useState<string | null>(null);
+  const [audioFormat, setAudioFormat] = useState<"source" | "mp3" | "opus" | "flac">(
+    "source",
+  );
   const [busy, setBusy] = useState(false);
   const [consentBusy, setConsentBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -79,6 +87,9 @@ export function VideoPanel({ initialJob }: { initialJob: number }) {
       selectedFor.current = view.job;
       setSelected(initialQuality(view));
       setActionError(null);
+      setSubtitle(view.subtitles.find((s) => s.isDefault)?.id ?? null);
+      setSubtitleFile(null);
+      setAudioFormat("source");
       // A newer video in the same window gets its own chance to set the
       // helpers up.
       setOfferDismissed(false);
@@ -95,6 +106,22 @@ export function VideoPanel({ initialJob }: { initialJob: number }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  async function pickSubtitleFile() {
+    const picked = await pickFile({
+      multiple: false,
+      directory: false,
+      filters: [{ name: "Subtitles", extensions: ["vtt", "srt"] }],
+    });
+    if (typeof picked === "string" && picked) {
+      setSubtitleFile(picked);
+    }
+  }
+
+  const subtitleFileName = subtitleFile
+    ? subtitleFile.split(/[/\\]/).pop() ?? subtitleFile
+    : null;
+  const effectiveSubtitle = subtitleFile ? "" : (subtitle ?? "");
 
   async function start(id?: string) {
     const target = id || selected;
@@ -116,6 +143,9 @@ export function VideoPanel({ initialJob }: { initialJob: number }) {
       await mediaDownload(view.job, {
         video: row.id,
         audio: row.audio ?? null,
+        subtitle: effectiveSubtitle || null,
+        subtitleFile: subtitleFile ?? null,
+        audioFormat,
         // The chosen quality belongs in the name, so two files of the same
         // video do not replace each other.
         name: `${view.title || "video"} ${row.label}`,
@@ -326,6 +356,76 @@ export function VideoPanel({ initialJob }: { initialJob: number }) {
               disabled={busy || view.downloading || view.done}
               autoFocus
             />
+            <div className="flex flex-col gap-1.5 pt-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-chrome-micro text-chrome-muted">
+                  Captions
+                </span>
+                <div className="flex shrink-0 items-center gap-2">
+                  {subtitleFile ? (
+                    <>
+                      <span className="max-w-40 truncate font-mono text-chrome-micro text-chrome-menu-text">
+                        {subtitleFileName}
+                      </span>
+                      <button
+                        type="button"
+                        className="text-chrome-micro text-chrome-muted underline"
+                        onClick={() => setSubtitleFile(null)}
+                      >
+                        Clear
+                      </button>
+                    </>
+                  ) : (
+                    <ListBox
+                      label="Captions"
+                      options={[
+                        { value: "", label: "No captions" },
+                        ...(view.subtitles.map((s) => ({
+                          value: s.id,
+                          label: s.name,
+                        })) ?? []),
+                      ]}
+                      value={effectiveSubtitle}
+                      onChange={setSubtitle}
+                      disabled={busy || view.downloading || view.done}
+                    />
+                  )}
+                  {!subtitleFile ? (
+                    <button
+                      type="button"
+                      className="shrink-0 text-chrome-micro text-chrome-muted underline disabled:cursor-default disabled:opacity-45"
+                      disabled={busy || view.downloading || view.done}
+                      onClick={() => void pickSubtitleFile()}
+                    >
+                      From a file…
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-chrome-micro text-chrome-muted">
+                  Save as
+                </span>
+                <ListBox
+                  label="Save as"
+                  options={[
+                    { value: "source", label: "Original track" },
+                    { value: "mp3", label: "MP3" },
+                    { value: "opus", label: "Opus" },
+                    { value: "flac", label: "FLAC" },
+                  ]}
+                  value={audioFormat}
+                  onChange={(value) => setAudioFormat(value as typeof audioFormat)}
+                  disabled={busy || view.downloading || view.done}
+                />
+              </div>
+              {audioFormat !== "source" ? (
+                <p className="text-chrome-micro text-chrome-muted">
+                  The sound is written as {audioFormat.toUpperCase()}; the
+                  picture is not saved.
+                </p>
+              ) : null}
+            </div>
             {actionError || (view.error && !view.downloading) ? (
               <p role="alert" className="pt-2 text-chrome-micro break-words text-chrome-error">
                 {actionError || view.error}

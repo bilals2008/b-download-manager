@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { AuthorAvatar } from "@/components/shell/author-avatar";
 import { AppMark } from "@/components/shell/app-mark";
@@ -15,6 +15,7 @@ import { UpdateProgressBody } from "@/components/updates/update-meter";
 import { useAppVersion } from "@/lib/app-version";
 import { APP_NAME, APP_TAGLINE } from "@/lib/brand";
 import { isDesktop } from "@/lib/errors";
+import { lastFreezeReport, type FreezeReport } from "@/lib/ipc-crash";
 import type { Settings } from "@/lib/settings";
 import {
   formatCheckTime,
@@ -55,8 +56,30 @@ export function AboutSettings({
 }: AboutSettingsProps) {
   const version = useAppVersion();
   const [check, setCheck] = useState<Check>({ kind: "idle" });
+  const [freeze, setFreeze] = useState<FreezeReport | null>(null);
   const run = useUpdateRun();
   const applying = run.phase !== "idle";
+
+  // A window that stopped answering is reported by a process outside the
+  // application, so the report is only here on the next start.
+  useEffect(() => {
+    if (!isDesktop()) {
+      return;
+    }
+    let active = true;
+    void lastFreezeReport()
+      .then((report) => {
+        if (active) {
+          setFreeze(report);
+        }
+      })
+      .catch(() => {
+        // No report is not a problem to report.
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   function askAgain() {
     setCheck({ kind: "checking" });
@@ -148,6 +171,26 @@ export function AboutSettings({
           )}
         </div>
       </Section>
+      {freeze ? (
+        <Section title="Problems">
+          <SettingRow
+            settingId="setting-freeze-report"
+            label="The window stopped answering"
+          >
+            <span className="text-chrome-micro text-chrome-muted">
+              {formatCheckTime(freeze.writtenAt * 1000)}
+            </span>
+          </SettingRow>
+          <div className="max-h-40 overflow-y-auto scrollbar-thin rounded-chrome bg-chrome-menu-hover p-2">
+            <pre className="whitespace-pre-wrap font-mono text-chrome-micro text-chrome-menu-text">
+              {freeze.text}
+            </pre>
+          </div>
+          <p className="pt-2 text-chrome-micro text-chrome-muted">
+            The report and the stacks of the stopped program are in {freeze.folder}.
+          </p>
+        </Section>
+      ) : null}
     </SettingsPage>
   );
 }

@@ -14,6 +14,7 @@ use std::time::{Duration, Instant};
 
 pub mod hang;
 pub mod monitor;
+pub mod sample;
 
 pub use monitor::{FLAG, Monitor};
 
@@ -102,14 +103,43 @@ pub struct Report {
     pub version: String,
     /// The last lines the application wrote to its log.
     pub log_tail: Vec<String>,
+    /// The threads of the process, when it was sampled.
+    pub threads: Vec<String>,
+    /// The file the stacks were written to, when they could be written.
+    pub dump: Option<PathBuf>,
 }
 
 impl Report {
+    /// A report with nothing extra in it.
+    pub fn new(finding: Finding, version: String) -> Self {
+        Self {
+            finding,
+            version,
+            log_tail: Vec::new(),
+            threads: Vec::new(),
+            dump: None,
+        }
+    }
+
     /// The report as the text that is written to the file.
     pub fn text(&self) -> String {
         let mut text = format!("# B Download Manager crash report\n\n");
         text.push_str(&format!("Version: {}\n", self.version));
         text.push_str(&format!("What happened: {}\n\n", describe(&self.finding)));
+        if let Some(dump) = &self.dump {
+            text.push_str(&format!(
+                "The stacks of the stopped program are in {}.\n\n",
+                dump.file_name().map(|name| name.to_string_lossy().to_string()).unwrap_or_default()
+            ));
+        }
+        if !self.threads.is_empty() {
+            text.push_str("## The threads of the program\n\n```\n");
+            for line in &self.threads {
+                text.push_str(line);
+                text.push('\n');
+            }
+            text.push_str("```\n\n");
+        }
         if !self.log_tail.is_empty() {
             text.push_str("## The last lines of the log\n\n```\n");
             for line in &self.log_tail {
@@ -200,15 +230,30 @@ mod tests {
 
     #[test]
     fn a_report_says_what_happened() {
-        let report = Report {
-            finding: Finding::Crashed { code: -1073741819 },
-            version: "1.1.1".to_string(),
-            log_tail: vec!["12:00:00 [info] the application is starting".to_string()],
-        };
+        let mut report = Report::new(
+            Finding::Crashed { code: -1073741819 },
+            "1.1.1".to_string(),
+        );
+        report.log_tail = vec!["12:00:00 [info] the application is starting".to_string()];
         let text = report.text();
         assert!(text.contains("1.1.1"));
         assert!(text.contains("died without warning"));
         assert!(text.contains("the application is starting"));
+    }
+
+    #[test]
+    fn a_report_of_a_freeze_says_so_and_shows_the_threads() {
+        let mut report = Report::new(
+            Finding::Frozen {
+                quiet_for: Duration::from_secs(45),
+            },
+            "1.1.1".to_string(),
+        );
+        report.threads = vec!["thread    12 used 3.0s of processor time".to_string()];
+        let text = report.text();
+        assert!(text.contains("stopped answering"), "{text}");
+        assert!(text.contains("45 seconds"), "{text}");
+        assert!(text.contains("thread    12"), "{text}");
     }
 
     #[test]

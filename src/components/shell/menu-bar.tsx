@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { FONT_OPTIONS } from "@/lib/fonts";
 import { loadSettings } from "@/lib/settings";
+import { LANGUAGES, readLanguage } from "@/i18n/catalogue";
 
 import type { ShellCommand } from "./commands";
 import { buildMenus, type ToolbarMenuEntry } from "./menus";
@@ -43,9 +44,14 @@ export function MenuBar({
     for (const font of fonts) {
       fontChecks[`font:${font.value}`] = font.value === current;
     }
+    const language = readLanguage();
+    const languageChecks: Partial<Record<ShellCommand, boolean>> = {};
+    for (const entry of LANGUAGES) {
+      languageChecks[`language:${entry.code}` as ShellCommand] = language === entry.code;
+    }
     return {
       menus: buildMenus(fonts, toolbars),
-      checks: { ...menuChecks, ...fontChecks },
+      checks: { ...menuChecks, ...fontChecks, ...languageChecks },
     };
   }, [menuChecks, openIndex, toolbars]);
 

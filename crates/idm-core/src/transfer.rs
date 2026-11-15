@@ -169,6 +169,10 @@ impl Source {
             let mut builder = crate::net::client_builder(parsed.host_str(), proxy, None)?
                 .user_agent(http::USER_AGENT)
                 .redirect(reqwest::redirect::Policy::limited(10))
+                // A confirmation page sets a cookie and the download of the
+                // file itself carries it; the jar stays in the client, so it
+                // travels with the range requests of this download too.
+                .cookie_store(true)
                 // A server that stops answering must not hold a connection
                 // slot for ever. The slot belongs to the whole application,
                 // so one dead server would hold every other download back.

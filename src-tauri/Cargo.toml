@@ -16,6 +16,9 @@ tauri-build = { version = "2", features = [] }
 idm-core = { path = "../crates/idm-core" }
 idm-archive = { path = "../crates/idm-archive" }
 idm-crash = { path = "../crates/idm-crash" }
+idm-remote = { path = "../crates/idm-remote" }
+idm-torrent = { path = "../crates/idm-torrent" }
+idm-debrid = { path = "../crates/idm-debrid" }
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }

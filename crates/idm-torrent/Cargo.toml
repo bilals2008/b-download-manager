@@ -1,0 +1,22 @@
+[package]
+name = "idm-torrent"
+version = "0.1.0"
+description = "BitTorrent support for the download engine"
+edition = "2021"
+rust-version = "1.88"
+
+[lib]
+name = "idm_torrent"
+path = "src/lib.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["rt", "macros", "net", "io-util", "time", "fs", "sync"] }
+# The tracker client only ever makes a plain GET, so the smallest build of the
+# client is enough.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+# The info hash and the piece hashes are SHA-1.
+sha1 = { version = "0.11", default-features = false }
+# The same guard the archive code uses, so a torrent name cannot leave the
+# folder the files go into.
+idm-archive = { path = "../idm-archive" }

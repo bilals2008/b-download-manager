@@ -3,12 +3,17 @@ mod bridge;
 pub mod crash;
 mod clipboard;
 mod checksum;
+mod commands;
 mod complete;
 mod conflict;
+mod debrid;
 mod dest;
+mod drive;
+mod mcp;
 mod dns;
 mod extract;
 mod grabber;
+mod gallery;
 mod lifecycle;
 mod migrate;
 mod network;
@@ -16,6 +21,9 @@ mod prefs;
 mod proxy;
 mod progress;
 mod queue;
+mod remote;
+mod schedule;
+mod torrent;
 mod settings_store;
 mod share;
 mod shower;
@@ -27,1141 +35,18 @@ mod updater;
 mod video;
 mod window_style;
 
-use std::path::PathBuf;
+use tauri::{Manager, WindowEvent};
 
-use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
-
-use idm_core::downloader::{DownloadInfo, Status};
 use idm_core::session::Index;
-use idm_core::transfer::Source;
-use prefs::DesktopPreferences;
-use state::{AppState, BrowserPolicy};
 
-use actions::UPDATE_EVENT;
-
-/// Everything the add dialog sends to start a download.
-///
-/// One object rather than a dozen positional arguments: the destination
-/// question is the newest field, and the call keeps a name for each.
-#[derive(serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct StartRequest {
-    url: String,
-    dest: String,
-    connections: Option<u32>,
-    referer: Option<String>,
-    queue: Option<bool>,
-    category: Option<String>,
-    /// Put the file in the folder its category saves to.
-    use_category_folder: Option<bool>,
-    description: Option<String>,
-    /// What the File Exists dialog answered, when it was asked.
-    conflict: Option<conflict::Choice>,
-}
-
-/// Runs off the main thread on purpose: `show_progress_if_requested` hands the
-/// window to the event loop, and building a webview inside the IPC handler the
-/// main thread is already in would never finish.
-#[tauri::command(async)]
-fn start_download(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    request: StartRequest,
-) -> Result<conflict::Started, conflict::Refusal> {
-    let started = actions::start(
-        &app,
-        &state,
-        request.url,
-        PathBuf::from(request.dest.trim()),
-        actions::StartOptions {
-            connections: request.connections,
-            referer: request.referer,
-            queue: request.queue.unwrap_or(false),
-            category: request.category,
-            use_category_folder: request.use_category_folder.unwrap_or(false),
-            description: request.description,
-            conflict: request.conflict.unwrap_or_default(),
-        },
-    )?;
-    show_progress_if_requested(&app, &state, &started);
-    Ok(started)
-}
-
-/// Open the progress window of a start when the reader asked for it.
-///
-/// A skipped start has no window: there is no download behind it. The window
-/// is built on the main thread, the one the window toolkit runs on, so this
-/// must be called off that thread: there `run_on_main_thread` runs the build
-/// inline, inside the webview's IPC handler, and the window never finishes
-/// being created.
-pub(crate) fn show_progress_if_requested(
-    app: &AppHandle,
-    state: &AppState,
-    started: &conflict::Started,
-) {
-    if !state.show_progress_on_start() || started.skipped {
-        return;
-    }
-    let Some(id) = started.id else {
-        return;
-    };
-    let Some(download) = state.get(id) else {
-        return;
-    };
-    let info = download.info();
-    shower::build(app, move |app| progress::show(app, &info, false));
-}
-
-#[tauri::command]
-fn list_downloads(state: State<'_, AppState>) -> Vec<DownloadInfo> {
-    state.infos()
-}
-
-#[tauri::command]
-fn pause_download(app: AppHandle, state: State<'_, AppState>, id: u64) -> Result<(), String> {
-    actions::pause(&app, &state, id)
-}
-
-#[tauri::command]
-fn resume_download(app: AppHandle, state: State<'_, AppState>, id: u64) -> Result<(), String> {
-    actions::resume(&app, &state, id, false)
-}
-
-#[tauri::command]
-fn cancel_download(app: AppHandle, state: State<'_, AppState>, id: u64) -> Result<(), String> {
-    actions::cancel(&app, &state, id)
-}
-
-/// Start a failed download again. `restart` forgets the bytes of an attempt
-/// the server cannot continue; otherwise the engine resumes from its parts.
-#[tauri::command]
-fn retry_download(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    id: u64,
-    restart: Option<bool>,
-) -> Result<(), String> {
-    actions::retry(&app, &state, id, restart.unwrap_or(false))
-}
-
-/// Start a finished or failed download again from the first byte. `conflict`
-/// is the answer to the File Exists question; the row stays as it is until
-/// that question is settled.
-/// Runs off the main thread for the same reason as `start_download`.
-#[tauri::command(async)]
-fn redownload_download(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    id: u64,
-    conflict: Option<conflict::Choice>,
-) -> Result<conflict::Started, conflict::Refusal> {
-    let started = actions::redownload(&app, &state, id, conflict.unwrap_or_default())?;
-    show_progress_if_requested(&app, &state, &started);
-    Ok(started)
-}
-
-/// Move a download that is not running to another folder, parts included.
-///
-/// The bytes of a part file travel with it, and a copy across volumes takes a
-/// while, so the command runs off the main thread.
-#[tauri::command(async)]
-async fn relocate_download(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    id: u64,
-    folder: String,
-) -> Result<(), String> {
-    actions::relocate(&app, &state, id, PathBuf::from(folder.trim())).await
-}
-
-/// Record the category and the note the properties window edited.
-#[tauri::command]
-fn set_download_meta(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    id: u64,
-    category: Option<String>,
-    description: Option<String>,
-) -> Result<(), String> {
-    actions::set_meta(&app, &state, id, category, description)
-}
-
-/// Point a download at another file, moving the file or its parts with it.
-///
-/// `conflict` is the answer to the File Exists question; a taken name is not
-/// replaced without one.
-/// Runs off the main thread: the file can be copied across volumes, and a
-/// copy of a large file takes a while.
-#[tauri::command(async)]
-async fn set_download_destination(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    id: u64,
-    dest: String,
-    conflict: Option<conflict::Choice>,
-) -> Result<String, conflict::Refusal> {
-    actions::set_destination(
-        &app,
-        &state,
-        id,
-        PathBuf::from(dest.trim()),
-        conflict.unwrap_or_default(),
-    )
-    .await
-}
-
-/// Park a download in the queue, keeping the bytes it already received.
-#[tauri::command]
-fn queue_download(app: AppHandle, state: State<'_, AppState>, id: u64) -> Result<(), String> {
-    actions::queue(&app, &state, id)
-}
-
-/// Take a download out of the queue and leave it paused.
-#[tauri::command]
-fn dequeue_download(app: AppHandle, state: State<'_, AppState>, id: u64) -> Result<(), String> {
-    actions::dequeue(&app, &state, id)
-}
-
-/// Activate the queue and start queued downloads in order, up to the
-/// simultaneous limit.
-#[tauri::command]
-fn start_queue(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
-    actions::start_queue(&app, &state)
-}
-
-/// Stop the queue and pause every download it has running.
-#[tauri::command]
-fn stop_queue(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
-    actions::stop_queue(&app, &state)
-}
-
-/// Move a queued download to a new position (0 = first).
-#[tauri::command]
-fn set_queue_position(state: State<'_, AppState>, id: u64, position: u32) -> Result<(), String> {
-    actions::set_queue_position(&state, id, position)
-}
-
-/// Set the maximum number of simultaneous downloads the queue may start.
-#[tauri::command]
-fn set_max_simultaneous(state: State<'_, AppState>, max: u32) -> u32 {
-    actions::set_max_simultaneous(&state, max)
-}
-
-/// The queue's current state: order, running set, limit, active flag.
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct QueueState {
-    order: Vec<u64>,
-    running: Vec<u64>,
-    max_simultaneous: u32,
-    active: bool,
-}
-
-/// Return the queue's current state for the UI.
-#[tauri::command]
-fn get_queue(state: State<'_, AppState>) -> QueueState {
-    let snapshot = state.queue().snapshot();
-    QueueState {
-        order: snapshot.order,
-        running: snapshot.running,
-        max_simultaneous: snapshot.max_simultaneous,
-        active: snapshot.active,
-    }
-}
-
-/// Delete the file of a finished download, then forget the row.
-#[tauri::command]
-fn delete_download_file(app: AppHandle, state: State<'_, AppState>, id: u64) -> Result<(), String> {
-    actions::delete_file(&app, &state, id)
-}
-
-/// Open the progress window of one download, or bring it back to the front.
-///
-/// The window is built on the main thread, the one the window toolkit runs
-/// on, and the download is handed to it before its first render.
-#[tauri::command]
-async fn open_progress_window(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    id: u64,
-) -> Result<(), String> {
-    let download = state.get(id).ok_or("unknown download")?;
-    let info = download.info();
-    let handle = app.clone();
-    app.run_on_main_thread(move || progress::show(&handle, &info, true))
-        .map_err(|error| error.to_string())
-}
-
-/// Fold the connection details of the progress window away, or open them.
-///
-/// The window sizes itself from this, so the page does not have to know the
-/// height of its own chrome.
-#[tauri::command]
-fn set_progress_details(window: tauri::WebviewWindow, open: bool, animated: bool) {
-    progress::set_details(&window, open, animated);
-}
-
-#[tauri::command]
-fn remove_download(app: AppHandle, state: State<'_, AppState>, id: u64) -> Result<(), String> {
-    // The download must stop before it leaves the list, or it would keep
-    // writing to the disk with nothing to show for it.
-    if let Some(download) = state.get(id) {
-        download.cancel();
-        // The parts and the manifest are the resume state of a row that will
-        // not exist any more. Left behind, they sit in the download folder as
-        // files nothing in the list explains.
-        download.forget_progress();
-    }
-    state.remove(id);
-    state.save_index();
-    // The progress window of a row that is gone has nothing to show.
-    progress::close(&app, id);
-    complete::close(&app, id);
-    tray::refresh(&app);
-    Ok(())
-}
-
-/// Move a download to another category. The file and its folder stay put.
-#[tauri::command]
-fn set_download_category(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    id: u64,
-    category: Option<String>,
-) -> Result<(), String> {
-    actions::set_category(&app, &state, id, category)
-}
-
-/// Cap the bandwidth of the whole application. Zero means no cap.
-#[tauri::command]
-fn set_speed_limit(state: State<'_, AppState>, bytes_per_second: u64) -> u64 {
-    state.modify_settings(|settings| {
-        settings.speed_limit_enabled = bytes_per_second > 0;
-        settings.speed_limit_bytes = bytes_per_second;
-    });
-    state.limits().global_speed.rate()
-}
-
-/// Cap the bandwidth of one download. Zero means no cap.
-///
-/// The limiter reads its rate on every wait, so a new cap reaches the
-/// connections of the download as they stream, including one that is already
-/// waiting for its next bytes.
-#[tauri::command]
-fn set_download_speed_limit(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    id: u64,
-    bytes_per_second: u64,
-) -> Result<u64, String> {
-    let download = state.get(id).ok_or("unknown download")?;
-    // A finished file has no connection left to pace, and the update that
-    // follows would open its completion window again.
-    if download.status() == Status::Completed {
-        return Err("this download has already finished".to_string());
-    }
-    // One gigabyte a second is far above any link this app will see, and the
-    // cap keeps a bad value from being stored as a meaningless one.
-    download.set_speed_limit(bytes_per_second.min(1024 * 1024 * 1024));
-    let rate = download.speed_limit();
-    let _ = app.emit(UPDATE_EVENT, download.info());
-    state.save_index();
-    Ok(rate)
-}
-
-/// The proxy that new downloads go through. `None` means no proxy.
-#[tauri::command]
-fn set_proxy(state: State<'_, AppState>, url: Option<String>) -> Result<(), String> {
-    let cleaned = match url {
-        Some(value) => validate_proxy(value)?,
-        None => String::new(),
-    };
-    state.modify_settings(|settings| settings.proxy_url = cleaned.clone());
-    Ok(())
-}
-
-/// Check a proxy address before it is stored or used.
-///
-/// Only the schemes the engine can actually dial are accepted, the port has to
-/// make sense, and a username or password is refused: the preference lives in
-/// plain local storage, so it must never carry a credential. Proxy
-/// authentication is not part of this build.
-#[tauri::command]
-fn validate_proxy(url: String) -> Result<String, String> {
-    let trimmed = url.trim();
-    if trimmed.is_empty() {
-        return Ok(String::new());
-    }
-    let parsed = reqwest::Url::parse(trimmed)
-        .map_err(|_| "Use a full address, for example socks5://127.0.0.1:1080.".to_string())?;
-    let scheme = parsed.scheme();
-    if !matches!(scheme, "http" | "https" | "socks5" | "socks5h") {
-        return Err(format!(
-            "{scheme} is not a proxy this build can use. Use http, https, socks5 or socks5h."
-        ));
-    }
-    if parsed.host_str().is_none() {
-        return Err("The proxy address has no host.".to_string());
-    }
-    if !parsed.username().is_empty() || parsed.password().is_some() {
-        return Err(
-            "Proxy authentication is not supported. Remove the username and password.".to_string(),
-        );
-    }
-    // The engine builds its client from this exact string, so refuse what it
-    // would refuse instead of storing an address that fails at the first
-    // download.
-    Source::parse("https://example.com/", Some(trimmed), None)
-        .map_err(|error| format!("The proxy address is not usable: {error}"))?;
-    Ok(trimmed.to_string())
-}
-
-/// The number of connections one site may use.
-#[tauri::command]
-fn set_site_connections(state: State<'_, AppState>, host: String, connections: u32) {
-    state.limits().sites.set(&host, connections);
-}
-
-/// The number of connections one site may use, when there is an override.
-#[tauri::command]
-fn site_connections(state: State<'_, AppState>, host: String) -> Option<u32> {
-    state.limits().sites.get(&host)
-}
-
-/// Leave the application for good, the way the Exit item of the menu does.
-///
-/// Closing the window only hides it into the tray, so the menu needs a way
-/// out. The one shutdown path pauses the running transfers and writes their
-/// resumes before the process ends.
-#[tauri::command]
-fn quit_app(app: AppHandle) {
-    lifecycle::shutdown(&app);
-}
-
-/// How many connections the whole application may have open at once.
-#[tauri::command]
-fn set_max_connections(state: State<'_, AppState>, max: u32) -> u32 {
-    state.modify_settings(|settings| settings.max_connections = max);
-    state.engine_settings().max_connections
-}
-
-/// The choices the tray and the close button follow.
-#[tauri::command]
-fn desktop_preferences(state: State<'_, AppState>) -> DesktopPreferences {
-    state.preferences()
-}
-
-/// Change one saved choice and write the file again.
-///
-/// The whole object goes back and forth, so two choices that belong together
-/// cannot be saved one after the other and leave the file between them.
-fn rewrite_preferences(
-    state: &AppState,
-    change: impl FnOnce(&mut DesktopPreferences),
-) -> DesktopPreferences {
-    let mut preferences = state.preferences();
-    change(&mut preferences);
-    let saved = preferences.clone();
-    state.set_preferences(preferences);
-    state.save_preferences();
-    saved
-}
-
-/// Whether the minimize button hides the window into the tray.
-#[tauri::command]
-fn set_minimize_to_tray(state: State<'_, AppState>, on: bool) -> bool {
-    rewrite_preferences(&state, |preferences| preferences.minimize_to_tray = on).minimize_to_tray
-}
-
-/// Whether closing the window keeps the application in the tray.
-#[tauri::command]
-fn set_close_to_tray(state: State<'_, AppState>, on: bool) -> bool {
-    rewrite_preferences(&state, |preferences| preferences.close_to_tray = on).close_to_tray
-}
-
-/// Take the tray icon out of the notification area, or put it back.
-///
-/// The answer is the choice as saved. Whether the icon is really there is what
-/// `desktop_preferences` says next time the window reads it; a shell that
-/// refuses an icon is written down in the log.
-#[tauri::command]
-fn set_tray_hidden(app: AppHandle, state: State<'_, AppState>, on: bool) -> bool {
-    rewrite_preferences(&state, |preferences| preferences.tray_hidden = on);
-    tray::set_visible(&app, !on);
-    on
-}
-
-/// Whether the tray icon follows the appearance of the window.
-#[tauri::command]
-fn set_tray_dark_mode(app: AppHandle, state: State<'_, AppState>, on: bool) -> bool {
-    rewrite_preferences(&state, |preferences| preferences.tray_dark_mode = on);
-    tray::repaint(&app);
-    on
-}
-
-/// Which appearance the window is drawn in, so the icon can follow it.
-///
-/// The webview owns the appearance; the tray only knows what it is told. A
-/// report of the appearance it already has repaints nothing.
-#[tauri::command]
-fn set_tray_appearance(app: AppHandle, state: State<'_, AppState>, light: bool) -> bool {
-    if state.appearance_is_light() == light {
-        return light;
-    }
-    state.set_appearance_is_light(light);
-    tray::repaint(&app);
-    light
-}
-
-/// The protocols a copied address has to start with to be offered as a
-/// download. The list comes back as it was stored, so the window can show what
-/// the backend will actually match.
-#[tauri::command]
-fn set_url_protocols(state: State<'_, AppState>, protocols: Vec<String>) -> Vec<String> {
-    rewrite_preferences(&state, |preferences| {
-        preferences.url_protocols = prefs::clean_url_protocols(&protocols);
-    })
-    .url_protocols
-}
-
-/// Whether a finished download gets its own window.
-#[tauri::command]
-fn set_show_complete_dialog(state: State<'_, AppState>, on: bool) -> bool {
-    state.modify_settings(|settings| settings.show_complete_dialog = on);
-    state.show_complete_dialog()
-}
-
-/// Whether a new download opens its progress window.
-#[tauri::command]
-fn set_show_progress_on_start(state: State<'_, AppState>, on: bool) -> bool {
-    state.modify_settings(|settings| settings.show_progress_on_start = on);
-    state.show_progress_on_start()
-}
-
-/// Whether a video download opens the quality window that follows it.
-#[tauri::command]
-fn set_show_video_window_on_start(state: State<'_, AppState>, on: bool) -> bool {
-    state.modify_settings(|settings| settings.show_video_window_on_start = on);
-    state.show_video_window_on_start()
-}
-
-/// The connections a browser hand-over gets, since it has no dialog to ask.
-#[tauri::command]
-fn set_browser_connections(state: State<'_, AppState>, count: u32) -> u32 {
-    state.modify_settings(|settings| settings.default_connections = count);
-    state.browser_connections()
-}
-
-/// Whether the clipboard is watched for download links.
-#[tauri::command]
-fn set_clipboard_capture(state: State<'_, AppState>, on: bool) -> bool {
-    state.modify_settings(|settings| settings.clipboard_capture = on);
-    state.clipboard_capture()
-}
-
-/// Register or remove the operating system's startup entry.
-#[tauri::command]
-fn set_launch_on_startup(app: AppHandle, on: bool) -> Result<bool, String> {
-    use tauri_plugin_autostart::ManagerExt;
-
-    let manager = app.autolaunch();
-    if on {
-        manager.enable()
-    } else {
-        manager.disable()
-    }
-    .map_err(|error| error.to_string())?;
-    manager.is_enabled().map_err(|error| error.to_string())
-}
-
-/// The capture rules the extension follows while this application runs.
-///
-/// The lists are cleaned here as well as in the window: this is the value the
-/// extension acts on, so it is the boundary that has to be safe.
-#[tauri::command]
-fn set_browser_policy(state: State<'_, AppState>, policy: BrowserPolicy) -> BrowserPolicy {
-    let policy = normalize_policy(policy);
-    state.modify_settings(|settings| settings.browser_policy = policy.clone());
-    policy
-}
-
-/// The appearance of the floating video download button the extension draws.
-#[tauri::command]
-fn set_video_button_settings(state: State<'_, AppState>, video_button: state::VideoButtonSettings) {
-    state.modify_settings(|settings| settings.video_button = video_button.clone());
-}
-
-/// The appearance of the floating video download button, served to the
-/// extension over the loopback bridge.
-#[tauri::command]
-fn video_button_settings(state: State<'_, AppState>) -> state::VideoButtonSettings {
-    state.video_button_settings()
-}
-
-/// Publish the appearance in force, so the browser panel uses the same palette.
-#[tauri::command]
-fn set_browser_theme(
-    state: State<'_, AppState>,
-    theme: String,
-    light: bool,
-    palette: std::collections::HashMap<String, String>,
-) {
-    state.set_browser_theme(state::BrowserTheme {
-        theme,
-        light,
-        palette,
-    });
-}
-
-/// What the window can say about the browser bridge without guessing.
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct BrowserStatus {
-    /// Whether the bridge bound its port.
-    bridge_running: bool,
-    port: u16,
-    api: u32,
-    /// The last extension request, in milliseconds since the Unix epoch.
-    /// `None` means the extension has not reached it yet.
-    last_contact_ms: Option<u64>,
-}
-
-#[tauri::command]
-fn browser_status(state: State<'_, AppState>) -> BrowserStatus {
-    BrowserStatus {
-        bridge_running: state.bridge_running(),
-        port: bridge::PORT,
-        api: bridge::API_VERSION,
-        last_contact_ms: state.last_extension_contact().map(|seconds| seconds * 1000),
-    }
-}
-
-/// Whether a folder can hold a download, and how much room is left.
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct FolderStatus {
-    /// The folder that was checked. Empty input means the system Downloads
-    /// folder, and this is the folder it resolved to.
-    path: String,
-    exists: bool,
-    writable: bool,
-    free_bytes: Option<u64>,
-    /// One sentence for the window when the folder cannot be used.
-    error: Option<String>,
-}
-
-#[tauri::command]
-fn folder_status(app: AppHandle, folder: String) -> FolderStatus {
-    let trimmed = folder.trim();
-    let path = if trimmed.is_empty() {
-        app.path()
-            .download_dir()
-            .unwrap_or_else(|_| PathBuf::from("."))
-    } else {
-        PathBuf::from(trimmed)
-    };
-    let shown = path.to_string_lossy().to_string();
-
-    if !path.exists() {
-        return FolderStatus {
-            path: shown,
-            exists: false,
-            writable: false,
-            free_bytes: None,
-            error: Some(
-                "This folder is not there yet. It is created when the first download starts."
-                    .to_string(),
-            ),
-        };
-    }
-    if !path.is_dir() {
-        return FolderStatus {
-            path: shown,
-            exists: true,
-            writable: false,
-            free_bytes: None,
-            error: Some("This path is a file, not a folder.".to_string()),
-        };
-    }
-
-    let writable = can_write(&path);
-    FolderStatus {
-        free_bytes: free_space(&path),
-        error: if writable {
-            None
-        } else {
-            Some("This folder cannot be written to. Choose another one.".to_string())
-        },
-        path: shown,
-        exists: true,
-        writable,
-    }
-}
-
-/// The log used to sit in the data folder next to the index. One rename
-/// carries the history over to the log folder the operating system assigns,
-/// and never deletes anything: if the new log already exists, the old file is
-/// left where it is.
-fn carry_log_over_from_data_dir(data: &std::path::Path, logs: &std::path::Path) {
-    if data == logs {
-        return;
-    }
-    let old = data.join("idm-clone.log");
-    if !old.is_file() {
-        return;
-    }
-    let landed = logs.join("idm-clone.log");
-    if landed.exists() {
-        return;
-    }
-    let _ = std::fs::rename(&old, &landed);
-}
-
-/// Where the log and the saved download index live.
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct AppPaths {
-    data_dir: String,
-    log_path: String,
-    /// The application's own storage for the bytes of unfinished downloads.
-    staging_dir: String,
-}
-
-#[tauri::command]
-fn app_paths(app: AppHandle, state: State<'_, AppState>) -> AppPaths {
-    let dir = app
-        .path()
-        .app_data_dir()
-        .unwrap_or_else(|_| PathBuf::from("."));
-    let log_dir = app
-        .path()
-        .app_log_dir()
-        .unwrap_or_else(|_| dir.join("logs"));
-    AppPaths {
-        log_path: log_dir.join("idm-clone.log").to_string_lossy().to_string(),
-        staging_dir: state
-            .staging()
-            .map(|staging| staging.root().to_string_lossy().to_string())
-            .unwrap_or_default(),
-        data_dir: dir.to_string_lossy().to_string(),
-    }
-}
-
-/// The longest list one policy carries, matching the window's limit.
-const MAX_RULES: usize = 64;
-
-fn normalize_policy(mut policy: BrowserPolicy) -> BrowserPolicy {
-    policy.types = clean_list(policy.types, clean_file_type);
-    policy.skip_sites = clean_list(policy.skip_sites, clean_site);
-    policy
-}
-
-fn clean_list(values: Vec<String>, clean: fn(&str) -> Option<String>) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
-    for value in values {
-        let Some(cleaned) = clean(&value) else {
-            continue;
-        };
-        if !out.contains(&cleaned) {
-            out.push(cleaned);
-        }
-        if out.len() >= MAX_RULES {
-            break;
-        }
-    }
-    out
-}
-
-fn clean_file_type(value: &str) -> Option<String> {
-    let cleaned = value
-        .trim()
-        .to_ascii_lowercase()
-        .trim_start_matches('*')
-        .trim_start_matches('.')
-        .to_string();
-    if cleaned.is_empty() || cleaned.len() > 16 {
-        return None;
-    }
-    let mut chars = cleaned.chars();
-    if !chars.next()?.is_ascii_alphanumeric() {
-        return None;
-    }
-    if !chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '_' | '-')) {
-        return None;
-    }
-    Some(cleaned)
-}
-
-/// A host out of anything the reader may have typed, without a scheme or a
-/// path. Junk becomes `None`.
-fn clean_site(value: &str) -> Option<String> {
-    let text = value.trim().trim_start_matches('*').trim_start_matches('.');
-    if text.is_empty() {
-        return None;
-    }
-    let with_scheme = if text.contains("://") {
-        text.to_string()
-    } else {
-        format!("http://{text}")
-    };
-    let url = reqwest::Url::parse(&with_scheme).ok()?;
-    let host = url.host_str()?.trim_end_matches('.').to_ascii_lowercase();
-    if host == "localhost" {
-        return Some(host);
-    }
-    let labels: Vec<&str> = host.split('.').collect();
-    if labels.len() < 2 {
-        return None;
-    }
-    let valid = labels.iter().all(|label| {
-        !label.is_empty()
-            && label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
-            && !label.starts_with('-')
-            && !label.ends_with('-')
-    });
-    valid.then_some(host)
-}
-
-/// Whether a file can be created in the folder. The test file is removed
-/// again; a folder that refuses it cannot hold a download either.
-fn can_write(folder: &std::path::Path) -> bool {
-    let stamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|elapsed| elapsed.as_nanos())
-        .unwrap_or(0);
-    let probe = folder.join(format!(".bdm-write-{}-{stamp}", std::process::id()));
-    match std::fs::File::create(&probe) {
-        Ok(_) => {
-            let _ = std::fs::remove_file(&probe);
-            true
-        }
-        Err(_) => false,
-    }
-}
-
-/// The room left on the volume of a folder, when the system can tell.
-#[cfg(target_os = "windows")]
-fn free_space(folder: &std::path::Path) -> Option<u64> {
-    use std::os::windows::ffi::OsStrExt;
-    use windows_sys::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
-
-    let wide: Vec<u16> = folder
-        .as_os_str()
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect();
-    let mut free = 0u64;
-    let mut total = 0u64;
-    let mut total_free = 0u64;
-    let ok = unsafe { GetDiskFreeSpaceExW(wide.as_ptr(), &mut free, &mut total, &mut total_free) };
-    (ok != 0).then_some(free)
-}
-
-#[cfg(not(target_os = "windows"))]
-fn free_space(_folder: &std::path::Path) -> Option<u64> {
-    None
-}
-
-/// The folder a download handed over by the browser is saved to.
-///
-/// The options window owns this preference and pushes it here, so a link
-/// caught by the extension lands where the user expects. An empty folder
-/// means the system Downloads folder.
-#[tauri::command]
-fn set_browser_folder(state: State<'_, AppState>, folder: String) -> String {
-    let trimmed = folder.trim().to_string();
-    state.modify_settings(|settings| settings.default_folder = trimmed.clone());
-    trimmed
-}
-
-/// The folder each category saves to.
-///
-/// The options window owns this list; the backend applies it, so a browser
-/// hand-over lands where the reader expects. The folders for temporary,
-/// staged bytes are not a setting: the application owns them and setup
-/// resolved them before this command can be reached, so the window cannot
-/// send a download's parts back into the user's way. The category rules are
-/// written to the engine's settings file, so a restart restores them before
-/// any window opens.
-#[tauri::command]
-fn set_category_rules(
-    state: State<'_, AppState>,
-    categories: Vec<state::CategoryRule>,
-) -> Vec<state::CategoryRule> {
-    let rules = normalize_category_rules(categories);
-    state.modify_settings(|settings| settings.categories = rules.clone());
-    rules
-}
-
-/// The engine's settings as the settings file holds them, for a window that
-/// opens as the cache's owner rather than on stale values.
-///
-/// `None` when there is no file yet: a first run or an upgrade has the
-/// webview's own copy as the seed, and the window must not mistake the
-/// defaults for what the reader chose.
-#[tauri::command]
-fn saved_settings(state: State<'_, AppState>) -> Option<settings_store::EngineSettings> {
-    state
-        .settings_file_exists()
-        .then(|| state.engine_settings())
-}
-
-/// Clean the rules a window sends. A name is required, the extensions are the
-/// engine's file types, and only an absolute folder is kept: a bad rule is
-/// dropped rather than failing the push, so one typo cannot stop the rest.
-fn normalize_category_rules(rules: Vec<state::CategoryRule>) -> Vec<state::CategoryRule> {
-    let mut out = Vec::new();
-    for rule in rules {
-        let name = rule.name.trim();
-        if name.is_empty() {
-            continue;
-        }
-        let mut extensions: Vec<String> = Vec::new();
-        for extension in rule.extensions {
-            let Some(cleaned) = clean_file_type(&extension) else {
-                continue;
-            };
-            if !extensions.contains(&cleaned) {
-                extensions.push(cleaned);
-            }
-            if extensions.len() >= MAX_RULES {
-                break;
-            }
-        }
-        let folder = rule.folder.trim();
-        let folder = if folder.is_empty() || !PathBuf::from(folder).is_absolute() {
-            String::new()
-        } else {
-            folder.to_string()
-        };
-        out.push(state::CategoryRule {
-            name: name.to_string(),
-            extensions,
-            folder,
-            builtin: rule.builtin,
-            fallback: rule.fallback,
-        });
-        if out.len() >= MAX_RULES {
-            break;
-        }
-    }
-    out
-}
-
-/// A sensible starting point for the destination path.
-#[tauri::command]
-fn default_destination(app: AppHandle) -> String {
-    let downloads = app
-        .path()
-        .download_dir()
-        .unwrap_or_else(|_| std::path::PathBuf::from("."));
-    downloads.join("download.bin").to_string_lossy().to_string()
-}
-
-/// What the server says about a link before the download starts.
-#[derive(serde::Serialize)]
-struct LinkProbe {
-    /// The name the server gives the file, when it gives one.
-    name: Option<String>,
-    /// The size of the file. `None` means the server did not tell it.
-    total: Option<u64>,
-    /// Whether the server honours a range request.
-    ranges: bool,
-    /// Whether a stopped download of this link could continue: the server
-    /// honours ranges and either knows how big the file is or gives a
-    /// validator that proves the bytes on disk are still the first bytes of
-    /// the file. This is the engine's own rule, so the dialog cannot promise
-    /// a resume the engine would not make.
-    resumable: bool,
-}
-
-/// What the server says about the link at this address.
-///
-/// A link like `https://example.org/get?id=12` carries no name, but the
-/// answer of the server does, in its `Content-Disposition` header. The same
-/// answer tells the size, out of `Content-Range` or `Content-Length`. The
-/// dialog asks for both so the user sees what they are about to download and
-/// does not have to invent a name.
-#[tauri::command]
-async fn probe_link(
-    state: State<'_, AppState>,
-    url: String,
-    referer: Option<String>,
-) -> Result<LinkProbe, String> {
-    let url = url.trim();
-    if url.is_empty() {
-        return Ok(LinkProbe {
-            name: None,
-            total: None,
-            ranges: false,
-            resumable: false,
-        });
-    }
-    let proxy = state.limits().proxy();
-    let source = Source::parse(url, proxy.as_deref(), referer.as_deref())?;
-    let probe = source.probe().await.map_err(|error| error.message)?;
-    let resumable = probe.ranges && (probe.total.is_some() || probe.validator().is_some());
-    Ok(LinkProbe {
-        name: probe.name,
-        total: probe.total,
-        ranges: probe.ranges,
-        resumable,
-    })
-}
-
-/// Show the window this page is in, once it has painted.
-///
-/// The two small windows are built hidden: a webview that is visible while it
-/// loads shows an empty white frame first, which reads as a broken window. The
-/// page calls this after its first frames, so the window appears with its
-/// content already drawn.
-#[tauri::command]
-fn show_ready(window: tauri::WebviewWindow) -> Result<(), String> {
-    window.show().map_err(|error| error.to_string())?;
-    window.set_focus().map_err(|error| error.to_string())
-}
-
-/// Paint the window itself in the theme's background.
-///
-/// What the webview has not drawn yet shows the window's own fill. The webview
-/// default is white, so every load or repaint of a hidden window could flash
-/// white before the page arrived. The page sends the colour of its
-/// `--background` token, and a theme change sends the next one.
-#[tauri::command]
-fn set_window_background(window: tauri::WebviewWindow, color: String) -> Result<(), String> {
-    let (red, green, blue) = parse_hex_color(&color).ok_or("expected a #rgb or #rrggbb colour")?;
-    window
-        .set_background_color(Some(tauri::window::Color(red, green, blue, 255)))
-        .map_err(|error| error.to_string())
-}
-
-/// Read the tokens' hex form (`#0b1416`, `#fff`) into the channels Tauri wants.
-fn parse_hex_color(value: &str) -> Option<(u8, u8, u8)> {
-    let hex = value.trim().strip_prefix('#')?;
-    let channel = |digits: &str| u8::from_str_radix(digits, 16).ok();
-    match hex.len() {
-        3 => {
-            let cell = |index: usize| channel(&hex[index..index + 1]).map(|value| value * 17);
-            Some((cell(0)?, cell(1)?, cell(2)?))
-        }
-        6 => Some((
-            channel(&hex[0..2])?,
-            channel(&hex[2..4])?,
-            channel(&hex[4..6])?,
-        )),
-        _ => None,
-    }
-}
-
-/// Whether a destination can hold the file, and whether a file is already
-/// there. The add dialog asks before it starts, so a bad name is a line in
-/// the dialog instead of a failed download.
-#[tauri::command]
-fn inspect_destination(
-    state: State<'_, AppState>,
-    dest: String,
-) -> Result<conflict::DestinationStatus, String> {
-    conflict::inspect(&state, &PathBuf::from(dest.trim()))
-}
-
-/// Open a file or a folder with the program the system uses for it.
-///
-/// The path comes from the download list, so it is a place the user picked.
-#[tauri::command]
-fn open_path(path: String) -> Result<(), String> {
-    let target = PathBuf::from(path.trim());
-    if target.as_os_str().is_empty() {
-        return Err("a path is required".to_string());
-    }
-    if !target.exists() {
-        return Err(format!("{} is not there yet", target.display()));
-    }
-    open_in_os(&target)
-}
-
-/// Whether an address is a web page rather than something else on the machine.
-///
-/// The only links this window offers go to a website; a `file:` or a `javascript:`
-/// address would be handed to whatever program owns it.
-fn is_web_address(url: &str) -> bool {
-    !url.chars().any(|c| c.is_control())
-        && (url.starts_with("http://") || url.starts_with("https://"))
-}
-
-/// Open a web address in the browser the system uses.
-///
-/// The window is a webview, not a tab: an anchor here would replace the page
-/// it is on, so the address goes to the shell instead.
-#[tauri::command]
-fn open_url(url: String) -> Result<(), String> {
-    let address = url.trim();
-    if !is_web_address(address) {
-        return Err("only a web address can be opened here".to_string());
-    }
-    open_in_browser(address)
-}
-
-/// Hand the path to the shell of the system.
-#[cfg(target_os = "windows")]
-pub(crate) fn open_in_os(target: &std::path::Path) -> Result<(), String> {
-    let mut command = if target.is_dir() {
-        let mut command = std::process::Command::new("explorer");
-        command.arg(target);
-        command
-    } else {
-        // `explorer` would open the folder of a file, so a file goes through
-        // the shell handler that opens it with its own program.
-        let mut command = std::process::Command::new("rundll32");
-        command.arg("url.dll,FileProtocolHandler").arg(target);
-        command
-    };
-    command
-        .spawn()
-        .map(|_| ())
-        .map_err(|error| format!("the system could not open it: {error}"))
-}
-
-#[cfg(target_os = "macos")]
-pub(crate) fn open_in_os(target: &std::path::Path) -> Result<(), String> {
-    std::process::Command::new("open")
-        .arg(target)
-        .spawn()
-        .map(|_| ())
-        .map_err(|error| format!("the system could not open it: {error}"))
-}
-
-#[cfg(not(any(target_os = "windows", target_os = "macos")))]
-pub(crate) fn open_in_os(target: &std::path::Path) -> Result<(), String> {
-    std::process::Command::new("xdg-open")
-        .arg(target)
-        .spawn()
-        .map(|_| ())
-        .map_err(|error| format!("the system could not open it: {error}"))
-}
-
-/// Hand a web address to the browser the system uses.
-///
-/// The three forms differ only in the program and, on Windows, in the handler
-/// `rundll32` is asked to load. The address arrives as one argument of one
-/// process, never through a shell, so it cannot carry a second command.
-fn open_in_browser(address: &str) -> Result<(), String> {
-    #[cfg(target_os = "windows")]
-    let mut command = {
-        let mut command = std::process::Command::new("rundll32");
-        command.arg("url.dll,FileProtocolHandler");
-        command
-    };
-    #[cfg(target_os = "macos")]
-    let mut command = std::process::Command::new("open");
-    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-    let mut command = std::process::Command::new("xdg-open");
-
-    command
-        .arg(address)
-        .spawn()
-        .map(|_| ())
-        .map_err(|error| format!("the browser could not be opened: {error}"))
-}
+use commands::downloads::show_progress_if_requested;
+use commands::system::{carry_log_over_from_data_dir, open_in_os};
+use state::AppState;
+
+pub(crate) use commands::downloads::*;
+pub(crate) use commands::preferences::*;
+pub(crate) use commands::queue::*;
+pub(crate) use commands::system::*;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -1271,8 +156,22 @@ pub fn run() {
             // The proxy script is fetched with the same client policy as
             // everything else, and fetched again now and then.
             proxy::start(app.handle().clone());
+            // The phone remote is off until the reader turns it on; when it
+            // is on, it starts with the application so a paired phone finds
+            // it on the same address.
+            if state.engine_settings().remote_enabled {
+                if let Err(error) = remote::start(app.handle(), &state) {
+                    idm_core::log::write(
+                        "warn",
+                        &format!("the phone remote is on but could not start: {error}"),
+                    );
+                }
+            }
             // A copied link is offered while the application is in the tray.
             clipboard::start(app.handle().clone());
+            // The queue's schedule is read on a clock, so a window that opens
+            // while nobody is looking still starts the queue.
+            schedule::start(app.handle().clone());
             Ok(())
         })
         .on_window_event(|window, event| match event {
@@ -1328,6 +227,21 @@ pub fn run() {
             set_queue_position,
             set_max_simultaneous,
             get_queue,
+            schedule::queue_schedule,
+            schedule::set_queue_schedule,
+            remote::remote_set_enabled,
+            remote::remote_status,
+            remote::remote_pairing_code,
+            remote::remote_revoke,
+            torrent::torrent_start,
+            torrent::torrent_jobs,
+            torrent::torrent_job,
+            torrent::torrent_pause,
+            torrent::torrent_resume,
+            torrent::torrent_set_seeding,
+            torrent::torrent_seeding,
+            torrent::set_torrent_seeding,
+            torrent::torrent_remove,
             delete_download_file,
             remove_download,
             set_speed_limit,
@@ -1337,6 +251,7 @@ pub fn run() {
             open_progress_window,
             set_progress_details,
             set_site_connections,
+            reset_learned_host,
             site_connections,
             set_max_connections,
             desktop_preferences,
@@ -1353,6 +268,8 @@ pub fn run() {
             set_show_video_window_on_start,
             set_browser_connections,
             set_clipboard_capture,
+            set_extract_after_done,
+            set_delete_archive_after_extract,
             set_launch_on_startup,
             set_browser_policy,
             set_video_button_settings,
@@ -1378,6 +295,8 @@ pub fn run() {
             default_destination,
             probe_link,
             inspect_destination,
+            gallery::gallery_inspect,
+            gallery::gallery_download,
             grabber::open_grabber_window,
             grabber::grabber_start,
             grabber::grabber_cancel,
@@ -1387,7 +306,21 @@ pub fn run() {
             set_window_background,
             open_path,
             checksum::verify_download_checksum,
+            crash::last_freeze_report,
+            debrid::debrid_services,
+            debrid::debrid_sign_in,
+            debrid::debrid_sign_out,
+            debrid::debrid_account,
+            debrid::debrid_test,
+            debrid::debrid_unrestrict,
+            debrid::debrid_set_auto,
+            debrid::debrid_auto,
+            debrid::debrid_ask_unlock,
+            mcp::mcp_enabled,
+            mcp::set_mcp_enabled,
             extract::extract_download,
+            extract::extract_download_with_password,
+            extract::extract_pending,
             open_url,
             share::share_app,
             updater::check_update,
@@ -1499,7 +432,7 @@ mod tests {
 
     #[test]
     fn a_capture_policy_is_cleaned_at_the_boundary() {
-        let policy = normalize_policy(BrowserPolicy {
+        let policy = normalize_policy(state::BrowserPolicy {
             capture: true,
             ask: true,
             types: vec![

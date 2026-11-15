@@ -9,7 +9,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 
-export type MediaKind = "video" | "audio" | "muxed";
+export type MediaKind = "video" | "audio" | "muxed" | "subtitle";
 export type MediaState = "parsing" | "ready" | "failed";
 
 export interface MediaFormat {
@@ -31,6 +31,20 @@ export interface MediaPair {
   label: string;
 }
 
+/** One caption track the manifest offered, as the panel shows it. */
+export interface SubtitleChoice {
+  /** The id the panel passes back when the track is chosen. */
+  id: string;
+  /** The name the manifest gave the track. */
+  name: string;
+  /** The language of the track, when the manifest says. */
+  language: string | null;
+  /** The format of the bytes (`vtt`, `srt`, `ttml`). */
+  container: string;
+  /** Whether the manifest marks this one as the default. */
+  isDefault: boolean;
+}
+
 export interface MediaJobView {
   job: number;
   state: MediaState;
@@ -41,6 +55,8 @@ export interface MediaJobView {
   duration: number | null;
   formats: MediaFormat[];
   pairs: MediaPair[];
+  /** The caption tracks the manifest offered, when it offered any. */
+  subtitles: SubtitleChoice[];
   preferred: string | null;
   cookiesOffered: boolean;
   cookieConsent: boolean;
@@ -244,6 +260,13 @@ export interface MediaDownloadRequest {
   audio?: string | null;
   name?: string;
   dest?: string;
+  /** The caption rendition the reader chose, when any. */
+  subtitle?: string | null;
+  /** A caption file the reader picked from their own disk, when any. */
+  subtitleFile?: string | null;
+  /** What the sound is saved as: nothing, the track as it came, or a
+   * conversion. */
+  audioFormat?: "source" | "mp3" | "opus" | "flac";
 }
 
 export function mediaDownload(

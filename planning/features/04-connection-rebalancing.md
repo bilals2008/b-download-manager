@@ -1,5 +1,7 @@
 # Connection rebalancing until the last byte
 
+> **Nov 2026:** implemented (pace::lagging). See REMAINING-FEATURES.md for the current proof.
+
 **Wave 2 · Status:** ✅ shipped (`pace::lagging` takes the free slot; a hand-over stops the range at the boundary instead of splitting it mid-write)
 
 ## Goal

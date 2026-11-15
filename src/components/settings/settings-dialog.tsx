@@ -6,6 +6,9 @@ import { AppearanceSettings } from "@/components/settings/appearance-settings";
 import { BrowserSettings } from "@/components/settings/browser-settings";
 import { ConnectionsSettings } from "@/components/settings/connections-settings";
 import { DownloadsSettings } from "@/components/settings/downloads-settings";
+import { DebridSettings } from "@/components/settings/debrid-settings";
+import { RemoteSettings } from "@/components/settings/remote-settings";
+import { TorrentSettings } from "@/components/settings/torrent-settings";
 import {
   GeneralSettings,
   type TraySettingsProps,
@@ -20,9 +23,10 @@ import {
 } from "@/components/settings/toolbar-settings";
 import { VideoDownloadButtonSettings } from "@/components/settings/video-download-button-settings";
 import {
-  settingsPageLabel,
+  settingsPageLabelKey,
   type SettingsPageId,
 } from "@/components/settings/settings-nav";
+import { useT } from "@/i18n";
 import { SettingsSidebar } from "@/components/settings/settings-sidebar";
 import { SettingsSearch } from "@/components/settings/settings-search";
 import type { SettingsCatalogEntry } from "@/components/settings/settings-search-data";
@@ -45,6 +49,8 @@ import {
   setMaxConnections,
   setMinimizeToTray,
   setProxy,
+  setExtractAfterDone,
+  setDeleteArchiveAfterExtract,
   setShowCompleteDialog,
   setShowProgressOnStart,
   setShowVideoWindowOnStart,
@@ -88,6 +94,8 @@ const ENGINE_KEYS: readonly (keyof Settings)[] = [
   "minimizeToTray",
   "closeToTray",
   "showCompleteDialog",
+  "extractAfterDone",
+  "deleteArchiveAfterExtract",
   "showProgressOnStart",
   "showVideoWindowOnStart",
   "clipboardCapture",
@@ -116,6 +124,7 @@ export function SettingsDialog({
   toolbar,
   tray,
 }: SettingsDialogProps) {
+  const t = useT();
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [page, setPage] = useState<SettingsPageId>("general");
   // A search result asks for one anchor after the page has changed. The hook
@@ -387,6 +396,13 @@ export function SettingsDialog({
         return <ConnectionsSettings settings={settings} onChange={update} />;
       case "proxy":
         return <ProxySettings settings={settings} onChange={update} />;
+      case "debrid":
+        return <DebridSettings />;
+      case "remote":
+        return <RemoteSettings />;
+      case "torrent":
+        return <TorrentSettings />;
+
       case "advanced":
         return <AdvancedSettings onReset={resetAll} />;
       case "about":
@@ -403,7 +419,7 @@ export function SettingsDialog({
   return (
     <Dialog
       open={open}
-      title="Settings"
+      title={t("settings.title")}
       onClose={onClose}
       className="h-[min(44rem,calc(100dvh-2rem))] w-[min(58rem,calc(100vw-2rem))] max-w-none border-0 bg-chrome-panel"
       headerClassName="py-2.5 pr-1.5 pl-5"
@@ -439,7 +455,7 @@ export function SettingsDialog({
         <SettingsSearch page={page} onNavigate={openSetting}>
           <div
             role="region"
-            aria-label={`${settingsPageLabel(page)} settings`}
+            aria-label={`${t(settingsPageLabelKey(page))} settings`}
             className="min-h-full"
           >
             {body()}
@@ -462,6 +478,8 @@ async function applyEngine(next: Settings): Promise<void> {
     setMinimizeToTray(next.minimizeToTray),
     setCloseToTray(next.closeToTray),
     setShowCompleteDialog(next.showCompleteDialog),
+    setExtractAfterDone(next.extractAfterDone),
+    setDeleteArchiveAfterExtract(next.deleteArchiveAfterExtract),
     setShowProgressOnStart(next.showProgressOnStart),
     setShowVideoWindowOnStart(next.showVideoWindowOnStart),
     setClipboardCapture(next.clipboardCapture),

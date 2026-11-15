@@ -1,5 +1,7 @@
 # BitTorrent support
 
+> **Nov 2026:** implemented (magnet links, .torrent files, window with progress, peers and pieces; seeding off by default). See REMAINING-FEATURES.md for the current proof.
+
 **Wave 6 · Status:** ❌ not written (the reference build has `crates/torrent`)
 
 ## Goal

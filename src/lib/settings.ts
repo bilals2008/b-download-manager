@@ -19,6 +19,10 @@ export interface Settings {
   showProgressOnStart: boolean;
   /** Whether a video download opens the quality window that follows it. */
   showVideoWindowOnStart: boolean;
+  /** Whether a finished archive is unpacked beside itself. */
+  extractAfterDone: boolean;
+  /** Whether the archive is removed once it was unpacked cleanly. */
+  deleteArchiveAfterExtract: boolean;
   /** Whether one tip is offered when the application is revealed at startup. */
   tipsOnStartup: boolean;
   /** Auto follows the system; the other two override it. */
@@ -98,6 +102,8 @@ export const DEFAULT_SETTINGS: Settings = {
   showCompleteDialog: true,
   showProgressOnStart: false,
   showVideoWindowOnStart: true,
+  extractAfterDone: false,
+  deleteArchiveAfterExtract: false,
   tipsOnStartup: true,
   theme: "ayu",
   uiFont: "googlesans",
@@ -189,6 +195,14 @@ export function loadSettings(): Settings {
       showVideoWindowOnStart: boolean(
         value.showVideoWindowOnStart,
         DEFAULT_SETTINGS.showVideoWindowOnStart,
+      ),
+      extractAfterDone: boolean(
+        value.extractAfterDone,
+        DEFAULT_SETTINGS.extractAfterDone,
+      ),
+      deleteArchiveAfterExtract: boolean(
+        value.deleteArchiveAfterExtract,
+        DEFAULT_SETTINGS.deleteArchiveAfterExtract,
       ),
       tipsOnStartup: boolean(
         value.tipsOnStartup,
@@ -352,6 +366,14 @@ export async function syncEngineSettings(): Promise<Settings | null> {
   settings.showVideoWindowOnStart = boolean(
     saved.showVideoWindowOnStart,
     settings.showVideoWindowOnStart,
+  );
+  settings.extractAfterDone = boolean(
+    saved.extractAfterDone,
+    settings.extractAfterDone,
+  );
+  settings.deleteArchiveAfterExtract = boolean(
+    saved.deleteArchiveAfterExtract,
+    settings.deleteArchiveAfterExtract,
   );
   settings.clipboardCapture = boolean(
     saved.clipboardCapture,

@@ -59,6 +59,9 @@ export type ShellCommand =
   | "font-reset"
   /** `font:<value>` picks a face from the list in the View menu. */
   | `font:${string}`
+  | "language-en"
+  /** `language:<code>` picks the language the window reads in. */
+  | `language:${string}`
   // Help
   | "help-contents"
   | "tutorials"

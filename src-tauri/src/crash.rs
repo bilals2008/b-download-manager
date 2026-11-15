@@ -7,6 +7,8 @@
 
 use std::path::PathBuf;
 
+use tauri::Manager;
+
 /// The crate the monitor is built from.
 pub use idm_crash::{Heartbeat, BEAT};
 
@@ -64,4 +66,38 @@ pub fn say_goodbye(folder: &std::path::Path) {
 pub fn watch(folder: PathBuf) {
     let monitor = Monitor::new(&folder, env!("CARGO_PKG_VERSION"));
     monitor.watch(std::process::id());
+}
+
+/// The report of the last time the window stopped answering.
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FreezeReport {
+    /// Where the report and the stacks of the stopped program are.
+    pub folder: String,
+    /// The report as it was written.
+    pub text: String,
+    /// When the report was written, in seconds since the epoch.
+    pub written_at: u64,
+}
+
+/// Read the report of the last freeze, when there was one.
+///
+/// The monitor writes it beside the log, so the reader is told on the next
+/// start that the window stopped answering, and where the stacks are.
+#[tauri::command]
+pub fn last_freeze_report(app: tauri::AppHandle) -> Option<FreezeReport> {
+    let folder = app.path().app_log_dir().ok()?;
+    let path = folder.join("freeze-report.md");
+    let text = std::fs::read_to_string(&path).ok()?;
+    let written_at = std::fs::metadata(&path)
+        .and_then(|meta| meta.modified())
+        .ok()
+        .and_then(|moment| moment.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|since| since.as_secs())
+        .unwrap_or(0);
+    Some(FreezeReport {
+        folder: folder.to_string_lossy().to_string(),
+        text,
+        written_at,
+    })
 }

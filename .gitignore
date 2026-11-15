@@ -34,7 +34,9 @@ src-tauri/.signing-key
 src-tauri/.signing-key.pub
 
 # The fetched ffmpeg sidecar (see src-tauri/binaries/README.md)
+# and the built MCP server for assistants
 src-tauri/binaries/ffmpeg-*
+src-tauri/binaries/idm-mcp-*
 
 # Logs, caches, editor and OS noise
 *.log

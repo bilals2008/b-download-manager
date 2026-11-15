@@ -1,5 +1,7 @@
 # MCP server for AI assistants
 
+> **Nov 2026:** implemented (separate stdio server, routes in the bridge, advanced setting, shipped beside the app). See REMAINING-FEATURES.md for the current proof.
+
 **Wave 6 · Status:** ❌ not written (the reference build has `crates/mcp`)
 
 ## Goal

@@ -121,6 +121,10 @@ fn fault(status: u16, body: &[u8]) -> DebridError {
             kind: ServiceKind::RealDebrid,
             message,
         },
+        // The service is asking the app to slow down, not refusing.
+        _ if status == 429 => DebridError::RateLimited {
+            kind: ServiceKind::RealDebrid,
+        },
         _ if status == 401 => DebridError::NotSignedIn {
             kind: ServiceKind::RealDebrid,
             message,

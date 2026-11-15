@@ -334,6 +334,7 @@ fn parse(answer: &str, fallback_title: &str) -> Result<(Manifest, SourcePlan), S
         formats,
         pairs,
         container_hint: Some("youtube".to_string()),
+        subtitles: Vec::new(),
     };
     Ok((manifest, SourcePlan::Files { tracks }))
 }

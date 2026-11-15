@@ -57,6 +57,49 @@ pub async fn probe(client: &reqwest::Client, url: &str) -> Result<Probe, Transfe
         return Err(answer_error(status.as_u16(), retry_after));
     }
 
+    // A Google Drive file too big to fetch directly arrives as a confirmation
+    // page; the answer to the form on that page is the file itself, and it
+    // sets the cookie the range requests need.
+    if is_html(&response) {
+        let body = response.text().await.unwrap_or_default();
+        if crate::sites::gdrive::quota_exceeded(&body) {
+            return Err(TransferError::msg(
+                "the file's owner is over their storage quota",
+            ));
+        }
+        if crate::sites::gdrive::needs_sign_in(&body) {
+            return Err(TransferError::msg(
+                "this file is private: it needs a sign-in with the owner's account",
+            ));
+        }
+        if let Some(action) = confirm_form_action(&body, url) {
+            let posted = client
+                .post(&action)
+                .header(ACCEPT_ENCODING, IDENTITY_ENCODING)
+                .send()
+                .await
+                .map_err(|e| TransferError::msg(format!("the confirmation could not be sent: {e}")))?;
+            if !posted.status().is_success() {
+                return Err(answer_error(posted.status().as_u16(), parse_retry_after(posted.headers())));
+            }
+            let retry_after = parse_retry_after(posted.headers());
+            let _ = retry_after;
+            return read_probe(posted);
+        }
+        // The page is not a confirmation; it is not a file either.
+        return Err(TransferError::msg(
+            "the address answers with an HTML page, not a file",
+        ));
+    }
+
+    read_probe(response)
+}
+
+/// The probe of a response whose headers carry the answer.
+fn read_probe(response: reqwest::Response) -> Result<Probe, TransferError> {
+    let status = response.status();
+    let retry_after = parse_retry_after(response.headers());
+    let _ = retry_after;
     let ranges = status == reqwest::StatusCode::PARTIAL_CONTENT;
 
     let mut total = response
@@ -92,6 +135,57 @@ pub async fn probe(client: &reqwest::Client, url: &str) -> Result<Probe, Transfe
         etag: header(ETAG),
         last_modified: header(LAST_MODIFIED),
     })
+}
+
+/// Whether the answer is an HTML page.
+fn is_html(response: &reqwest::Response) -> bool {
+    response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| value.to_ascii_lowercase().contains("text/html"))
+        .unwrap_or(false)
+}
+
+/// The `action` of the download form of a confirmation page, resolved
+/// against the page it was on.
+///
+/// Google's big-file page carries a form with `id="download-form"` and an
+/// action that carries the confirmation token. An action that is an absolute
+/// URL stays as it is; a relative one resolves against the page.
+fn confirm_form_action(body: &str, url: &str) -> Option<String> {
+    let form = body.find("download-form")?;
+    let start = body[..form].rfind("<form")?;
+    let tag = &body[start..];
+    let end = tag.find('>')?;
+    let tag = &tag[..end];
+    let action = attribute(tag, "action")?;
+    if action.starts_with("http://") || action.starts_with("https://") {
+        return Some(action);
+    }
+    reqwest::Url::parse(url)
+        .and_then(|base| base.join(&action))
+        .map(|resolved| resolved.to_string())
+        .ok()
+}
+
+/// The value of a named attribute of a tag, quoted or not.
+fn attribute(tag: &str, name: &str) -> Option<String> {
+    let needle = format!("{name}=");
+    let at = tag.find(&needle)?;
+    let rest = tag[at + needle.len()..].trim_start();
+    let first = rest.chars().next()?;
+    if first == '"' || first == '\'' {
+        let end = rest[1..].find(first)?;
+        Some(rest[1..1 + end].to_string())
+    } else {
+        Some(
+            rest.split_whitespace()
+                .next()
+                .unwrap_or("")
+                .to_string(),
+        )
+    }
 }
 
 /// The header value that proves a later request gets the same bytes.
@@ -261,283 +355,16 @@ pub fn range_header(from: u64, to: Option<u64>) -> String {
     }
 }
 
-/// Read a `Content-Range` value: `bytes <start>-<end>/<total>`.
-///
-/// The total is `None` when the server wrote `*`: it does not know the size.
-pub fn parse_content_range(value: &str) -> Option<(u64, u64, Option<u64>)> {
-    let (unit, spec) = value.trim().split_once(' ')?;
-    if !unit.eq_ignore_ascii_case("bytes") {
-        return None;
-    }
-    let (range, total) = spec.trim().split_once('/')?;
-    let (start, end) = range.trim().split_once('-')?;
-    let start = start.trim().parse().ok()?;
-    let end = end.trim().parse().ok()?;
-    let total = total.trim();
-    let total = if total == "*" {
-        None
-    } else {
-        Some(total.parse().ok()?)
-    };
-    Some((start, end, total))
-}
+mod parse;
+mod retry;
 
-/// Read the total size out of a `Content-Range` value.
-///
-/// `bytes 0-0/1234` gives `Some(1234)`. `bytes 0-0/*` gives `None`, which is
-/// how a server says it does not know the size.
-pub fn parse_content_range_total(value: &str) -> Option<u64> {
-    parse_content_range(value).and_then(|(_, _, total)| total)
-}
-
-/// Read the first byte offset out of a `Content-Range` value.
-///
-/// The reference binary checks the reply of a range request against the range
-/// it asked for (`HTTPConnection::GetRetrRangeReply()`), so the engine has to
-/// be able to read back what the server actually served.
-pub fn parse_content_range_start(value: &str) -> Option<u64> {
-    parse_content_range(value).map(|(start, _, _)| start)
-}
-
-/// The file name a `Content-Disposition` header carries, if it carries one.
-///
-/// `filename*=UTF-8''na%C3%AFve.txt` (RFC 5987) wins over a plain
-/// `filename="naive.txt"`, because it is the one a server sends when it has
-/// already solved the encoding. Some servers send a whole path in the field,
-/// so only the last segment is kept.
-pub fn file_name_from_disposition(value: &str) -> Option<String> {
-    let mut plain = None;
-
-    for part in value.split(';') {
-        let part = part.trim();
-        if let Some(raw) = part.strip_prefix("filename*=") {
-            let raw = raw.trim().trim_matches('"');
-            let encoded = raw.rsplit_once("''").map(|(_, rest)| rest).unwrap_or(raw);
-            if let Some(name) = clean_file_name(&percent_decode(encoded)) {
-                return Some(name);
-            }
-        } else if let Some(raw) = part.strip_prefix("filename=") {
-            plain = clean_file_name(raw.trim().trim_matches('"'));
-        }
-    }
-
-    plain
-}
-
-/// The last segment of a name a server sent, without quotes or separators.
-fn clean_file_name(value: &str) -> Option<String> {
-    let last = value.rsplit(['/', '\\']).next()?.trim();
-    if last.is_empty() || last == "." || last == ".." {
-        return None;
-    }
-    Some(last.to_string())
-}
-
-/// Decode `%XX` escapes; anything else is kept as it came.
-fn percent_decode(value: &str) -> String {
-    fn digit(byte: u8) -> Option<u8> {
-        match byte {
-            b'0'..=b'9' => Some(byte - b'0'),
-            b'a'..=b'f' => Some(byte - b'a' + 10),
-            b'A'..=b'F' => Some(byte - b'A' + 10),
-            _ => None,
-        }
-    }
-
-    let bytes = value.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut index = 0;
-    while index < bytes.len() {
-        if bytes[index] == b'%' && index + 2 < bytes.len() {
-            if let (Some(high), Some(low)) = (digit(bytes[index + 1]), digit(bytes[index + 2])) {
-                out.push(high * 16 + low);
-                index += 3;
-                continue;
-            }
-        }
-        out.push(bytes[index]);
-        index += 1;
-    }
-    String::from_utf8_lossy(&out).into_owned()
-}
-
-/// How long the server asked us to wait before trying again.
-///
-/// Both forms of the header are honoured: the delta-seconds form
-/// (`120`), and the HTTP-date form (`Sun, 06 Nov 1994 08:49:37 GMT`). A date
-/// in the past — or one this build cannot read — is not a wait, so the caller
-/// falls back to its own backoff instead of sleeping for a negative time.
-/// The result is capped at [`MAX_RETRY_AFTER`] so a wrong clock on either side
-/// cannot park a download for days.
-pub fn parse_retry_after(headers: &HeaderMap) -> Option<Duration> {
-    let value = headers.get(RETRY_AFTER)?.to_str().ok()?.trim();
-    if value.is_empty() {
-        return None;
-    }
-    if let Ok(seconds) = value.parse::<u64>() {
-        return Some(Duration::from_secs(seconds.min(MAX_RETRY_AFTER.as_secs())));
-    }
-    let at = parse_http_date(value)?;
-    let wait = at.duration_since(SystemTime::now()).unwrap_or_default();
-    Some(wait.min(MAX_RETRY_AFTER))
-}
-
-/// The longest wait a `Retry-After` may impose. A day is already far more
-/// than any server means by it in the middle of a download.
-pub const MAX_RETRY_AFTER: Duration = Duration::from_secs(24 * 60 * 60);
-
-/// Read one of the three date forms RFC 9110 allows in `Retry-After`.
-///
-/// The preferred form is IMF-fixdate (`Sun, 06 Nov 1994 08:49:37 GMT`); the
-/// obsolete RFC 850 (`Sunday, 06-Nov-94 08:49:37 GMT`) and asctime
-/// (`Sun Nov  6 08:49:37 1994`) forms are still sent by old servers, so they
-/// are read too. A value is refused rather than guessed at, because a wrong
-/// wait is worse than the caller's own backoff.
-pub fn parse_http_date(value: &str) -> Option<SystemTime> {
-    let value = value.trim();
-    let rest = value
-        .split_once(", ")
-        .map(|(_, rest)| rest)
-        .unwrap_or_else(|| {
-            // asctime has no comma after the weekday; drop the two names.
-            value.split_once(' ').map(|(_, rest)| rest).unwrap_or(value)
-        });
-    let parts: Vec<&str> = rest.split_whitespace().collect();
-    // `06 Nov 1994 08:49:37 GMT` splits into six pieces, `06-Nov-94` stays
-    // whole, `Nov 6 08:49:37 1994` splits into five.
-    let (day, month, year, clock) = match parts.as_slice() {
-        [day, month, year, clock, zone] if zone.eq_ignore_ascii_case("GMT") => {
-            (day.to_string(), month.to_string(), *year, *clock)
-        }
-        [day_month_year, clock, zone] if zone.eq_ignore_ascii_case("GMT") => {
-            return parse_rfc850(day_month_year, clock);
-        }
-        // `Nov 6 08:49:37 1994` — the asctime form, which names no zone and
-        // is therefore always GMT.
-        [month, day, clock, year] => ((*day).to_string(), (*month).to_string(), *year, *clock),
-        _ => return None,
-    };
-    let day: u32 = day.parse().ok()?;
-    let month = month_number(&month)?;
-    let year: i64 = year.parse().ok()?;
-    let (hour, minute, second) = parse_clock(clock)?;
-    to_system_time(day, month, year, hour, minute, second)
-}
-
-/// `06-Nov-94 08:49:37` — the RFC 850 form.
-fn parse_rfc850(value: &str, clock: &str) -> Option<SystemTime> {
-    let (day, rest) = value.split_once('-')?;
-    let (month, year) = rest.split_once('-')?;
-    let day: u32 = day.parse().ok()?;
-    let month = month_number(month)?;
-    let year: i64 = year.parse().ok()?;
-    // A two-digit year is this century when it is small; the form predates
-    // 2000 by design, so 94 means 1994 and 24 means 2024.
-    let year = if year < 70 {
-        2000 + year
-    } else if year < 100 {
-        1900 + year
-    } else {
-        year
-    };
-    let (hour, minute, second) = parse_clock(clock)?;
-    to_system_time(day, month, year, hour, minute, second)
-}
-
-fn parse_clock(value: &str) -> Option<(i64, i64, i64)> {
-    let mut pieces = value.split(':');
-    let hour = pieces.next()?.parse().ok()?;
-    let minute = pieces.next()?.parse().ok()?;
-    let second = pieces.next()?.parse().ok()?;
-    if pieces.next().is_some() || hour > 23 || minute > 59 || second > 60 {
-        return None;
-    }
-    Some((hour, minute, second))
-}
-
-fn month_number(name: &str) -> Option<u32> {
-    const MONTHS: [&str; 12] = [
-        "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
-    ];
-    let lower = name.to_ascii_lowercase();
-    let lower = lower.trim_end_matches('.');
-    // The asctime form abbreviates to three letters; a full name is accepted
-    // too, because some proxies send one.
-    let three = if lower.len() >= 3 { &lower[..3] } else { lower };
-    MONTHS
-        .iter()
-        .position(|month| *month == three)
-        .map(|index| index as u32 + 1)
-}
-
-/// Days since 1970-01-01 for a proleptic Gregorian date (Howard Hinnant's
-/// `days_from_civil`), so no calendar crate is needed.
-fn days_from_civil(year: i64, month: u32, day: u32) -> i64 {
-    let year = if month <= 2 { year - 1 } else { year };
-    let era = if year >= 0 { year } else { year - 399 } / 400;
-    let year_of_era = year - era * 400;
-    let month = month as i64;
-    let day_of_year =
-        (153 * (if month > 2 { month - 3 } else { month + 9 }) + 2) / 5 + day as i64 - 1;
-    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
-    era * 146_097 + day_of_era - 719_468
-}
-
-fn to_system_time(
-    day: u32,
-    month: u32,
-    year: i64,
-    hour: i64,
-    minute: i64,
-    second: i64,
-) -> Option<SystemTime> {
-    if !(1..=31).contains(&day) || !(1970..=9999).contains(&year) {
-        return None;
-    }
-    let days = days_from_civil(year, month, day);
-    if days < 0 {
-        return None;
-    }
-    let seconds = days * 86_400 + hour * 3_600 + minute * 60 + second;
-    Some(UNIX_EPOCH + Duration::from_secs(seconds as u64))
-}
-
-/// The wait before the next attempt after a failure.
-///
-/// The reference binary waits a fixed 400 ms between attempts. An exponential
-/// wait with a cap costs nothing to implement and does not hammer a struggling
-/// server.
-pub fn backoff(attempt: u32) -> Duration {
-    const BASE_MS: u64 = 400;
-    const CAP_MS: u64 = 30_000;
-
-    let shift = attempt.saturating_sub(1).min(7);
-    Duration::from_millis(BASE_MS.saturating_mul(1u64 << shift).min(CAP_MS))
-}
-
-/// What the answer of the server means, in words a user can act on.
-///
-/// The status code alone tells a user nothing. "The link may have expired"
-/// and "the site only answers a browser" are the two answers that matter
-/// most in practice, and both are refusals.
-pub fn status_message(status: u16) -> String {
-    match status {
-        401 => "the server asked us to sign in (401)".to_string(),
-        403 => "the server refused the request (403); the link may have expired, or the site only answers a browser".to_string(),
-        404 => "the file is not on the server any more (404)".to_string(),
-        410 => "the file is gone for good (410)".to_string(),
-        416 => "the server has no such range of bytes (416)".to_string(),
-        429 => "the server is busy (429) and asked us to come back later".to_string(),
-        500..=599 => format!("the server had a problem ({status})"),
-        _ => format!("the server answered {status}"),
-    }
-}
-
-/// Whether the server told us to come back later, so the wait is the
-/// server's choice rather than ours.
-pub fn is_retryable(status: u16) -> bool {
-    matches!(status, 408 | 425 | 429 | 500 | 502 | 503 | 504)
-}
+pub use parse::{
+    file_name_from_disposition, parse_content_range, parse_content_range_start,
+    parse_content_range_total,
+};
+pub use retry::{
+    backoff, is_retryable, parse_http_date, parse_retry_after, status_message, MAX_RETRY_AFTER,
+};
 
 #[cfg(test)]
 mod tests {

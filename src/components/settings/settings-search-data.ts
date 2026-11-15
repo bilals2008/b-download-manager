@@ -1,3 +1,4 @@
+import { CATALOGUES } from "@/i18n/catalogue";
 import {
   SETTINGS_PAGES,
   type SettingsPageId,
@@ -22,6 +23,24 @@ export interface SettingsCatalogEntry extends SettingsSearchEntry {
  * element a search result should open. A row's `settingId` is the anchor here.
  */
 const PAGE_ENTRIES: readonly SettingsCatalogEntry[] = [
+  {
+    id: "setting-language",
+    page: "general",
+    section: "Language",
+    title: "Language",
+    description: "The words the window shows, and its direction for Arabic.",
+    keywords: [
+      "language",
+      "langue",
+      "sprache",
+      "arabic",
+      "french",
+      "german",
+      "rtl",
+      "right to left",
+      "localisation",
+    ],
+  },
   {
     id: "setting-launch-startup",
     page: "general",
@@ -589,12 +608,115 @@ const PAGE_ENTRIES: readonly SettingsCatalogEntry[] = [
     ],
   },
   {
+    id: "setting-debrid-accounts",
+    page: "debrid",
+    section: "Accounts",
+    title: "Debrid accounts",
+    description: "Unlock the host links an account can take.",
+    keywords: [
+      "debrid",
+      "real-debrid",
+      "realdebrid",
+      "alldebrid",
+      "all-debrid",
+      "premiumize",
+      "unlock",
+      "host link",
+      "full speed",
+    ],
+  },
+  {
+    id: "setting-debrid-auto",
+    page: "debrid",
+    section: "Automatic",
+    title: "Unlock matching host links without asking",
+    description: "Every link a signed-in service can take is unlocked before the download starts.",
+    keywords: [
+      "debrid",
+      "automatic",
+      "unlock",
+      "auto unlock",
+      "link",
+      "service",
+    ],
+  },
+  {
+    id: "setting-remote",
+    page: "remote",
+    section: "Phone and LAN",
+    title: "Let a phone on this network drive the app",
+    description: "A phone pairs once, then lists, adds, pauses, resumes and removes downloads.",
+    keywords: [
+      "remote",
+      "phone",
+      "lan",
+      "network",
+      "mobile",
+      "wifi",
+      "browser",
+      "pair",
+      "pairing",
+    ],
+  },
+  {
+    id: "setting-remote-pair",
+    page: "remote",
+    section: "Phone and LAN",
+    title: "Pair a phone",
+    description: "A one-time code that is good for one phone.",
+    keywords: [
+      "remote",
+      "pair",
+      "pairing",
+      "code",
+      "qr",
+      "phone",
+      "connect",
+      "first time",
+    ],
+  },
+  {
+    id: "setting-torrent-seed",
+    page: "torrent",
+    section: "BitTorrent",
+    title: "Keep uploading after the download finishes",
+    description: "Uploading a finished torrent back to the swarm.",
+    keywords: [
+      "torrent",
+      "bittorrent",
+      "magnet",
+      "seed",
+      "seeding",
+      "upload",
+      "share",
+      "swarm",
+      "uploading",
+    ],
+  },
+  {
     id: "setting-data-folder",
     page: "advanced",
     section: "Application data",
     title: "Data folder",
     description: "The download list and unfinished files.",
     keywords: ["data", "folder", "storage", "appdata", "files", "open"],
+  },
+  {
+    id: "setting-mcp",
+    page: "advanced",
+    section: "AI assistants",
+    title: "Let AI assistants drive this app",
+    description: "The MCP door an assistant starts beside the app.",
+    keywords: [
+      "mcp",
+      "assistant",
+      "ai",
+      "agent",
+      "model context protocol",
+      "assistants",
+      "claude",
+      "llm",
+    ],
   },
   {
     id: "setting-staging-folder",
@@ -702,7 +824,7 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsCatalogEntry[] = [
 ];
 
 export const SETTINGS_PAGE_LABELS: ReadonlyMap<string, string> = new Map(
-  SETTINGS_PAGES.map((page) => [page.id, page.label]),
+  SETTINGS_PAGES.map((page) => [page.id, CATALOGUES.en[page.labelKey]]),
 );
 
 const SETTINGS_PAGE_ORDER: readonly string[] = SETTINGS_PAGES.map(

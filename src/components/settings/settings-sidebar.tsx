@@ -1,4 +1,5 @@
 import { SettingsGlyph } from "@/components/icons/ui-icons";
+import { useT } from "@/i18n";
 import {
   SETTINGS_GROUPS,
   type SettingsPageId,
@@ -19,19 +20,21 @@ interface SettingsSidebarProps {
  * width, and an ellipsis in a navigation list reads as a broken label.
  */
 export function SettingsSidebar({ page, onSelect }: SettingsSidebarProps) {
+  const t = useT();
   return (
     <nav
       aria-label="Settings pages"
       className="w-52 shrink-0 overflow-y-auto scrollbar-none px-2.5 py-4"
     >
       {SETTINGS_GROUPS.map((group) => (
-        <div key={group.label} className="pb-4 last:pb-0">
+        <div key={group.labelKey} className="pb-4 last:pb-0">
           <p className="px-2.5 pb-1.5 text-chrome-micro font-medium text-chrome-muted">
-            {group.label}
+            {t(group.labelKey)}
           </p>
           <ul className="flex flex-col gap-0.5">
-            {group.pages.map(({ id, label, glyph }) => {
+            {group.pages.map(({ id, labelKey, glyph }) => {
               const active = page === id;
+              const label = t(labelKey);
               return (
                 <li key={id}>
                   <button
