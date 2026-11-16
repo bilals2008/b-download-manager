@@ -5,10 +5,8 @@
 .dl .ss-stage {
   overflow: hidden;
   border-radius: 16px;
-  background: #060c0d;
-  box-shadow:
-    0 40px 90px -52px rgb(20 16 13 / 0.28),
-    0 14px 30px -24px rgb(20 16 13 / 0.16);
+  background: transparent;
+  box-shadow: none;
 }
 
 .dl {
@@ -299,12 +297,6 @@
 
 .dl-row[data-phase='done'] .dl-fill {
   background-image: linear-gradient(90deg, #34d399, #22c55e);
-}
-
-.dl-fill--filler {
-  background-image: none;
-  background-color: rgb(255 255 255 / 0.16);
-  transition: none;
 }
 
 /* The chip's disc, ring and gloss use the app's alpha values pre-blended onto

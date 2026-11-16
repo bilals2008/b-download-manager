@@ -1,5 +1,5 @@
 import { AppWindow, FileArchive, FileText, Film, Folder, Gamepad2, Music, Package, Play, Plus, Square } from 'lucide-react'
-import { Bar, Button, Stage, Window, type Act, type Layout } from '../kit'
+import { Button, Stage, Window, type Act, type Layout } from '../kit'
 import './hero.css'
 
 // B Download Manager as it looks on the landing page hero: a paused transfer
@@ -49,22 +49,22 @@ async function script(a: Act<S>) {
 }
 
 const TOKENS = {
-  '--ss-canvas': '#0b1416',
-  '--ss-surface': '#0b1416',
-  '--ss-chrome': '#0b1416',
-  '--ss-line': '#13312a',
-  '--ss-line-faint': '#102923',
-  '--ss-ink-1': '#0f1c19',
-  '--ss-ink-2': '#11201f',
-  '--ss-ink-3': '#16302b',
-  '--ss-ink-4': '#1a3a33',
-  '--ss-ink-5': '#20443c',
-  '--ss-fill': '#16302b',
-  '--ss-text': '#869a93',
-  '--ss-text-strong': '#d7e3df',
-  '--ss-text-faint': '#5f726c',
-  '--ss-icon': '#93a7a0',
-  '--ss-icon-faint': '#4b5f59',
+  '--ss-canvas': '#111214',
+  '--ss-surface': '#111214',
+  '--ss-chrome': '#111214',
+  '--ss-line': '#1f2124',
+  '--ss-line-faint': '#1a1c1f',
+  '--ss-ink-1': '#161719',
+  '--ss-ink-2': '#17181b',
+  '--ss-ink-3': '#1e2023',
+  '--ss-ink-4': '#212428',
+  '--ss-ink-5': '#25282c',
+  '--ss-fill': '#1e2023',
+  '--ss-text': '#9a9ea6',
+  '--ss-text-strong': '#e4e6e9',
+  '--ss-text-faint': '#6f737b',
+  '--ss-icon': '#a7abb2',
+  '--ss-icon-faint': '#5d6167',
   '--ss-accent': '#cdf25a',
   '--ss-accent-2': '#cdf25a',
   '--ss-accent-soft': 'rgb(205 242 90 / 0.14)',
@@ -75,7 +75,7 @@ const TOKENS = {
   '--ss-radius-lg': '10px',
   '--ss-radius-window': '12px',
   '--ss-font': '"Instrument Sans", ui-sans-serif, system-ui, sans-serif',
-  '--ss-shadow-window': '0 0 0 1px rgb(255 255 255 / 0.07), 0 30px 70px -30px rgb(0 0 0 / 0.55)',
+  '--ss-shadow-window': '0 0 0 1px rgb(255 255 255 / 0.06), 0 34px 64px -26px rgb(20 16 13 / 0.35)',
 }
 
 const SUBJECT = { name: 'ubuntu-24.04.1-desktop-amd64.iso', size: '5.8 GB' }
@@ -86,13 +86,13 @@ const ROWS = [
   { name: 'godot-4.4-stable-win64.exe', size: '118 MB', pct: 100, phase: 'done' as const },
 ]
 
-const FILL = [
-  { name: 208, pct: 46 },
-  { name: 164, pct: 12 },
-  { name: 186, pct: 73 },
-  { name: 138, pct: 28 },
-  { name: 196, pct: 58 },
-  { name: 152, pct: 35 },
+const COMPLETED = [
+  { name: 'opencode-1.0.168-windows-x64.zip', size: '86 MB', pct: 100 },
+  { name: 'annual-report-2026.pdf', size: '4.2 MB', pct: 100 },
+  { name: 'product-shots-final.zip', size: '318 MB', pct: 100 },
+  { name: 'slides-valuation-v3.pptx', size: '27 MB', pct: 100 },
+  { name: 'benchmark-suite-2026.7z', size: '1.1 GB', pct: 100 },
+  { name: 'fonts-archive.zip', size: '12 MB', pct: 100 },
 ]
 
 const LABEL = { paused: 'Paused', running: 'Downloading', done: 'Completed' } as const
@@ -179,8 +179,8 @@ export default function DownloadHero() {
                   {ROWS.map((r) => (
                     <Row key={r.name} layout={layout} name={r.name} size={r.size} pct={r.pct} phase={r.phase} speed={r.speed ?? '-'} eta={r.eta ?? '-'} />
                   ))}
-                  {FILL.map((f, i) => (
-                    <Fill key={i} layout={layout} name={f.name} pct={f.pct} />
+                  {COMPLETED.map((r) => (
+                    <Row key={r.name} layout={layout} name={r.name} size={r.size} pct={100} phase="done" speed="-" eta="-" />
                   ))}
                 </div>
               </div>
@@ -263,57 +263,6 @@ function Row({ layout, name, size, pct, phase, speed, eta, sel, target }: { layo
     </div>
   )
 }
-
-function Fill({ layout, name, pct }: { layout: Layout; name: number; pct: number }) {
-  const track = (
-    <span className="dl-track">
-      <i className="dl-fill dl-fill--filler" style={{ width: `${pct}%` }} />
-    </span>
-  )
-  return (
-    <div className="dl-row dl-row--fill">
-      {layout === 'compact' ? (
-        <>
-          <div className="dl-top">
-            <span className="dl-name">
-              <Bar w={name} h={7} tone={2} />
-            </span>
-            <Bar w={56} h={14} r={7} tone={1} />
-          </div>
-          <div className="dl-bottom">
-            {track}
-            <Bar w={38} h={7} tone={1} />
-          </div>
-        </>
-      ) : (
-        <>
-          <span className="dl-name">
-            <Bar w={name} h={7} tone={2} />
-          </span>
-          <span className="dl-size">
-            <Bar w={34} h={7} tone={1} />
-          </span>
-          <span className="dl-prog">
-            {track}
-            <span className="dl-pct">
-              <Bar w={38} h={7} tone={1} />
-            </span>
-          </span>
-          <span className="dl-speed">
-            <Bar w={44} h={7} tone={1} />
-          </span>
-          <span className="dl-eta">
-            <Bar w={34} h={7} tone={1} />
-          </span>
-          <span className="dl-status">
-            <Bar w={58} h={14} r={7} tone={1} />
-          </span>
-        </>
-      )}
-    </div>
-  )
-}
-
 function Track({ pct }: { pct: number }) {
   return (
     <span className="dl-track">
