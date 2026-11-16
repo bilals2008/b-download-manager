@@ -369,17 +369,32 @@ impl PeerSession {
             loop {
                 match self.read_message().await? {
                     Message::Extended { id: 1, payload } => {
-                        let value = bencode_decode(&payload)?;
+                        let (value, consumed) =
+                            crate::bencode::decode_value_with_end(&payload)?;
                         if value.get("msg_type").and_then(|v| v.as_int()) == Some(2) {
                             return Err(TorrentError::Network(
                                 "the peer rejected the metadata request".into(),
                             ));
                         }
                         let piece = value.get("piece").and_then(|v| v.as_int()).unwrap_or(0) as usize;
-                        let data = value.get("data").and_then(|v| v.as_bytes()).unwrap_or(&[]);
+                        // Some clients put the raw piece bytes straight after
+                        // the dictionary instead of in a `data` key.
+                        let data: Vec<u8> = match value
+                            .get("data")
+                            .and_then(|v| v.as_bytes())
+                            .map(<[u8]>::to_vec)
+                        {
+                            Some(data) => data,
+                            None => payload[consumed..].to_vec(),
+                        };
+                        if data.is_empty() {
+                            return Err(TorrentError::Network(
+                                "the peer sent no bytes for the piece".into(),
+                            ));
+                        }
                         let at = piece * BLOCK_SIZE;
                         if at + data.len() <= metadata.len() {
-                            metadata[at..at + data.len()].copy_from_slice(data);
+                            metadata[at..at + data.len()].copy_from_slice(&data);
                             got += data.len();
                         }
                         break;
@@ -525,5 +540,83 @@ mod tests {
         assert!(!session.has_piece(1));
         assert!(session.has_piece(2));
         assert!(session.extension);
+    }
+
+    /// The metadata message of a common client carries its bytes straight
+    /// after the dictionary instead of in a `data` key. The client must not
+    /// wait forever for a key that is never coming.
+    #[tokio::test]
+    async fn metadata_whose_bytes_follow_the_dictionary_is_read() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::net::TcpListener;
+
+        let metadata = b"d1:a4:wiki4:minee".to_vec();
+        let size = metadata.len();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let info_hash = [7u8; 20];
+        let script = metadata.clone();
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            async fn message(socket: &mut tokio::net::TcpStream, body: Vec<u8>) {
+                let length = (body.len() as u32).to_be_bytes();
+                socket.write_all(&length).await.unwrap();
+                socket.write_all(&body).await.unwrap();
+            }
+            async fn read(socket: &mut tokio::net::TcpStream) -> Vec<u8> {
+                let mut length_prefix = [0u8; 4];
+                socket.read_exact(&mut length_prefix).await.unwrap();
+                let length = u32::from_be_bytes(length_prefix) as usize;
+                let mut body = vec![0u8; length];
+                socket.read_exact(&mut body).await.unwrap();
+                body
+            }
+            // The handshake: their bytes in, our bytes out.
+            let mut hello = vec![19u8];
+            hello.extend_from_slice(b"BitTorrent protocol");
+            let mut reserved = [0u8; 8];
+            reserved[5] = 0x10;
+            hello.extend_from_slice(&reserved);
+            hello.extend_from_slice(&info_hash);
+            hello.extend_from_slice(&[9u8; 20]);
+            let mut received = vec![0u8; 68];
+            socket.read_exact(&mut received).await.unwrap();
+            socket.write_all(&hello).await.unwrap();
+            let bitfield = Message::to_wire(&Message::Bitfield(vec![0b1000_0000]));
+            socket.write_all(&bitfield).await.unwrap();
+            // The extension handshake.
+            let theirs = read(&mut socket).await;
+            assert_eq!(theirs[0], 20);
+            let mut reply = vec![20, 0];
+            reply.extend_from_slice(&crate::bencode::bencode_encode(&crate::bencode::BencodeValue::Dict(vec![
+                (
+                    "m".into(),
+                    crate::bencode::BencodeValue::Dict(vec![(
+                        "ut_metadata".into(),
+                        crate::bencode::BencodeValue::Integer(1),
+                    )]),
+                ),
+                ("metadata_size".into(), crate::bencode::BencodeValue::Integer(size as i64)),
+            ])));
+            message(&mut socket, reply).await;
+            // The piece request, then the piece: a dictionary in front of the
+            // bytes, and the bytes behind it.
+            let request = read(&mut socket).await;
+            assert_eq!(request[0], 20);
+            let mut piece = vec![20, 1];
+            piece.extend_from_slice(format!("d8:msg_typei1e5:piecei0e10:total_sizei{size}ee").as_bytes());
+            piece.extend_from_slice(&script);
+            message(&mut socket, piece).await;
+            std::future::pending::<()>().await;
+        });
+
+        let mut session = PeerSession::connect(address, info_hash, [8u8; 20], 1)
+            .await
+            .expect("the peer said hello");
+        let found = session
+            .fetch_metadata()
+            .await
+            .expect("the metadata came back");
+        assert_eq!(found, metadata);
     }
 }

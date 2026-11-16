@@ -102,6 +102,16 @@ pub(crate) fn decode_with_info_span(
     Ok((BencodeValue::Dict(entries), span))
 }
 
+/// Read one value and say how many bytes it took, so a message whose
+/// dictionary leads a raw blob can be split in one pass.
+pub(crate) fn decode_value_with_end(
+    bytes: &[u8],
+) -> Result<(BencodeValue, usize), TorrentError> {
+    let mut decoder = Decoder { bytes, at: 0 };
+    let value = decoder.value()?;
+    Ok((value, decoder.at))
+}
+
 /// Write a value as bencode.
 pub fn bencode_encode(value: &BencodeValue) -> Vec<u8> {
     let mut out = Vec::new();
