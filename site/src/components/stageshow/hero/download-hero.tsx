@@ -44,7 +44,7 @@ async function script(a: Act<S>) {
   a.put({ phase: 'done', pct: 100 })
   a.mark('done')
   await a.wait(900)
-  await a.move({ wide: { x: 1044, y: 470 }, compact: { x: 320, y: 336 } })
+  await a.move({ wide: { x: 1060, y: 490 }, compact: { x: 320, y: 336 } })
   await a.wait(2000)
 }
 
@@ -127,7 +127,7 @@ export default function DownloadHero() {
       script={script}
       play="once"
       fill
-      cursor={{ at: { wide: { x: 1044, y: 470 }, compact: { x: 300, y: 300 } }, idle: 3200 }}
+      cursor={{ at: { wide: { x: 1060, y: 490 }, compact: { x: 300, y: 300 } }, idle: 3200 }}
       className="dl"
     >
       {(s, _rect, layout) => {

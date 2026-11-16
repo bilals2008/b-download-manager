@@ -26,10 +26,10 @@
    keeps running past the crop */
 .dl-win {
   position: absolute;
-  top: 56px;
-  left: 56px;
-  width: 1008px;
-  height: 570px;
+  top: 24px;
+  left: 24px;
+  width: 1072px;
+  height: 560px;
 }
 
 .dl .ss-stage[data-layout='compact'] .dl-win {
