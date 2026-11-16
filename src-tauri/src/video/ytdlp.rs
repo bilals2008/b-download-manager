@@ -16,6 +16,7 @@ use std::time::Duration;
 
 use tauri::AppHandle;
 
+use idm_core::media::subtitles::SubtitleRendition;
 use idm_core::media::{quality, Format, Manifest, MediaKind};
 use reqwest::Url;
 use serde::Deserialize;
@@ -144,8 +145,29 @@ struct Answer {
     title: Option<String>,
     #[serde(default)]
     duration: Option<f64>,
+    /// The language the video was uploaded in, when the helper says.
+    #[serde(default)]
+    language: Option<String>,
     #[serde(default)]
     formats: Vec<RawFormat>,
+    /// The uploader's own captions, one list per language.
+    #[serde(default)]
+    subtitles: HashMap<String, Vec<RawSubtitle>>,
+    /// The captions made by machine, in the video's language and every
+    /// translation the helper could think of.
+    #[serde(default)]
+    automatic_captions: HashMap<String, Vec<RawSubtitle>>,
+}
+
+/// One caption file of one language, as the helper names it.
+#[derive(Deserialize)]
+struct RawSubtitle {
+    #[serde(default)]
+    ext: Option<String>,
+    #[serde(default)]
+    url: Option<String>,
+    #[serde(default)]
+    name: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -196,6 +218,8 @@ struct Candidate {
 fn parse(answer: &str, fallback_title: &str) -> Result<(Manifest, SourcePlan), String> {
     let answer: Answer = serde_json::from_str(answer)
         .map_err(|error| format!("the video helper's answer could not be read: {error}"))?;
+
+    let subtitle_renditions = subtitles(&answer);
 
     let mut candidates: Vec<Candidate> = Vec::new();
     for raw in &answer.formats {
@@ -334,9 +358,75 @@ fn parse(answer: &str, fallback_title: &str) -> Result<(Manifest, SourcePlan), S
         formats,
         pairs,
         container_hint: Some("youtube".to_string()),
-        subtitles: Vec::new(),
+        subtitles: subtitle_renditions,
     };
     Ok((manifest, SourcePlan::Files { tracks }))
+}
+
+/// The caption tracks the helper named, as the panel's rows.
+///
+/// Only the video's own language is taken from the machine captions: the
+/// helper lists every translation it can make, and a hundred rows would bury
+/// the one track that is really there.
+fn subtitles(input: &Answer) -> Vec<SubtitleRendition> {
+    let own = input.language.as_deref().unwrap_or("");
+    let mut out: Vec<SubtitleRendition> = Vec::new();
+    let mut uploader: Vec<&String> = input.subtitles.keys().collect();
+    uploader.sort();
+    for language in uploader {
+        if let Some(group) = input.subtitles.get(language) {
+            add(&mut out, language, group);
+        }
+    }
+    for (language, group) in &input.automatic_captions {
+        if language.as_str() == own {
+            add(&mut out, language, group);
+        }
+    }
+    out
+}
+
+/// Add one language's caption file, the uploader's copy first.
+fn add(out: &mut Vec<SubtitleRendition>, language: &str, group: &[RawSubtitle]) {
+    if out
+        .iter()
+        .any(|rendition| rendition.language.as_deref() == Some(language))
+    {
+        // The uploader's track is already on the list; the machine copy of
+        // the same language adds nothing.
+        return;
+    }
+    let Some(file) = group.iter().find(|file| readable(file)) else {
+        return;
+    };
+    let Some(url) = file.url.clone().filter(|url| url.starts_with("https://")) else {
+        return;
+    };
+    let name = file
+        .name
+        .as_deref()
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .unwrap_or(language);
+    out.push(SubtitleRendition {
+        id: format!("sub-{language}"),
+        name: name.to_string(),
+        language: Some(language.to_string()),
+        url,
+        container: file
+            .ext
+            .as_deref()
+            .unwrap_or_default()
+            .to_ascii_lowercase(),
+        // Nothing is muxed into the file unless the reader asks for it.
+        is_default: false,
+    });
+}
+
+/// Whether this caption file is one the muxer reads.
+fn readable(file: &RawSubtitle) -> bool {
+    let extension = file.ext.as_deref().unwrap_or("");
+    extension.eq_ignore_ascii_case("vtt") || extension.eq_ignore_ascii_case("srt")
 }
 
 /// A codec the helper named, or `None` for `"none"` and a missing value.
@@ -419,5 +509,38 @@ mod tests {
     fn an_answer_with_no_plain_file_says_so() {
         let only_playlist = r#"{"formats":[{"format_id":"233","ext":"mp4","protocol":"m3u8_native","url":"https://x/y.m3u8"}]}"#;
         assert!(parse(only_playlist, "fallback").is_err());
+    }
+
+    #[test]
+    fn the_captions_the_helper_named_become_rows() {
+        let answer = r#"{
+            "title": "A film",
+            "language": "en",
+            "formats": [{"format_id": "137", "ext": "mp4", "protocol": "https", "vcodec": "avc1", "acodec": "none", "height": 1080, "url": "https://rr1.googlevideo.com/videoplayback?itag=137"}],
+            "subtitles": {
+                "en": [
+                    {"ext": "json3", "url": "https://www.youtube.com/api/timedtext?v=x&fmt=json3", "name": "English"},
+                    {"ext": "vtt", "url": "https://www.youtube.com/api/timedtext?v=x&fmt=vtt", "name": "English"}
+                ],
+                "ur": [{"ext": "vtt", "url": "https://www.youtube.com/api/timedtext?v=x&lang=ur", "name": "Urdu"}]
+            },
+            "automatic_captions": {
+                "en": [{"ext": "vtt", "url": "https://www.youtube.com/api/timedtext?v=x&kind=asr", "name": "English (auto)"}],
+                "de": [{"ext": "vtt", "url": "https://www.youtube.com/api/timedtext?v=x&lang=de", "name": "German (auto)"}]
+            }
+        }"#;
+        let (manifest, _) = parse(answer, "fallback").expect("an answer");
+        let rows: Vec<(&str, &str)> = manifest
+            .subtitles
+            .iter()
+            .map(|rendition| (rendition.language.as_deref().unwrap_or(""), rendition.container.as_str()))
+            .collect();
+        assert_eq!(
+            rows,
+            vec![("en", "vtt"), ("ur", "vtt")],
+            "the webvtt copy of each language, the machine copy of the same language skipped, the translations left out"
+        );
+        assert!(manifest.subtitles[0].url.contains("fmt=vtt"));
+        assert!(!manifest.subtitles.iter().any(|row| row.is_default));
     }
 }
