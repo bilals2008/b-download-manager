@@ -8,6 +8,10 @@ use serde::Serialize;
 
 use crate::error::TorrentError;
 
+/// The entries of a dictionary and the bytes each value took in the stream,
+/// which is what the info hash is cut out of.
+type DictEntries = (Vec<(String, BencodeValue)>, Vec<(usize, usize)>);
+
 /// A value read from, or written to, a bencode stream.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -242,7 +246,7 @@ impl<'a> Decoder<'a> {
     }
 
     /// The entries of a dictionary and the bytes each value took.
-    fn dict_entries(&mut self) -> Result<(Vec<(String, BencodeValue)>, Vec<(usize, usize)>), TorrentError> {
+    fn dict_entries(&mut self) -> Result<DictEntries, TorrentError> {
         let mut entries = Vec::new();
         let mut spans = Vec::new();
         loop {

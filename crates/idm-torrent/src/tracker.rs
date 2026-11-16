@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use crate::bencode::bencode_decode;
 use crate::error::TorrentError;
-use crate::util::{hex_decode, hex_encode};
+use crate::util::hex_decode;
 
 /// What a tracker answered.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -21,7 +21,9 @@ pub struct AnnounceResult {
     pub incomplete: u64,
 }
 
-/// Tell a tracker who we are and ask it for peers.
+/// Tell a tracker who we are and ask it for peers. The proxy, when there is
+/// one, carries the HTTP announce; a UDP tracker is reached directly, the
+/// way the protocol is spoken.
 pub async fn announce(
     tracker: &str,
     info_hash: &str,
@@ -29,6 +31,7 @@ pub async fn announce(
     port: u16,
     event: &str,
     left: u64,
+    proxy: Option<&str>,
 ) -> Result<AnnounceResult, TorrentError> {
     let hash = hex_decode(info_hash)
         .ok_or_else(|| TorrentError::Malformed("the info hash is not hex".into()))?;
@@ -43,10 +46,10 @@ pub async fn announce(
             "the tracker {tracker} is not one this crate can reach"
         )));
     }
-    http_announce(tracker, &hash, &id, port, event, left).await
+    http_announce(tracker, &hash, &id, port, event, left, proxy).await
 }
 
-/// Ask a tracker over HTTP.
+/// Ask a tracker over HTTP, through the proxy when one is set.
 async fn http_announce(
     tracker: &str,
     info_hash: &[u8],
@@ -54,12 +57,10 @@ async fn http_announce(
     port: u16,
     event: &str,
     left: u64,
+    proxy: Option<&str>,
 ) -> Result<AnnounceResult, TorrentError> {
     let url = announce_url(tracker, info_hash, peer_id, port, event, left);
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(20))
-        .build()
-        .map_err(|e| TorrentError::Network(e.to_string()))?;
+    let client = http_client(proxy)?;
     let response = client
         .get(&url)
         .send()
@@ -76,6 +77,20 @@ async fn http_announce(
         .await
         .map_err(|e| TorrentError::Network(e.to_string()))?;
     parse_answer(&body)
+}
+
+/// The HTTP client an announce leaves through: the reader's proxy when there
+/// is one, a direct connection when there is not.
+pub(crate) fn http_client(proxy: Option<&str>) -> Result<reqwest::Client, TorrentError> {
+    let mut builder = reqwest::Client::builder().timeout(Duration::from_secs(20));
+    if let Some(proxy) = proxy.filter(|proxy| !proxy.is_empty()) {
+        let proxy = reqwest::Proxy::all(proxy)
+            .map_err(|e| TorrentError::Network(format!("the proxy is not usable: {e}")))?;
+        builder = builder.proxy(proxy);
+    }
+    builder
+        .build()
+        .map_err(|e| TorrentError::Network(e.to_string()))
 }
 
 /// Ask a tracker over UDP (BEP 15).
@@ -106,7 +121,7 @@ async fn udp_announce(
     let address = addresses
         .next()
         .ok_or_else(|| TorrentError::Network(format!("{host} has no address")))?;
-    let mut socket = tokio::net::UdpSocket::bind("0.0.0.0:0")
+    let socket = tokio::net::UdpSocket::bind("0.0.0.0:0")
         .await
         .map_err(|e| TorrentError::Network(e.to_string()))?;
     socket
@@ -143,7 +158,7 @@ async fn udp_announce(
     request.extend_from_slice(info_hash);
     request.extend_from_slice(peer_id);
     request.extend_from_slice(&0u64.to_be_bytes());
-    request.extend_from_slice(&(left as u64).to_be_bytes());
+    request.extend_from_slice(&left.to_be_bytes());
     request.extend_from_slice(&0u64.to_be_bytes());
     request.extend_from_slice(&event_code(event).to_be_bytes());
     request.extend_from_slice(&0u32.to_be_bytes());
@@ -273,16 +288,6 @@ fn peer_from_bytes(bytes: &[u8]) -> SocketAddr {
     SocketAddr::from((address, port))
 }
 
-/// The address of a peer, as it is shown.
-pub fn address_text(address: &SocketAddr) -> String {
-    address.to_string()
-}
-
-/// The peer id, as it is shown.
-pub fn peer_id_text(id: &[u8; 20]) -> String {
-    hex_encode(id)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -322,6 +327,7 @@ mod tests {
             6881,
             "started",
             0,
+            None,
         )
         .await
         .unwrap();
@@ -339,9 +345,56 @@ mod tests {
             6881,
             "started",
             0,
+            None,
         )
         .await
         .unwrap_err();
         assert!(error.to_string().contains("tracker"));
+    }
+
+    #[tokio::test]
+    async fn an_announce_leaves_through_the_proxy() {
+        // A proxy of our own: it takes the request, checks that the whole
+        // tracker address is in the request line — which is what a proxied
+        // plain-HTTP request carries — and answers as the tracker would.
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let proxy = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = vec![0u8; 4096];
+            let read = socket.read(&mut request).await.unwrap();
+            let text = String::from_utf8_lossy(&request[..read]).to_string();
+            assert!(
+                text.starts_with("GET http://"),
+                "the announce did not go through the proxy: {text}"
+            );
+            let body = b"d8:intervali1800e5:peers6:\x7f\x00\x00\x01\x1a\xe1e";
+            let head = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            );
+            socket.write_all(head.as_bytes()).await.unwrap();
+            socket.write_all(body).await.unwrap();
+            socket.flush().await.unwrap();
+        });
+        let result = announce(
+            "http://tracker.example/announce",
+            &"0".repeat(40),
+            &"1".repeat(40),
+            6881,
+            "started",
+            0,
+            Some(&format!("http://{proxy}")),
+        )
+        .await
+        .unwrap();
+        assert_eq!(result.peers.len(), 1);
+    }
+
+    #[test]
+    fn no_proxy_is_a_direct_client_and_a_bad_proxy_is_an_error() {
+        assert!(http_client(None).is_ok());
+        assert!(http_client(Some("")).is_ok());
+        assert!(http_client(Some("not a proxy address")).is_err());
     }
 }

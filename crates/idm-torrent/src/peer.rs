@@ -303,6 +303,8 @@ pub struct PeerInfo {
     pub address: String,
     /// The id the peer says.
     pub peer_id: String,
+    /// The program the peer runs, when its id says so.
+    pub client: String,
     /// Whether the connection is there now.
     pub connected: bool,
     /// How many bytes came from this peer.
@@ -311,6 +313,23 @@ pub struct PeerInfo {
     pub uploaded: u64,
     /// How much of the torrent this peer has, from 0 to 1.
     pub progress: f32,
+    /// How many bytes a second come from this peer.
+    pub down_speed: u64,
+    /// How many bytes a second go to this peer.
+    pub up_speed: u64,
+}
+
+/// The program a peer runs, read from its peer id the Azureus way: the first
+/// eight bytes of the id carry the name of the client, when the client puts
+/// its name there. An id that says nothing gives nothing.
+pub fn client_name(peer_id: &[u8; 20]) -> String {
+    let head = &peer_id[..8];
+    if !head.iter().all(|byte| byte.is_ascii_graphic()) {
+        return String::new();
+    }
+    let text = String::from_utf8_lossy(head);
+    text.trim_matches(|character: char| !character.is_ascii_alphanumeric())
+        .to_owned()
 }
 
 #[cfg(test)]
@@ -369,5 +388,23 @@ mod tests {
         // A keep-alive on the wire is a four-byte length of zero, nothing else.
         assert_eq!(Message::KeepAlive.to_wire(), vec![0, 0, 0, 0]);
         assert_eq!(Message::KeepAlive.encode(), Vec::<u8>::new());
+    }
+
+    #[test]
+    fn the_name_of_a_client_is_read_from_its_peer_id() {
+        let mut id = [0u8; 20];
+        id[..8].copy_from_slice(b"-qB5050-");
+        assert_eq!(client_name(&id), "qB5050");
+
+        let mut id = [0u8; 20];
+        id[..8].copy_from_slice(b"qBittorr");
+        assert_eq!(client_name(&id), "qBittorr");
+    }
+
+    #[test]
+    fn a_peer_id_that_says_nothing_gives_no_client() {
+        // A hash of bytes, like the one this crate makes for itself.
+        let id = [0x9fu8; 20];
+        assert_eq!(client_name(&id), "");
     }
 }

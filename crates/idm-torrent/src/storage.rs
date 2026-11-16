@@ -2,9 +2,11 @@
 //! over. The crate never decides where a download ends up, it only writes
 //! what it was given a place to write.
 
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use sha1::Digest;
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio::sync::Mutex;
 
@@ -13,6 +15,7 @@ use crate::metainfo::Metainfo;
 use crate::peerconn::{BlockSource, BoxFuture};
 use crate::pieces::PieceMap;
 use crate::safe::safe_path;
+use crate::util::hex_encode;
 
 /// One file of the torrent, being written.
 struct StoredFile {
@@ -22,6 +25,9 @@ struct StoredFile {
     path: PathBuf,
     /// Where the bytes are written while it is not.
     part: PathBuf,
+    /// The file that is written to: the part file, or the file itself when it
+    /// is already there from an earlier run.
+    working: PathBuf,
     /// How many bytes the file holds.
     length: u64,
     /// Where the file starts in the stream of all the bytes.
@@ -39,6 +45,11 @@ pub struct Storage {
 
 impl Storage {
     /// The part files of the chosen files of a torrent, inside `root`.
+    ///
+    /// A file that is already there is written to where it is: the bytes of
+    /// a job that was stopped are never thrown away. A part file that is
+    /// shorter than it should be stays short, so the bytes that are missing
+    /// are missing and not zeros.
     pub async fn new(
         root: &Path,
         metainfo: &Metainfo,
@@ -56,18 +67,21 @@ impl Storage {
                 tokio::fs::create_dir_all(parent).await?;
             }
             let part = part_path(&path);
+            let working = if path.exists() { path.clone() } else { part.clone() };
+            // No truncate: the bytes of a job that was stopped are kept, and
+            // the file is never extended with zeros to look complete.
             let handle = tokio::fs::OpenOptions::new()
                 .read(true)
                 .write(true)
                 .create(true)
-                .truncate(true)
-                .open(&part)
+                .truncate(false)
+                .open(&working)
                 .await?;
-            handle.set_len(file.length).await?;
             files.push(StoredFile {
                 index: *index,
                 path,
                 part,
+                working,
                 length: file.length,
                 offset: file.offset,
                 handle: Mutex::new(handle),
@@ -125,23 +139,20 @@ impl Storage {
     }
 
     /// Put a whole file where it belongs: the part file becomes the file.
+    /// A file that is already where it belongs is left alone.
     pub async fn finish_file(&self, torrent_index: usize) -> Result<PathBuf, TorrentError> {
         let file = self
             .files
             .iter()
             .find(|file| file.index == torrent_index)
             .ok_or_else(|| TorrentError::Failed(format!("file {torrent_index} is not written here")))?;
+        if file.working != file.part {
+            return Ok(file.path.clone());
+        }
         tokio::fs::rename(&file.part, &file.path).await?;
         Ok(file.path.clone())
     }
 
-    /// Where a file is written, and where its part file is.
-    pub fn paths(&self, torrent_index: usize) -> Option<(PathBuf, PathBuf)> {
-        self.files
-            .iter()
-            .find(|file| file.index == torrent_index)
-            .map(|file| (file.path.clone(), file.part.clone()))
-    }
 }
 
 /// The part file of a file: the file's name with `.part` behind it.
@@ -153,6 +164,73 @@ fn part_path(path: &Path) -> PathBuf {
         .unwrap_or_else(|| "part".into());
     part.set_file_name(format!("{name}.part"));
     part
+}
+
+/// The pieces of a torrent that are already on disk.
+///
+/// The files are read and hashed against the hashes the torrent carries, so
+/// a file that is only half there counts as missing: a piece is only there
+/// when every byte of it is there and the hash says so. A piece can lie
+/// over two files, so the bytes of a file are read in the order of the
+/// stream, and the hash of a piece is fed the bytes in that order too.
+pub fn pieces_on_disk(
+    root: &Path,
+    metainfo: &Metainfo,
+    chosen: &[usize],
+) -> Result<Vec<bool>, TorrentError> {
+    let piece_map = PieceMap::new(metainfo.piece_length, metainfo.total_length);
+    let mut hashers: Vec<sha1::Sha1> = (0..piece_map.count).map(|_| sha1::Sha1::new()).collect();
+    let mut indices: Vec<usize> = chosen.to_vec();
+    indices.sort_unstable();
+    indices.dedup();
+
+    for index in indices {
+        let Some(file) = metainfo.files.get(index) else {
+            continue;
+        };
+        let Some(relative) = safe_path(&file.path) else {
+            continue;
+        };
+        let path = root.join(relative);
+        // A file that is whole is read where it is; a file that is still
+        // being written is read from its part file.
+        let source = if path.exists() { path } else { part_path(&path) };
+        let Ok(mut handle) = std::fs::File::open(&source) else {
+            continue;
+        };
+        let file_end = file.offset + file.length;
+        let mut at = 0u64;
+        while at < file.length {
+            let piece = piece_map.index_at(file.offset + at);
+            if piece >= piece_map.count {
+                break;
+            }
+            let piece_end = piece_map.offset_of(piece) + piece_map.length_of(piece);
+            let to = file_end.min(piece_end);
+            let amount = (to - (file.offset + at)) as usize;
+            let mut buffer = vec![0u8; amount];
+            // A file that is shorter than it should be stops here: the rest
+            // of the piece is missing, and its hash will not match.
+            if handle.read_exact(&mut buffer).is_err() {
+                break;
+            }
+            hashers[piece as usize].update(&buffer);
+            at += amount as u64;
+        }
+    }
+
+    let mut have = Vec::with_capacity(piece_map.count as usize);
+    for (index, hasher) in hashers.into_iter().enumerate() {
+        let mut digest = [0u8; 20];
+        digest.copy_from_slice(&hasher.finalize());
+        let matches = metainfo
+            .pieces
+            .get(index)
+            .map(|hash| hash.eq_ignore_ascii_case(&hex_encode(&digest)))
+            .unwrap_or(false);
+        have.push(matches);
+    }
+    Ok(have)
 }
 
 impl BlockSource for Storage {
@@ -198,13 +276,24 @@ impl BlockSource for Storage {
 mod tests {
     use super::*;
     use crate::metainfo::TorrentFile;
+    use crate::util::sha1_bytes;
+
+    /// The bytes the torrent of the tests holds.
+    fn content() -> Vec<u8> {
+        b"abcdefgh".to_vec()
+    }
 
     fn a_metainfo() -> Metainfo {
+        let bytes = content();
+        let pieces = [&bytes[..4], &bytes[4..]]
+            .iter()
+            .map(|chunk| hex_encode(&sha1_bytes(chunk)))
+            .collect();
         Metainfo {
             info_hash: "0".repeat(40),
             name: "Example".into(),
             piece_length: 4,
-            pieces: vec![],
+            pieces,
             files: vec![
                 TorrentFile {
                     path: "Example/one.txt".into(),
@@ -222,6 +311,16 @@ mod tests {
         }
     }
 
+    /// A folder with the files of the torrent in it, whole.
+    fn a_folder(name: &str, bytes: &[u8]) -> std::path::PathBuf {
+        let folder = std::env::temp_dir().join(name);
+        let _ = std::fs::remove_dir_all(&folder);
+        std::fs::create_dir_all(folder.join("Example")).unwrap();
+        std::fs::write(folder.join("Example").join("one.txt"), &bytes[..6]).unwrap();
+        std::fs::write(folder.join("Example").join("two.txt"), &bytes[6..]).unwrap();
+        folder
+    }
+
     #[tokio::test]
     async fn a_piece_is_written_into_the_files() {
         let folder = std::env::temp_dir().join("idm-torrent-storage-test");
@@ -237,5 +336,55 @@ mod tests {
         assert_eq!(one, b"abcdef");
         assert_eq!(two, b"gh");
         let _ = tokio::fs::remove_dir_all(&folder).await;
+    }
+
+    #[tokio::test]
+    async fn the_bytes_of_a_stopped_job_are_kept() {
+        let folder = std::env::temp_dir().join("idm-torrent-storage-keep");
+        let _ = tokio::fs::remove_dir_all(&folder).await;
+        tokio::fs::create_dir_all(folder.join("Example")).await.unwrap();
+        tokio::fs::write(folder.join("Example").join("one.txt.part"), b"abcdef")
+            .await
+            .unwrap();
+
+        let _storage = Storage::new(&folder, &a_metainfo(), &[0, 1]).await.unwrap();
+        // The file is not moved to its whole name, and the part file keeps
+        // every byte it had.
+        assert!(!folder.join("Example").join("one.txt").exists());
+        let part = tokio::fs::read(folder.join("Example").join("one.txt.part"))
+            .await
+            .unwrap();
+        assert_eq!(part, b"abcdef");
+        let _ = tokio::fs::remove_dir_all(&folder).await;
+    }
+
+    #[test]
+    fn a_folder_with_the_right_files_holds_every_piece() {
+        let folder = a_folder("idm-torrent-storage-check", &content());
+        let have = pieces_on_disk(&folder, &a_metainfo(), &[0, 1]).unwrap();
+        assert_eq!(have, vec![true, true]);
+        let _ = std::fs::remove_dir_all(&folder);
+    }
+
+    #[test]
+    fn a_folder_with_a_wrong_byte_is_missing_that_piece() {
+        let mut bytes = content();
+        bytes[1] = b'X';
+        let folder = a_folder("idm-torrent-storage-wrong", &bytes);
+        let have = pieces_on_disk(&folder, &a_metainfo(), &[0, 1]).unwrap();
+        // The first piece holds the byte that is wrong; the second is whole.
+        assert_eq!(have, vec![false, true]);
+        let _ = std::fs::remove_dir_all(&folder);
+    }
+
+    #[test]
+    fn a_folder_with_a_short_file_is_missing_its_pieces() {
+        let folder = std::env::temp_dir().join("idm-torrent-storage-short");
+        let _ = std::fs::remove_dir_all(&folder);
+        std::fs::create_dir_all(folder.join("Example")).unwrap();
+        std::fs::write(folder.join("Example").join("one.txt"), b"abc").unwrap();
+        let have = pieces_on_disk(&folder, &a_metainfo(), &[0, 1]).unwrap();
+        assert_eq!(have, vec![false, false]);
+        let _ = std::fs::remove_dir_all(&folder);
     }
 }

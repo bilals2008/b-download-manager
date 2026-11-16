@@ -1,6 +1,6 @@
 //! The little conversions the rest of the crate needs: hex for the hashes,
-//! percent-decoding for the magnet links and base32 for the magnets that
-//! carry their info hash in it.
+//! percent-decoding for the magnet links, base32 for the magnets that carry
+//! their info hash in it and base64 for the piece map the window draws.
 
 /// The bytes as hex, in lower case.
 pub fn hex_encode(bytes: &[u8]) -> String {
@@ -15,7 +15,7 @@ pub fn hex_encode(bytes: &[u8]) -> String {
 /// The bytes a hex text stands for, or nothing when the text is not hex.
 pub fn hex_decode(text: &str) -> Option<Vec<u8>> {
     let text = text.trim();
-    if text.len() % 2 != 0 {
+    if !text.len().is_multiple_of(2) {
         return None;
     }
     let bytes = text.as_bytes();
@@ -26,6 +26,35 @@ pub fn hex_decode(text: &str) -> Option<Vec<u8>> {
         out.push((high * 16 + low) as u8);
     }
     Some(out)
+}
+
+/// The bytes as base64 (RFC 4648, with the padding).
+///
+/// The piece map of a big torrent is a bitmap of a few thousand bytes, and
+/// base64 carries it in a third less than hex does.
+pub fn base64_encode(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] =
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let first = chunk[0] as u32;
+        let second = *chunk.get(1).unwrap_or(&0) as u32;
+        let third = *chunk.get(2).unwrap_or(&0) as u32;
+        let triple = (first << 16) | (second << 8) | third;
+        out.push(ALPHABET[(triple >> 18) as usize & 0x3f] as char);
+        out.push(ALPHABET[(triple >> 12) as usize & 0x3f] as char);
+        if chunk.len() > 1 {
+            out.push(ALPHABET[(triple >> 6) as usize & 0x3f] as char);
+        } else {
+            out.push('=');
+        }
+        if chunk.len() > 2 {
+            out.push(ALPHABET[triple as usize & 0x3f] as char);
+        } else {
+            out.push('=');
+        }
+    }
+    out
 }
 
 /// The text a percent-encoded string stands for.
@@ -143,6 +172,16 @@ mod tests {
             vec![0u8; 20]
         );
         assert!(base32_decode("0189").is_none());
+    }
+
+    #[test]
+    fn base64_carries_the_bytes() {
+        assert_eq!(base64_encode(&[]), "");
+        assert_eq!(base64_encode(b"f"), "Zg==");
+        assert_eq!(base64_encode(b"fo"), "Zm8=");
+        assert_eq!(base64_encode(b"foo"), "Zm9v");
+        assert_eq!(base64_encode(b"foob"), "Zm9vYg==");
+        assert_eq!(base64_encode(&[0xff, 0xfe, 0xfd]), "//79");
     }
 
     #[test]

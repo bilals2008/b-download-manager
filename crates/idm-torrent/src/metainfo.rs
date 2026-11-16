@@ -81,7 +81,7 @@ pub(crate) fn metainfo_from_info(
     }
     let pieces = piece_hashes
         .chunks(20)
-        .map(|hash| hex_encode(hash))
+        .map(hex_encode)
         .collect::<Vec<String>>();
 
     let files = files_of(info, &name)?;

@@ -5,7 +5,7 @@ use std::future::Future;
 use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
@@ -49,6 +49,12 @@ pub struct PeerSession {
     /// How many bytes went to this peer.
     pub uploaded: u64,
     source: Option<Arc<dyn BlockSource>>,
+    /// How many bytes a second may go out; zero is no limit.
+    upload_limit: u64,
+    /// When the window of the upload started.
+    window_start: Instant,
+    /// How many bytes went out in this window.
+    window_bytes: u64,
 }
 
 impl PeerSession {
@@ -81,6 +87,9 @@ impl PeerSession {
             downloaded: 0,
             uploaded: 0,
             source: None,
+            upload_limit: 0,
+            window_start: Instant::now(),
+            window_bytes: 0,
         };
 
         session
@@ -142,6 +151,15 @@ impl PeerSession {
     /// Where the blocks of a piece come from once the job has them.
     pub fn set_source(&mut self, source: Arc<dyn BlockSource>) {
         self.source = Some(source);
+    }
+
+    /// Keep the upload under the limit the reader set; zero is no limit.
+    pub fn set_upload_limit(&mut self, limit: u64) {
+        if limit != self.upload_limit {
+            self.upload_limit = limit;
+            self.window_start = Instant::now();
+            self.window_bytes = 0;
+        }
     }
 
     /// Whether the peer says it has a piece.
@@ -299,6 +317,11 @@ impl PeerSession {
         })
         .await?;
 
+        // The id the peer wants metadata messages sent to it under. It is in
+        // the peer's own handshake and is not always 1, so a request sent to
+        // the handshake id — or to this crate's own id — is one the peer does
+        // not read, and the metadata never comes.
+        let to_the_peer;
         let size = loop {
             match self.read_message().await? {
                 Message::Extended { id: 0, payload } => {
@@ -313,6 +336,7 @@ impl PeerSession {
                             "the peer does not have the metadata of the torrent".into(),
                         ));
                     }
+                    to_the_peer = speaks as u8;
                     break value
                         .get("metadata_size")
                         .and_then(|v| v.as_int())
@@ -338,7 +362,7 @@ impl PeerSession {
                 ("piece".into(), BencodeValue::Integer((got / BLOCK_SIZE) as i64)),
             ]);
             self.send(&Message::Extended {
-                id: 0,
+                id: to_the_peer,
                 payload: bencode_encode(&request),
             })
             .await?;
@@ -416,6 +440,7 @@ impl PeerSession {
             return Ok(());
         };
         let size = bytes.len() as u64;
+        self.pace_upload(size).await;
         self.send(&Message::Piece {
             index,
             begin,
@@ -424,6 +449,29 @@ impl PeerSession {
         .await?;
         self.uploaded += size;
         Ok(())
+    }
+
+    /// Wait until a block may go out. The limit is a number of bytes a
+    /// second, so a block waits for the window to turn over when the window
+    /// is full. The limit is not exact; it keeps the upload near it.
+    async fn pace_upload(&mut self, amount: u64) {
+        if self.upload_limit == 0 {
+            self.window_bytes += amount;
+            return;
+        }
+        loop {
+            let elapsed = self.window_start.elapsed();
+            if elapsed >= Duration::from_secs(1) {
+                self.window_start = Instant::now();
+                self.window_bytes = 0;
+                break;
+            }
+            if self.window_bytes + amount <= self.upload_limit {
+                break;
+            }
+            tokio::time::sleep(Duration::from_secs(1) - elapsed).await;
+        }
+        self.window_bytes += amount;
     }
 
     fn set_have(&mut self, index: u32) {
