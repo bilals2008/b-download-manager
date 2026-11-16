@@ -96,6 +96,17 @@ const COMPLETED = [
 ]
 
 const LABEL = { paused: 'Paused', running: 'Downloading', done: 'Completed' } as const
+
+/** The app's material file icons, matched by extension. */
+function fileIcon(name: string) {
+  const n = name.toLowerCase()
+  if (n.endsWith('.iso')) return '/images/file-icons/disc.svg'
+  if (n.endsWith('.mp4') || n.endsWith('.mkv')) return '/images/file-icons/video.svg'
+  if (n.endsWith('.exe') || n.endsWith('.msi')) return '/images/file-icons/exe.svg'
+  if (n.endsWith('.pdf')) return '/images/file-icons/pdf.svg'
+  if (n.endsWith('.pptx') || n.endsWith('.ppt')) return '/images/file-icons/powerpoint.svg'
+  return '/images/file-icons/zip.svg'
+}
 const CHIP = { paused: 'paused', running: 'downloading', done: 'completed' } as const
 
 const VIEWS = [
@@ -239,7 +250,10 @@ function Row({ layout, name, size, pct, phase, speed, eta, sel, target }: { layo
       {layout === 'compact' ? (
         <>
           <div className="dl-top">
-            <span className="dl-name">{name}</span>
+            <span className="dl-name">
+              <img className="dl-file-icon" src={fileIcon(name)} alt="" width={20} height={20} />
+              {name}
+            </span>
             {status}
           </div>
           <div className="dl-bottom">
@@ -249,7 +263,10 @@ function Row({ layout, name, size, pct, phase, speed, eta, sel, target }: { layo
         </>
       ) : (
         <>
-          <span className="dl-name">{name}</span>
+          <span className="dl-name">
+            <img className="dl-file-icon" src={fileIcon(name)} alt="" width={20} height={20} />
+            {name}
+          </span>
           <span className="dl-size">{size}</span>
           <span className="dl-prog">
             <Track pct={pct} />
