@@ -3,6 +3,8 @@
 export { Stage } from './stage'
 export { Window, Bar } from './window'
 export { Button } from './controls/Button'
+export { Field } from './controls/Field'
+export { Popover } from './motion/Popover'
 
 export type { StageProps } from './stage'
 export type { Act } from './act'

@@ -18,6 +18,7 @@
   --icon-green: #3fb950;
   --icon-green-deep: #1f7a33;
   --dl-track: rgb(255 255 255 / 0.08);
+  --dl-row-h: 48px;
 }
 
 /* Inset from the top, left and right by one gutter, off the bottom: the list
@@ -34,7 +35,7 @@
   top: 16px;
   left: 16px;
   width: 326px;
-  height: 298px;
+  height: 354px;
 }
 
 /* ---- The bar: the mark and the three tools ---- */
@@ -84,7 +85,7 @@
 .dl-pane {
   flex: none;
   width: 208px;
-  padding: 20px 8px 12px;
+  padding: 20px 8px 8px;
   border-right: 1px solid var(--ss-line);
 }
 
@@ -361,10 +362,91 @@
   fill: #438f54;
 }
 
+/* ---- The Add URL popover: one step above the canvas, hairline edge ---- */
+
+.dl-add {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 10px;
+  --ss-popover-bg: var(--ss-ink-3);
+  --ss-popover-shadow: 0 0 0 1px var(--ss-line), 0 22px 44px -18px rgb(0 0 0 / 0.55);
+}
+
+.dl-add .ss-field__box {
+  height: 30px;
+  background: var(--ss-canvas);
+  font-size: 12px;
+}
+
+.dl-add-foot {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ---- The new row arriving: its height opens, carrying the list below ---- */
+
+.dl-arrive {
+  flex: none;
+  overflow: hidden;
+  animation: dl-arrive 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* The row stays faint while the opening edge passes over it, then fades in */
+.dl-arrive > .dl-row {
+  animation: dl-arrive-ink 420ms linear both;
+}
+
+@keyframes dl-arrive-ink {
+  0%,
+  70% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes dl-arrive {
+  from {
+    height: 0;
+    opacity: 0;
+  }
+  to {
+    height: var(--dl-row-h);
+    opacity: 1;
+  }
+}
+
+.dl .ss-stage[data-still] .dl-arrive {
+  animation: none;
+  height: var(--dl-row-h);
+}
+
+.dl .ss-stage[data-still] .dl-arrive > .dl-row {
+  animation: none;
+  opacity: 1;
+}
+
 /* ---- Compact: no pane, no column header, two lines a row ---- */
 
 .dl .ss-stage[data-layout='compact'] .dl-rows {
   padding-top: 6px;
+}
+
+.dl .ss-stage[data-layout='compact'] {
+  --dl-row-h: 56px;
+}
+
+.dl .ss-stage[data-layout='compact'] .dl-add {
+  gap: 12px;
+  padding: 8px;
+}
+
+.dl .ss-stage[data-layout='compact'] .dl-add .ss-field__box {
+  height: 26px;
+  padding: 0 8px;
+  font-size: 10.5px;
 }
 
 .dl .ss-stage[data-layout='compact'] .dl-row {
@@ -392,6 +474,7 @@
 
 .dl .ss-stage[data-layout='compact'] .dl-top .dl-status {
   flex: none;
+  width: 84px;
   font-size: 10.5px;
   gap: 5px;
 }
@@ -405,6 +488,6 @@
 }
 
 .dl .ss-stage[data-layout='compact'] .dl-pct {
-  width: auto;
+  width: 42px;
   font-size: 10.5px;
 }

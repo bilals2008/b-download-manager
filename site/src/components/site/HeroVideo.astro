@@ -1,0 +1,95 @@
+---
+// The landing hero as a real video: the stageshow scene recorded frame-by-frame
+// by scripts/record-hero.mjs (wide 1120x540, compact 358x330, one cut per theme
+// because the page ground is baked in; the ending dissolves into the opening
+// so `loop` never jumps). The right cut follows viewport and theme; reduced
+// motion gets the finished-state poster instead of playback.
+---
+
+<video
+  class="hero-video"
+  data-hero-video
+  muted
+  loop
+  playsinline
+  preload="auto"
+  poster="/images/hero-poster-wide-light.webp"
+  aria-hidden="true"
+  tabindex="-1"
+></video>
+<img
+  class="hero-still"
+  data-hero-still
+  src="/images/hero-poster-wide-light.webp"
+  alt=""
+  hidden
+/>
+
+<script>
+  const video = document.querySelector<HTMLVideoElement>("[data-hero-video]");
+  const still = document.querySelector<HTMLImageElement>("[data-hero-still]");
+  if (video && still) {
+    const compact = matchMedia("(max-width: 759px)");
+    const reduced = matchMedia("(prefers-reduced-motion: reduce)");
+    const cut = () =>
+      `${compact.matches ? "compact" : "wide"}-${document.documentElement.dataset.theme === "dark" ? "dark" : "light"}`;
+
+    const apply = () => {
+      const name = cut();
+      if (reduced.matches) {
+        video.pause();
+        video.hidden = true;
+        still.src = `/images/hero-poster-${name}.webp`;
+        still.hidden = false;
+        return;
+      }
+      still.hidden = true;
+      video.hidden = false;
+      if (video.dataset.cut !== name) {
+        video.dataset.cut = name;
+        video.poster = `/images/hero-poster-${name}.webp`;
+        video.replaceChildren(
+          ...["webm", "mp4"].map((ext) => {
+            const source = document.createElement("source");
+            source.src = `/videos/hero-${name}.${ext}`;
+            source.type = `video/${ext}`;
+            return source;
+          }),
+        );
+        video.load();
+      }
+      video.play().catch(() => {});
+    };
+
+    compact.addEventListener("change", apply);
+    reduced.addEventListener("change", apply);
+    new MutationObserver(apply).observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
+    apply();
+  }
+</script>
+
+<style>
+  .hero-video,
+  .hero-still {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1120 / 540;
+    border-radius: 16px;
+  }
+
+  .hero-video[hidden],
+  .hero-still[hidden] {
+    display: none;
+  }
+
+  @media (max-width: 759px) {
+    .hero-video,
+    .hero-still {
+      aspect-ratio: 358 / 330;
+    }
+  }
+</style>

@@ -1,7 +1,7 @@
 ---
 import Button from "./Button.astro";
 import PlatformIcon from "./PlatformIcon.astro";
-import DownloadHero from "../stageshow/hero/download-hero";
+import HeroVideo from "./HeroVideo.astro";
 import { RELEASES_URL } from "../../lib/releases";
 
 const platforms = [
@@ -65,7 +65,7 @@ const platforms = [
       role="img"
       aria-label="The B Download Manager window: a paused download is selected, resumed from the toolbar, and finishes with a green check."
     >
-      <DownloadHero client:load />
+      <HeroVideo />
     </div>
   </div>
 </section>
