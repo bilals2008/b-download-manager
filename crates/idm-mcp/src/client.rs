@@ -298,6 +298,47 @@ mod tests {
     use super::*;
     use std::net::TcpListener;
 
+    /// How many bytes the body of a request promises, read out of its head.
+    fn content_length(head: &str) -> usize {
+        head.lines()
+            .filter_map(|line| line.split_once(':'))
+            .find(|(name, _)| name.eq_ignore_ascii_case("content-length"))
+            .and_then(|(_, value)| value.trim().parse().ok())
+            .unwrap_or(0)
+    }
+
+    /// Read one whole request: the head, and then the body it announced.
+    ///
+    /// Answering before the body is read makes the kernel reset the connection
+    /// on Windows, because closing a socket with unread bytes throws away the
+    /// answer too. The client then reports a transport failure instead of the
+    /// refusal it was sent, which is what made this suite flake under load.
+    fn read_request(stream: &mut std::net::TcpStream) -> String {
+        let mut request = Vec::new();
+        let mut chunk = [0u8; 1024];
+        let mut whole = None;
+        loop {
+            let read = stream.read(&mut chunk).expect("a request");
+            if read == 0 {
+                break;
+            }
+            request.extend_from_slice(&chunk[..read]);
+            if whole.is_none() {
+                if let Some(end) = request
+                    .windows(4)
+                    .position(|window| window == b"\r\n\r\n")
+                {
+                    let head = String::from_utf8_lossy(&request[..end + 4]).to_string();
+                    whole = Some(end + 4 + content_length(&head));
+                }
+            }
+            if whole.is_some_and(|whole| request.len() >= whole) {
+                break;
+            }
+        }
+        String::from_utf8_lossy(&request).to_string()
+    }
+
     /// A tiny HTTP server that answers one request with a fixed body and
     /// hands the request back to the test.
     fn serve_once(body: &str) -> (String, std::thread::JoinHandle<String>) {
@@ -306,15 +347,7 @@ mod tests {
         let body = body.to_string();
         let handle = std::thread::spawn(move || {
             let (mut stream, _) = listener.accept().expect("a connection");
-            let mut request = Vec::new();
-            let mut chunk = [0u8; 1024];
-            while !request.windows(4).any(|window| window == b"\r\n\r\n") {
-                let read = stream.read(&mut chunk).expect("a request");
-                if read == 0 {
-                    break;
-                }
-                request.extend_from_slice(&chunk[..read]);
-            }
+            let request = read_request(&mut stream);
             let answer = format!(
                 "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                 body.len(),
@@ -322,7 +355,7 @@ mod tests {
             );
             stream.write_all(answer.as_bytes()).expect("an answer");
             stream.flush().expect("a flush");
-            String::from_utf8_lossy(&request).to_string()
+            request
         });
         (address, handle)
     }
@@ -336,16 +369,7 @@ mod tests {
             let mut requests = String::new();
             for body in bodies {
                 let (mut stream, _) = listener.accept().expect("a connection");
-                let mut request = Vec::new();
-                let mut chunk = [0u8; 1024];
-                while !request.windows(4).any(|window| window == b"\r\n\r\n") {
-                    let read = stream.read(&mut chunk).expect("a request");
-                    if read == 0 {
-                        break;
-                    }
-                    request.extend_from_slice(&chunk[..read]);
-                }
-                requests.push_str(&String::from_utf8_lossy(&request));
+                requests.push_str(&read_request(&mut stream));
                 let answer = format!(
                     "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                     body.len(),

@@ -8,7 +8,7 @@ use std::path::Path;
 
 use crate::external;
 use crate::format::Format;
-use crate::safe::{self, Limits, Staging, Writer};
+use crate::safe::{Staging, Writer};
 use crate::volumes::{MultiFile, VolumeKind, volume_key};
 use crate::{Error, Policy, Report};
 
@@ -56,12 +56,6 @@ pub fn run(archive: &Path, policy: &mut Policy<'_>) -> Result<Report, Error> {
     Ok(report)
 }
 
-/// The limits for an archive of `size` bytes, when the caller has none of
-/// its own.
-pub fn limits_for(size: u64) -> Limits {
-    Limits::for_archive(size)
-}
-
 /// Whether `archive` is one this crate reads.
 pub fn is_archive(archive: &Path) -> bool {
     matches!(
@@ -78,9 +72,3 @@ pub fn is_archive(archive: &Path) -> bool {
         ))
     )
 }
-
-/// The staging folder's name prefix, so a caller can tell one apart.
-pub const STAGING_PREFIX: &str = ".idm-extract-";
-
-/// Kept so the module is used even when the helpers above are not.
-pub(crate) fn _unused(_: &safe::Limits) {}

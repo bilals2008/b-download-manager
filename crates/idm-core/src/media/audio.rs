@@ -82,6 +82,9 @@ impl AudioSelector {
         match selector.as_str() {
             "b" => return Ok(AudioSelector::Best),
             "ba" => return Ok(AudioSelector::Source),
+            // A bare name is the best sound in that container, the same way
+            // `opus` and `flac` are read without their colon.
+            "mp3" => return Ok(AudioSelector::Mp3(Mp3Quality::Variable)),
             "opus" | "opus:" => return Ok(AudioSelector::Opus),
             "flac" | "flac:" => return Ok(AudioSelector::Flac),
             _ => {}
@@ -481,6 +484,11 @@ mod tests {
         assert_eq!(
             AudioSelector::parse("mp3:0").expect("mp3:0"),
             AudioSelector::Mp3(Mp3Quality::Variable)
+        );
+        assert_eq!(
+            AudioSelector::parse("mp3").expect("mp3"),
+            AudioSelector::Mp3(Mp3Quality::Variable),
+            "the panel sends the bare name"
         );
         assert_eq!(
             AudioSelector::parse("opus:").expect("opus:"),
