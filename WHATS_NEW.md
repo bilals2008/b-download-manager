@@ -8,6 +8,24 @@
   section for its own version, and the release page uses the same words.
 -->
 
+## 1.3.0 — 16 November 2026
+
+### Torrents
+
+- A new tab in the torrent window draws the pieces of a download: what is on disk, what is still missing and what is on its way.
+- A magnet link with no trackers, or whose trackers cannot be reached, now finds its peers through the distributed peer table and downloads anyway.
+- Torrents find peers on your own network too: local discovery is on by default, and you can turn it off in the Torrents settings.
+- A new choice asks your router to open the torrent port (UPnP or NAT-PMP). It is off by default, and the settings page says what the router answered.
+- Torrent trackers now use the proxy you set in Options; peer connections still go directly, and the settings say so.
+
+## 1.2.1 - 16 November 2026
+
+### Torrents
+
+- Magnet links and .torrent files download like any other file, with their progress shown in a torrent window.
+- Add a torrent from a link, a file or an address, and pick the files you want before it starts.
+- A finished torrent can keep sharing; choose the ratio or the minutes it stops at, and how fast it uploads.
+
 ## 1.2.0 - 15 November 2026
 
 ### Your words, your language
@@ -32,7 +50,7 @@
 
 ### Host links and your accounts
 
-- Real-Debrid, AllDebrid and Premiumize unlock the links they take. Magnet links and .torrent files are coming soon.
+- Real-Debrid, AllDebrid and Premiumize unlock the links they take.
 
 ### Your phone, and your assistant
 

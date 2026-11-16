@@ -56,6 +56,16 @@ export function ChevronRight({ className }: GlyphProps) {
   );
 }
 
+/** The job list toggle: a frame with a column down its left side. */
+export function SidebarGlyph({ className }: GlyphProps) {
+  return (
+    <Glyph className={className}>
+      <rect x="1.75" y="2.75" width="12.5" height="10.5" rx="2" />
+      <path d="M6.25 2.75v10.5" />
+    </Glyph>
+  );
+}
+
 /**
  * The tree disclosure chevron: wider, rounder and a step heavier than the menu
  * arrows, so opening a category reads as a control and not as decoration.

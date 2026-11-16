@@ -3,6 +3,7 @@ import { DeleteConfirmDialog } from "@/components/workspace/delete-confirm-dialo
 import { DownloadList } from "@/components/workspace/download-list";
 import { FileExistsDialog } from "@/components/workspace/file-exists-dialog";
 import { StatusBar } from "@/components/workspace/status-bar";
+import { TorrentClosedHint } from "@/components/windows/torrent/torrent-closed-hint";
 import { useDownloads } from "@/state/download-store";
 
 interface WorkspaceProps {
@@ -29,6 +30,7 @@ export function Workspace({ categoriesVisible, onAddDownload }: WorkspaceProps) 
         <DownloadList onAddDownload={onAddDownload} />
       </div>
       <StatusBar />
+      <TorrentClosedHint />
       <DeleteConfirmDialog />
       {/* Keyed by the file it asks about, so a second question never inherits
           the checkbox of the first. */}
