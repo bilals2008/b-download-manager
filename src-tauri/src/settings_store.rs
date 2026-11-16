@@ -36,6 +36,24 @@ pub const MAX_CONNECTIONS: u32 = 32;
 /// The largest byte rate one value may claim, one gigabyte a second.
 const MAX_SPEED: u64 = 1024 * 1024 * 1024;
 
+/// The largest upload limit a torrent may be given, in kilobytes a second.
+/// A gigabyte a second of upload is not a rate any connection this
+/// application runs over can hold, so a bigger number is a typo.
+const MAX_TORRENT_UPLOAD_KBPS: u64 = 1_000_000;
+
+/// The largest ratio a finished torrent stops at: a hundred times what it
+/// took in. Sharing that long is not a limit anyone means.
+const MAX_TORRENT_SEED_RATIO: f64 = 100.0;
+
+/// The longest a finished torrent keeps sharing: a year of minutes. Past that
+/// is a job that never ends, which a zero already says.
+const MAX_TORRENT_SEED_MINUTES: u64 = 525_600;
+
+/// The most extra bootstrap nodes the table takes. A handful of nodes is
+/// enough to enter the table; a long list is a typo or an attack, and every
+/// one of them is a datagram at start-up.
+const MAX_TORRENT_DHT_NODES: usize = 16;
+
 /// The settings the download engine applies, as stored on disk.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -110,6 +128,32 @@ pub struct EngineSettings {
     /// Off by default: uploading after the file is complete is a choice with
     /// a cost the reader sees coming.
     pub torrent_seeding: bool,
+    /// The upload limit of the torrents, in kilobytes a second. Zero is no
+    /// limit, and that is the default: a torrent that is not asked to hold
+    /// back is not held back.
+    pub torrent_upload_kbps: u64,
+    /// The uploaded over downloaded ratio a finished torrent stops sharing
+    /// at. Two is the default, the ratio torrents conventionally stop at;
+    /// zero never stops.
+    pub torrent_seed_ratio: f64,
+    /// How many minutes a finished torrent keeps sharing. Zero never stops,
+    /// which is the default for the same reason the sharing itself is off.
+    pub torrent_seed_minutes: u64,
+    /// The port the trackers are told about. Zero means the engine's own
+    /// announce port, which is what a job uses while nothing listens on it.
+    pub torrent_port: u16,
+    /// Extra nodes the distributed table starts from, as `host:port` texts.
+    /// The standard bootstrap nodes are always used as well; these are for
+    /// a network where they cannot be reached. Empty is the default.
+    pub torrent_dht_nodes: Vec<String>,
+    /// Whether torrents are announced on the local network (BEP 14) and
+    /// the peers that answer are taken. On by default: it is how a torrent
+    /// finds the copy already on this network, and it stays on it.
+    pub torrent_lpd: bool,
+    /// Whether the router is asked to open the torrent port (UPnP, or
+    /// NAT-PMP when no IGD answers). Off by default: opening a port on the
+    /// reader's router is a choice they make, not one made for them.
+    pub torrent_port_mapping: bool,
 }
 
 impl Default for EngineSettings {
@@ -140,6 +184,13 @@ impl Default for EngineSettings {
             mcp_enabled: false,
             remote_enabled: false,
             torrent_seeding: false,
+            torrent_upload_kbps: 0,
+            torrent_seed_ratio: 2.0,
+            torrent_seed_minutes: 0,
+            torrent_port: 0,
+            torrent_dht_nodes: Vec::new(),
+            torrent_lpd: true,
+            torrent_port_mapping: false,
         }
     }
 }
@@ -219,7 +270,43 @@ pub fn sanitize(mut settings: EngineSettings) -> EngineSettings {
     settings.proxy_script = settings.proxy_script.trim().to_string();
     clean_dns(&mut settings.dns);
     settings.schedule = settings.schedule.clone().sanitized();
+    settings.torrent_upload_kbps = settings.torrent_upload_kbps.min(MAX_TORRENT_UPLOAD_KBPS);
+    // A ratio that is not a number would make the comparison that stops a
+    // job false forever, which is the trap a hand-edited file sets: it reads
+    // as zero, the value that says "never stop" in as many words.
+    settings.torrent_seed_ratio = if settings.torrent_seed_ratio.is_finite() {
+        settings.torrent_seed_ratio.clamp(0.0, MAX_TORRENT_SEED_RATIO)
+    } else {
+        0.0
+    };
+    settings.torrent_seed_minutes = settings.torrent_seed_minutes.min(MAX_TORRENT_SEED_MINUTES);
+    settings.torrent_dht_nodes = clean_dht_nodes(&settings.torrent_dht_nodes);
+    // A port is a u16, so 0..=65535 is all the type can hold and nothing is
+    // clamped away; zero stays the engine's own announce port.
     settings
+}
+
+/// Clean the bootstrap nodes the file stores: `host:port` texts, trimmed and
+/// deduped, capped. A text without a port, or with one that is not a port,
+/// is dropped rather than resolved into something unexpected.
+fn clean_dht_nodes(nodes: &[String]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for node in nodes {
+        let node = node.trim();
+        let Some((host, port)) = node.rsplit_once(':') else {
+            continue;
+        };
+        if host.is_empty() || !port.parse::<u16>().is_ok_and(|port| port != 0) {
+            continue;
+        }
+        if !out.iter().any(|kept| kept == node) {
+            out.push(node.to_string());
+        }
+        if out.len() >= MAX_TORRENT_DHT_NODES {
+            break;
+        }
+    }
+    out
 }
 
 /// Clean the DNS the file stores. A mode this build does not know reads as
@@ -374,6 +461,22 @@ mod tests {
         let settings = load(&path);
         assert_eq!(settings.default_folder, "");
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn bootstrap_nodes_are_cleaned_to_host_and_port() {
+        let cleaned = clean_dht_nodes(&[
+            " dht.example.org:6881 ".into(),
+            "dht.example.org:6881".into(),
+            "no-port".into(),
+            "host:0".into(),
+            "host:notaport".into(),
+            "".into(),
+            "10.0.0.5:6882".into(),
+        ]);
+        assert_eq!(cleaned, vec!["dht.example.org:6881", "10.0.0.5:6882"]);
+        let many: Vec<String> = (0..40).map(|i| format!("10.0.0.{i}:6881")).collect();
+        assert_eq!(clean_dht_nodes(&many).len(), MAX_TORRENT_DHT_NODES);
     }
 
     #[test]

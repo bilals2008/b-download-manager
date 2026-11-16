@@ -48,7 +48,8 @@ export function buildMenus(
     accessKey: "t",
     rows: [
       { command: "add-download", label: "Add new download...", shortcut: key("add-download") },
-      { command: "add-torrent", label: "Add torrent (coming soon)", disabled: true },
+      { command: "add-torrent", label: "Add torrent..." },
+      { command: "torrents", label: "Torrents", shortcut: key("torrents") },
       { command: "add-batch", label: "Add batch download...", disabled: true },
       {
         command: "add-batch-clipboard",

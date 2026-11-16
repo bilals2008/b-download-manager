@@ -35,7 +35,7 @@ mod updater;
 mod video;
 mod window_style;
 
-use tauri::{Manager, WindowEvent};
+use tauri::{Emitter, Manager, WindowEvent};
 
 use idm_core::session::Index;
 
@@ -199,6 +199,13 @@ pub fn run() {
                     progress::remove_tray(window.app_handle());
                     progress::forget(window.label());
                 }
+                // The torrent window really closes, and a closed window leaves
+                // nothing behind, so the main window says where it went.
+                if window.label() == torrent::WINDOW {
+                    if let Some(main) = window.app_handle().get_webview_window("main") {
+                        let _ = main.emit("torrent://closed", ());
+                    }
+                }
             }
             _ => {}
         })
@@ -236,6 +243,14 @@ pub fn run() {
             torrent::torrent_seeding,
             torrent::set_torrent_seeding,
             torrent::torrent_remove,
+            torrent::torrent_recheck,
+            torrent::torrent_set_files,
+            torrent::torrent_pause_all,
+            torrent::torrent_resume_all,
+            torrent::torrent_settings,
+            torrent::set_torrent_settings,
+            torrent::torrent_port_mapping,
+            torrent::show_torrent_window,
             delete_download_file,
             remove_download,
             set_speed_limit,
@@ -348,6 +363,7 @@ pub fn run() {
                 event,
                 tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
             ) {
+                torrent::shutdown();
                 lifecycle::save_on_exit(app);
             }
         });

@@ -12,6 +12,7 @@ import { cycleSectionFocus } from "@/components/shell/section-focus";
 import { TipOfTheDayDialog } from "@/components/tips/tip-of-the-day-dialog";
 import { AboutDialog } from "@/components/workspace/about-dialog";
 import { AddDownloadDialog } from "@/components/workspace/add-download-dialog";
+import { AddTorrentDialog } from "@/components/workspace/add-torrent-dialog";
 import { CloseConfirmDialog } from "@/components/workspace/close-confirm-dialog";
 import { UpdateDialog } from "@/components/workspace/update-dialog";
 import { UpdateNotice } from "@/components/updates/update-notice";
@@ -23,6 +24,7 @@ import { APP_HOME_PAGE, APP_NAME, APP_TAGLINE } from "@/lib/brand";
 import { describeError, isDesktop } from "@/lib/errors";
 import { applyFont } from "@/lib/fonts";
 import { openGrabberWindow } from "@/lib/grabber";
+import { showTorrentWindow } from "@/lib/ipc-torrent";
 import {
   defaultDestination,
   desktopPreferences,
@@ -70,6 +72,7 @@ import {
   type ToolbarPreference,
   type ToolbarToken,
 } from "@/lib/toolbars";
+import { useTorrentHandoff } from "@/components/workspace/torrent-handoff";
 import { runCheck, type UpdateFound } from "@/lib/updates";
 import { useDownloads } from "@/state/download-store";
 import { useEngineSync } from "@/state/use-engine-sync";
@@ -84,6 +87,8 @@ export default function App() {
   );
   const [categoriesVisible, setCategoriesVisible] = useState(true);
   const [addDownloadOpen, setAddDownloadOpen] = useState(false);
+  // Torrents are a job of their own, so they have a dialog of their own.
+  const torrent = useTorrentHandoff();
   const [clipboardLink, setClipboardLink] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
@@ -126,6 +131,7 @@ export default function App() {
     activeDownloads,
     blocked:
       addDownloadOpen ||
+      torrent.open ||
       settingsOpen ||
       aboutOpen ||
       tipsOpen ||
@@ -551,6 +557,12 @@ export default function App() {
       case "add-download":
         setAddDownloadOpen(true);
         break;
+      case "add-torrent":
+        torrent.openBlank();
+        break;
+      case "torrents":
+        void showTorrentWindow().catch(() => {});
+        break;
       case "options":
         setSettingsOpen(true);
         break;
@@ -695,7 +707,9 @@ export default function App() {
         open={addDownloadOpen}
         seedUrl={clipboardLink}
         onClose={closeAddDownload}
+        onTorrent={(source) => { closeAddDownload(); torrent.openWith(source); }}
       />
+      <AddTorrentDialog open={torrent.open} initialSource={torrent.seed} onClose={torrent.close} />
       <SettingsDialog
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}

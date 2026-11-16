@@ -204,6 +204,7 @@ fn current_drawing(app: &AppHandle) -> Image<'static> {
 /// whether the window can be hidden safely.
 fn install(app: &AppHandle) -> tauri::Result<()> {
     let show = MenuItem::with_id(app, "show", "Show B Download Manager", true, None::<&str>)?;
+    let torrents = MenuItem::with_id(app, "torrents", "Torrents", true, None::<&str>)?;
     let pause = MenuItem::with_id(app, "pause-all", "Pause all downloads", true, None::<&str>)?;
     let resume = MenuItem::with_id(
         app,
@@ -222,7 +223,7 @@ fn install(app: &AppHandle) -> tauri::Result<()> {
         None::<&str>,
     )?;
     let quit = MenuItem::with_id(app, "quit", "Exit", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show, &pause, &resume, &remote, &quit])?;
+    let menu = Menu::with_items(app, &[&show, &torrents, &pause, &resume, &remote, &quit])?;
 
     TrayIconBuilder::with_id(TRAY_ID)
         .menu(&menu)
@@ -231,6 +232,7 @@ fn install(app: &AppHandle) -> tauri::Result<()> {
         .icon(current_drawing(app))
         .on_menu_event(|app, event| match event.id.as_ref() {
             "show" => show_window(app),
+            "torrents" => crate::torrent::show_torrent_window(app.clone()),
             "pause-all" => pause_all(app),
             "resume-all" => resume_all(app),
             // The phone remote goes off (or on) from here, without a window.

@@ -9,12 +9,7 @@
 
 const CATALOG = [
   { command: "add-download", label: "Add URL" },
-  {
-    command: "add-torrent",
-    label: "Add Torrent",
-    disabled: true,
-    note: "Torrents are coming soon",
-  },
+  { command: "add-torrent", label: "Add Torrent" },
   { command: "resume", label: "Resume" },
   { command: "stop", label: "Stop" },
   { command: "stop-all", label: "Stop All" },

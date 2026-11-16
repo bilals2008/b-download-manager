@@ -311,6 +311,10 @@ impl AppState {
         self.set_video_button_settings(settings.video_button.clone());
         self.set_browser_policy(settings.browser_policy.clone());
         self.set_categories(settings.categories.clone());
+        // The torrent client keeps its own limits, so it is told the whole
+        // object here as well: the file, the engine and the client must agree,
+        // or a save would reach only the window.
+        crate::torrent::apply_limits(&settings);
     }
 
     /// The choices the tray and the close button follow.
