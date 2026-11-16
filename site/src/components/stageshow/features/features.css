@@ -291,3 +291,34 @@
 .fs-themes .fs-track[data-phase='done'] .fs-fill {
   background-image: linear-gradient(90deg, #047857, #15803d);
 }
+
+/* ---- Engine stills: status tones and the resume manifest strip ---- */
+
+.fs-val[data-tone='done'] {
+  color: var(--ss-success);
+}
+
+.fs-val[data-tone='run'] {
+  color: #22d3ee;
+}
+
+.fs-blocks {
+  display: flex;
+  gap: 3px;
+  margin-bottom: 12px;
+}
+
+.fs-blocks i {
+  flex: 1;
+  height: 10px;
+  border-radius: 2px;
+  background: rgb(255 255 255 / 0.08);
+}
+
+.fs-blocks i[data-state='done'] {
+  background: linear-gradient(90deg, #34d399, #22c55e);
+}
+
+.fs-blocks i[data-state='live'] {
+  background: var(--ss-accent);
+}

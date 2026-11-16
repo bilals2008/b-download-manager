@@ -1,11 +1,7 @@
 ---
-import Icon from "./Icon.astro";
-import type { IconName } from "./Icon.astro";
 import Button from "./Button.astro";
-import PreviewPlaceholder from "./PreviewPlaceholder.astro";
 
 type Feature = {
-  icon: IconName;
   kicker: string;
   title: string;
   body: string;
@@ -16,7 +12,6 @@ type Feature = {
 
 const features: Feature[] = [
   {
-    icon: "network",
     kicker: "Segmented transfers",
     title: "One file, up to 32 connections.",
     body: "The engine cuts a file into byte ranges and gives each one its own connection, with a per-site cap and an application-wide budget.",
@@ -25,12 +20,11 @@ const features: Feature[] = [
       "Per-site and global caps",
       "Ranges sized at 16 MiB",
     ],
-    image: "/images/screens/preview-connections.webp",
+    image: "/images/features/connections.webp",
     imageAlt:
-      "Progress window connection list showing 32 connections split across ranges of one file",
+      "The connections pane: one file at 68 percent, six of its thirty-two connections listed with their byte ranges, downloaded amounts and live speeds.",
   },
   {
-    icon: "resume",
     kicker: "Resume",
     title: "Resume, not restart.",
     body: "A crash-safe manifest records every finished range. Pause, close the app or lose power; the next run reads the bytes already on disk.",
@@ -39,12 +33,11 @@ const features: Feature[] = [
       "Overlaps and out-of-order ranges rejected",
       "FTP REST offsets for the same job",
     ],
-    image: "/images/screens/preview-resume.webp",
+    image: "/images/features/resume.webp",
     imageAlt:
-      "Progress window after a restart, showing the bytes already on disk and a Resume button",
+      "A stopped download after a crash: the manifest's finished ranges as green blocks, 237 of 347 megabytes kept, and the next range to fetch.",
   },
   {
-    icon: "globe",
     kicker: "HTTP, HTTPS and FTP",
     title: "Range requests where they work.",
     body: "HTTP and HTTPS ask for identity-encoded ranges. FTP seeks with REST. A server that answers with a plain 200 is fetched on one connection.",
@@ -53,12 +46,11 @@ const features: Feature[] = [
       "FTP data connection per range",
       "One-connection fallback",
     ],
-    image: "/images/screens/dialog-add-url.webp",
+    image: "/images/features/probe.webp",
     imageAlt:
-      "Add URL window showing a link, its probed size and resumable state, category and save folder",
+      "The Add URL window probing an FTP link: probed size, ranges accepted, protocol, and the category folder the file will land in.",
   },
   {
-    icon: "gauge",
     kicker: "Limits",
     title: "A ceiling you choose.",
     body: "Set one cap for the whole application and one for each download, in KB/s or MB/s. The engine applies the limit across every open connection.",
@@ -67,9 +59,9 @@ const features: Feature[] = [
       "KB/s or MB/s",
       "Applied per connection",
     ],
-    image: "/images/screens/preview-limits.webp",
+    image: "/images/features/limits.webp",
     imageAlt:
-      "Speed limiter tab with a per-download cap, its unit and the application-wide limit",
+      "The speed limiter: a 4 MB/s cap for this download and 12 MB/s for the whole application, with six connections sharing 9.6 MB/s right now.",
   },
 ];
 ---
@@ -88,44 +80,31 @@ const features: Feature[] = [
     </header>
 
     <div class="feature-stack">
-      <span class="feature-spine" aria-hidden="true"></span>
-
       {
         features.map((feature, index) => (
           <article
-            class:list={[
-              "feature-row",
-              index % 2 === 1 && "feature-row--reverse",
-              "reveal",
-            ]}
+            class:list={["feature-row", index % 2 === 1 && "feature-row--reverse", "reveal"]}
           >
-            <span class="feature-index" aria-hidden="true">
-              {String(index + 1).padStart(2, "0")}
-            </span>
-
             <div class="feature-copy">
-              <div class="feature-kicker">
-                <span class="feature-icon">
-                  <Icon name={feature.icon} size={17} />
-                </span>
-                <span>{feature.kicker}</span>
-              </div>
+              <p class="feature-kicker">{feature.kicker}</p>
               <h3 class="feature-title">{feature.title}</h3>
               <p class="feature-body">{feature.body}</p>
               <ul class="feature-bullets">
                 {feature.bullets.map((bullet) => (
-                  <li>
-                    <span class="feature-check">
-                      <Icon name="check" size={11} strokeWidth={2} />
-                    </span>
-                    {bullet}
-                  </li>
+                  <li>{bullet}</li>
                 ))}
               </ul>
             </div>
 
             <div class="feature-visual">
-              <PreviewPlaceholder src={feature.image} alt={feature.imageAlt} />
+              <img
+                src={feature.image}
+                width="1344"
+                height="864"
+                alt={feature.imageAlt}
+                loading={index === 0 ? "eager" : "lazy"}
+                decoding="async"
+              />
             </div>
           </article>
         ))
@@ -153,80 +132,28 @@ const features: Feature[] = [
   }
 
   .feature-stack {
-    position: relative;
+    display: grid;
+    gap: clamp(3.5rem, 7vw, 6rem);
     margin-top: clamp(3rem, 6vw, 5rem);
   }
 
-  .feature-spine {
-    display: none;
-  }
-
   .feature-row {
-    position: relative;
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    gap: 1rem;
-    padding-top: 2.25rem;
-    border-top: 1px solid var(--line);
-  }
-
-  .feature-row:first-of-type {
-    padding-top: 0;
-    border-top: 0;
-  }
-
-  .feature-row + .feature-row {
-    margin-top: 3rem;
-  }
-
-  .feature-index {
-    display: inline-flex;
-    grid-column: 1;
-    grid-row: 1;
-    align-self: start;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.75rem;
     align-items: center;
-    justify-content: center;
-    width: 2.35rem;
-    height: 2.35rem;
-    border: 1px solid var(--line-strong);
-    border-radius: 50%;
-    color: var(--accent);
-    font-family: var(--face-mono);
-    font-size: var(--type-caption);
-    font-variant-numeric: tabular-nums;
-    line-height: 1;
-  }
-
-  .feature-copy {
-    grid-column: 2;
-    grid-row: 1;
-    min-width: 0;
   }
 
   .feature-kicker {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
     color: var(--muted);
     font-size: var(--type-caption);
     font-weight: 500;
+    letter-spacing: 0.02em;
     line-height: 1.3;
   }
 
-  .feature-icon {
-    display: grid;
-    place-items: center;
-    width: 2.1rem;
-    height: 2.1rem;
-    flex: none;
-    border: 1px solid var(--line);
-    border-radius: 0.55rem;
-    background-color: var(--accent-soft);
-    color: var(--accent);
-  }
-
   .feature-title {
-    margin-top: 0.95rem;
+    margin-top: 0.8rem;
     color: var(--ink);
     font-family: var(--face-display);
     font-size: var(--type-subsection);
@@ -246,40 +173,42 @@ const features: Feature[] = [
 
   .feature-bullets {
     display: grid;
-    gap: 0.55rem;
-    margin-top: 1.4rem;
+    gap: 0.5rem;
+    margin: 1.3rem 0 0;
+    padding: 0;
+    list-style: none;
   }
 
   .feature-bullets li {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
+    position: relative;
+    padding-left: 1.1rem;
     color: var(--ink);
     font-size: var(--type-small);
-    line-height: 1.45;
+    line-height: 1.5;
   }
 
-  .feature-check {
-    display: grid;
-    place-items: center;
-    width: 1.3rem;
-    height: 1.3rem;
-    flex: none;
+  .feature-bullets li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.5em;
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
-    background-color: var(--accent-soft);
-    color: var(--accent);
+    background-color: var(--accent);
   }
 
   .feature-visual {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    width: 100%;
-    max-width: 30rem;
-    justify-self: center;
+    overflow: hidden;
+    border-radius: var(--radius-md);
+    background-color: var(--figure-bg);
+    box-shadow: var(--shadow-panel);
   }
 
-  .feature-visual :global(.preview-placeholder) {
-    aspect-ratio: 4 / 3;
+  .feature-visual img {
+    display: block;
+    width: 100%;
+    height: auto;
   }
 
   .features-more {
@@ -289,49 +218,9 @@ const features: Feature[] = [
   }
 
   @media (min-width: 56rem) {
-    .feature-stack {
-      display: grid;
-      gap: clamp(4rem, 8vw, 7rem);
-    }
-
-    .feature-spine {
-      display: block;
-      position: absolute;
-      top: 1.2rem;
-      bottom: 1.2rem;
-      left: 50%;
-      width: 1px;
-      background: linear-gradient(
-        to bottom,
-        transparent,
-        var(--line) 8%,
-        var(--line) 92%,
-        transparent
-      );
-      transform: translateX(-50%);
-    }
-
     .feature-row {
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-      align-items: center;
-      gap: clamp(3rem, 7vw, 6rem);
-      padding-top: 0;
-      padding-block: 0;
-      border-top: 0;
-    }
-
-    .feature-row + .feature-row {
-      margin-top: 0;
-    }
-
-    .feature-copy {
-      grid-column: 1;
-      grid-row: 1;
-    }
-
-    .feature-visual {
-      grid-column: 2;
-      grid-row: 1;
+      grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+      gap: clamp(3rem, 6vw, 5.5rem);
     }
 
     .feature-row--reverse .feature-copy {
@@ -342,17 +231,6 @@ const features: Feature[] = [
     .feature-row--reverse .feature-visual {
       grid-column: 1;
       grid-row: 1;
-    }
-
-    .feature-index {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      z-index: 1;
-      width: 2.75rem;
-      height: 2.75rem;
-      background-color: var(--page);
-      transform: translate(-50%, -50%);
     }
   }
 </style>

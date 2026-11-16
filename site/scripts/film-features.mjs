@@ -15,7 +15,7 @@ const base = opt('url', 'http://localhost:4321').replace(/\/$/, '')
 const only = opt('only', null)
 const film = resolve('C:/Users/muham/.agents/skills/stageshow/scripts/film.mjs')
 const edge = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'
-const names = ['torrents', 'scheduler', 'captions', 'drive', 'language', 'network', 'debrid', 'addurl', 'themes']
+const names = ['torrents', 'scheduler', 'captions', 'drive', 'language', 'network', 'debrid', 'addurl', 'themes', 'connections', 'resume', 'probe', 'limits']
 const out = resolve(siteRoot, 'public/images/features')
 const shots = resolve(siteRoot, '.feat-shots')
 mkdirSync(out, { recursive: true })
