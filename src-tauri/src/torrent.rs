@@ -553,11 +553,14 @@ fn show_now(app: &AppHandle, id: Option<&str>) {
         .decorations(false)
         .center()
         .visible(false);
-    if let Some(id) = id {
-        builder = builder.initialization_script(format!(
-            "window.__BDM_TORRENT__ = {{ id: \"{id}\" }};"
-        ));
-    }
+    // The marker says what this window is before the page loads. It is set
+    // whether or not a job is named, because a window without it renders the
+    // main window again and never becomes visible.
+    let marker = match id {
+        Some(id) => format!("window.__BDM_TORRENT__ = {{ id: \"{id}\" }};"),
+        None => "window.__BDM_TORRENT__ = {};".to_string(),
+    };
+    builder = builder.initialization_script(marker);
     match builder.build() {
         Ok(window) => crate::window_style::round_corners(&window),
         Err(error) => idm_core::log::write(
