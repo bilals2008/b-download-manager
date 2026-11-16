@@ -55,6 +55,7 @@
 .fs-row + .fs-label,
 .fs-trow + .fs-label,
 .fs-seg + .fs-label,
+.fs-swatches + .fs-label,
 .fs-grid2 + .fs-label,
 .ss-field + .fs-label {
   margin-top: 14px;
@@ -218,4 +219,75 @@
 
 .fs-metercell .fs-track {
   flex: 1;
+}
+
+/* ---- Themes: the wide still, drawn in Bloom (the app's light side) ---- */
+
+.fs-themes .fs-win {
+  width: 1160px;
+  height: 460px;
+}
+
+.fs-themes-body {
+  display: grid;
+  grid-template-columns: 420px minmax(0, 1fr);
+  gap: 28px;
+  height: 100%;
+}
+
+.fs-swatches {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 10px;
+}
+
+.fs-swatch {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: var(--ss-radius-sm);
+  color: var(--ss-text-strong);
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.fs-swatch i {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgb(31 27 22 / 0.12);
+}
+
+.fs-swatch[data-on] {
+  background: var(--ss-ink-3);
+  box-shadow: inset 0 0 0 1px var(--ss-accent), 0 0 0 3px var(--ss-accent-soft);
+}
+
+.fs-themes-preview {
+  display: flex;
+  flex-direction: column;
+  padding: 12px 14px;
+  border-radius: var(--ss-radius-md);
+  background: var(--ss-surface);
+  box-shadow: inset 0 0 0 1px var(--ss-line-faint);
+}
+
+.fs-themes .fs-track {
+  background: rgb(31 27 22 / 0.1);
+}
+
+.fs-themes .fs-track[data-phase='running'] .fs-fill {
+  background-image: linear-gradient(90deg, #047857, #0e7490, #2563eb);
+}
+
+.fs-themes .fs-track[data-phase='paused'] .fs-fill {
+  background-image: linear-gradient(90deg, #5872a8, #445c88);
+}
+
+.fs-themes .fs-track[data-phase='done'] .fs-fill {
+  background-image: linear-gradient(90deg, #047857, #15803d);
 }

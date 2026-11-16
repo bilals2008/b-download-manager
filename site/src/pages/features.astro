@@ -4,7 +4,14 @@ import Button from "../components/site/Button.astro";
 import ToolbarFeature from "../components/site/ToolbarFeature.astro";
 import { RELEASES_URL } from "../lib/releases";
 
-const features = [
+const features: {
+  id: string;
+  wide?: boolean;
+  title: string;
+  copy: string;
+  points: string[];
+  alt: string;
+}[] = [
   {
     id: "torrents",
     title: "Magnet links and .torrent files, like any other download.",
@@ -93,6 +100,18 @@ const features = [
     ],
     alt: "The Add URL window: a link filled in, start-straight-away and unpack toggles on, and an archive password field in dots.",
   },
+  {
+    id: "themes",
+    wide: true,
+    title: "Ten appearances, one identity.",
+    copy: "Light, Bloom, Dark, Cyberpunk, Volt, Soft Black, Ayu Dark, Graphite and Hive — or Auto, following the system. Picking one repaints every window at once, tray and browser panel included.",
+    points: [
+      "A colour swatch for every theme on the Appearance page",
+      "Bloom carries the light side: warm paper, honey only where it means something",
+      "Auto follows the operating system until you override it",
+    ],
+    alt: "The Appearance pane drawn in the Bloom light theme: a swatch grid of all ten themes with Bloom selected, beside a live preview of three downloads in Bloom's colours.",
+  },
 ];
 ---
 
@@ -116,12 +135,12 @@ const features = [
       <div class="feat-grid">
         {
           features.map((f, i) => (
-            <article class="feat reveal" aria-labelledby={`feat-${f.id}`}>
+            <article class:list={["feat", "reveal", f.wide && "feat--wide"]} aria-labelledby={`feat-${f.id}`}>
               <div class="feat-shot">
                 <img
                   src={`/images/features/${f.id}.webp`}
-                  width="1280"
-                  height="800"
+                  width={f.wide ? 2464 : 1344}
+                  height={f.wide ? 904 : 864}
                   alt={f.alt}
                   loading={i < 2 ? "eager" : "lazy"}
                   decoding="async"
@@ -202,6 +221,14 @@ const features = [
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: clamp(2.5rem, 5vw, 4rem) clamp(1.5rem, 3vw, 2.5rem);
     margin-top: clamp(2.5rem, 6vw, 4.5rem);
+  }
+
+  .feat--wide {
+    grid-column: 1 / -1;
+  }
+
+  .feat--wide .feat-copy {
+    max-width: 62ch;
   }
 
   .feat-shot {

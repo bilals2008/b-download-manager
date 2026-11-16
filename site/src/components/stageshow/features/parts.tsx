@@ -7,9 +7,9 @@ import './features.css'
 // palette, bleeding off the bottom the way the real list does. Every scene
 // is a still (no script), filmed at 2x for the features page.
 
-export function Fs({ name, lead, toolbar, children }: { name: string; lead: string; toolbar?: ReactNode; children: ReactNode }) {
+export function Fs({ name, lead, toolbar, children, w = 640, h = 400, tokens }: { name: string; lead: string; toolbar?: ReactNode; children: ReactNode; w?: number; h?: number; tokens?: Record<string, string> }) {
   return (
-    <Stage width={640} height={400} theme="dark" tokens={APP_TOKENS} className={`fs fs-${name}`}>
+    <Stage width={w} height={h} theme="dark" tokens={{ ...APP_TOKENS, ...tokens }} className={`fs fs-${name}`}>
       {() => (
         <Window
           className="fs-win"

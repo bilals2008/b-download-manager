@@ -11,6 +11,7 @@ import Language from "../../components/stageshow/features/language";
 import Network from "../../components/stageshow/features/network";
 import Debrid from "../../components/stageshow/features/debrid";
 import AddUrl from "../../components/stageshow/features/addurl";
+import Themes from "../../components/stageshow/features/themes";
 ---
 
 <html lang="en">
@@ -31,6 +32,10 @@ import AddUrl from "../../components/stageshow/features/addurl";
         height: 400px;
         margin: 0 0 48px 20px;
       }
+      .feat-slot--wide {
+        width: 1200px;
+        height: 420px;
+      }
     </style>
   </head>
   <body>
@@ -42,5 +47,6 @@ import AddUrl from "../../components/stageshow/features/addurl";
     <div id="f-network" class="feat-slot"><Network client:load /></div>
     <div id="f-debrid" class="feat-slot"><Debrid client:load /></div>
     <div id="f-addurl" class="feat-slot"><AddUrl client:load /></div>
+    <div id="f-themes" class="feat-slot feat-slot--wide"><Themes client:load /></div>
   </body>
 </html>

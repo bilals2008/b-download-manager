@@ -15,7 +15,7 @@ const base = opt('url', 'http://localhost:4321').replace(/\/$/, '')
 const only = opt('only', null)
 const film = resolve('C:/Users/muham/.agents/skills/stageshow/scripts/film.mjs')
 const edge = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'
-const names = ['torrents', 'scheduler', 'captions', 'drive', 'language', 'network', 'debrid', 'addurl']
+const names = ['torrents', 'scheduler', 'captions', 'drive', 'language', 'network', 'debrid', 'addurl', 'themes']
 const out = resolve(siteRoot, 'public/images/features')
 const shots = resolve(siteRoot, '.feat-shots')
 mkdirSync(out, { recursive: true })
@@ -24,7 +24,7 @@ mkdirSync(shots, { recursive: true })
 for (const name of names) {
   if (only && name !== only) continue
   const png = resolve(shots, `${name}.png`)
-  const r = spawnSync(process.execPath, [film, `${base}/capture/features`, '--select', `#f-${name}`, '--width', '700', '--still', '--gate', '--out', png], {
+  const r = spawnSync(process.execPath, [film, `${base}/capture/features`, '--select', `#f-${name}`, '--width', name === 'themes' ? '1260' : '700', '--still', '--gate', '--out', png], {
     encoding: 'utf8',
     env: { ...process.env, CHROME_PATH: process.env.CHROME_PATH || edge },
   })
