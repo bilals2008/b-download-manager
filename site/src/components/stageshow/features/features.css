@@ -1,0 +1,221 @@
+/* The feature stills: one window on the app's palette, inset by one gutter
+   on three sides and running off the bottom, so the list keeps going past
+   the crop. Shared by every scene in features/. */
+
+.fs .ss-stage {
+  overflow: hidden;
+  border-radius: 16px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.fs-win {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  width: 600px;
+  height: 420px;
+}
+
+.fs-brand {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: 14px;
+  color: var(--ss-text-strong);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.fs-brand img {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+.fs-body {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 14px 18px 18px;
+  overflow: hidden;
+}
+
+.fs-label {
+  margin: 0 0 6px;
+  color: var(--ss-text-faint);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 16px;
+}
+
+.fs-label + .fs-label,
+.fs-row + .fs-label,
+.fs-trow + .fs-label,
+.fs-seg + .fs-label,
+.fs-grid2 + .fs-label,
+.ss-field + .fs-label {
+  margin-top: 14px;
+}
+
+.fs-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  height: 40px;
+  color: var(--ss-text-strong);
+  font-size: 12px;
+}
+
+.fs-row[data-faint] {
+  color: var(--ss-text-faint);
+}
+
+.fs-row > .fs-name {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.fs-row > .fs-val {
+  color: var(--ss-text);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.fs-checkrow {
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+}
+
+.fs-file-icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  object-fit: contain;
+}
+
+.fs-folder {
+  flex: none;
+  color: var(--ss-icon);
+}
+
+.fs-cols {
+  display: grid;
+  align-items: center;
+  gap: 12px;
+  height: 28px;
+  border-bottom: 1px solid var(--ss-line-faint);
+  color: var(--ss-text);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.fs-trow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  color: var(--ss-text-strong);
+  font-size: 12px;
+}
+
+.fs-hint {
+  margin-left: auto;
+  color: var(--ss-text-faint);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.fs-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ss-line-faint);
+  color: var(--ss-text-strong);
+  font-size: 12px;
+}
+
+.fs-grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.fs-track {
+  position: relative;
+  display: block;
+  min-width: 0;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.08);
+}
+
+.fs-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background-repeat: no-repeat;
+}
+
+.fs-track[data-phase='running'] .fs-fill {
+  background-image: linear-gradient(90deg, #34d399, #22d3ee, #60a5fa);
+}
+
+.fs-track[data-phase='paused'] .fs-fill {
+  background-image: linear-gradient(90deg, #7f9fe0, #6a86c4);
+}
+
+.fs-track[data-phase='done'] .fs-fill {
+  background-image: linear-gradient(90deg, #34d399, #22c55e);
+}
+
+.fs .ss-field__box {
+  height: 30px;
+  font-size: 12px;
+}
+
+.fs .ss-seg {
+  font-size: 11.5px;
+}
+
+.fs-rtl {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  border-radius: var(--ss-radius-md);
+  background: var(--ss-ink-2);
+}
+
+.fs-rtl .fs-row {
+  height: 32px;
+  font-size: 11.5px;
+}
+
+.fs-rtl .fs-row[data-active] {
+  color: var(--ss-accent-text);
+}
+
+.fs-metercell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.fs-metercell .fs-track {
+  flex: 1;
+}

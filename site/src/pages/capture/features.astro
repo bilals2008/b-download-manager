@@ -1,0 +1,46 @@
+---
+// Bare stages for filming the feature stills (scripts/film-features.mjs):
+// each scene at its exact 640x400 design size on the figure plate, stacked
+// with room between so a film clip never catches its neighbour.
+import "../../styles/fonts.css";
+import Torrents from "../../components/stageshow/features/torrents";
+import Scheduler from "../../components/stageshow/features/scheduler";
+import Captions from "../../components/stageshow/features/captions";
+import Drive from "../../components/stageshow/features/drive";
+import Language from "../../components/stageshow/features/language";
+import Network from "../../components/stageshow/features/network";
+import Debrid from "../../components/stageshow/features/debrid";
+import AddUrl from "../../components/stageshow/features/addurl";
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/png" href="/images/app-icon.png" />
+    <title>feature capture</title>
+    <style is:global>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: #14100d;
+      }
+      .feat-slot {
+        width: 640px;
+        height: 400px;
+        margin: 0 0 48px 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="f-torrents" class="feat-slot"><Torrents client:load /></div>
+    <div id="f-scheduler" class="feat-slot"><Scheduler client:load /></div>
+    <div id="f-captions" class="feat-slot"><Captions client:load /></div>
+    <div id="f-drive" class="feat-slot"><Drive client:load /></div>
+    <div id="f-language" class="feat-slot"><Language client:load /></div>
+    <div id="f-network" class="feat-slot"><Network client:load /></div>
+    <div id="f-debrid" class="feat-slot"><Debrid client:load /></div>
+    <div id="f-addurl" class="feat-slot"><AddUrl client:load /></div>
+  </body>
+</html>

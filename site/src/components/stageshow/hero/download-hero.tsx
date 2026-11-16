@@ -1,5 +1,6 @@
 import { AppWindow, FileArchive, FileText, Film, Folder, Gamepad2, Music, Play, Plus, Square } from 'lucide-react'
 import { Button, Field, Popover, Stage, Window, type Act, type Layout } from '../kit'
+import { APP_TOKENS } from '../app-tokens'
 import './hero.css'
 
 // B Download Manager as it looks on the landing page hero: the whole loop of
@@ -71,35 +72,7 @@ async function script(a: Act<S>) {
   await a.wait(1800)
 }
 
-const TOKENS = {
-  '--ss-canvas': '#111214',
-  '--ss-surface': '#111214',
-  '--ss-chrome': '#111214',
-  '--ss-line': '#1f2124',
-  '--ss-line-faint': '#1a1c1f',
-  '--ss-ink-1': '#161719',
-  '--ss-ink-2': '#17181b',
-  '--ss-ink-3': '#1e2023',
-  '--ss-ink-4': '#212428',
-  '--ss-ink-5': '#25282c',
-  '--ss-fill': '#1e2023',
-  '--ss-text': '#9a9ea6',
-  '--ss-text-strong': '#e4e6e9',
-  '--ss-text-faint': '#6f737b',
-  '--ss-icon': '#a7abb2',
-  '--ss-icon-faint': '#5d6167',
-  '--ss-accent': '#cdf25a',
-  '--ss-accent-2': '#cdf25a',
-  '--ss-accent-soft': 'rgb(205 242 90 / 0.14)',
-  '--ss-accent-text': '#cdf25a',
-  '--ss-success': '#2fd06b',
-  '--ss-radius-sm': '8px',
-  '--ss-radius-md': '8px',
-  '--ss-radius-lg': '10px',
-  '--ss-radius-window': '12px',
-  '--ss-font': '"Instrument Sans", ui-sans-serif, system-ui, sans-serif',
-  '--ss-shadow-window': '0 0 0 1px rgb(255 255 255 / 0.06), 0 34px 64px -26px rgb(20 16 13 / 0.35)',
-}
+
 
 const SUBJECT = { name: 'ubuntu-24.04.iso', size: '5.8 GB' }
 
@@ -162,7 +135,7 @@ export default function DownloadHero() {
       height={540}
       compact={{ below: 760, width: 358, height: 330 }}
       theme="dark"
-      tokens={TOKENS}
+      tokens={APP_TOKENS}
       initial={initial}
       poster={{ open: false, url: URL_TEXT, added: true, sel: true, phase: 'done', pct: 100 }}
       script={script}
