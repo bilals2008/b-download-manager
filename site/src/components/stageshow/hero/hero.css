@@ -1,0 +1,391 @@
+/* The app's own palette, set as stage tokens in the scene, so the window, its
+   panes and the kit's buttons share one set of names. Here: the plate, the
+   framing, and the parts of the app the kit does not have. */
+
+.dl .ss-stage {
+  overflow: hidden;
+  border-radius: 16px;
+  background: #060c0d;
+  box-shadow:
+    0 40px 90px -52px rgb(20 16 13 / 0.28),
+    0 14px 30px -24px rgb(20 16 13 / 0.16);
+}
+
+.dl {
+  /* Artwork tints, straight from the app's icon palette */
+  --icon-blue: #7f92cc;
+  --icon-blue-deep: #4f5f94;
+  --icon-amber: #d99a2b;
+  --icon-amber-deep: #7a4f07;
+  --icon-green: #3fb950;
+  --icon-green-deep: #1f7a33;
+  --dl-track: rgb(255 255 255 / 0.08);
+}
+
+/* Inset from the top, left and right by one gutter, off the bottom: the list
+   keeps running past the crop */
+.dl-win {
+  position: absolute;
+  top: 56px;
+  left: 56px;
+  width: 1008px;
+  height: 570px;
+}
+
+.dl .ss-stage[data-layout='compact'] .dl-win {
+  top: 16px;
+  left: 16px;
+  width: 326px;
+  height: 400px;
+}
+
+/* ---- The bar: the mark and the three tools ---- */
+
+.dl-brand {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: 14px;
+  color: var(--ss-text-strong);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.dl-brand img {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+.dl-tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Resume is the one tool the story is about: lime while the paused row is
+   selected, quiet again once the transfer is running */
+.dl-resume[data-lit] {
+  color: var(--ss-accent);
+}
+
+.dl .ss-stage[data-layout='compact'] .dl-brand {
+  gap: 6px;
+  margin-left: 10px;
+}
+
+/* ---- Body: the pane and the list ---- */
+
+.dl-body {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+}
+
+.dl-pane {
+  flex: none;
+  width: 208px;
+  padding: 20px 8px 12px;
+  border-right: 1px solid var(--ss-line);
+}
+
+.dl-label {
+  margin: 0 0 6px;
+  padding: 0 8px;
+  color: var(--ss-text-faint);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 16px;
+}
+
+.dl-label--sub {
+  margin-top: 22px;
+}
+
+.dl-group {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dl-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 36px;
+  padding: 0 8px;
+  border-radius: var(--ss-radius-sm);
+  color: var(--ss-text-strong);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.dl-item[data-active] {
+  background: var(--ss-ink-3);
+}
+
+.dl-count {
+  margin-left: auto;
+  color: var(--ss-text-faint);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.dl-cat-icon {
+  flex: none;
+  color: var(--ss-icon);
+}
+
+.dl-view-icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  stroke-width: 0.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.dl-view-icon[data-view='all'] {
+  fill: var(--icon-blue);
+  stroke: var(--icon-blue-deep);
+}
+
+.dl-view-icon[data-view='unfinished'] {
+  fill: var(--icon-amber);
+  stroke: var(--icon-amber-deep);
+}
+
+.dl-view-icon[data-view='finished'] {
+  fill: var(--icon-green);
+  stroke: var(--icon-green-deep);
+}
+
+.dl-view-icon .dl-view-deep {
+  stroke: var(--icon-amber-deep);
+}
+
+.dl-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* ---- The list: six columns, the same grid in the header and the rows ---- */
+
+.dl-cols {
+  display: grid;
+  flex: none;
+  grid-template-columns: minmax(0, 1fr) 74px 126px 84px 70px 96px;
+  align-items: center;
+  gap: 16px;
+  height: 36px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--ss-line-faint);
+  color: var(--ss-text);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.dl-cols > :nth-child(2),
+.dl-cols > :nth-child(3),
+.dl-cols > :nth-child(4),
+.dl-cols > :nth-child(5) {
+  text-align: right;
+}
+
+.dl-rows {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.dl-row {
+  display: grid;
+  flex: none;
+  grid-template-columns: minmax(0, 1fr) 74px 126px 84px 70px 96px;
+  align-items: center;
+  gap: 16px;
+  height: 48px;
+  padding: 0 20px;
+  color: var(--ss-text-strong);
+  font-size: 12.5px;
+  transition: background-color 160ms ease;
+}
+
+.dl-row[data-hover] {
+  background: var(--ss-ink-2);
+}
+
+.dl-row[data-sel] {
+  background: var(--ss-ink-3);
+}
+
+.dl-name {
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dl-size,
+.dl-speed,
+.dl-eta {
+  color: var(--ss-text);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.dl-prog {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dl-pct {
+  flex: none;
+  width: 44px;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.dl-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.dl-track {
+  position: relative;
+  display: block;
+  flex: 1;
+  min-width: 0;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--dl-track);
+}
+
+.dl-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background-repeat: no-repeat;
+  transition: width 620ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* The app's meter: held blue when paused, emerald through cyan to blue while
+   running, green when done. The fill's background spans the whole track, so
+   the colours stay put as the fill grows. */
+.dl-row[data-phase='paused'] .dl-fill {
+  background-image: linear-gradient(90deg, #7f9fe0, #6a86c4);
+}
+
+.dl-row[data-phase='running'] .dl-fill {
+  background-image: linear-gradient(90deg, #34d399, #22d3ee, #60a5fa);
+}
+
+.dl-row[data-phase='done'] .dl-fill {
+  background-image: linear-gradient(90deg, #34d399, #22c55e);
+}
+
+.dl-fill--filler {
+  background-image: none;
+  background-color: rgb(255 255 255 / 0.16);
+  transition: none;
+}
+
+/* The chip's disc, ring and gloss use the app's alpha values pre-blended onto
+   the disc, so the 14px icon is painted in solid colour and stays crisp */
+.dl-chip {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+.dl-chip[data-kind='paused'] .dl-chip-dep {
+  fill: #4f5f94;
+}
+
+.dl-chip[data-kind='paused'] .dl-chip-ring {
+  stroke: #8897c6;
+}
+
+.dl-chip[data-kind='paused'] .dl-chip-gloss {
+  fill: #6b79a5;
+}
+
+.dl-chip[data-kind='downloading'] .dl-chip-dep,
+.dl-chip[data-kind='completed'] .dl-chip-dep {
+  fill: #1f7a33;
+}
+
+.dl-chip[data-kind='downloading'] .dl-chip-ring,
+.dl-chip[data-kind='completed'] .dl-chip-ring {
+  stroke: #3dab4e;
+}
+
+.dl-chip[data-kind='downloading'] .dl-chip-gloss,
+.dl-chip[data-kind='completed'] .dl-chip-gloss {
+  fill: #438f54;
+}
+
+/* ---- Compact: no pane, no column header, two lines a row ---- */
+
+.dl .ss-stage[data-layout='compact'] .dl-rows {
+  padding-top: 6px;
+}
+
+.dl .ss-stage[data-layout='compact'] .dl-row {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 9px;
+  height: 56px;
+  padding: 0 14px;
+}
+
+.dl .ss-stage[data-layout='compact'] .dl-top,
+.dl .ss-stage[data-layout='compact'] .dl-bottom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dl .ss-stage[data-layout='compact'] .dl-name {
+  flex: 1;
+  font-size: 11.5px;
+}
+
+.dl .ss-stage[data-layout='compact'] .dl-top .dl-status {
+  flex: none;
+  font-size: 10.5px;
+  gap: 5px;
+}
+
+.dl .ss-stage[data-layout='compact'] .dl-top > .ss-bar {
+  flex: none;
+}
+
+.dl .ss-stage[data-layout='compact'] .dl-bottom .dl-track {
+  height: 4px;
+}
+
+.dl .ss-stage[data-layout='compact'] .dl-pct {
+  width: auto;
+  font-size: 10.5px;
+}

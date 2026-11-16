@@ -1,6 +1,7 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import react from '@astrojs/react';
 import tailwindcss from '@tailwindcss/vite';
 
 // The feed and the sitemap need an absolute origin. Vercel supplies one on every
@@ -15,8 +16,12 @@ export default defineConfig({
   site,
   vite: {
     plugins: [tailwindcss()],
+    optimizeDeps: {
+      include: ['react', 'react-dom', 'react-dom/client'],
+    },
   },
   integrations: [
+    react(),
     starlight({
       title: 'B Download Manager',
       favicon: '/images/app-icon.png',

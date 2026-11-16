@@ -1,7 +1,7 @@
 ---
 import Button from "./Button.astro";
 import PlatformIcon from "./PlatformIcon.astro";
-import PreviewPlaceholder from "./PreviewPlaceholder.astro";
+import DownloadHero from "../stageshow/hero/download-hero";
 import { RELEASES_URL } from "../../lib/releases";
 
 const platforms = [
@@ -60,11 +60,12 @@ const platforms = [
       </ul>
     </div>
 
-    <div class="hero-figure reveal">
-      <PreviewPlaceholder
-        src="/images/screens/app-home.webp"
-        alt="B Download Manager main window with a queue of completed and running downloads"
-      />
+    <div
+      class="hero-figure reveal"
+      role="img"
+      aria-label="The B Download Manager window: a paused download is selected, resumed from the toolbar, and finishes with a green check."
+    >
+      <DownloadHero client:load />
     </div>
   </div>
 </section>
@@ -203,6 +204,8 @@ const platforms = [
 
   .hero-figure {
     margin-top: clamp(2.5rem, 5vw, 4rem);
+    max-width: 70rem;
+    margin-inline: auto;
   }
 
   @media (min-width: 40rem) {
