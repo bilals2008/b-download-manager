@@ -17,3 +17,21 @@ lto = true
 opt-level = "s"
 panic = "abort"
 strip = true
+
+# The dev profile is the one that filled the disk: full debug info for every
+# crate is several times the size of the code it describes, and a `.pdb` beside
+# every binary doubles that again. Line tables keep panic backtraces readable
+# as file and line, which is all a reader of those backtraces needs, at a
+# fraction of the size. No dependency needs even that: a backtrace through one
+# is still named, and no one steps into it.
+#
+# Incremental stays on. It is what makes a rebuild seconds instead of a full
+# compile, and with one profile for every command it is reused instead of
+# piling up a new cache per environment variable.
+[profile.dev]
+debug = "line-tables-only"
+incremental = true
+
+[profile.dev.package."*"]
+debug = false
+

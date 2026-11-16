@@ -26,6 +26,39 @@ change on the running application.
 
 ---
 
+## Build discipline
+
+Repeated agent builds once grew `target/` to **70 GB** (311 stale incremental
+caches). `Cargo.toml` now settles it in the profile instead, which is the part
+that cannot be forgotten: the dev profile keeps line tables only, dependencies
+keep no debug info at all, and `.pdb` files stop at the app. Do not repeat the
+old workaround. The disk is the reader's, not a scratch pad.
+
+- Verify with the smallest command that proves the change: `cargo test -p
+  <crate>` or `cargo clippy -p <crate>` while iterating. Run `cargo test
+  --workspace` and `pnpm verify` **once, at the end** — not after every edit.
+- **Do not prefix builds with `CARGO_INCREMENTAL` or `CARGO_PROFILE_DEV_DEBUG`
+  any more.** Each different value starts a new incremental cache beside the
+  old one, and a pile of half-used caches is what made `target/` huge. One
+  profile, the same command, one cache, reused.
+- If `target/` has been left on old settings and is still huge after a profile
+  change, `pnpm clean` once — the next build starts from nothing but the new
+  profile.
+- **Never run two cargo builds at the same time** in this workspace: they
+  fight over the target lock and `link.exe` fails with a bogus "build tools
+  missing" error. Wait for one to finish before starting the next.
+- `pnpm tauri build` only when the running app must actually be driven (bridge
+  probe, UI proof). If the change does not touch what the app binary uses,
+  reuse the binary that is already in `target/release`.
+- After a small fix, re-run the targeted command — cargo reuses what is
+  built. Do not start a fresh full build, and do not `cargo clean` mid-task.
+- If `target/` is already huge, report the size and let the reader decide
+  about a clean; never delete it unasked.
+- Build scratch binaries and examples only when they are about to be used,
+  and remove scratch files when the task ends.
+
+---
+
 Project-specific rules for coding agents. Details: `docs/DEVELOPMENT.md`.
 Organize files properly: Keep folders and files logically structured by feature and responsibility.
 - Keep folders and files well-organized, modular, and maintainable.

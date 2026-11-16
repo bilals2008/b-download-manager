@@ -22,6 +22,7 @@ pnpm test                # frontend unit tests (Vitest + Testing Library)
 pnpm verify              # check:all + typecheck + unit tests: the pre-push gate
 pnpm check:all           # every self-check script, one summary at the end
 pnpm check:release       # the release contract: versions, updater, bridge, notes
+pnpm clean               # empty target/ and dist/, and say what it freed
 cargo test --workspace   # the app and the engine crate together
 cargo test -p idm-core   # the engine only, without a window
 cargo clippy --workspace --all-targets -- -D warnings
@@ -31,6 +32,19 @@ pnpm site:dev            # Astro docs site (site/)
 The Rust side is one Cargo workspace (`Cargo.toml` at the root), so `target/`
 and `Cargo.lock` live at the root, not in `src-tauri/`. `[profile.release]`
 belongs in the root manifest — Cargo ignores profiles in member manifests.
+
+The dev profile is what keeps `target/` from reaching tens of gigabytes: line
+tables only for this workspace, no debug info for dependencies, and one
+incremental cache reused by every command. Do not pass `CARGO_INCREMENTAL` or
+`CARGO_PROFILE_DEV_DEBUG` per build — a new value means a new cache beside the
+old one, and that pile is what fills the disk.
+
+On Windows, one more thing makes every build faster and cheaper, run once in an
+elevated shell (the folder paths are this machine's):
+
+```powershell
+Add-MpPreference -ExclusionPath "D:\Dev\b-download-manager", "$env:USERPROFILE\.cargo", "$env:LOCALAPPDATA\pnpm"
+```
 
 The `check:*` scripts and `check-release-integrity.mjs` are read-only and do
 not touch the network by contract; that is what lets CI run all of them on
@@ -524,3 +538,19 @@ Optional, not installed (only add if one of the above proves insufficient):
 https://skills.sh/full-stack-skills/tauri-skills.
 
 See https://skills.sh/ to search for anything else.
+
+## Magnet probe (opt-in, real network)
+
+`pnpm probe:magnet` runs a real torrent job against a real public swarm and
+prints what the engine actually saw: status, peers, and SHA-1-verified bytes,
+every two seconds for a bounded time (default 120s). With no argument it
+resolves the current Debian netinst torrent; pass a `.torrent` URL or file
+after `--` to probe another, and `--seconds N` to watch longer. It proves the
+whole path — metadata exchange, peer connections, piece verification — on a
+live swarm; it does not prove anything about CI, and it is deliberately not
+part of `pnpm verify`. Read the output honestly: exit 0 with zero bytes means
+the swarm was empty or unreachable from this network (a valid result, not a
+pass), and exit 1 means the code or the job itself failed. The probe builds
+only the `magnet_probe` example (never shipped in the app), runs it with
+`CARGO_INCREMENTAL=0`, and removes the job and its temp folder on every exit
+path.

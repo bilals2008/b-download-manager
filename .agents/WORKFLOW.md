@@ -54,7 +54,9 @@ splits it as part of the same change.
 
 ## 4. Prove it on the real application
 
-The unit tests and the check scripts are the floor, not the proof.
+The unit tests and the check scripts are the floor, not the proof. Follow the
+build discipline in `AGENTS.md`: targeted commands while iterating, the full
+suite once at the end, no concurrent cargo builds, no needless release builds.
 
 - `cargo test --workspace` — the engine and the app.
 - `pnpm test` — the window.
