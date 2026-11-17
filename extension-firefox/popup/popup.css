@@ -354,6 +354,28 @@ h2 {
   scrollbar-color: var(--line) transparent;
 }
 
+/* The caption choice under the qualities. */
+.media-row.caption-row {
+  gap: 8px;
+  padding: 6px 8px;
+}
+
+.caption-select {
+  max-width: 62%;
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+}
+
+.caption-select:focus-visible {
+  outline: 2px solid var(--line);
+  outline-offset: 1px;
+}
+
 .media-row {
   display: flex;
   align-items: center;

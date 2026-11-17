@@ -2,6 +2,7 @@
 
 use super::*;
 use super::resolver::rewrite_throttle;
+use idm_core::media::subtitles::SubtitleRendition;
 
 /// Fold the clients' failures into the one a person reads.
 pub(super) fn merge_failures(failures: Vec<YtError>) -> YtError {
@@ -241,7 +242,7 @@ pub(super) fn plan_from(
         formats,
         pairs,
         container_hint: Some("youtube".to_string()),
-        subtitles: Vec::new(),
+        subtitles: captions(data),
     };
     Ok(Planned {
         manifest,
@@ -249,6 +250,65 @@ pub(super) fn plan_from(
         throttled,
     })
 }
+
+/// The caption tracks the player offered, as the manifest carries them.
+///
+/// The player response lists them under the captions renderer, one entry per
+/// language (and one more for the machine transcript). The listing address is
+/// the timed-text endpoint; the WebVTT form is asked for, which is what the
+/// muxer reads. A page that offered no captions gives an empty list, which is
+/// not an error.
+fn captions(data: &Value) -> Vec<SubtitleRendition> {
+    let Some(tracks) = data
+        .pointer("/captions/playerCaptionsTracklistRenderer/captionTracks")
+        .and_then(Value::as_array)
+    else {
+        return Vec::new();
+    };
+    let mut out: Vec<SubtitleRendition> = Vec::new();
+    for track in tracks {
+        let Some(url) = track.get("baseUrl").and_then(Value::as_str) else {
+            continue;
+        };
+        let language = track
+            .get("languageCode")
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        let name = track
+            .pointer("/name/simpleText")
+            .and_then(Value::as_str)
+            .or_else(|| track.pointer("/name/runs/0/text").and_then(Value::as_str))
+            .map(str::to_string)
+            .or_else(|| language.clone())
+            .unwrap_or_else(|| "Captions".to_string());
+        let id = track
+            .get("vssId")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .or_else(|| language.clone())
+            .unwrap_or_else(|| name.clone());
+        if out.iter().any(|known| known.id == id) {
+            continue;
+        }
+        // An address that already asks for a format keeps it; every other
+        // one is asked for the WebVTT form the muxer reads.
+        let url = if url.contains("fmt=") {
+            url.to_string()
+        } else {
+            format!("{url}&fmt=vtt")
+        };
+        out.push(SubtitleRendition {
+            id,
+            name,
+            language,
+            url,
+            container: "vtt".to_string(),
+            is_default: out.is_empty(),
+        });
+    }
+    out
+}
+
 
 /// The player script's own name, out of `playerConfig.assets.js`.
 ///
@@ -325,4 +385,55 @@ pub(super) fn digits_after(text: &str, marker: &str) -> Option<u64> {
         .map(|end| &rest[..end])
         .unwrap_or(rest);
     digits.parse().ok()
+}
+
+#[cfg(test)]
+mod caption_tests {
+    use super::*;
+
+    #[test]
+    fn the_caption_tracks_of_a_player_response_are_read() {
+        let data: Value = serde_json::from_str(
+            r#"{
+              "captions": {
+                "playerCaptionsTracklistRenderer": {
+                  "captionTracks": [
+                    {
+                      "baseUrl": "https://www.youtube.com/api/timedtext?v=abc&lang=en",
+                      "name": { "runs": [{ "text": "English" }] },
+                      "vssId": ".en",
+                      "languageCode": "en"
+                    },
+                    {
+                      "baseUrl": "https://www.youtube.com/api/timedtext?v=abc&lang=ur&fmt=vtt",
+                      "name": { "simpleText": "Urdu" },
+                      "vssId": "a.ur",
+                      "languageCode": "ur"
+                    }
+                  ]
+                }
+              }
+            }"#,
+        )
+        .unwrap();
+        let tracks = captions(&data);
+        assert_eq!(tracks.len(), 2);
+        assert_eq!(tracks[0].id, ".en");
+        assert_eq!(tracks[0].name, "English");
+        assert_eq!(tracks[0].language.as_deref(), Some("en"));
+        assert!(tracks[0].is_default);
+        assert!(tracks[0].url.ends_with("&fmt=vtt"));
+        assert_eq!(tracks[1].name, "Urdu");
+        assert!(!tracks[1].is_default);
+        assert_eq!(
+            tracks[1].url,
+            "https://www.youtube.com/api/timedtext?v=abc&lang=ur&fmt=vtt"
+        );
+    }
+
+    #[test]
+    fn a_page_without_captions_gives_nothing() {
+        let data: Value = serde_json::from_str(r#"{"playabilityStatus":{"status":"OK"}}"#).unwrap();
+        assert!(captions(&data).is_empty());
+    }
 }

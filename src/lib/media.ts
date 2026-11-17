@@ -310,6 +310,29 @@ export function openVideoWindow(job: number): Promise<void> {
   return invoke<void>("open_video_window", { job });
 }
 
+/**
+ * Whether an address is a YouTube page. YouTube downloads start from the
+ * page itself, with the quality chosen there, so the app's quality window is
+ * not opened for them.
+ */
+export function isYouTubeUrl(url: string | null | undefined): boolean {
+  if (!url) {
+    return false;
+  }
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return (
+      host === "youtu.be" ||
+      host === "youtube.com" ||
+      host.endsWith(".youtube.com") ||
+      host === "youtube-nocookie.com" ||
+      host.endsWith(".youtube-nocookie.com")
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** Which of the two optional video helpers are installed. */
 export interface VideoHelperStatus {
   ytdlp: boolean;

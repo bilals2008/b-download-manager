@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "B Download Manager Integration",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Hands links and downloads to B Download Manager, the companion desktop app.",
   "permissions": ["contextMenus", "cookies", "downloads", "storage", "tabs", "webRequest"],
   "host_permissions": ["http://127.0.0.1:27500/*", "<all_urls>"],

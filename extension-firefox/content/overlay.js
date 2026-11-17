@@ -175,6 +175,8 @@
     qualityJobs: [],
     qualityView: null,
     qualitySelected: "",
+    qualitySignature: "",
+    captionSelected: "",
     qualityTimer: 0,
     // While the panel is open, the application's theme is read again so a
     // theme change in the window reaches the panel without reopening it.
@@ -770,6 +772,7 @@
     state.qualityJob = 0;
     state.qualityJobs = [];
     state.qualitySelected = "";
+    state.qualitySignature = "";
     state.qualityView = {
       state: "parsing",
       title: bdmPageName(),
@@ -867,7 +870,26 @@
         if (best) {
           state.qualityJob = best.job;
           state.qualityView = best;
-          renderQuality();
+          // The list is rebuilt only when something in it changed: a rebuild
+          // under the pointer cancels the click that was on its way, which is
+          // what made a quality need two clicks.
+          const signature = JSON.stringify([
+            best.job,
+            best.state,
+            best.title,
+            best.error,
+            best.notice,
+            best.formats,
+            best.pairs,
+            best.subtitles,
+            best.cookiesOffered,
+            best.cookieConsent,
+            best.preferred,
+          ]);
+          if (signature !== state.qualitySignature) {
+            state.qualitySignature = signature;
+            renderQuality();
+          }
         } else {
           // Several jobs can be watched at once. One that was merged into
           // another answers with its old id no longer existing; that is not a
@@ -1079,6 +1101,9 @@
             node.dataset.id === row.id ? "true" : "false";
         }
         item.focus({ preventScroll: true });
+        // One click on the row is the download; the icon is the same thing
+        // with a label.
+        void startQuality(row);
       });
       button.addEventListener("click", (event) => {
         event.stopPropagation();
@@ -1088,6 +1113,36 @@
 
       item.append(wrap, size, button);
       list.append(item);
+    }
+
+    // The caption tracks the page offered, when it offered any. The choice
+    // travels with the download and the app writes it into the file.
+    const tracks = Array.isArray(view.subtitles) ? view.subtitles : [];
+    if (tracks.length) {
+      const captionRow = document.createElement("li");
+      captionRow.className = "row caption";
+      const captionLabel = document.createElement("span");
+      captionLabel.className = "name";
+      captionLabel.textContent = "Captions";
+      const select = document.createElement("select");
+      select.className = "caption-select";
+      select.setAttribute("aria-label", "Captions");
+      const none = document.createElement("option");
+      none.value = "";
+      none.textContent = "No captions";
+      select.append(none);
+      for (const track of tracks) {
+        const option = document.createElement("option");
+        option.value = track.id;
+        option.textContent = track.name || track.language || track.id;
+        select.append(option);
+      }
+      select.value = state.captionSelected || "";
+      select.addEventListener("change", () => {
+        state.captionSelected = select.value;
+      });
+      captionRow.append(captionLabel, select);
+      list.append(captionRow);
     }
     setStatus("", "");
   }
@@ -1108,6 +1163,7 @@
           // The quality belongs in the file name, the way the page's own
           // complete files carry it.
           name: `${state.qualityView.title || bdmPageName()} ${row.label.toLowerCase()}`,
+          subtitle: state.captionSelected || null,
         },
       });
       if (!answer || !answer.ok) {
@@ -1159,6 +1215,8 @@
     state.qualityJobs = [];
     state.qualityView = null;
     state.qualitySelected = "";
+    state.qualitySignature = "";
+    state.captionSelected = "";
     if (state.ui) state.ui.list.textContent = "";
     if (state.open) closePanel(false);
   }

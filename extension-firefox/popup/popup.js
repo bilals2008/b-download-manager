@@ -33,6 +33,10 @@ let inFlight = false;
 
 /** The inline quality list the popup draws for a media job. */
 const mediaQuality = {
+  /** The last view drawn, so an unchanged poll leaves the list alone. */
+  signature: "",
+  /** The caption track the reader chose, or empty. */
+  caption: "",
   items: [],
   referer: "",
   job: 0,
@@ -522,6 +526,7 @@ function renderQualities(view) {
           video: row.id,
           audio: row.audio,
           name: view.title || "",
+          subtitle: mediaQuality.caption || null,
         },
       });
       if (!answer?.ok) {
@@ -538,6 +543,35 @@ function renderQualities(view) {
     });
 
     li.append(info, size, button);
+    refs.mediaList.append(li);
+  }
+
+  // The caption tracks the page offered, when it offered any.
+  const tracks = Array.isArray(view.subtitles) ? view.subtitles : [];
+  if (tracks.length) {
+    const li = document.createElement("li");
+    li.className = "media-row caption-row";
+    const label = document.createElement("span");
+    label.className = "quality-info";
+    label.textContent = "Captions";
+    const select = document.createElement("select");
+    select.className = "caption-select";
+    select.setAttribute("aria-label", "Captions");
+    const none = document.createElement("option");
+    none.value = "";
+    none.textContent = "No captions";
+    select.append(none);
+    for (const track of tracks) {
+      const option = document.createElement("option");
+      option.value = track.id;
+      option.textContent = track.name || track.language || track.id;
+      select.append(option);
+    }
+    select.value = mediaQuality.caption || "";
+    select.addEventListener("change", () => {
+      mediaQuality.caption = select.value;
+    });
+    li.append(label, select);
     refs.mediaList.append(li);
   }
 }
@@ -566,7 +600,25 @@ async function pollQuality() {
   if (best) {
     mediaQuality.job = best.job;
     mediaQuality.view = best;
-    renderQualities(best);
+    // A rebuild under the pointer would cancel the click that was on its
+    // way; the list is only redrawn when something in it changed.
+    const signature = JSON.stringify([
+      best.job,
+      best.state,
+      best.title,
+      best.error,
+      best.notice,
+      best.formats,
+      best.pairs,
+      best.subtitles,
+      best.cookiesOffered,
+      best.cookieConsent,
+      best.preferred,
+    ]);
+    if (signature !== mediaQuality.signature) {
+      mediaQuality.signature = signature;
+      renderQualities(best);
+    }
   } else {
     // An id that was merged into another job is not a failure; only a real
     // refusal should replace the list with an error.
@@ -613,6 +665,8 @@ async function beginMediaQuality(item, items, referer) {
   mediaQuality.job = 0;
   mediaQuality.jobs = [];
   mediaQuality.view = null;
+  mediaQuality.signature = "";
+  mediaQuality.caption = "";
   mediaQuality.done = false;
   refs.mediaTitle.textContent = "Qualities";
   refs.mediaBack.hidden = false;

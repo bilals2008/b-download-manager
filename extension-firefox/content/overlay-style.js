@@ -354,6 +354,33 @@ const BDM_OVERLAY_STYLE = `
     height: 26px;
   }
 
+  .row.caption {
+    gap: 8px;
+    padding: 6px 4px 5px 8px;
+  }
+
+  .row.caption .name {
+    flex: 1;
+    color: var(--bdm-muted);
+    font-size: 10px;
+  }
+
+  .caption-select {
+    max-width: 60%;
+    padding: 3px 6px;
+    border: 1px solid var(--bdm-line);
+    border-radius: var(--bdm-radius-control);
+    background: var(--bdm-canvas);
+    color: var(--bdm-text);
+    font: inherit;
+    font-size: 10px;
+  }
+
+  .caption-select:focus-visible {
+    outline: 2px solid var(--bdm-focus);
+    outline-offset: 1px;
+  }
+
   .empty.cookie {
     display: flex;
     align-items: center;

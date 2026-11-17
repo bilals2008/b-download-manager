@@ -273,6 +273,7 @@ async function bdmBridgeMediaStart(job, payload) {
       audio: payload?.audio ? String(payload.audio) : null,
       name: String(payload?.name || ""),
       dest: String(payload?.dest || ""),
+      subtitle: payload?.subtitle ? String(payload.subtitle) : null,
     },
     8000,
   );

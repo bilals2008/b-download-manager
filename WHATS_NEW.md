@@ -8,7 +8,7 @@
   section for its own version, and the release page uses the same words.
 -->
 
-## 1.3.0 — 16 November 2026
+## 1.3.0 — 17 November 2026
 
 ### Torrents
 
@@ -17,6 +17,8 @@
 - Torrents find peers on your own network too: local discovery is on by default, and you can turn it off in the Torrents settings.
 - A new choice asks your router to open the torrent port (UPnP or NAT-PMP). It is off by default, and the settings page says what the router answered.
 - Torrent trackers now use the proxy you set in Options; peer connections still go directly, and the settings say so.
+- YouTube videos download straight from the page at the quality you pick there, with captions chosen next to it; the extra window no longer opens.
+- A quality in the page's download panel starts with one click.
 
 ## 1.2.1 - 16 November 2026
 
