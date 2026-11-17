@@ -10,6 +10,60 @@ edit one before its release ships if a bullet needs better words.
 
 ---
 
+## [1.3.0] - 17 November 2026
+
+### Added
+
+- **video:** One-click qualities, YouTube captions and no in-app quality window
+- **theme:** Add the Bloom dark theme
+- **torrent:** Find LAN peers, open the router port, proxy trackers and probe swarms
+- **ui:** Give torrents a window of their own
+  - The list of jobs sits on the left, and the chosen one takes the right pane: an overview with its pieces drawn, the files with their sizes, the peers and the trackers. Tracker state is in plain words with the engine's reason in the tooltip, tables stay inside their columns, and the job list folds away for a reader looking at one job. The window says where to bring it back after it closes.
+- **app:** Open the torrents window from the menu and the tray
+  - Tasks > Torrents and a tray item both raise the one torrents window, the window opens wide enough for two panes, and its settings are saved beside the rest. A closed window tells the main window it went, so it can say where to find it again.
+- **video:** Offer the caption tracks the helper names
+  - The panel lists the uploader's captions per language before the machine ones, and takes only the video's own language from those: the helper lists every translation it can make, which would bury the one track that is really there.
+- **torrent:** Find peers through DHT, local discovery and the router
+  - A magnet with no reachable tracker can now finish: the engine reads the distributed peer table, finds peers on the local network and asks the router to open the port. Trackers go through the chosen proxy; peer connections stay direct.
+- **site:** Replace landing feature panels with filmed engine stills
+- **site:** Add the themes feature to /features with a Bloom-light pane still
+- **site:** Write the 1.2.x features into /features with filmed pane stills
+- **site:** Ship landing hero as full-workflow loop video with per-theme cuts
+- **site:** File-type icons and motion flourishes in download-hero
+- **site:** Name completed rows in download-hero
+- **site:** Animated download-hero stageshow figure
+- **remote:** Hide the tray toggle and ignore a saved switch at startup
+- **remote:** Mark the phone remote UI coming soon, the server stays in
+- **torrent:** Mark the torrent UI coming soon, the engine stays in
+- The torrent flow end to end, and the assistant page says coming soon
+- 1.2.0 - media, Drive, debrid, torrents, remote, MCP, scheduler, languages and the big split
+- **proxy:** Decide the proxy per address from a PAC script
+- **network:** Hold downloads to one adapter with a kill switch
+- **dns:** Encrypted DNS with DoH, DoT and NextDNS
+- Wave 2 — learned host caps, pacing, geo, freeze detector, checksum verify, archive extract
+- **crash:** Watch the application from outside and write the report when it ends badly
+
+### Changed
+
+- **settings:** Split the search index by area
+  - The list had grown past a thousand lines and every settings change touched it. The entries now live with the area they describe, and the index only joins them.
+- **ui:** Move the add-download form into its own hook
+  - The dialog keeps the chrome and the questions; the form state, the field checks and the submit live beside it, so the torrent dialog asks the same questions the same way.
+
+### Fixed
+
+- **app:** The torrents window opens from the menu without a job
+  - The window rendered the main window again and never became visible when no job was named, so Tasks > Torrents appeared to do nothing. The marker that says which window this is now always set.
+- **torrent:** The piece bytes are what follows the dictionary on the wire
+  - A common client sends the ut_metadata piece as its dictionary and then the raw bytes of the piece, instead of a data key. The fetcher waited on a key that never arrives, so a magnet could not read its file list. The piece bytes after the dictionary are read instead, and the first piece alone unblocks a job. Add a scripted-peer test that speaks exactly that dialect.
+- Parse subtitle cues on their own, and settle archive and MCP edges
+  - The cue parser moves beside the renderer that uses it, an audio file with no tags reports none instead of failing, an archive entry cannot escape its folder, and the MCP client stops dropping a reply it already read.
+- **site:** Drop sheen that hid the running meter
+- **site:** Tighten download-hero window inset
+- **windows:** One progress window and one completion window, so the app stops freezing
+- **downloads:** Resume from the bytes on disk and stop the app from freezing
+
+
 ## [1.1.1] - 9 November 2026
 
 ### Added
