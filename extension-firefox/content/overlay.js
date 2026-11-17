@@ -1160,9 +1160,9 @@
         payload: {
           video: row.id,
           audio: row.audio,
-          // The quality belongs in the file name, the way the page's own
-          // complete files carry it.
-          name: `${state.qualityView.title || bdmPageName()} ${row.label.toLowerCase()}`,
+          // The title alone names the file: the quality a page lists is
+          // not part of the title a reader looks for.
+          name: state.qualityView.title || bdmPageName(),
           subtitle: state.captionSelected || null,
         },
       });

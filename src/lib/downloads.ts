@@ -192,6 +192,21 @@ export function progressOf(download: Download): number {
 }
 
 /** "1.2 GB" style size, the label the Size column shows. */
+/**
+ * The name a row shows: the extension kept, the page's quality label out.
+ *
+ * A video taken from a page is named after its title and the quality the page
+ * offered ("Kaffara mp4 1080p.mp4"). The quality is not part of the title a
+ * reader looks for, so the row leaves it out; the file on disk is untouched.
+ */
+export function displayFileName(fileName: string): string {
+  const dot = fileName.lastIndexOf(".");
+  const stem = dot > 0 ? fileName.slice(0, dot) : fileName;
+  const extension = dot > 0 ? fileName.slice(dot) : "";
+  const quality = /^(.*?) (mp4|webm|mkv|m4a|mp3|opus|flac|aac|ogg) [^.]*$/i.exec(stem);
+  return quality ? `${quality[1]}${extension}` : fileName;
+}
+
 export function formatSize(bytes: number): string {
   if (bytes <= 0) {
     return "0 B";

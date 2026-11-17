@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   categoryTargetFolder,
+  displayFileName,
   progressOf,
   type Download,
 } from "@/lib/downloads";
@@ -78,5 +79,23 @@ describe("progressOf", () => {
     expect(progressOf(row({ status: "completed", size: 0, downloaded: 0 }))).toBe(
       100,
     );
+  });
+});
+
+describe("displayFileName", () => {
+  it("leaves the page's quality label out of the title", () => {
+    expect(displayFileName("THEY GOT IT WRONG !! mp4 1080p.mp4")).toBe(
+      "THEY GOT IT WRONG !!.mp4",
+    );
+    expect(displayFileName("Holiday webm 720p high bitrate.webm")).toBe(
+      "Holiday.webm",
+    );
+    expect(displayFileName("Song mp3 128kbps.mp3")).toBe("Song.mp3");
+  });
+
+  it("keeps a name that carries no quality label as it is", () => {
+    expect(displayFileName("Report final.pdf")).toBe("Report final.pdf");
+    expect(displayFileName("a.mp4")).toBe("a.mp4");
+    expect(displayFileName("no extension")).toBe("no extension");
   });
 });

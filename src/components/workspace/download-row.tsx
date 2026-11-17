@@ -5,6 +5,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { SelectionCheckbox } from "@/components/workspace/selection-checkbox";
 import { DownloadProgress } from "@/components/workspace/download-progress";
 import {
+  displayFileName,
   formatEta,
   formatSize,
   formatSpeed,
@@ -106,7 +107,7 @@ export function DownloadRow({
         <div className="flex min-w-0 items-center gap-2.5">
           <SelectionCheckbox
             checked={selected}
-            label={`Select ${item.fileName}`}
+            label={`Select ${displayFileName(item.fileName)}`}
             onToggle={onToggle}
           />
 
@@ -123,7 +124,7 @@ export function DownloadRow({
               className="block min-w-0"
             >
               <span className="block truncate text-chrome-menu-text">
-                {item.fileName}
+                {displayFileName(item.fileName)}
               </span>
             </Tooltip>
             {!item.error && item.mediaStage && item.status !== "completed" ? (
