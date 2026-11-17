@@ -1,10 +1,8 @@
-/**
- * The door the MCP server of the download manager talks through.
- *
- * The server is a separate program for an assistant to start; this switch
- * decides whether it may reach this application at all. Off by default: the
- * bridge refuses every assistant route while it is off.
- */
+//! The door the MCP server of the download manager talks through.
+//!
+//! The server is a separate program for an assistant to start; this switch
+//! decides whether it may reach this application at all. Off by default: the
+//! bridge refuses every assistant route while it is off.
 
 use tauri::State;
 

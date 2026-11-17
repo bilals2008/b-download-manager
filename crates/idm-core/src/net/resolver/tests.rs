@@ -184,7 +184,7 @@ async fn the_chosen_resolver_answers_through_the_encrypted_server() {
         .addresses(NAME)
         .await
         .expect("the local resolver answers");
-    assert_eq!(found, vec![IpAddr::V4(ANSWER.into())]);
+    assert_eq!(found, vec![IpAddr::V4(ANSWER)]);
 }
 
 /// A download goes through the encrypted resolver: the name is only the local

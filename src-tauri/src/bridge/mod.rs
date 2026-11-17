@@ -221,9 +221,9 @@ async fn route(app: &AppHandle, request: &Request, connected: bool) -> (u16, Val
         ("GET", "/v1/theme") => (200, ok(browser_theme(app))),
         ("POST", "/v1/media") => crate::video::capture::register(app, &request.body).await,
         ("GET", "/v1/mcp/downloads") | ("GET", "/v1/mcp/queue") | ("POST", "/v1/mcp/downloads") => {
-            mcp_route(app, &request)
+            mcp_route(app, request)
         }
-        ("POST", path) if path.starts_with("/v1/mcp/downloads/") => mcp_route(app, &request),
+        ("POST", path) if path.starts_with("/v1/mcp/downloads/") => mcp_route(app, request),
         ("GET", "/v1/downloads") => (200, ok(downloads(app))),
         ("POST", "/v1/downloads") => add_download(app, &request.body).await,
         ("GET", "/v1/batch-options") => (200, ok(batch::options(app, &app.state::<AppState>()))),

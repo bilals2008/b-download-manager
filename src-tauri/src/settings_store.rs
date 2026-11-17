@@ -321,14 +321,8 @@ fn clean_dns(dns: &mut idm_core::net::DnsSettings) {
     };
     // A URL with credentials is never written down; what cannot be asked is
     // never kept either.
-    dns.doh_url = match idm_core::net::dns::check_doh_url(&dns.doh_url) {
-        Ok(url) => url,
-        Err(_) => String::new(),
-    };
-    dns.dot_host = match idm_core::net::dns::check_dot_host(&dns.dot_host) {
-        Ok(host) => host,
-        Err(_) => String::new(),
-    };
+    dns.doh_url = idm_core::net::dns::check_doh_url(&dns.doh_url).unwrap_or_default();
+    dns.dot_host = idm_core::net::dns::check_dot_host(&dns.dot_host).unwrap_or_default();
     dns.nextdns_profile = dns.nextdns_profile.trim().to_ascii_lowercase();
     if !idm_core::net::dns::valid_nextdns_profile(&dns.nextdns_profile) {
         dns.nextdns_profile.clear();

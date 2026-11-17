@@ -165,7 +165,7 @@ pub fn start(
         container,
         ffmpeg: super::tools::ffmpeg(app),
         captions: None,
-        convert: convert.clone(),
+        convert,
     };
     let file_name = with_extension(&name, &extension);
     let dest = crate::bridge::dest::unique(&folder, &file_name);

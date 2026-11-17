@@ -126,7 +126,7 @@ fn median(mut rates: Vec<f64>) -> Option<f64> {
     }
     rates.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     let middle = rates.len() / 2;
-    Some(if rates.len() % 2 == 0 {
+    Some(if rates.len().is_multiple_of(2) {
         (rates[middle - 1] + rates[middle]) / 2.0
     } else {
         rates[middle]

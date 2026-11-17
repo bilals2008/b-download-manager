@@ -60,10 +60,11 @@ impl Weekday {
 }
 
 /// What the queue does when the window closes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum EndAction {
     /// The queue keeps running until the reader stops it.
+    #[default]
     KeepRunning,
     /// The queue stops and the downloads it started are paused.
     PauseQueue,
@@ -71,11 +72,7 @@ pub enum EndAction {
     ShutDown,
 }
 
-impl Default for EndAction {
-    fn default() -> Self {
-        EndAction::KeepRunning
-    }
-}
+
 
 /// The wall clock of the machine, as the schedule sees it.
 ///

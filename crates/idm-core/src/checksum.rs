@@ -99,7 +99,7 @@ pub fn is_hash(text: &str) -> bool {
             return false;
         }
     }
-    digits % 2 == 0 && algorithm_for_length(digits / 2).is_some()
+    digits.is_multiple_of(2) && algorithm_for_length(digits / 2).is_some()
 }
 
 /// Why a hash could not be read or used.

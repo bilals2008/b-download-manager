@@ -75,10 +75,6 @@ impl ScheduleRunner {
         }
     }
 
-    /// Ask the thread to stop.
-    pub fn stop(&self) {
-        self.stop.store(true, Ordering::SeqCst);
-    }
 }
 
 impl Default for ScheduleRunner {

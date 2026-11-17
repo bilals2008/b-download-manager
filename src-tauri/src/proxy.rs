@@ -102,8 +102,7 @@ async fn fetch(url: &str) -> Result<String, String> {
     }
     // The script is fetched with the engine's own client, so the encrypted
     // DNS and the chosen adapter apply to it as they do to everything else.
-    let client = idm_core::net::client_builder(None, None, None)
-        .map_err(|error| error)?
+    let client = idm_core::net::client_builder(None, None, None)?
         .timeout(Duration::from_secs(30))
         .build()
         .map_err(|error| format!("the client could not be made: {error}"))?;

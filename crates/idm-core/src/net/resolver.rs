@@ -165,9 +165,8 @@ impl Dns {
             crate::net::adapter::Route::Bound(_) => {
                 let kept = route.keep(ips);
                 if kept.is_empty() {
-                    return Err(format!(
-                        "the chosen network adapter cannot reach the address of the server"
-                    ));
+                    return Err("the chosen network adapter cannot reach the address of the server"
+                        .to_string());
                 }
                 Ok(kept)
             }
@@ -319,7 +318,7 @@ async fn build(
     if servers.is_empty() {
         return Err(setup("no server the resolver can reach".into()));
     }
-    let tls = tls_config(extra_roots).map_err(|error| setup(error))?;
+    let tls = tls_config(extra_roots).map_err(setup)?;
     let mut builder = HickoryResolver::builder_with_config(
         ResolverConfig::from_name_servers(servers),
         TokioRuntimeProvider::default(),

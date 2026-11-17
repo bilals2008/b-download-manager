@@ -150,7 +150,7 @@ fn check(app: &AppHandle) {
         for download in state.list() {
             if download.status() == Status::Running {
                 download.fail_with(reason.clone());
-                crate::actions::announce(&app, &download);
+                crate::actions::announce(app, &download);
             }
         }
         idm_core::log::write("warn", &reason);

@@ -123,7 +123,7 @@ impl Report {
 
     /// The report as the text that is written to the file.
     pub fn text(&self) -> String {
-        let mut text = format!("# B Download Manager crash report\n\n");
+        let mut text = "# B Download Manager crash report\n\n".to_string();
         text.push_str(&format!("Version: {}\n", self.version));
         text.push_str(&format!("What happened: {}\n\n", describe(&self.finding)));
         if let Some(dump) = &self.dump {
