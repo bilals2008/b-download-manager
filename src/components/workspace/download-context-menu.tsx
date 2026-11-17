@@ -20,7 +20,7 @@ import {
   type Download,
 } from "@/lib/downloads";
 import { describeError } from "@/lib/errors";
-import { isYouTubeUrl, openVideoWindow } from "@/lib/media";
+import { openMediaProgress } from "@/lib/media";
 import { openPath, openProgressWindow, extractDownload } from "@/lib/ipc";
 import { useDownloads } from "@/state/download-store";
 
@@ -158,13 +158,8 @@ export function DownloadContextMenu({
         dequeue(items.map((download) => download.id));
         break;
       case "recover":
-        // YouTube jobs are started again from the page itself; their window
-        // is not part of this build.
-        if (item.mediaJob !== undefined && isYouTubeUrl(item.url)) {
-          break;
-        }
         if (item.mediaJob !== undefined) {
-          openVideoWindow(item.mediaJob).catch((failure: unknown) => {
+          openMediaProgress(item.mediaJob).catch((failure: unknown) => {
             reportError(describeError(failure));
           });
         } else {
@@ -187,11 +182,8 @@ export function DownloadContextMenu({
         open(splitPath(item.dest).dir);
         break;
       case "open-window":
-        if (item.mediaJob !== undefined && isYouTubeUrl(item.url)) {
-          break;
-        }
         if (item.mediaJob !== undefined) {
-          openVideoWindow(item.mediaJob).catch((failure: unknown) => {
+          openMediaProgress(item.mediaJob).catch((failure: unknown) => {
             reportError(describeError(failure));
           });
         } else {

@@ -369,6 +369,52 @@ fn payload(info: &DownloadInfo) -> String {
     format!("window.__BDM_PROGRESS__ = {json};")
 }
 
+/// The script that names the media job before the page renders.
+fn media_payload(job: u64) -> String {
+    format!("window.__BDM_PROGRESS_MEDIA__ = {{ \"job\": {job} }};")
+}
+
+/// Show the progress window of a video download, or point the open one at it.
+///
+/// It is the same window the engine downloads use: the page reads the media
+/// job on its own and switches to the picture the job is at.
+pub fn show_media(app: &AppHandle, job: u64, focus: bool) {
+    let title = app
+        .state::<crate::state::AppState>()
+        .media_job(job)
+        .map(|job| job.view().title)
+        .filter(|title| !title.trim().is_empty())
+        .unwrap_or_else(|| "Video download".to_string());
+    let title = format!("{title} — B Download Manager");
+    if let Some(window) = app.get_webview_window(WINDOW) {
+        let _ = window.set_title(&title);
+        let _ = window.emit("progress://media", json!({ "job": job }));
+        if focus {
+            reveal(app, job);
+        } else if !window.is_visible().unwrap_or(false) {
+            let _ = window.show();
+        }
+        return;
+    }
+    let built = WebviewWindowBuilder::new(app, WINDOW, WebviewUrl::App("index.html".into()))
+        .title(title)
+        .inner_size(WIDTH, DETAILS_HEIGHT)
+        .resizable(false)
+        .maximizable(false)
+        .decorations(false)
+        .center()
+        .visible(false)
+        .initialization_script(media_payload(job))
+        .build();
+    match built {
+        Ok(window) => crate::window_style::round_corners(&window),
+        Err(error) => log::write(
+            "warn",
+            &format!("the progress window did not open: {error}"),
+        ),
+    }
+}
+
 /// Show the progress window of a download, or bring it back to the front when
 /// it is already open.
 ///

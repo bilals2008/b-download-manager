@@ -348,6 +348,7 @@ pub fn run() {
             video::capture::media_resume,
             video::capture::media_reparse,
             video::capture::open_video_window,
+            video::capture::open_media_progress,
             video::capture::video_helper_status,
             video::capture::video_helper_install,
             video::capture::video_helper_import,

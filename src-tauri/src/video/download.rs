@@ -237,23 +237,21 @@ pub fn start(
 
 /// Open the panel that shows the download going.
 ///
-/// A media download is not an engine download: it has no progress window of
-/// its own, and the panel is the window that shows its progress. The panel is
-/// opened when the download starts, so the bytes are watched from the first
-/// one, whatever the browser asked for: a registration that came in inline
-/// never opened a window at all. The reader can turn this off in Settings.
+/// A media download shows its progress in the application's one progress
+/// window, the same one a download gets — under the same switch, so the two
+/// kinds of download behave alike. A registration that came in inline never
+/// opened a window at all.
 ///
 /// The window is built on the main thread, and building a webview inside the
 /// IPC handler the main thread is already in would never finish, so the build
-/// is asked for from a task of its own.
+/// is asked for from the main thread's own queue.
 fn show_progress(app: &AppHandle, job: u64) {
-    if !app.state::<AppState>().show_video_window_on_start() {
+    if !app.state::<AppState>().show_progress_on_start() {
         return;
     }
     let handle = app.clone();
-    tauri::async_runtime::spawn(async move {
-        super::window::show(&handle, job);
-    });
+    let inside = handle.clone();
+    let _ = handle.run_on_main_thread(move || crate::progress::show_media(&inside, job, true));
 }
 
 /// Continue a stopped or failed download from the bytes it already has.

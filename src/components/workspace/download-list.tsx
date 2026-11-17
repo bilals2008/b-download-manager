@@ -31,7 +31,7 @@ import {
   type SortKey,
 } from "@/lib/downloads";
 import { describeError } from "@/lib/errors";
-import { isYouTubeUrl, openVideoWindow } from "@/lib/media";
+import { openMediaProgress } from "@/lib/media";
 import {
   chooseFolder,
   openProgressWindow,
@@ -126,15 +126,12 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
 
   /** Open the window that shows this download in flight. */
   function openProgress(item: Download) {
-    // A YouTube download started from the page at the quality chosen there;
-    // the row itself is its progress, so clicking it opens nothing.
-    if (item.mediaJob !== undefined && isYouTubeUrl(item.url)) {
-      return;
-    }
+    // A video download shows the same progress window an engine download
+    // does; its job is read by the page once a second.
     const shown =
       item.mediaJob === undefined
         ? openProgressWindow(item.id)
-        : openVideoWindow(item.mediaJob);
+        : openMediaProgress(item.mediaJob);
     shown.catch((failure: unknown) => {
       reportError(describeError(failure));
     });

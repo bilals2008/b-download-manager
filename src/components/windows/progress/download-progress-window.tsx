@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+import { listen } from "@tauri-apps/api/event";
+
 import {
   DownloadStatusTab,
   type ProgressAction,
@@ -9,9 +11,10 @@ import {
   type ProgressTabId,
 } from "@/components/windows/progress/progress-tabs";
 import { ProgressWindowTitle } from "@/components/windows/progress/progress-window-title";
+import { MediaProgressWindow } from "@/components/windows/progress/media-progress";
 import { SpeedLimitTab } from "@/components/windows/progress/speed-limit-tab";
 import { fileNameFromUrl, splitPath } from "@/lib/downloads";
-import { describeError } from "@/lib/errors";
+import { describeError, isDesktop } from "@/lib/errors";
 import {
   cancelDownload,
   openPath,
@@ -25,17 +28,73 @@ import { useLiveDownload } from "@/state/use-live-download";
 import type { DownloadInfo, DownloadStatus } from "@/types";
 
 /**
- * The "Download progress" window of one download.
+ * The "Download progress" window: the app's one progress window.
  *
- * The state comes from the engine: the copy the window was opened with, then
- * every `download://update`. The controls call the same Tauri commands the
- * list calls, so the window and the row cannot disagree. Closing the window
- * leaves the download running; only Cancel stops it.
+ * It shows either an engine download or a video download. The one that was
+ * named last owns it, so a download that starts while a video is downloading
+ * moves the window to itself, and a video that starts does the same.
  *
- * The download is handed in by the backend through `window.__BDM_PROGRESS__`
- * before this renders.
+ * The download is handed in by the backend through `window.__BDM_PROGRESS__`,
+ * the video job through `window.__BDM_PROGRESS_MEDIA__`, before this renders.
  */
-export function DownloadProgressWindow({ initial }: { initial: DownloadInfo }) {
+export function DownloadProgressWindow({
+  initial,
+  mediaJob,
+}: {
+  initial?: DownloadInfo;
+  mediaJob?: number;
+}) {
+  const [media, setMedia] = useState<number | null>(mediaJob ?? null);
+
+  useEffect(() => {
+    if (!isDesktop()) {
+      return;
+    }
+    let live = true;
+    const stops: (() => void)[] = [];
+    void listen<{ job: number }>("progress://media", (event) => {
+      setMedia(event.payload.job);
+    })
+      .then((stop) => {
+        if (live) {
+          stops.push(stop);
+        } else {
+          stop();
+        }
+      })
+      .catch(() => {
+        // The desktop runtime is not there; the marker still picks a mode.
+      });
+    void listen("progress://job", () => {
+      setMedia(null);
+    })
+      .then((stop) => {
+        if (live) {
+          stops.push(stop);
+        } else {
+          stop();
+        }
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+      for (const stop of stops) {
+        stop();
+      }
+    };
+  }, []);
+
+  if (media !== null) {
+    return <MediaProgressWindow job={media} />;
+  }
+  if (!initial) {
+    return null;
+  }
+  return <DownloadBody initial={initial} />;
+}
+
+/** The engine download side of the window. */
+function DownloadBody({ initial }: { initial: DownloadInfo }) {
   const { info, speed, eta } = useLiveDownload(initial);
   const [tab, setTab] = useState<ProgressTabId>("status");
   const [detailsOpen, setDetailsOpen] = useState(true);

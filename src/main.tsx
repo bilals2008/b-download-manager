@@ -27,6 +27,9 @@ applyLanguage();
 const progress = (
   window as Window & { __BDM_PROGRESS__?: DownloadInfo }
 ).__BDM_PROGRESS__;
+const progressMedia = (
+  window as Window & { __BDM_PROGRESS_MEDIA__?: { job: number } }
+).__BDM_PROGRESS_MEDIA__;
 const completed = (
   window as Window & { __BDM_COMPLETE__?: DownloadInfo }
 ).__BDM_COMPLETE__;
@@ -42,7 +45,7 @@ const torrent =
 // The small windows round their own corners. The page behind them has to
 // be the same surface, or the curve shows a sliver of the app canvas outside
 // it. The token is overridden here, before the first paint.
-if (progress || completed || grabber || video || torrent) {
+if (progress || progressMedia || completed || grabber || video || torrent) {
   document.documentElement.style.setProperty(
     "--background",
     "var(--chrome-popup)",
@@ -53,8 +56,8 @@ if (progress || completed || grabber || video || torrent) {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    {progress ? (
-      <DownloadProgressWindow initial={progress} />
+    {progress || progressMedia ? (
+      <DownloadProgressWindow initial={progress} mediaJob={progressMedia?.job} />
     ) : completed ? (
       <DownloadCompleteWindow info={completed} />
     ) : grabber ? (

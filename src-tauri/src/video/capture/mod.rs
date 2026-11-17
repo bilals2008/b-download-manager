@@ -447,6 +447,22 @@ pub fn media_reparse(app: AppHandle, job: u64) -> Result<MediaJobView, String> {
         .ok_or_else(|| "unknown media job".to_string())
 }
 
+/// Show the progress window of a video download, or bring it to the front.
+///
+/// Async on purpose: the window is built on the main thread, the one the
+/// window toolkit runs on, and a synchronous command runs on that same
+/// thread — there `run_on_main_thread` runs the build inline, inside the
+/// webview's IPC handler, and WebView2 never finishes creating the window.
+#[tauri::command(async)]
+pub fn open_media_progress(app: AppHandle, job: u64) -> Result<(), String> {
+    if app.state::<AppState>().media_job(job).is_none() {
+        return Err("unknown media job".to_string());
+    }
+    let handle = app.clone();
+    app.run_on_main_thread(move || crate::progress::show_media(&handle, job, true))
+        .map_err(|error| error.to_string())
+}
+
 /// Bring the quality panel of a media job back to the front.
 ///
 /// Media rows in the download list are not engine downloads, so they have no
