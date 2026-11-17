@@ -1,4 +1,3 @@
-
 use super::*;
 use crate::media::fixtures;
 use crate::media::{Format, MediaKind};
