@@ -25,9 +25,10 @@ mod tests {
             safe_path("Big Buck Bunny.mkv").as_deref(),
             Some("Big Buck Bunny.mkv")
         );
+        let expected = format!("Season 1{}episode 2.mkv", std::path::MAIN_SEPARATOR);
         assert_eq!(
             safe_path("Season 1/episode 2.mkv").as_deref(),
-            Some("Season 1\\episode 2.mkv")
+            Some(expected.as_str())
         );
     }
 
