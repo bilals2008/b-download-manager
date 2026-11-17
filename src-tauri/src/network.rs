@@ -121,9 +121,7 @@ pub fn watch(app: AppHandle) {
     std::thread::spawn(move || loop {
         let mut changed = CHANGED.lock().expect("change lock poisoned");
         while !*changed {
-            changed = CHANGE
-                .wait(changed)
-                .expect("change lock poisoned");
+            changed = CHANGE.wait(changed).expect("change lock poisoned");
         }
         *changed = false;
         drop(changed);
@@ -144,9 +142,8 @@ fn check(app: &AppHandle) {
     let label = route.label().unwrap_or_default().to_string();
     if let Route::Down { .. } = route {
         // The adapter is gone: the running downloads stop, and they say why.
-        let reason = format!(
-            "the network adapter {label} is not connected, so the download was stopped"
-        );
+        let reason =
+            format!("the network adapter {label} is not connected, so the download was stopped");
         for download in state.list() {
             if download.status() == Status::Running {
                 download.fail_with(reason.clone());
@@ -175,7 +172,7 @@ fn same_route(one: &Route, other: &Route) -> bool {
 fn notify() -> Result<(), String> {
     use std::sync::OnceLock;
     use windows_sys::Win32::NetworkManagement::IpHelper::{
-        MIB_IPINTERFACE_ROW, MIB_NOTIFICATION_TYPE, NotifyIpInterfaceChange,
+        NotifyIpInterfaceChange, MIB_IPINTERFACE_ROW, MIB_NOTIFICATION_TYPE,
     };
     use windows_sys::Win32::Networking::WinSock::AF_UNSPEC;
 
@@ -203,7 +200,9 @@ fn notify() -> Result<(), String> {
             &mut handle,
         );
         if result != windows_sys::Win32::Foundation::ERROR_SUCCESS {
-            return Err(format!("the network watcher could not be started: {result}"));
+            return Err(format!(
+                "the network watcher could not be started: {result}"
+            ));
         }
         let _ = HANDLE.set(handle as usize);
     }
@@ -260,8 +259,14 @@ mod tests {
             v4: Some("10.0.0.2".parse().unwrap()),
             ..Default::default()
         });
-        assert!(same_route(&bound, &same), "the same adapter is the same route");
-        assert!(!same_route(&bound, &other), "another adapter is another route");
+        assert!(
+            same_route(&bound, &same),
+            "the same adapter is the same route"
+        );
+        assert!(
+            !same_route(&bound, &other),
+            "another adapter is another route"
+        );
         assert!(!same_route(&bound, &Route::Any));
         assert!(!same_route(
             &Route::Down {
@@ -275,7 +280,8 @@ mod tests {
 
     /// The state of a route, in the words the window shows.
     #[test]
-    fn the_state_of_a_route_is_what_the_window_shows() {        let none = state_of(&Route::Any);
+    fn the_state_of_a_route_is_what_the_window_shows() {
+        let none = state_of(&Route::Any);
         assert_eq!(none.state, "none");
         assert!(none.label.is_empty());
         let down = state_of(&Route::Down {

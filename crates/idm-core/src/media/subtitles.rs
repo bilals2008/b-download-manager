@@ -100,7 +100,12 @@ pub fn add_formats(manifest: &mut Manifest, renditions: &[SubtitleRendition]) {
 /// `S_TEXT/UTF8`, which is WebVTT's text. Any other container keeps the text
 /// as it is, so nothing is converted for it.
 pub fn container_codec(container: &str) -> &str {
-    match container.trim().trim_start_matches('.').to_ascii_lowercase().as_str() {
+    match container
+        .trim()
+        .trim_start_matches('.')
+        .to_ascii_lowercase()
+        .as_str()
+    {
         "mp4" | "m4a" | "m4v" | "m4s" | "mov" => "mov_text",
         "mkv" | "webm" => "S_TEXT/UTF8",
         _ => TEXT_AS_IS,
@@ -112,7 +117,12 @@ pub fn container_codec(container: &str) -> &str {
 /// An MP4 wants `mov_text`, which is SubRip's text; a Matroska file wants
 /// `S_TEXT/UTF8`, which is WebVTT's text.
 pub fn format_for_container(container: &str) -> SubtitleFormat {
-    match container.trim().trim_start_matches('.').to_ascii_lowercase().as_str() {
+    match container
+        .trim()
+        .trim_start_matches('.')
+        .to_ascii_lowercase()
+        .as_str()
+    {
         "mp4" | "m4a" | "m4v" | "m4s" | "mov" => SubtitleFormat::Srt,
         _ => SubtitleFormat::Vtt,
     }
@@ -291,7 +301,6 @@ pub fn pick(tracks: &[SubtitleTrack]) -> Vec<&SubtitleTrack> {
 mod cues;
 
 pub use cues::{convert, parse, parse_srt, parse_vtt, to_srt, to_vtt, Cue};
-
 
 /// The subtitles of one track, read.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -60,6 +60,9 @@ pub async fn test_dns(dns: DnsSettings) -> Result<DnsTest, String> {
     let (took, addresses) = idm_core::net::resolver::test(&choice, TEST_NAME, &[]).await?;
     Ok(DnsTest {
         milliseconds: took.as_millis() as u64,
-        addresses: addresses.iter().map(|address| address.to_string()).collect(),
+        addresses: addresses
+            .iter()
+            .map(|address| address.to_string())
+            .collect(),
     })
 }

@@ -119,15 +119,11 @@ pub(super) fn deliver(
             stage("Joining");
             let Some(ffmpeg) = delivery.ffmpeg.as_deref() else {
                 return Err(DeliverError::Failed(
-                    "the captions need FFmpeg; install it from the video settings page"
-                        .to_string(),
+                    "the captions need FFmpeg; install it from the video settings page".to_string(),
                 ));
             };
             let codec = caption_codec(&delivery.extension).ok_or_else(|| {
-                DeliverError::Failed(format!(
-                    "captions cannot go into .{}",
-                    delivery.extension
-                ))
+                DeliverError::Failed(format!("captions cannot go into .{}", delivery.extension))
             })?;
             let with_captions = work_dir.join(format!("final-captions.{}", delivery.extension));
             let _ = std::fs::remove_file(&with_captions);

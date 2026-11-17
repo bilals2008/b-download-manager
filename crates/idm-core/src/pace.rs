@@ -164,7 +164,9 @@ pub fn stalled(segments: &[Segment], rates: &HashMap<u32, f64>) -> Option<u32> {
             continue;
         };
         let rate = rates.get(&candidate.id).copied().unwrap_or(0.0);
-        if rate <= benchmark * STALLED_SHARE && (best.is_none() || rate < best.map(|b| b.1).unwrap_or(f64::MAX)) {
+        if rate <= benchmark * STALLED_SHARE
+            && (best.is_none() || rate < best.map(|b| b.1).unwrap_or(f64::MAX))
+        {
             best = Some((candidate.id, rate));
         }
     }

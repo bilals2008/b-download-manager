@@ -178,7 +178,10 @@ pub(crate) fn show_ready(window: tauri::WebviewWindow) -> Result<(), String> {
 /// white before the page arrived. The page sends the colour of its
 /// `--background` token, and a theme change sends the next one.
 #[tauri::command]
-pub(crate) fn set_window_background(window: tauri::WebviewWindow, color: String) -> Result<(), String> {
+pub(crate) fn set_window_background(
+    window: tauri::WebviewWindow,
+    color: String,
+) -> Result<(), String> {
     let (red, green, blue) = parse_hex_color(&color).ok_or("expected a #rgb or #rrggbb colour")?;
     window
         .set_background_color(Some(tauri::window::Color(red, green, blue, 255)))

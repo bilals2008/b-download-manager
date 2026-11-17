@@ -143,10 +143,7 @@ pub async fn gallery_download(
 }
 
 /// Fetch the page, the same way every other address goes through.
-async fn fetch(
-    url: &str,
-    referer: Option<&str>,
-) -> Result<crate::video::probe::Fetched, String> {
+async fn fetch(url: &str, referer: Option<&str>) -> Result<crate::video::probe::Fetched, String> {
     let url = url.trim();
     if url.is_empty() {
         return Err("the address is empty".to_string());

@@ -93,7 +93,10 @@ impl Lookup {
         self.asked += 1;
         let arguments = vec![
             ("id".into(), BencodeValue::Bytes(self.local.to_vec())),
-            ("info_hash".into(), BencodeValue::Bytes(self.target.to_vec())),
+            (
+                "info_hash".into(),
+                BencodeValue::Bytes(self.target.to_vec()),
+            ),
         ];
         Some((address, arguments))
     }
@@ -151,8 +154,7 @@ impl Lookup {
     pub fn finished(&self) -> bool {
         self.asked >= MAX_QUERIES
             || Instant::now() >= self.deadline
-            || (self.candidates.is_empty()
-                && (self.asked > 0 || Instant::now() >= self.grace))
+            || (self.candidates.is_empty() && (self.asked > 0 || Instant::now() >= self.grace))
     }
 
     /// Whether the walk still waits for its first node, so the table can
@@ -195,11 +197,7 @@ impl Lookup {
         if id == self.local || self.queried.contains(&address) {
             return;
         }
-        if self
-            .candidates
-            .iter()
-            .any(|(_, known)| *known == address)
-        {
+        if self.candidates.iter().any(|(_, known)| *known == address) {
             return;
         }
         let position = self
@@ -240,9 +238,12 @@ mod tests {
         assert_eq!(address.to_string(), "10.0.0.1:6881");
         walk.answer(
             address,
-            &[("values".into(), BencodeValue::Bytes(encode_peers(&[
-                "1.2.3.4:6881".parse().expect("the address"),
-            ])))],
+            &[(
+                "values".into(),
+                BencodeValue::Bytes(encode_peers(&["1.2.3.4:6881"
+                    .parse()
+                    .expect("the address")])),
+            )],
         );
         assert!(!walk.peers().is_empty());
         // The walk asks the rest of its candidates before it is over.

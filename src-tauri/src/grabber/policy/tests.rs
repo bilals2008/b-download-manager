@@ -1,8 +1,8 @@
-use reqwest::Url;
 use super::exclusions::wildcard;
 use super::kinds::KINDS;
 use super::net::{addr_is_public, host_problem};
 use super::*;
+use reqwest::Url;
 
 fn url(text: &str) -> Url {
     Url::parse(text).expect("a URL")
@@ -68,9 +68,8 @@ fn a_candidate_carries_the_name_and_category_the_list_needs() {
     assert_eq!(found.category, "Video");
     assert!(found.url.contains("sig=1"), "the address is kept whole");
 
-    let archive =
-        Candidate::from_url(&url("https://example.org/a.rar"), "https://example.org/")
-            .expect("an archive");
+    let archive = Candidate::from_url(&url("https://example.org/a.rar"), "https://example.org/")
+        .expect("an archive");
     assert_eq!(archive.category, "Compressed");
 }
 

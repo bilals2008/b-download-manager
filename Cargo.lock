@@ -2015,6 +2015,7 @@ dependencies = [
  "h2",
  "hickory-resolver",
  "http",
+ "libc",
  "lzma-rust2",
  "md-5",
  "rcgen",

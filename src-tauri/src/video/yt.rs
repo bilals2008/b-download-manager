@@ -224,10 +224,10 @@ mod resolver;
 use resolver::remember;
 
 #[cfg(test)]
-mod tests;
-#[cfg(test)]
 mod live;
 #[cfg(test)]
 mod live_download;
 #[cfg(test)]
 mod live_fallback;
+#[cfg(test)]
+mod tests;

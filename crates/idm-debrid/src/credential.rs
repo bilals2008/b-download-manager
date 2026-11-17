@@ -198,10 +198,7 @@ impl AccountStore {
     /// An account that is not signed in may not, and neither may one
     /// without paid time left: it would start a slow download.
     pub fn can_unlock(&self, kind: ServiceKind) -> bool {
-        self.is_signed_in(kind)
-            && self
-                .state(kind)
-                .is_some_and(|state| state.premium)
+        self.is_signed_in(kind) && self.state(kind).is_some_and(|state| state.premium)
     }
 
     /// The account of one service, when the app is signed in to it.
@@ -252,9 +249,7 @@ impl AccountStore {
         }
     }
 
-    fn write_states(
-        &self,
-    ) -> std::sync::RwLockWriteGuard<'_, HashMap<ServiceKind, AccountState>> {
+    fn write_states(&self) -> std::sync::RwLockWriteGuard<'_, HashMap<ServiceKind, AccountState>> {
         match self.states.write() {
             Ok(guard) => guard,
             Err(poisoned) => poisoned.into_inner(),

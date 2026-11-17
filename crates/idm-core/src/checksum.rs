@@ -332,7 +332,10 @@ mod tests {
         );
         assert!(is_hash("414fa339"), "a CRC32 hash");
         assert!(!is_hash("not a hash"));
-        assert!(!is_hash(&"a".repeat(33)), "an odd number of digits is no hash");
+        assert!(
+            !is_hash(&"a".repeat(33)),
+            "an odd number of digits is no hash"
+        );
     }
 
     #[test]

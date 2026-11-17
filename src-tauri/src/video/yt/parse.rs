@@ -1,7 +1,7 @@
 //! Reading a player answer: playability, the formats it offers, and the manifest and leases they become.
 
-use super::*;
 use super::resolver::rewrite_throttle;
+use super::*;
 use idm_core::media::subtitles::SubtitleRendition;
 
 /// Fold the clients' failures into the one a person reads.
@@ -308,7 +308,6 @@ fn captions(data: &Value) -> Vec<SubtitleRendition> {
     }
     out
 }
-
 
 /// The player script's own name, out of `playerConfig.assets.js`.
 ///

@@ -111,7 +111,8 @@ pub async fn map(
         .await
         .map_err(|e| TorrentError::Network(e.to_string()))?;
     let mut buffer = [0u8; 64];
-    let received = tokio::time::timeout(Duration::from_secs(3), socket.recv_from(&mut buffer)).await;
+    let received =
+        tokio::time::timeout(Duration::from_secs(3), socket.recv_from(&mut buffer)).await;
     let Ok(Ok((length, _))) = received else {
         return Ok(None);
     };
@@ -175,7 +176,8 @@ mod tests {
 
     #[test]
     fn the_gateway_is_read_from_the_routing_table() {
-        let windows = "===========================================================================\n\
+        let windows =
+            "===========================================================================\n\
 Interface List\n 10...00 11 22 33 44 55 ...... Ethernet\n\
 ===========================================================================\n\
 \nActive Routes:\n\
@@ -187,10 +189,7 @@ Network Destination        Netmask          Gateway       Interface  Metric\n\
             Some("192.168.1.1".parse().unwrap())
         );
         let linux = "default via 10.0.0.1 dev eth0 proto dhcp metric 100\n10.0.0.0/24 dev eth0 scope link\n";
-        assert_eq!(
-            gateway_from_route(linux),
-            Some("10.0.0.1".parse().unwrap())
-        );
+        assert_eq!(gateway_from_route(linux), Some("10.0.0.1".parse().unwrap()));
         assert_eq!(gateway_from_route("no routes here"), None);
     }
 }

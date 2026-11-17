@@ -48,7 +48,8 @@ impl BencodeValue {
 
     /// The string, when this is a string that is text.
     pub fn as_text(&self) -> Option<String> {
-        self.as_bytes().map(|bytes| String::from_utf8_lossy(bytes).into_owned())
+        self.as_bytes()
+            .map(|bytes| String::from_utf8_lossy(bytes).into_owned())
     }
 
     /// The number, when this is a number.
@@ -90,7 +91,9 @@ pub(crate) fn decode_with_info_span(
 ) -> Result<(BencodeValue, Option<(usize, usize)>), TorrentError> {
     let mut decoder = Decoder { bytes, at: 0 };
     if decoder.byte()? != b'd' {
-        return Err(TorrentError::Malformed("it does not start with a dictionary".into()));
+        return Err(TorrentError::Malformed(
+            "it does not start with a dictionary".into(),
+        ));
     }
     let (entries, spans) = decoder.dict_entries()?;
     let mut span = None;
@@ -104,9 +107,7 @@ pub(crate) fn decode_with_info_span(
 
 /// Read one value and say how many bytes it took, so a message whose
 /// dictionary leads a raw blob can be split in one pass.
-pub(crate) fn decode_value_with_end(
-    bytes: &[u8],
-) -> Result<(BencodeValue, usize), TorrentError> {
+pub(crate) fn decode_value_with_end(bytes: &[u8]) -> Result<(BencodeValue, usize), TorrentError> {
     let mut decoder = Decoder { bytes, at: 0 };
     let value = decoder.value()?;
     Ok((value, decoder.at))
@@ -267,11 +268,7 @@ impl<'a> Decoder<'a> {
                     let (key, _, _) = self.value_with_span()?;
                     let key = match key {
                         BencodeValue::Bytes(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
-                        _ => {
-                            return Err(TorrentError::Malformed(
-                                "a key is not a string".into(),
-                            ))
-                        }
+                        _ => return Err(TorrentError::Malformed("a key is not a string".into())),
                     };
                     let (value, start, end) = self.value_with_span()?;
                     entries.push((key, value));
@@ -298,14 +295,14 @@ mod tests {
     #[test]
     fn a_value_goes_out_and_comes_back() {
         let value = BencodeValue::Dict(vec![
-            ("announce".into(), BencodeValue::Bytes(b"http://tracker/".to_vec())),
+            (
+                "announce".into(),
+                BencodeValue::Bytes(b"http://tracker/".to_vec()),
+            ),
             ("info".into(), BencodeValue::Integer(42)),
         ]);
         let bytes = bencode_encode(&value);
-        assert_eq!(
-            bytes,
-            b"d8:announce15:http://tracker/4:infoi42ee".to_vec()
-        );
+        assert_eq!(bytes, b"d8:announce15:http://tracker/4:infoi42ee".to_vec());
         assert_eq!(bencode_decode(&bytes).unwrap(), value);
     }
 

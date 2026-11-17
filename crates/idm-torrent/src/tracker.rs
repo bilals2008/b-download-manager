@@ -111,9 +111,9 @@ async fn udp_announce(
         Some((host, port)) => (host, port),
         None => (host, "80"),
     };
-    let tracker_port: u16 = port_text
-        .parse()
-        .map_err(|_| TorrentError::Malformed(format!("the tracker port {port_text} is not a number")))?;
+    let tracker_port: u16 = port_text.parse().map_err(|_| {
+        TorrentError::Malformed(format!("the tracker port {port_text} is not a number"))
+    })?;
 
     let mut addresses = tokio::net::lookup_host((host, tracker_port))
         .await
@@ -244,13 +244,14 @@ fn parse_answer(body: &[u8]) -> Result<AnnounceResult, TorrentError> {
     let value = bencode_decode(body)
         .map_err(|e| TorrentError::Malformed(format!("the tracker answered with junk: {e}")))?;
     if let Some(reason) = value.get("failure reason").and_then(|v| v.as_text()) {
-        return Err(TorrentError::Network(format!(
-            "the tracker said {reason}"
-        )));
+        return Err(TorrentError::Network(format!("the tracker said {reason}")));
     }
     let interval = value.get("interval").and_then(|v| v.as_int()).unwrap_or(0) as u64;
     let complete = value.get("complete").and_then(|v| v.as_int()).unwrap_or(0) as u64;
-    let incomplete = value.get("incomplete").and_then(|v| v.as_int()).unwrap_or(0) as u64;
+    let incomplete = value
+        .get("incomplete")
+        .and_then(|v| v.as_int())
+        .unwrap_or(0) as u64;
 
     let mut peers = Vec::new();
     match value.get("peers") {
@@ -263,7 +264,10 @@ fn parse_answer(body: &[u8]) -> Result<AnnounceResult, TorrentError> {
         }
         Some(crate::bencode::BencodeValue::List(list)) => {
             for entry in list {
-                let ip = entry.get("ip").and_then(|v| v.as_text()).unwrap_or_default();
+                let ip = entry
+                    .get("ip")
+                    .and_then(|v| v.as_text())
+                    .unwrap_or_default();
                 let port = entry.get("port").and_then(|v| v.as_int()).unwrap_or(0);
                 if let Ok(address) = ip.parse::<Ipv4Addr>() {
                     peers.push(SocketAddr::from((address, port as u16)));

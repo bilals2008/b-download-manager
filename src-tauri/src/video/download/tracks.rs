@@ -1,7 +1,7 @@
 //! Running the tracks: HLS, DASH and plain files, their progress, fingerprints and finish.
 
-use super::*;
 use super::run::Outcome;
+use super::*;
 
 /// A stable name for the playlist a set of segments came from.
 ///
@@ -67,9 +67,10 @@ pub(super) async fn run_hls(
             None => None,
         }
         .ok_or_else(|| Outcome::media("that quality is not in the manifest"))?;
-        let fetched = crate::video::probe::fetch(&uri, &job.referer, &job.headers, job.header_origin())
-            .await
-            .map_err(Outcome::transient)?;
+        let fetched =
+            crate::video::probe::fetch(&uri, &job.referer, &job.headers, job.header_origin())
+                .await
+                .map_err(Outcome::transient)?;
         hls::parse_media(&fetched.text, &fetched.url)
             .map_err(|error| Outcome::media(error.to_string()))?
     };

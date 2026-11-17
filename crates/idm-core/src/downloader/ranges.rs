@@ -123,8 +123,7 @@ fn hand_over(
         let Some(segment) = segments.get_mut(index) else {
             return false;
         };
-        let Some(new_segment) =
-            segmenter::split(segment, new_id, &download.dir, &download.stem)
+        let Some(new_segment) = segmenter::split(segment, new_id, &download.dir, &download.stem)
         else {
             return false;
         };
@@ -402,7 +401,10 @@ pub(super) async fn fetch_range(
 /// message says that the file was taken over by one connection because of
 /// data corruption, when newly received data in several connections did not
 /// match the same data downloaded earlier.
-pub(super) fn downgrade_to_one_connection(download: &Arc<Download>, total: Option<u64>) -> Option<Segment> {
+pub(super) fn downgrade_to_one_connection(
+    download: &Arc<Download>,
+    total: Option<u64>,
+) -> Option<Segment> {
     let new_id = download.next_segment_id.fetch_add(1, Ordering::SeqCst);
     let part = segmenter::part_path(&download.dir, &download.stem, new_id);
 

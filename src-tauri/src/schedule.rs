@@ -74,7 +74,6 @@ impl ScheduleRunner {
             stop: AtomicBool::new(false),
         }
     }
-
 }
 
 impl Default for ScheduleRunner {
@@ -120,7 +119,12 @@ fn tick(app: &tauri::AppHandle, runner: &ScheduleRunner) {
                 "info",
                 &format!("the queue's window closed: {}", schedule.summary()),
             );
-            close_window(app, &state, schedule.end_action, settings.power_off_after_queue);
+            close_window(
+                app,
+                &state,
+                schedule.end_action,
+                settings.power_off_after_queue,
+            );
         }
     }
 }
@@ -170,13 +174,7 @@ fn save_everything(app: &tauri::AppHandle, state: &AppState) {
 #[cfg(windows)]
 fn power_off() {
     let _ = std::process::Command::new("shutdown")
-        .args([
-            "/s",
-            "/t",
-            "60",
-            "/c",
-            "The download queue has finished.",
-        ])
+        .args(["/s", "/t", "60", "/c", "The download queue has finished."])
         .spawn();
 }
 

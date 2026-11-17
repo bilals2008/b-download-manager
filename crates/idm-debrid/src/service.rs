@@ -125,10 +125,9 @@ impl DebridError {
                 "{} is asking us to slow down. Try again in a minute.",
                 kind.name()
             ),
-            DebridError::NotPremium { kind } => format!(
-                "the {} account has no paid time left.",
-                kind.name()
-            ),
+            DebridError::NotPremium { kind } => {
+                format!("the {} account has no paid time left.", kind.name())
+            }
             DebridError::NotSignedIn { kind, .. } => {
                 format!("{} did not take the key. Sign in again.", kind.name())
             }

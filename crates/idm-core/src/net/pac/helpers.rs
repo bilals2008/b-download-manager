@@ -81,11 +81,7 @@ struct Parts {
 const DAYS: [&str; 7] = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 
 /// The call of a helper function, or `None` when the name is not one.
-pub(super) fn call(
-    name: &str,
-    args: &[Value],
-    clock: &Clock,
-) -> Option<Result<Value, PacError>> {
+pub(super) fn call(name: &str, args: &[Value], clock: &Clock) -> Option<Result<Value, PacError>> {
     let answered = match name {
         "isPlainHostName" => plain_host_name(args),
         "dnsDomainIs" => domain_is(args),
@@ -308,9 +304,7 @@ fn time_range(args: &[Value], clock: &Clock) -> Result<Value, PacError> {
     let args = without_gmt(args);
     let numbers: Vec<i64> = args
         .iter()
-        .map(|arg| {
-            to_int(arg).ok_or_else(|| PacError::runtime("timeRange needs numbers"))
-        })
+        .map(|arg| to_int(arg).ok_or_else(|| PacError::runtime("timeRange needs numbers")))
         .collect::<Result<Vec<i64>, PacError>>()?;
     let parts = clock.parts(is_gmt);
     let hour = i64::from(parts.hour);
@@ -358,10 +352,22 @@ mod tests {
 
     #[test]
     fn the_domain_helpers_answer() {
-        assert_eq!(ask("dnsDomainIs", &["wiki.Example.org", ".example.org"]), Value::Bool(true));
-        assert_eq!(ask("dnsDomainIs", &["notexample.org", ".example.org"]), Value::Bool(false));
-        assert_eq!(ask("dnsDomainIs", &["example.org", "example.org"]), Value::Bool(true));
-        assert_eq!(ask("localHostOrDomainIs", &["www", "www.example.org"]), Value::Bool(true));
+        assert_eq!(
+            ask("dnsDomainIs", &["wiki.Example.org", ".example.org"]),
+            Value::Bool(true)
+        );
+        assert_eq!(
+            ask("dnsDomainIs", &["notexample.org", ".example.org"]),
+            Value::Bool(false)
+        );
+        assert_eq!(
+            ask("dnsDomainIs", &["example.org", "example.org"]),
+            Value::Bool(true)
+        );
+        assert_eq!(
+            ask("localHostOrDomainIs", &["www", "www.example.org"]),
+            Value::Bool(true)
+        );
         assert_eq!(
             ask("localHostOrDomainIs", &["www.other.org", "www.example.org"]),
             Value::Bool(false)
@@ -383,10 +389,16 @@ mod tests {
         );
         // A name cannot be resolved here, so the answer is "not inside".
         assert_eq!(
-            ask("isInNet", &["host.example.org", "192.168.0.0", "255.255.0.0"]),
+            ask(
+                "isInNet",
+                &["host.example.org", "192.168.0.0", "255.255.0.0"]
+            ),
             Value::Bool(false)
         );
-        assert_eq!(ask("convert_addr", &["104.16.41.2"]), Value::Num(1745889538.0));
+        assert_eq!(
+            ask("convert_addr", &["104.16.41.2"]),
+            Value::Num(1745889538.0)
+        );
         assert_eq!(ask("convert_addr", &["nonsense"]), Value::Null);
     }
 
@@ -413,20 +425,41 @@ mod tests {
         // The third of January 2024, a Wednesday, at noon.
         let clock = Clock::at(1_704_283_200, 0);
         let values = vec![Value::Str("MON".into()), Value::Str("FRI".into())];
-        assert_eq!(call("weekdayRange", &values, &clock), Some(Ok(Value::Bool(true))));
+        assert_eq!(
+            call("weekdayRange", &values, &clock),
+            Some(Ok(Value::Bool(true)))
+        );
         let values = vec![Value::Str("SUN".into()), Value::Str("SAT".into())];
-        assert_eq!(call("weekdayRange", &values, &clock), Some(Ok(Value::Bool(true))));
+        assert_eq!(
+            call("weekdayRange", &values, &clock),
+            Some(Ok(Value::Bool(true)))
+        );
         let values = vec![Value::Str("SAT".into())];
-        assert_eq!(call("weekdayRange", &values, &clock), Some(Ok(Value::Bool(false))));
+        assert_eq!(
+            call("weekdayRange", &values, &clock),
+            Some(Ok(Value::Bool(false)))
+        );
         let values = vec![Value::Num(0.0), Value::Num(23.0)];
-        assert_eq!(call("timeRange", &values, &clock), Some(Ok(Value::Bool(true))));
+        assert_eq!(
+            call("timeRange", &values, &clock),
+            Some(Ok(Value::Bool(true)))
+        );
         let values = vec![Value::Num(13.0), Value::Num(23.0)];
-        assert_eq!(call("timeRange", &values, &clock), Some(Ok(Value::Bool(false))));
+        assert_eq!(
+            call("timeRange", &values, &clock),
+            Some(Ok(Value::Bool(false)))
+        );
         // A range over midnight.
         let values = vec![Value::Num(22.0), Value::Num(2.0)];
-        assert_eq!(call("timeRange", &values, &clock), Some(Ok(Value::Bool(false))));
+        assert_eq!(
+            call("timeRange", &values, &clock),
+            Some(Ok(Value::Bool(false)))
+        );
         // "GMT" says the clock is read as it is.
         let values = vec![Value::Num(0.0), Value::Num(23.0), Value::Str("GMT".into())];
-        assert_eq!(call("timeRange", &values, &clock), Some(Ok(Value::Bool(true))));
+        assert_eq!(
+            call("timeRange", &values, &clock),
+            Some(Ok(Value::Bool(true)))
+        );
     }
 }

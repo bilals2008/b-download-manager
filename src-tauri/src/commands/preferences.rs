@@ -236,7 +236,10 @@ pub(crate) fn set_launch_on_startup(app: AppHandle, on: bool) -> Result<bool, St
 /// The lists are cleaned here as well as in the window: this is the value the
 /// extension acts on, so it is the boundary that has to be safe.
 #[tauri::command]
-pub(crate) fn set_browser_policy(state: State<'_, AppState>, policy: BrowserPolicy) -> BrowserPolicy {
+pub(crate) fn set_browser_policy(
+    state: State<'_, AppState>,
+    policy: BrowserPolicy,
+) -> BrowserPolicy {
     let policy = normalize_policy(policy);
     state.modify_settings(|settings| settings.browser_policy = policy.clone());
     policy
@@ -244,7 +247,10 @@ pub(crate) fn set_browser_policy(state: State<'_, AppState>, policy: BrowserPoli
 
 /// The appearance of the floating video download button the extension draws.
 #[tauri::command]
-pub(crate) fn set_video_button_settings(state: State<'_, AppState>, video_button: state::VideoButtonSettings) {
+pub(crate) fn set_video_button_settings(
+    state: State<'_, AppState>,
+    video_button: state::VideoButtonSettings,
+) {
     state.modify_settings(|settings| settings.video_button = video_button.clone());
 }
 
@@ -415,7 +421,9 @@ pub(crate) fn saved_settings(state: State<'_, AppState>) -> Option<settings_stor
 /// Clean the rules a window sends. A name is required, the extensions are the
 /// engine's file types, and only an absolute folder is kept: a bad rule is
 /// dropped rather than failing the push, so one typo cannot stop the rest.
-pub(crate) fn normalize_category_rules(rules: Vec<state::CategoryRule>) -> Vec<state::CategoryRule> {
+pub(crate) fn normalize_category_rules(
+    rules: Vec<state::CategoryRule>,
+) -> Vec<state::CategoryRule> {
     let mut out = Vec::new();
     for rule in rules {
         let name = rule.name.trim();

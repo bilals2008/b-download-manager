@@ -69,9 +69,7 @@ async fn main() {
             break;
         }
     }
-    println!(
-        "result: {downloaded} bytes downloaded, at most {peak_peers} peers known at once"
-    );
+    println!("result: {downloaded} bytes downloaded, at most {peak_peers} peers known at once");
     let _ = client.remove(&id, true).await;
     let _ = std::fs::remove_dir_all(&directory);
     if downloaded == 0 {

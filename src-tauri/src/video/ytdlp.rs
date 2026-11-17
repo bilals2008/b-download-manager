@@ -413,11 +413,7 @@ fn add(out: &mut Vec<SubtitleRendition>, language: &str, group: &[RawSubtitle]) 
         name: name.to_string(),
         language: Some(language.to_string()),
         url,
-        container: file
-            .ext
-            .as_deref()
-            .unwrap_or_default()
-            .to_ascii_lowercase(),
+        container: file.ext.as_deref().unwrap_or_default().to_ascii_lowercase(),
         // Nothing is muxed into the file unless the reader asks for it.
         is_default: false,
     });
@@ -533,7 +529,12 @@ mod tests {
         let rows: Vec<(&str, &str)> = manifest
             .subtitles
             .iter()
-            .map(|rendition| (rendition.language.as_deref().unwrap_or(""), rendition.container.as_str()))
+            .map(|rendition| {
+                (
+                    rendition.language.as_deref().unwrap_or(""),
+                    rendition.container.as_str(),
+                )
+            })
             .collect();
         assert_eq!(
             rows,

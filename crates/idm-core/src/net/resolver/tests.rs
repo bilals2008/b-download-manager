@@ -40,7 +40,9 @@ fn authority() -> Authority {
     let leaf = rcgen::CertificateParams::new(vec!["127.0.0.1".to_string()]).expect("leaf params");
     let leaf_key = rcgen::KeyPair::generate().expect("leaf key");
     let issuer = rcgen::Issuer::from_params(&ca, ca_key);
-    let leaf_cert = leaf.signed_by(&leaf_key, &issuer).expect("leaf certificate");
+    let leaf_cert = leaf
+        .signed_by(&leaf_key, &issuer)
+        .expect("leaf certificate");
 
     Authority {
         root: ca_cert.der().to_vec(),
@@ -113,7 +115,7 @@ fn answer(query: &[u8]) -> Vec<u8> {
     out.extend_from_slice(&query[4..6]); // one question
     out.extend_from_slice(&[0x00, 0x01]); // one answer
     out.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]); // no authority, no extra
-    // The question, as it came.
+                                                      // The question, as it came.
     let end = question_end(query);
     out.extend_from_slice(&query[12..end]);
     // The answer: a pointer to the name, an A record, four bytes of address.

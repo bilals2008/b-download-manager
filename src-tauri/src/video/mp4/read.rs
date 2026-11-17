@@ -1,9 +1,9 @@
 //! Reading an MP4 track: the progressive sample tables and the track list.
 
-use super::*;
 use super::boxes::*;
 use super::fragment::fragment_samples;
 use super::write::{patch_mdhd_duration, patch_tkhd_duration};
+use super::*;
 
 /// Read the first track of an MP4 file.
 pub(super) fn read_track(path: &Path) -> Result<Track, MuxError> {
@@ -188,7 +188,10 @@ fn progressive_samples(moov: &[u8], track_id: u32) -> Result<Vec<Sample>, MuxErr
 /// sample count has to come from `stsz`. The runs then have to add up to it
 /// exactly: a table that falls short would leave trailing pictures with no
 /// offset, and one that overruns would move a picture that is not there.
-pub(super) fn composition_offsets(body: Option<&[u8]>, samples: usize) -> Result<Option<Vec<i32>>, MuxError> {
+pub(super) fn composition_offsets(
+    body: Option<&[u8]>,
+    samples: usize,
+) -> Result<Option<Vec<i32>>, MuxError> {
     let Some(body) = body else {
         return Ok(None);
     };

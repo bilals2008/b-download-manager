@@ -73,7 +73,8 @@ impl std::fmt::Debug for Shared {
 /// after that asks names through it. A client that builds its own without
 /// this slot would quietly use the system's resolver, which is the one thing
 /// the reader asked not to happen.
-static CURRENT: std::sync::OnceLock<std::sync::Mutex<Option<Arc<Dns>>>> = std::sync::OnceLock::new();
+static CURRENT: std::sync::OnceLock<std::sync::Mutex<Option<Arc<Dns>>>> =
+    std::sync::OnceLock::new();
 
 fn slot() -> &'static std::sync::Mutex<Option<Arc<Dns>>> {
     CURRENT.get_or_init(|| std::sync::Mutex::new(None))
@@ -165,8 +166,10 @@ impl Dns {
             crate::net::adapter::Route::Bound(_) => {
                 let kept = route.keep(ips);
                 if kept.is_empty() {
-                    return Err("the chosen network adapter cannot reach the address of the server"
-                        .to_string());
+                    return Err(
+                        "the chosen network adapter cannot reach the address of the server"
+                            .to_string(),
+                    );
                 }
                 Ok(kept)
             }
@@ -287,16 +290,14 @@ async fn build(
     let port = choice.resolver.port;
     let servers: Vec<NameServerConfig> = match choice.resolver.kind {
         ResolverKind::System => {
-            return Err(setup("the system's resolver is not asked through here".into()))
+            return Err(setup(
+                "the system's resolver is not asked through here".into(),
+            ))
         }
         ResolverKind::Plain => {
             let ips = server_ips(&choice.resolver.address, label.as_str()).await?;
             self::with_port(ips, port, |ip, port| {
-                NameServerConfig::new(
-                    ip,
-                    true,
-                    vec![connection(ConnectionConfig::tcp(), port)],
-                )
+                NameServerConfig::new(ip, true, vec![connection(ConnectionConfig::tcp(), port)])
             })
         }
         ResolverKind::OverTls => {
@@ -352,12 +353,15 @@ fn with_port(
     port: u16,
     make: impl Fn(IpAddr, u16) -> NameServerConfig,
 ) -> Vec<NameServerConfig> {
-    ipv4_first(ips).into_iter().map(|ip| make(ip, port)).collect()
+    ipv4_first(ips)
+        .into_iter()
+        .map(|ip| make(ip, port))
+        .collect()
 }
 
 async fn https_servers(resolver: &Resolver, label: &str) -> Result<Vec<NameServerConfig>, String> {
-    let url = reqwest::Url::parse(&resolver.address)
-        .map_err(|error| format!("{label}: {error}"))?;
+    let url =
+        reqwest::Url::parse(&resolver.address).map_err(|error| format!("{label}: {error}"))?;
     if url.scheme() != "https" {
         return Err(format!("{label}: not an https:// address"));
     }

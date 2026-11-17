@@ -163,4 +163,3 @@ pub(super) fn is_audio(container: &str, content_type: Option<&str>) -> bool {
 pub(super) fn is_web_url(value: &str) -> bool {
     value.starts_with("http://") || value.starts_with("https://")
 }
-

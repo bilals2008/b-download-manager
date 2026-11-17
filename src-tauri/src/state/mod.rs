@@ -229,7 +229,7 @@ impl Default for AppState {
             shutting_down: AtomicBool::new(false),
             show_complete_dialog: AtomicBool::new(true),
             show_progress_on_start: AtomicBool::new(false),
-            show_video_window_on_start: AtomicBool::new(true),
+            show_video_window_on_start: AtomicBool::new(false),
             clipboard_capture: AtomicBool::new(false),
             appearance_is_light: AtomicBool::new(false),
             staging: Mutex::new(None),

@@ -2,7 +2,11 @@
 
 use super::*;
 
-pub(super) fn read_box_header(file: &mut File, at: u64, end: u64) -> Result<Option<BoxHeader>, MuxError> {
+pub(super) fn read_box_header(
+    file: &mut File,
+    at: u64,
+    end: u64,
+) -> Result<Option<BoxHeader>, MuxError> {
     if at + 8 > end {
         return Ok(None);
     }

@@ -86,7 +86,9 @@ impl DeviceStore {
 
     /// The devices, with the lock held.
     fn devices(&self) -> MutexGuard<'_, Vec<Device>> {
-        self.devices.lock().unwrap_or_else(|poison| poison.into_inner())
+        self.devices
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
     }
 
     /// Put the devices back, read from the file they are kept in.

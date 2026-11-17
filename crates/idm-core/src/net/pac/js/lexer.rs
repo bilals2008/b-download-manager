@@ -77,7 +77,10 @@ impl<'a> Lexer<'a> {
                     loop {
                         match self.peek_char() {
                             None => {
-                                return Err(PacError::syntax(self.line, "the comment is not closed"))
+                                return Err(PacError::syntax(
+                                    self.line,
+                                    "the comment is not closed",
+                                ))
                             }
                             Some('\n') => {
                                 self.line += 1;
@@ -143,7 +146,8 @@ impl<'a> Lexer<'a> {
         }
         let code = u32::from_str_radix(&self.src[start..self.at], 16)
             .map_err(|_| PacError::syntax(self.line, "the escape is not a character"))?;
-        char::from_u32(code).ok_or_else(|| PacError::syntax(self.line, "the escape is not a character"))
+        char::from_u32(code)
+            .ok_or_else(|| PacError::syntax(self.line, "the escape is not a character"))
     }
 
     /// Reads a number.
@@ -245,12 +249,24 @@ impl<'a> Lexer<'a> {
 /// The words the language knows by name. They are read as marks, so a
 /// script cannot use one of them as a name of its own.
 const KEYWORDS: &[&str] = &[
-    "var", "if", "else", "return", "function", "true", "false", "null", "undefined",
+    "var",
+    "if",
+    "else",
+    "return",
+    "function",
+    "true",
+    "false",
+    "null",
+    "undefined",
 ];
 
 /// Reads the script into tokens.
 pub(super) fn tokenize(src: &str) -> Result<Vec<Token>, PacError> {
-    let mut lexer = Lexer { src, at: 0, line: 1 };
+    let mut lexer = Lexer {
+        src,
+        at: 0,
+        line: 1,
+    };
     let mut tokens = Vec::new();
     loop {
         lexer.skip_trivia()?;

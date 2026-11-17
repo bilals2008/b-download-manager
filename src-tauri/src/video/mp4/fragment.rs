@@ -1,7 +1,7 @@
 //! Reading the samples of a fragmented MP4 (`moof`/`trun`).
 
-use super::*;
 use super::boxes::*;
+use super::*;
 
 /* -------------------------------------------------------- fragmented reads */
 

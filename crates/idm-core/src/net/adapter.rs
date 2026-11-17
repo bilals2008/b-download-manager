@@ -187,7 +187,9 @@ impl Route {
     pub fn decide(&self, ip: IpAddr) -> Decision {
         match self {
             Route::Any => Decision::Any,
-            Route::Down { label } => Decision::Down { label: label.clone() },
+            Route::Down { label } => Decision::Down {
+                label: label.clone(),
+            },
             Route::Bound(b) => b.decide(ip),
         }
     }
@@ -367,7 +369,7 @@ pub fn set_route(route: Route) {
 pub fn interface_option(ip: IpAddr, index: u32) -> Option<(i32, [u8; 4])> {
     #[cfg(windows)]
     {
-        use windows_sys::Win32::Networking::WinSock::{IP_UNICAST_IF, IPV6_UNICAST_IF};
+        use windows_sys::Win32::Networking::WinSock::{IPV6_UNICAST_IF, IP_UNICAST_IF};
         match ip {
             IpAddr::V4(_) => Some((IP_UNICAST_IF, index.to_be_bytes())),
             IpAddr::V6(_) => Some((IPV6_UNICAST_IF, index.to_ne_bytes())),
@@ -428,13 +430,13 @@ mod tests {
     fn the_interface_option_takes_the_index_in_its_own_byte_order() {
         // Windows takes the IPv4 index in network byte order and the IPv6 one
         // in host byte order: the same number, two orders.
-        let (option4, bytes4) = interface_option("93.184.216.34".parse().unwrap(), 7)
-            .expect("the IPv4 option");
-        let (option6, bytes6) = interface_option("2606:2800::1".parse().unwrap(), 7)
-            .expect("the IPv6 option");
+        let (option4, bytes4) =
+            interface_option("93.184.216.34".parse().unwrap(), 7).expect("the IPv4 option");
+        let (option6, bytes6) =
+            interface_option("2606:2800::1".parse().unwrap(), 7).expect("the IPv6 option");
         #[cfg(windows)]
         {
-            use windows_sys::Win32::Networking::WinSock::{IP_UNICAST_IF, IPV6_UNICAST_IF};
+            use windows_sys::Win32::Networking::WinSock::{IPV6_UNICAST_IF, IP_UNICAST_IF};
             assert_eq!(option4, IP_UNICAST_IF);
             assert_eq!(option6, IPV6_UNICAST_IF);
             assert_eq!(bytes4, [0, 0, 0, 7]);
@@ -511,7 +513,10 @@ mod tests {
             label: "VPN".into(),
             ..Default::default()
         };
-        assert_eq!(empty.state_for("1.2.3.4".parse().unwrap()), AdapterState::Down);
+        assert_eq!(
+            empty.state_for("1.2.3.4".parse().unwrap()),
+            AdapterState::Down
+        );
         assert!(matches!(
             empty.decide("1.2.3.4".parse().unwrap()),
             Decision::Down { .. }

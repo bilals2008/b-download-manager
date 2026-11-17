@@ -27,10 +27,7 @@ pub fn is_magnet(url: &str) -> bool {
 
 /// The host of a link, in lower case and without its port.
 fn host_of(url: &str) -> Option<String> {
-    let rest = url
-        .split_once("://")
-        .map(|(_, rest)| rest)
-        .unwrap_or(url);
+    let rest = url.split_once("://").map(|(_, rest)| rest).unwrap_or(url);
     let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
     let authority = authority
         .rsplit_once('@')
@@ -160,7 +157,10 @@ mod tests {
             "magnet:?xt=urn:btih:0123456789abcdef",
             &premium
         ));
-        assert!(should_unlock("https://real-debrid.com/d/ABC/f.rar", &premium));
+        assert!(should_unlock(
+            "https://real-debrid.com/d/ABC/f.rar",
+            &premium
+        ));
 
         let free = store_with(ServiceKind::RealDebrid, false);
         assert!(!should_unlock(

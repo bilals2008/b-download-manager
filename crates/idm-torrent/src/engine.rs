@@ -269,10 +269,7 @@ pub(crate) async fn run(job: Arc<Job>) {
             // tracker reads `left=0` as "this one has everything", so an
             // unknown size is sent as the smallest real one instead. Reporting
             // zero made a new magnet look like a seeder and get no peers back.
-            let left = metainfo
-                .as_ref()
-                .map(|m| m.total_length)
-                .unwrap_or(1);
+            let left = metainfo.as_ref().map(|m| m.total_length).unwrap_or(1);
             let mut tracker_ok = false;
             for url in job.trackers() {
                 let answer = tracker::announce(
@@ -452,7 +449,15 @@ pub(crate) async fn run(job: Arc<Job>) {
                     attach_source(&mut session, &storage);
                 }
                 set_status(&job, JobStatus::Seeding);
-                seed(&mut session, &job, &mut uploaded, &known, &have, &mut announced).await;
+                seed(
+                    &mut session,
+                    &job,
+                    &mut uploaded,
+                    &known,
+                    &have,
+                    &mut announced,
+                )
+                .await;
             } else {
                 set_status(&job, JobStatus::Completed);
             }
@@ -467,8 +472,15 @@ pub(crate) async fn run(job: Arc<Job>) {
 
         // A peer has to be connected before we can ask what it holds.
         if session.is_none() {
-            match connect(&mut session, &addresses, &mut tried, &job.id, &peer_id, piece_map.count)
-                .await
+            match connect(
+                &mut session,
+                &addresses,
+                &mut tried,
+                &job.id,
+                &peer_id,
+                piece_map.count,
+            )
+            .await
             {
                 Ok(()) => {
                     attach_source(&mut session, &storage);
@@ -715,7 +727,11 @@ fn stop_seeding(job: &Arc<Job>) {
 /// The peers of a job, as they are shown: the ones the trackers named and the
 /// one we are talking to, each with the program it runs and the speed it was
 /// last measured at.
-fn peers_of(known: &[PeerInfo], session: &Option<PeerSession>, previous: &[PeerInfo]) -> Vec<PeerInfo> {
+fn peers_of(
+    known: &[PeerInfo],
+    session: &Option<PeerSession>,
+    previous: &[PeerInfo],
+) -> Vec<PeerInfo> {
     let mut peers = known.to_vec();
     if let Some(peer) = session {
         let live = PeerInfo {
@@ -737,7 +753,10 @@ fn peers_of(known: &[PeerInfo], session: &Option<PeerSession>, previous: &[PeerI
     // A peer keeps the speed it was measured at: the counters carry on from
     // the last second, not from zero.
     for peer in peers.iter_mut() {
-        if let Some(before) = previous.iter().find(|before| before.address == peer.address) {
+        if let Some(before) = previous
+            .iter()
+            .find(|before| before.address == peer.address)
+        {
             peer.down_speed = before.down_speed;
             peer.up_speed = before.up_speed;
             if peer.client.is_empty() {

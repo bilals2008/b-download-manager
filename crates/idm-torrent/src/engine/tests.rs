@@ -131,195 +131,182 @@ async fn a_peer(bytes: Vec<u8>) -> std::net::SocketAddr {
     address
 }
 
-    /// One peer that hands out the file list of a magnet (BEP 9) and then the
-    /// pieces it promised, over the one connection the client makes.
-    async fn a_magnet_peer(metadata: Vec<u8>, bytes: Vec<u8>) -> std::net::SocketAddr {
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let address = listener.local_addr().unwrap();
-        tokio::spawn(async move {
-            // The client comes back for the pieces on a second connection,
-            // once it knows how many there are, so the peer stays listening.
-            loop {
-                let Ok((socket, _)) = listener.accept().await else {
-                    return;
-                };
-                let metadata = metadata.clone();
-                let bytes = bytes.clone();
-                tokio::spawn(async move { serve_magnet_peer(socket, metadata, bytes).await });
-            }
-        });
-        address
-    }
-
-    async fn serve_magnet_peer(
-        mut socket: tokio::net::TcpStream,
-        metadata: Vec<u8>,
-        bytes: Vec<u8>,
-    ) {
-            let mut hello = [0u8; 68];
-            socket.read_exact(&mut hello).await.unwrap();
-            let info_hash: [u8; 20] = hello[28..48].try_into().unwrap();
-            let mut response = vec![19u8];
-            response.extend_from_slice(b"BitTorrent protocol");
-            response.extend_from_slice(&hello[20..28]);
-            response.extend_from_slice(&info_hash);
-            response.extend_from_slice(&[9u8; 20]);
-            socket.write_all(&response).await.unwrap();
-            // Both pieces are there, and the client reads the map first.
-            socket
-                .write_all(&Message::to_wire(&Message::Bitfield(vec![0b1100_0000])))
-                .await
-                .unwrap();
-            let handshake = BencodeValue::Dict(vec![
-                (
-                    "m".into(),
-                    BencodeValue::Dict(vec![(
-                        "ut_metadata".into(),
-                        BencodeValue::Integer(1),
-                    )]),
-                ),
-                (
-                    "metadata_size".into(),
-                    BencodeValue::Integer(metadata.len() as i64),
-                ),
-                ("v".into(), BencodeValue::Bytes(b"probe".to_vec())),
-            ]);
-            socket
-                .write_all(&Message::to_wire(&Message::Extended {
-                    id: 0,
-                    payload: bencode_encode(&handshake),
-                }))
-                .await
-                .unwrap();
-            loop {
-                let mut length = [0u8; 4];
-                if socket.read_exact(&mut length).await.is_err() {
-                    return;
-                }
-                let length = u32::from_be_bytes(length) as usize;
-                if length == 0 {
-                    continue; // a keep-alive
-                }
-                let mut body = vec![0u8; length];
-                if socket.read_exact(&mut body).await.is_err() {
-                    return;
-                }
-                match Message::decode(body[0], &body[1..]) {
-                    Ok(Message::Extended { payload, .. }) => {
-                        let Ok(value) = bencode_decode(&payload) else {
-                            continue;
-                        };
-                        // Only a request for the list is answered: the whole
-                        // list fits in one piece for a torrent this small.
-                        if value.get("msg_type").and_then(|kind| kind.as_int()) != Some(0) {
-                            continue;
-                        }
-                        let reply = BencodeValue::Dict(vec![
-                            ("msg_type".into(), BencodeValue::Integer(1)),
-                            ("piece".into(), BencodeValue::Integer(0)),
-                            (
-                                "total_size".into(),
-                                BencodeValue::Integer(metadata.len() as i64),
-                            ),
-                            ("data".into(), BencodeValue::Bytes(metadata.clone())),
-                        ]);
-                        let message = Message::Extended {
-                            id: 1,
-                            payload: bencode_encode(&reply),
-                        };
-                        if socket.write_all(&Message::to_wire(&message)).await.is_err() {
-                            return;
-                        }
-                    }
-                    Ok(Message::Request {
-                        index,
-                        begin,
-                        length,
-                    }) => {
-                        let start = index as usize * 1024 + begin as usize;
-                        let data = bytes[start..start + length as usize].to_vec();
-                        let piece = Message::Piece {
-                            index,
-                            begin,
-                            data,
-                        };
-                        if socket.write_all(&Message::to_wire(&piece)).await.is_err() {
-                            return;
-                        }
-                    }
-                    _ => {}
-                }
-            }
-    }
-
-    #[tokio::test]
-    async fn a_magnet_job_reads_its_files_from_a_peer_and_downloads_them() {
-        let bytes = content();
-        let pieces: Vec<u8> = [&bytes[..1024], &bytes[1024..]]
-            .iter()
-            .flat_map(|chunk| sha1_bytes(chunk))
-            .collect();
-        let info = BencodeValue::Dict(vec![
-            ("length".into(), BencodeValue::Integer(2048)),
-            ("name".into(), BencodeValue::Bytes(b"hello.txt".to_vec())),
-            ("piece length".into(), BencodeValue::Integer(1024)),
-            ("pieces".into(), BencodeValue::Bytes(pieces)),
-        ]);
-        let metadata = bencode_encode(&info);
-        // The magnet names the hash of the file list the peer will send, which
-        // is what makes a magnet a torrent rather than an address.
-        let hash = crate::util::hex_encode(&sha1_bytes(&metadata));
-        let peer = a_magnet_peer(metadata, bytes.clone()).await;
-        let tracker = a_tracker(peer).await;
-        let link = format!("magnet:?xt=urn:btih:{hash}&dn=hello&tr={tracker}");
-        let directory = std::env::temp_dir().join(format!(
-            "idm-torrent-magnet-e2e-{}",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_dir_all(&directory);
-
-        let client = TorrentClient::new();
-        let id = client
-            .add_job(JobRequest {
-                source: JobSource::Magnet(link),
-                directory: directory.clone(),
-                wanted: Vec::new(),
-                start_paused: false,
-                sequential: false,
-            })
-            .await
-            .expect("the magnet was added");
-
-        let mut finished = None;
-        for _ in 0..120 {
-            if let Some(job) = client.job(&id) {
-                match job.status {
-                    JobStatus::Completed => {
-                        finished = Some(job);
-                        break;
-                    }
-                    JobStatus::Failed(why) => panic!("the magnet failed: {why}"),
-                    _ => {}
-                }
-            }
-            tokio::time::sleep(Duration::from_millis(100)).await;
+/// One peer that hands out the file list of a magnet (BEP 9) and then the
+/// pieces it promised, over the one connection the client makes.
+async fn a_magnet_peer(metadata: Vec<u8>, bytes: Vec<u8>) -> std::net::SocketAddr {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        // The client comes back for the pieces on a second connection,
+        // once it knows how many there are, so the peer stays listening.
+        loop {
+            let Ok((socket, _)) = listener.accept().await else {
+                return;
+            };
+            let metadata = metadata.clone();
+            let bytes = bytes.clone();
+            tokio::spawn(async move { serve_magnet_peer(socket, metadata, bytes).await });
         }
-        let job = finished.unwrap_or_else(|| {
-            let seen = client
-                .job(&id)
-                .map(|job| format!("{:?} with {} bytes", job.status, job.downloaded))
-                .unwrap_or_else(|| "gone".into());
-            panic!("the magnet did not finish in time; the job was {seen}");
-        });
-        assert_eq!(job.downloaded, 2048);
-        let written = std::fs::read(directory.join("hello.txt")).expect("the file is there");
-        assert_eq!(written, bytes);
-        let _ = client.remove(&id, true).await;
-        let _ = std::fs::remove_dir_all(&directory);
-    }
+    });
+    address
+}
 
-    #[tokio::test]
-    async fn a_job_downloads_its_pieces_from_a_peer() {
+async fn serve_magnet_peer(mut socket: tokio::net::TcpStream, metadata: Vec<u8>, bytes: Vec<u8>) {
+    let mut hello = [0u8; 68];
+    socket.read_exact(&mut hello).await.unwrap();
+    let info_hash: [u8; 20] = hello[28..48].try_into().unwrap();
+    let mut response = vec![19u8];
+    response.extend_from_slice(b"BitTorrent protocol");
+    response.extend_from_slice(&hello[20..28]);
+    response.extend_from_slice(&info_hash);
+    response.extend_from_slice(&[9u8; 20]);
+    socket.write_all(&response).await.unwrap();
+    // Both pieces are there, and the client reads the map first.
+    socket
+        .write_all(&Message::to_wire(&Message::Bitfield(vec![0b1100_0000])))
+        .await
+        .unwrap();
+    let handshake = BencodeValue::Dict(vec![
+        (
+            "m".into(),
+            BencodeValue::Dict(vec![("ut_metadata".into(), BencodeValue::Integer(1))]),
+        ),
+        (
+            "metadata_size".into(),
+            BencodeValue::Integer(metadata.len() as i64),
+        ),
+        ("v".into(), BencodeValue::Bytes(b"probe".to_vec())),
+    ]);
+    socket
+        .write_all(&Message::to_wire(&Message::Extended {
+            id: 0,
+            payload: bencode_encode(&handshake),
+        }))
+        .await
+        .unwrap();
+    loop {
+        let mut length = [0u8; 4];
+        if socket.read_exact(&mut length).await.is_err() {
+            return;
+        }
+        let length = u32::from_be_bytes(length) as usize;
+        if length == 0 {
+            continue; // a keep-alive
+        }
+        let mut body = vec![0u8; length];
+        if socket.read_exact(&mut body).await.is_err() {
+            return;
+        }
+        match Message::decode(body[0], &body[1..]) {
+            Ok(Message::Extended { payload, .. }) => {
+                let Ok(value) = bencode_decode(&payload) else {
+                    continue;
+                };
+                // Only a request for the list is answered: the whole
+                // list fits in one piece for a torrent this small.
+                if value.get("msg_type").and_then(|kind| kind.as_int()) != Some(0) {
+                    continue;
+                }
+                let reply = BencodeValue::Dict(vec![
+                    ("msg_type".into(), BencodeValue::Integer(1)),
+                    ("piece".into(), BencodeValue::Integer(0)),
+                    (
+                        "total_size".into(),
+                        BencodeValue::Integer(metadata.len() as i64),
+                    ),
+                    ("data".into(), BencodeValue::Bytes(metadata.clone())),
+                ]);
+                let message = Message::Extended {
+                    id: 1,
+                    payload: bencode_encode(&reply),
+                };
+                if socket.write_all(&Message::to_wire(&message)).await.is_err() {
+                    return;
+                }
+            }
+            Ok(Message::Request {
+                index,
+                begin,
+                length,
+            }) => {
+                let start = index as usize * 1024 + begin as usize;
+                let data = bytes[start..start + length as usize].to_vec();
+                let piece = Message::Piece { index, begin, data };
+                if socket.write_all(&Message::to_wire(&piece)).await.is_err() {
+                    return;
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+#[tokio::test]
+async fn a_magnet_job_reads_its_files_from_a_peer_and_downloads_them() {
+    let bytes = content();
+    let pieces: Vec<u8> = [&bytes[..1024], &bytes[1024..]]
+        .iter()
+        .flat_map(|chunk| sha1_bytes(chunk))
+        .collect();
+    let info = BencodeValue::Dict(vec![
+        ("length".into(), BencodeValue::Integer(2048)),
+        ("name".into(), BencodeValue::Bytes(b"hello.txt".to_vec())),
+        ("piece length".into(), BencodeValue::Integer(1024)),
+        ("pieces".into(), BencodeValue::Bytes(pieces)),
+    ]);
+    let metadata = bencode_encode(&info);
+    // The magnet names the hash of the file list the peer will send, which
+    // is what makes a magnet a torrent rather than an address.
+    let hash = crate::util::hex_encode(&sha1_bytes(&metadata));
+    let peer = a_magnet_peer(metadata, bytes.clone()).await;
+    let tracker = a_tracker(peer).await;
+    let link = format!("magnet:?xt=urn:btih:{hash}&dn=hello&tr={tracker}");
+    let directory =
+        std::env::temp_dir().join(format!("idm-torrent-magnet-e2e-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&directory);
+
+    let client = TorrentClient::new();
+    let id = client
+        .add_job(JobRequest {
+            source: JobSource::Magnet(link),
+            directory: directory.clone(),
+            wanted: Vec::new(),
+            start_paused: false,
+            sequential: false,
+        })
+        .await
+        .expect("the magnet was added");
+
+    let mut finished = None;
+    for _ in 0..120 {
+        if let Some(job) = client.job(&id) {
+            match job.status {
+                JobStatus::Completed => {
+                    finished = Some(job);
+                    break;
+                }
+                JobStatus::Failed(why) => panic!("the magnet failed: {why}"),
+                _ => {}
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    let job = finished.unwrap_or_else(|| {
+        let seen = client
+            .job(&id)
+            .map(|job| format!("{:?} with {} bytes", job.status, job.downloaded))
+            .unwrap_or_else(|| "gone".into());
+        panic!("the magnet did not finish in time; the job was {seen}");
+    });
+    assert_eq!(job.downloaded, 2048);
+    let written = std::fs::read(directory.join("hello.txt")).expect("the file is there");
+    assert_eq!(written, bytes);
+    let _ = client.remove(&id, true).await;
+    let _ = std::fs::remove_dir_all(&directory);
+}
+
+#[tokio::test]
+async fn a_job_downloads_its_pieces_from_a_peer() {
     let bytes = content();
     let peer = a_peer(bytes.clone()).await;
     let tracker = a_tracker(peer).await;
@@ -363,10 +350,7 @@ async fn a_peer(bytes: Vec<u8>) -> std::net::SocketAddr {
 
 #[tokio::test]
 async fn a_start_paused_job_is_queued_with_nothing_downloaded() {
-    let directory = std::env::temp_dir().join(format!(
-        "idm-torrent-paused-{}",
-        std::process::id()
-    ));
+    let directory = std::env::temp_dir().join(format!("idm-torrent-paused-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&directory);
     let client = TorrentClient::new();
     let id = client

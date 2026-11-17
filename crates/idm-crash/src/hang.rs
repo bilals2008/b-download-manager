@@ -107,8 +107,8 @@ impl Episodes {
 pub fn ask(pid: u32) -> Answer {
     use windows_sys::Win32::Foundation::HWND;
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        EnumWindows, GetWindowThreadProcessId, IsWindowVisible, SendMessageTimeoutW, SMTO_ABORTIFHUNG,
-        WM_NULL,
+        EnumWindows, GetWindowThreadProcessId, IsWindowVisible, SendMessageTimeoutW,
+        SMTO_ABORTIFHUNG, WM_NULL,
     };
 
     /// The message result is not read, only whether there was one.
@@ -233,7 +233,10 @@ mod tests {
     #[test]
     fn a_process_without_a_window_is_not_called_hung() {
         let mut episodes = Episodes::new();
-        assert_eq!(episodes.observe(quiet_for(60), Answer::NoWindow), Episode::Quiet);
+        assert_eq!(
+            episodes.observe(quiet_for(60), Answer::NoWindow),
+            Episode::Quiet
+        );
     }
 
     #[test]

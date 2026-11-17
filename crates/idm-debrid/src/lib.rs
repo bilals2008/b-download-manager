@@ -176,10 +176,10 @@ impl Debrid {
         );
         let info = service.account_info().await?;
         let credential = Credential::Token { token: key };
-        os_store::save(kind, &credential).map_err(|message| DebridError::Service { kind, message })?;
+        os_store::save(kind, &credential)
+            .map_err(|message| DebridError::Service { kind, message })?;
         self.sign_in(Account { kind, credential });
-        self.accounts
-            .set_state(AccountState::new(kind, &info));
+        self.accounts.set_state(AccountState::new(kind, &info));
         Ok(info)
     }
 
@@ -250,8 +250,7 @@ impl Debrid {
             message: "the app is not signed in".into(),
         })?;
         let info = service.account_info().await?;
-        self.accounts
-            .set_state(AccountState::new(kind, &info));
+        self.accounts.set_state(AccountState::new(kind, &info));
         Ok(info)
     }
 

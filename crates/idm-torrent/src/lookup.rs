@@ -110,15 +110,19 @@ async fn lookup_magnet(
     let started = Instant::now();
     let mut index = 0;
     while index < addresses.len() && started.elapsed() < DEADLINE {
-        let batch: Vec<SocketAddr> = addresses[index..(index + BATCH).min(addresses.len())].to_vec();
+        let batch: Vec<SocketAddr> =
+            addresses[index..(index + BATCH).min(addresses.len())].to_vec();
         index += BATCH;
         let mut asking = tokio::task::JoinSet::new();
         for address in batch {
             asking.spawn(async move {
-                let mut session = tokio::time::timeout(HELLO, PeerSession::connect(address, info_hash, peer_id, 0))
-                    .await
-                    .ok()?
-                    .ok()?;
+                let mut session = tokio::time::timeout(
+                    HELLO,
+                    PeerSession::connect(address, info_hash, peer_id, 0),
+                )
+                .await
+                .ok()?
+                .ok()?;
                 let metadata = tokio::time::timeout(LIST, session.fetch_metadata())
                     .await
                     .ok()?

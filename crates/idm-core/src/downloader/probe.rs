@@ -53,7 +53,10 @@ fn measurable(host: &str) -> bool {
 /// A server that is busy answers `429`; the answer carries a body, and that
 /// body is not the size of the file. The probe therefore fails on such an
 /// answer, and the download waits and asks again.
-pub(super) async fn probe_with_retries(download: &Arc<Download>, epoch: u64) -> Result<Probe, String> {
+pub(super) async fn probe_with_retries(
+    download: &Arc<Download>,
+    epoch: u64,
+) -> Result<Probe, String> {
     let mut attempt = 0u32;
 
     loop {

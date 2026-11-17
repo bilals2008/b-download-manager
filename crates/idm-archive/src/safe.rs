@@ -562,15 +562,15 @@ mod tests {
     #[test]
     fn entry_paths_stay_inside() {
         let guard = Guard::new(64);
-        assert_eq!(guard.check("a/b.txt").unwrap(), Path::new("a").join("b.txt"));
+        assert_eq!(
+            guard.check("a/b.txt").unwrap(),
+            Path::new("a").join("b.txt")
+        );
         assert_eq!(
             guard.check("a\\b.txt").unwrap(),
             Path::new("a").join("b.txt")
         );
-        assert_eq!(
-            guard.check("./a//b").unwrap(),
-            Path::new("a").join("b")
-        );
+        assert_eq!(guard.check("./a//b").unwrap(), Path::new("a").join("b"));
         for bad in [
             "../evil",
             "a/../../b",

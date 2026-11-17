@@ -51,7 +51,11 @@ pub enum Status {
 /// The mapping this client holds, and the protocol it was asked in.
 enum Held {
     Upnp(upnp::Mapping),
-    NatPmp { gateway: Ipv4Addr, external: u16, lease: u32 },
+    NatPmp {
+        gateway: Ipv4Addr,
+        external: u16,
+        lease: u32,
+    },
 }
 
 /// The port mapping of one client.

@@ -9,7 +9,7 @@ use std::path::Path;
 use crate::external;
 use crate::format::Format;
 use crate::safe::{Staging, Writer};
-use crate::volumes::{MultiFile, VolumeKind, volume_key};
+use crate::volumes::{volume_key, MultiFile, VolumeKind};
 use crate::{Error, Policy, Report};
 
 /// Unpack `archive` as `policy` says.
@@ -44,11 +44,8 @@ pub fn run(archive: &Path, policy: &mut Policy<'_>) -> Result<Report, Error> {
     }
     let skipped = writer.take_skipped();
     let refused = writer.refused();
-    let (mut report, placed) = staging.place(
-        &crate::base_name(archive),
-        policy.subfolder,
-        policy.on_file,
-    )?;
+    let (mut report, placed) =
+        staging.place(&crate::base_name(archive), policy.subfolder, policy.on_file)?;
     report.skipped = skipped;
     report.refused = refused;
     report.files = placed;

@@ -9,8 +9,8 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::video::MediaJob;
 use crate::video::capture::DownloadRequest;
+use crate::video::MediaJob;
 
 use idm_core::media::subtitles;
 
@@ -51,10 +51,15 @@ pub(super) async fn prepare(
     let Some(id) = request.subtitle.as_deref() else {
         return Ok(None);
     };
-    let manifest = job.manifest.as_ref().ok_or_else(|| {
-        "the manifest is not there any more; read the page again".to_string()
-    })?;
-    let Some(rendition) = manifest.subtitles.iter().find(|rendition| rendition.id == id) else {
+    let manifest = job
+        .manifest
+        .as_ref()
+        .ok_or_else(|| "the manifest is not there any more; read the page again".to_string())?;
+    let Some(rendition) = manifest
+        .subtitles
+        .iter()
+        .find(|rendition| rendition.id == id)
+    else {
         return Err("that caption track is not in the manifest any more".to_string());
     };
     let fetched = crate::video::probe::fetch(

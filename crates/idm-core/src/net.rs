@@ -24,8 +24,8 @@ pub mod resolver;
 
 pub use adapter::{Adapter, AdapterState, Binding, Decision, Route};
 pub use dns::{
-    Hosts, LookupFailure, Preset, Resolver, ResolverChoice, ResolverKind, Who, DnsMode,
-    DnsSettings, PRESETS,
+    DnsMode, DnsSettings, Hosts, LookupFailure, Preset, Resolver, ResolverChoice, ResolverKind,
+    Who, PRESETS,
 };
 pub use pac::{PacError, ProxyRoute};
 pub use resolver::{test as test_resolver, Dns};
@@ -75,9 +75,12 @@ impl Clients {
     /// The clients for a download: the one the reader's setting gives, and
     /// the one that goes straight to the server.
     pub fn new(base: reqwest::Client) -> Result<Self, String> {
-        let direct = client_builder(None, None, None)?.no_proxy().build().map_err(
-            |error| format!("the client that goes straight to the server could not be made: {error}"),
-        )?;
+        let direct = client_builder(None, None, None)?
+            .no_proxy()
+            .build()
+            .map_err(|error| {
+                format!("the client that goes straight to the server could not be made: {error}")
+            })?;
         Ok(Self {
             base,
             direct,
@@ -115,11 +118,15 @@ impl Clients {
                 );
             }
         }
-        let host = reqwest::Url::parse(url).ok().and_then(|url| url.host_str().map(str::to_owned));
+        let host = reqwest::Url::parse(url)
+            .ok()
+            .and_then(|url| url.host_str().map(str::to_owned));
         let client = client_builder(host.as_deref(), Some(address), None)?
             .build()
             .map_err(|error| {
-                format!("the proxy script chose an address that cannot be used: {address} ({error})")
+                format!(
+                    "the proxy script chose an address that cannot be used: {address} ({error})"
+                )
             })?;
         known.insert(address.to_owned(), client.clone());
         Ok(client)
@@ -257,7 +264,10 @@ mod tests {
     #[test]
     fn the_kinds_of_proxy_are_told_apart() {
         assert_eq!(Proxy::None.name(), "None");
-        assert_eq!(Proxy::Script("function FindProxyForURL(){}".into()).name(), "Script");
+        assert_eq!(
+            Proxy::Script("function FindProxyForURL(){}".into()).name(),
+            "Script"
+        );
         assert_eq!(
             Proxy::Script("function FindProxyForURL(){}".into()).script(),
             Some("function FindProxyForURL(){}")

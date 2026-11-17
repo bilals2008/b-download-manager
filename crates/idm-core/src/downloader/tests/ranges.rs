@@ -339,4 +339,3 @@ async fn a_single_range_gets_a_second_connection() {
         .expect("the task must not panic");
     let _ = std::fs::remove_dir_all(&dir);
 }
-

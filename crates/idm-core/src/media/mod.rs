@@ -12,8 +12,8 @@
 
 pub mod audio;
 pub mod dash;
-pub mod drm;
 pub mod download;
+pub mod drm;
 pub mod gallery;
 pub mod hls;
 pub mod quality;

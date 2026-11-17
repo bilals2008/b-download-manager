@@ -10,7 +10,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use crate::{Finding, Heartbeat, Report, log_tail};
+use crate::{log_tail, Finding, Heartbeat, Report};
 
 /// The flag that turns a copy of the application into the monitor.
 pub const FLAG: &str = "--crash-monitor";
@@ -85,7 +85,9 @@ impl Monitor {
         if self.goodbye.exists() {
             return;
         }
-        self.write(Finding::Crashed { code: exit_code(pid) });
+        self.write(Finding::Crashed {
+            code: exit_code(pid),
+        });
     }
 
     /// Write the report down.
@@ -101,10 +103,7 @@ impl Monitor {
     /// the reader can see where it was when it stopped.
     fn write_freeze(&self, pid: u32, quiet_for: Duration) {
         let sample = crate::sample::sample(pid, Some(&self.dump));
-        let mut report = Report::new(
-            Finding::Frozen { quiet_for },
-            self.version.clone(),
-        );
+        let mut report = Report::new(Finding::Frozen { quiet_for }, self.version.clone());
         report.log_tail = log_tail(&self.log, 40);
         if let Some(sample) = sample {
             report.threads = sample.table();
@@ -126,11 +125,7 @@ fn alive(pid: u32) -> bool {
     unsafe {
         // The handle must be able to wait: asking only to read the exit code
         // would leave the wait without the right to be done.
-        let handle = OpenProcess(
-            PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE,
-            0,
-            pid,
-        );
+        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, 0, pid);
         if handle.is_null() {
             // The process is gone: OpenProcess could not open it.
             return false;

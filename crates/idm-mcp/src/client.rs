@@ -324,10 +324,7 @@ mod tests {
             }
             request.extend_from_slice(&chunk[..read]);
             if whole.is_none() {
-                if let Some(end) = request
-                    .windows(4)
-                    .position(|window| window == b"\r\n\r\n")
-                {
+                if let Some(end) = request.windows(4).position(|window| window == b"\r\n\r\n") {
                     let head = String::from_utf8_lossy(&request[..end + 4]).to_string();
                     whole = Some(end + 4 + content_length(&head));
                 }

@@ -186,9 +186,15 @@ async fn a_restarted_download_does_not_keep_its_old_error() {
 fn a_download_stopped_with_a_reason_says_why() {
     let dir = temp_dir("fail-with");
     let dest = dir.join("out.bin");
-    let download =
-        Download::new(90, "https://example.com/a.bin".to_string(), dest, 1, None, None)
-            .expect("download");
+    let download = Download::new(
+        90,
+        "https://example.com/a.bin".to_string(),
+        dest,
+        1,
+        None,
+        None,
+    )
+    .expect("download");
     download.set_status(Status::Running);
 
     download.fail_with("the network adapter VPN is not connected");
@@ -553,4 +559,3 @@ fn a_cancel_covers_the_run_requests_that_came_before_it() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
-

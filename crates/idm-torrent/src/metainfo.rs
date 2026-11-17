@@ -45,8 +45,8 @@ pub fn parse_torrent(bytes: &[u8]) -> Result<Metainfo, TorrentError> {
     let info = value
         .get("info")
         .ok_or_else(|| TorrentError::Malformed("it has no info dictionary".into()))?;
-    let (start, end) = info_span
-        .ok_or_else(|| TorrentError::Malformed("it has no info dictionary".into()))?;
+    let (start, end) =
+        info_span.ok_or_else(|| TorrentError::Malformed("it has no info dictionary".into()))?;
     let info_hash = hex_encode(&sha1_bytes(&bytes[start..end]));
 
     let mut metainfo = metainfo_from_info(info, info_hash)?;
@@ -109,7 +109,9 @@ pub(crate) fn metainfo_from_info(
 fn files_of(info: &BencodeValue, name: &str) -> Result<Vec<TorrentFile>, TorrentError> {
     if let Some(length) = info.get("length").and_then(BencodeValue::as_int) {
         if length < 0 {
-            return Err(TorrentError::Malformed("a file has a negative length".into()));
+            return Err(TorrentError::Malformed(
+                "a file has a negative length".into(),
+            ));
         }
         return Ok(vec![TorrentFile {
             path: name.to_owned(),
@@ -130,7 +132,9 @@ fn files_of(info: &BencodeValue, name: &str) -> Result<Vec<TorrentFile>, Torrent
             .and_then(BencodeValue::as_int)
             .ok_or_else(|| TorrentError::Malformed("a file has no length".into()))?;
         if length < 0 {
-            return Err(TorrentError::Malformed("a file has a negative length".into()));
+            return Err(TorrentError::Malformed(
+                "a file has a negative length".into(),
+            ));
         }
         let parts = entry
             .get("path")
@@ -241,10 +245,7 @@ mod tests {
             ),
             ("name".into(), BencodeValue::Bytes(b"Example".to_vec())),
             ("piece length".into(), BencodeValue::Integer(4)),
-            (
-                "pieces".into(),
-                BencodeValue::Bytes(vec![1u8; 20 * 3]),
-            ),
+            ("pieces".into(), BencodeValue::Bytes(vec![1u8; 20 * 3])),
         ]);
         bencode_encode(&BencodeValue::Dict(vec![
             (
@@ -262,10 +263,7 @@ mod tests {
         assert_eq!(metainfo.piece_length, 4);
         assert_eq!(metainfo.pieces.len(), 3);
         assert_eq!(metainfo.total_length, 11);
-        assert_eq!(
-            metainfo.trackers,
-            vec!["http://tracker.example/announce"]
-        );
+        assert_eq!(metainfo.trackers, vec!["http://tracker.example/announce"]);
         assert_eq!(metainfo.files.len(), 2);
         assert_eq!(metainfo.files[0].path, "Example/one.txt");
         assert_eq!(metainfo.files[0].length, 5);
@@ -282,7 +280,10 @@ mod tests {
         let (value, span) = decode_with_info_span(&bytes).unwrap();
         let info = value.get("info").unwrap();
         let (start, end) = span.unwrap();
-        assert_eq!(metainfo.info_hash, hex_encode(&sha1_bytes(&bytes[start..end])));
+        assert_eq!(
+            metainfo.info_hash,
+            hex_encode(&sha1_bytes(&bytes[start..end]))
+        );
         // The info dictionary stands on its own as well.
         let alone = metainfo_from_info(info, metainfo.info_hash.clone()).unwrap();
         assert_eq!(alone.total_length, metainfo.total_length);

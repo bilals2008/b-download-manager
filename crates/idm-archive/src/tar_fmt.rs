@@ -47,8 +47,7 @@ pub fn extract(archive: &Path, format: Format, writer: &mut Writer) -> Result<()
 
 /// A tar error as one of ours.
 fn damaged(e: std::io::Error) -> Error {
-    if e.kind() == std::io::ErrorKind::NotFound
-        || e.kind() == std::io::ErrorKind::PermissionDenied
+    if e.kind() == std::io::ErrorKind::NotFound || e.kind() == std::io::ErrorKind::PermissionDenied
     {
         Error::Io(e)
     } else {

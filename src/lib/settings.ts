@@ -19,6 +19,8 @@ export interface Settings {
   showProgressOnStart: boolean;
   /** Whether a video download opens the quality window that follows it. */
   showVideoWindowOnStart: boolean;
+  /** Whether the hint after the torrent window closes is shown. */
+  torrentClosedHint: boolean;
   /** Whether a finished archive is unpacked beside itself. */
   extractAfterDone: boolean;
   /** Whether the archive is removed once it was unpacked cleanly. */
@@ -101,7 +103,8 @@ export const DEFAULT_SETTINGS: Settings = {
   closeToTray: true,
   showCompleteDialog: true,
   showProgressOnStart: false,
-  showVideoWindowOnStart: true,
+  showVideoWindowOnStart: false,
+  torrentClosedHint: true,
   extractAfterDone: false,
   deleteArchiveAfterExtract: false,
   tipsOnStartup: true,
@@ -195,6 +198,10 @@ export function loadSettings(): Settings {
       showVideoWindowOnStart: boolean(
         value.showVideoWindowOnStart,
         DEFAULT_SETTINGS.showVideoWindowOnStart,
+      ),
+      torrentClosedHint: boolean(
+        value.torrentClosedHint,
+        DEFAULT_SETTINGS.torrentClosedHint,
       ),
       extractAfterDone: boolean(
         value.extractAfterDone,
@@ -366,6 +373,10 @@ export async function syncEngineSettings(): Promise<Settings | null> {
   settings.showVideoWindowOnStart = boolean(
     saved.showVideoWindowOnStart,
     settings.showVideoWindowOnStart,
+  );
+  settings.torrentClosedHint = boolean(
+    saved.torrentClosedHint,
+    settings.torrentClosedHint,
   );
   settings.extractAfterDone = boolean(
     saved.extractAfterDone,

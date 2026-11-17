@@ -36,7 +36,9 @@ pub fn host_header_is_local(host: &str, port: u16) -> bool {
         }
     }
 
-    let name = name.trim_matches(|c| c == '[' || c == ']').to_ascii_lowercase();
+    let name = name
+        .trim_matches(|c| c == '[' || c == ']')
+        .to_ascii_lowercase();
     if name == "localhost" {
         return true;
     }

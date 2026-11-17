@@ -86,17 +86,14 @@ fn script_state(state: &AppState) -> ScriptState {
     } else {
         "The script could not be fetched.".to_string()
     };
-    ScriptState {
-        url,
-        loaded,
-        note,
-    }
+    ScriptState { url, loaded, note }
 }
 
 /// Fetch the script at `url`.
 async fn fetch(url: &str) -> Result<String, String> {
-    let parsed = reqwest::Url::parse(url)
-        .map_err(|_| "Use a full address, for example http://proxy.example.org/proxy.pac.".to_string())?;
+    let parsed = reqwest::Url::parse(url).map_err(|_| {
+        "Use a full address, for example http://proxy.example.org/proxy.pac.".to_string()
+    })?;
     if !matches!(parsed.scheme(), "http" | "https") {
         return Err("The script must be fetched over http or https.".to_string());
     }
@@ -112,7 +109,10 @@ async fn fetch(url: &str) -> Result<String, String> {
         .await
         .map_err(|error| format!("the script could not be fetched: {error}"))?;
     if !answer.status().is_success() {
-        return Err(format!("the script could not be fetched: {}", answer.status()));
+        return Err(format!(
+            "the script could not be fetched: {}",
+            answer.status()
+        ));
     }
     let text = answer
         .text()

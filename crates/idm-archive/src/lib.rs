@@ -33,11 +33,11 @@ mod zip_fmt;
 
 pub use external::find_7zip;
 pub use format::Format;
-pub use listing::{Entry, list};
+pub use listing::{list, Entry};
 pub use safe::{Guard, Limits, Refusal};
 pub use subfolder::Subfolder;
 pub use unpack::is_archive;
-pub use volumes::{Volume, VolumeKind, volume_key};
+pub use volumes::{volume_key, Volume, VolumeKind};
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;

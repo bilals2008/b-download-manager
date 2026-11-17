@@ -114,7 +114,11 @@ async fn main() {
 
     println!(
         "summary: metadata {}, {} bytes verified, at most {} peers known",
-        if metadata { "arrived" } else { "did not arrive" },
+        if metadata {
+            "arrived"
+        } else {
+            "did not arrive"
+        },
         downloaded,
         peak_peers
     );
@@ -147,7 +151,9 @@ async fn read_torrent(source: Option<&str>) -> Result<Vec<u8>, String> {
             .map_err(|error| error.to_string())?;
         let name = listing
             .split('"')
-            .find(|part| part.starts_with("debian-") && part.ends_with("-amd64-netinst.iso.torrent"))
+            .find(|part| {
+                part.starts_with("debian-") && part.ends_with("-amd64-netinst.iso.torrent")
+            })
             .ok_or("the Debian listing named no netinst torrent")?;
         let url = format!("{DEBIAN_LIST}{name}");
         println!("using {url}");
@@ -173,10 +179,7 @@ async fn fetch(client: &reqwest::Client, url: &str) -> Result<Vec<u8>, String> {
     if !response.status().is_success() {
         return Err(format!("the address answered {}", response.status()));
     }
-    let bytes = response
-        .bytes()
-        .await
-        .map_err(|error| error.to_string())?;
+    let bytes = response.bytes().await.map_err(|error| error.to_string())?;
     if bytes.len() > 10 * 1024 * 1024 {
         return Err("the response is too large to be a torrent".into());
     }

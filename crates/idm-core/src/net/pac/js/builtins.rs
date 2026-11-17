@@ -17,9 +17,7 @@ pub(super) fn member(object: &Value, property: &str) -> Result<Value, PacError> 
                 "a list has no property '{property}'"
             ))),
         },
-        Value::Null => Err(PacError::runtime(
-            "the script reads a property of null",
-        )),
+        Value::Null => Err(PacError::runtime("the script reads a property of null")),
         Value::Undefined => Err(PacError::runtime(
             "the script reads a property of undefined",
         )),
@@ -32,7 +30,9 @@ pub(super) fn member(object: &Value, property: &str) -> Result<Value, PacError> 
 /// The item of a list.
 pub(super) fn indexed(object: &Value, index: &Value) -> Result<Value, PacError> {
     let Value::Array(items) = object else {
-        return Err(PacError::runtime("the script indexes something that is not a list"));
+        return Err(PacError::runtime(
+            "the script indexes something that is not a list",
+        ));
     };
     let at = to_int(index).unwrap_or(0);
     if at < 0 || at as usize >= items.len() {
@@ -130,7 +130,10 @@ fn string_method(text: &str, name: &str, args: &[Value]) -> Result<Value, PacErr
         "split" => {
             let separator = argument_text(args, 0);
             let parts: Vec<Value> = if separator.is_empty() {
-                characters.iter().map(|c| Value::Str(c.to_string())).collect()
+                characters
+                    .iter()
+                    .map(|c| Value::Str(c.to_string()))
+                    .collect()
             } else {
                 text.split(&separator as &str)
                     .map(|part| Value::Str(part.to_owned()))
@@ -154,11 +157,7 @@ fn string_method(text: &str, name: &str, args: &[Value]) -> Result<Value, PacErr
 
 /// Where a slice begins or ends, counting from the end when it is negative.
 fn slice_start(at: i64, len: usize) -> usize {
-    let at = if at < 0 {
-        len as i64 + at
-    } else {
-        at
-    };
+    let at = if at < 0 { len as i64 + at } else { at };
     at.clamp(0, len as i64) as usize
 }
 
@@ -168,10 +167,7 @@ fn array_method(items: &Rc<Vec<Value>>, name: &str, args: &[Value]) -> Result<Va
         "length" => Value::Num(items.len() as f64),
         "indexOf" => {
             let wanted = args.first().cloned().unwrap_or(Value::Undefined);
-            match items
-                .iter()
-                .position(|item| loose_eq(item, &wanted))
-            {
+            match items.iter().position(|item| loose_eq(item, &wanted)) {
                 Some(at) => Value::Num(at as f64),
                 None => Value::Num(-1.0),
             }
@@ -181,10 +177,7 @@ fn array_method(items: &Rc<Vec<Value>>, name: &str, args: &[Value]) -> Result<Va
             Value::Bool(items.iter().any(|item| loose_eq(item, &wanted)))
         }
         "join" => {
-            let separator = args
-                .first()
-                .map(as_text)
-                .unwrap_or_else(|| ",".to_owned());
+            let separator = args.first().map(as_text).unwrap_or_else(|| ",".to_owned());
             Value::Str(
                 items
                     .iter()
@@ -214,13 +207,7 @@ fn array_method(items: &Rc<Vec<Value>>, name: &str, args: &[Value]) -> Result<Va
             }
             Value::Array(Rc::new(all))
         }
-        "toString" => Value::Str(
-            items
-                .iter()
-                .map(as_text)
-                .collect::<Vec<String>>()
-                .join(","),
-        ),
+        "toString" => Value::Str(items.iter().map(as_text).collect::<Vec<String>>().join(",")),
         other => {
             return Err(PacError::unsupported(format!(
                 "the script calls the unknown method '{other}' of a list"

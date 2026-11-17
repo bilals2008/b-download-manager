@@ -24,9 +24,9 @@ pub fn open(dst: SocketAddr, binding: &Binding) -> io::Result<tokio::net::TcpSoc
         use std::os::windows::io::{FromRawSocket, IntoRawSocket};
         use windows_sys::Win32::Networking::WinSock::{setsockopt, IPPROTO_IP, IPPROTO_IPV6};
 
-        let local = binding.local_for(dst.ip()).ok_or_else(|| {
-            io::Error::other("the chosen adapter has no address of that family")
-        })?;
+        let local = binding
+            .local_for(dst.ip())
+            .ok_or_else(|| io::Error::other("the chosen adapter has no address of that family"))?;
         let socket = Socket::new(Domain::for_address(dst), Type::STREAM, Some(Protocol::TCP))?;
         socket.bind(&SocketAddr::new(local, 0).into())?;
         socket.set_nonblocking(true)?;
@@ -36,8 +36,15 @@ pub fn open(dst: SocketAddr, binding: &Binding) -> io::Result<tokio::net::TcpSoc
                 std::net::IpAddr::V4(_) => IPPROTO_IP,
                 std::net::IpAddr::V6(_) => IPPROTO_IPV6,
             };
-            let result =
-                unsafe { setsockopt(handle as usize, level, option, bytes.as_ptr(), bytes.len() as i32) };
+            let result = unsafe {
+                setsockopt(
+                    handle as usize,
+                    level,
+                    option,
+                    bytes.as_ptr(),
+                    bytes.len() as i32,
+                )
+            };
             if result != 0 {
                 return Err(io::Error::last_os_error());
             }
@@ -49,13 +56,30 @@ pub fn open(dst: SocketAddr, binding: &Binding) -> io::Result<tokio::net::TcpSoc
     #[cfg(all(unix, not(target_os = "macos")))]
     {
         use socket2::{Domain, Protocol, Socket, Type};
-        use std::os::unix::io::IntoRawFd;
+        use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd};
 
         let socket = Socket::new(Domain::for_address(dst), Type::STREAM, Some(Protocol::TCP))?;
-        socket.bind_device(Some(binding.name.as_bytes()))?;
+        // Linux binds the device by its own name; the kernel needs the caller
+        // to be allowed to do it, and a refusal is said plainly rather than
+        // letting the connection leave through a route nobody chose.
+        let name = binding.name.as_bytes();
+        let result = unsafe {
+            libc::setsockopt(
+                socket.as_raw_fd(),
+                libc::SOL_SOCKET,
+                libc::SO_BINDTODEVICE,
+                name.as_ptr() as *const libc::c_void,
+                name.len() as libc::socklen_t,
+            )
+        };
+        if result != 0 {
+            return Err(io::Error::last_os_error());
+        }
         socket.set_nonblocking(true)?;
         let fd = socket.into_raw_fd();
-        Ok(tokio::net::TcpSocket::from_raw_fd(fd))
+        let stream = unsafe { std::net::TcpStream::from_raw_fd(fd) };
+        stream.set_nonblocking(true)?;
+        Ok(tokio::net::TcpSocket::from_std_stream(stream))
     }
     #[cfg(not(any(windows, all(unix, not(target_os = "macos")))))]
     {

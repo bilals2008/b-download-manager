@@ -125,11 +125,7 @@ fn parse_listing(output: &str) -> Vec<Entry> {
             }
         }
         if let Some(path) = path {
-            entries.push(Entry {
-                path,
-                size,
-                is_dir,
-            });
+            entries.push(Entry { path, size, is_dir });
         }
     }
     entries

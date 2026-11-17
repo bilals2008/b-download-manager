@@ -9,7 +9,7 @@ use std::path::Path;
 use zip::result::ZipError;
 
 use crate::safe::Writer;
-use crate::volumes::{MultiFile, VolumeKind, volume_key};
+use crate::volumes::{volume_key, MultiFile, VolumeKind};
 use crate::Error;
 
 /// Unpack a zip into `writer`.
@@ -42,7 +42,11 @@ fn zip_error(error: ZipError, password: Option<&str>) -> Error {
     }
 }
 
-fn run<R: Read + Seek>(reader: R, writer: &mut Writer, password: Option<&str>) -> Result<(), Error> {
+fn run<R: Read + Seek>(
+    reader: R,
+    writer: &mut Writer,
+    password: Option<&str>,
+) -> Result<(), Error> {
     let mut zip = zip::ZipArchive::new(reader).map_err(|e| zip_error(e, password))?;
     refuse_overlaps(&mut zip, password)?;
     for index in 0..zip.len() {
@@ -51,7 +55,10 @@ fn run<R: Read + Seek>(reader: R, writer: &mut Writer, password: Option<&str>) -
             None => zip.by_index(index),
         }
         .map_err(|e| zip_error(e, password))?;
-        let name = entry.name().map_err(|e| zip_error(e, password))?.into_owned();
+        let name = entry
+            .name()
+            .map_err(|e| zip_error(e, password))?
+            .into_owned();
         if entry.is_symlink() {
             writer.skip(&name, "link");
             continue;

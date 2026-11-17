@@ -8,17 +8,25 @@
   section for its own version, and the release page uses the same words.
 -->
 
-## 1.3.0 — 17 November 2026
+## 2.0.0 — 17 November 2026
 
 ### Torrents
 
 - A new tab in the torrent window draws the pieces of a download: what is on disk, what is still missing and what is on its way.
-- A magnet link with no trackers, or whose trackers cannot be reached, now finds its peers through the distributed peer table and downloads anyway.
-- Torrents find peers on your own network too: local discovery is on by default, and you can turn it off in the Torrents settings.
-- A new choice asks your router to open the torrent port (UPnP or NAT-PMP). It is off by default, and the settings page says what the router answered.
+- A magnet link with no trackers, or whose trackers cannot be reached, finds its peers through the distributed peer table and downloads anyway.
+- Torrents find peers on your own network too, and a new choice asks the router to open the torrent port; it is off by default and the page says what the router answered.
 - Torrent trackers now use the proxy you set in Options; peer connections still go directly, and the settings say so.
-- YouTube videos download straight from the page at the quality you pick there, with captions chosen next to it; the extra window no longer opens.
+- The hint shown after the torrent window closes has a "Do not show again" choice.
+
+### Videos
+
+- YouTube videos download straight from the page at the quality you pick there, with captions chosen next to it; the quality window in the app no longer opens by itself.
+- The quality window is now opt-in: Settings has a switch for it, off by default.
 - A quality in the page's download panel starts with one click.
+
+## 1.3.0 — 17 November 2026
+
+- This release was withdrawn and replaced by 2.0.0.
 
 ## 1.2.1 - 16 November 2026
 

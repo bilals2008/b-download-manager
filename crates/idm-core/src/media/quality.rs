@@ -109,9 +109,7 @@ pub fn finish(formats: &mut [Format], pairs: &mut [Pair], duration: Option<f64>)
     let show_container = {
         let mut containers: Vec<&str> = formats
             .iter()
-            .filter(|format| {
-                format.kind != MediaKind::Audio && format.kind != MediaKind::Subtitle
-            })
+            .filter(|format| format.kind != MediaKind::Audio && format.kind != MediaKind::Subtitle)
             .map(|format| format.container.as_str())
             .collect();
         containers.sort_unstable();

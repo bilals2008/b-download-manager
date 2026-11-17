@@ -57,7 +57,10 @@ pub fn in_dash_element(root: &Element) -> Option<&'static str> {
     if schemes.is_empty() {
         return None;
     }
-    let names: Vec<&'static str> = schemes.iter().map(|scheme| protection_name(scheme)).collect();
+    let names: Vec<&'static str> = schemes
+        .iter()
+        .map(|scheme| protection_name(scheme))
+        .collect();
     for known in [
         "Widevine",
         "PlayReady",
@@ -118,7 +121,11 @@ pub fn sentence(reason: &str) -> String {
 /// stream is protected.
 fn hls_scheme(rest: &str) -> Option<&'static str> {
     let attrs = Attributes::parse(rest);
-    let method = attrs.get("METHOD").unwrap_or("").trim().to_ascii_uppercase();
+    let method = attrs
+        .get("METHOD")
+        .unwrap_or("")
+        .trim()
+        .to_ascii_uppercase();
     if method.is_empty() || method == "NONE" {
         return None;
     }
@@ -232,7 +239,10 @@ mod tests {
             in_container(b"\0\0\0\x20pssh\0\0\0\0"),
             Some("MPEG Common Encryption")
         );
-        assert_eq!(in_container(b"....encv...."), Some("an encrypted sample entry"));
+        assert_eq!(
+            in_container(b"....encv...."),
+            Some("an encrypted sample entry")
+        );
         assert_eq!(in_container(b"\0\0\0\x20ftypisom"), None);
     }
 
@@ -256,7 +266,11 @@ mod tests {
             assert!(!sentence.is_empty());
             assert!(!sentence.contains('\n'));
             assert!(
-                sentence.chars().filter(|character| *character == '.').count() <= 1,
+                sentence
+                    .chars()
+                    .filter(|character| *character == '.')
+                    .count()
+                    <= 1,
                 "one sentence: {sentence}"
             );
         }

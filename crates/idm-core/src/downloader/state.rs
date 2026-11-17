@@ -1,7 +1,7 @@
 //! The state of one download: its segments, progress, control and metadata.
 
-use super::*;
 use super::resume::read_manifest;
+use super::*;
 
 impl Download {
     pub fn new(

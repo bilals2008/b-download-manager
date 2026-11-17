@@ -89,7 +89,6 @@ impl std::fmt::Display for ExtractFailure {
     }
 }
 
-
 /// A file count the caller may want while an archive unpacks.
 ///
 /// The complete window draws a bar for a large archive from this.
@@ -123,7 +122,8 @@ pub fn extract_download(state: State<'_, AppState>, id: u64) -> Result<ExtractRe
     if info.status != Status::Completed {
         return Err("only a finished file can be unpacked".to_string());
     }
-    let report = unpack_with(Path::new(&info.dest), None, None).map_err(|failure| failure.to_string())?;
+    let report =
+        unpack_with(Path::new(&info.dest), None, None).map_err(|failure| failure.to_string())?;
     Ok(ExtractReport {
         folder: report.folder.to_string_lossy().to_string(),
         files: report.files,
@@ -202,7 +202,9 @@ pub(crate) fn unpack_with(
             archive.display()
         )));
     }
-    let size = std::fs::metadata(archive).map(|meta| meta.len()).unwrap_or(0);
+    let size = std::fs::metadata(archive)
+        .map(|meta| meta.len())
+        .unwrap_or(0);
     let dest = archive
         .parent()
         .filter(|parent| !parent.as_os_str().is_empty())
@@ -239,9 +241,9 @@ pub(crate) fn unpack_with(
 /// A row is unpacked once per run: the engine may report the same completion
 /// more than once, and a second pass would only rewrite the same files.
 pub(crate) async fn extract_automatically(app: tauri::AppHandle, id: u64) {
-    use tauri::Manager;
     use std::collections::HashSet;
     use std::sync::Mutex;
+    use tauri::Manager;
 
     static UNPACKED: Mutex<Option<HashSet<u64>>> = Mutex::new(None);
 
@@ -301,15 +303,12 @@ pub(crate) async fn extract_automatically(app: tauri::AppHandle, id: u64) {
             }
             idm_core::log::write(
                 "info",
-                &format!("{} is encrypted; the window asks for its password", info.dest),
+                &format!(
+                    "{} is encrypted; the window asks for its password",
+                    info.dest
+                ),
             );
-            let _ = app.emit(
-                "extract://needs-password",
-                ExtractPending {
-                    id,
-                    name,
-                },
-            );
+            let _ = app.emit("extract://needs-password", ExtractPending { id, name });
             return;
         }
         Ok(Err(ExtractFailure::Other(error))) => {
@@ -317,10 +316,7 @@ pub(crate) async fn extract_automatically(app: tauri::AppHandle, id: u64) {
                 "warn",
                 &format!("{} could not be unpacked: {error}", info.dest),
             );
-            let _ = app.emit(
-                "extract://failed",
-                ExtractError { id, message: error },
-            );
+            let _ = app.emit("extract://failed", ExtractError { id, message: error });
             return;
         }
         Err(_) => return,
@@ -384,8 +380,8 @@ mod tests {
 
     #[test]
     fn an_archive_that_is_not_there_is_refused() {
-        let error = unpack(Path::new("there-is-no-such-archive.zip"))
-            .expect_err("there is no archive");
+        let error =
+            unpack(Path::new("there-is-no-such-archive.zip")).expect_err("there is no archive");
         assert!(error.contains("not there"), "{error}");
     }
 

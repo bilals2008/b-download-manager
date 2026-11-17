@@ -34,8 +34,8 @@ const DEFAULT_EXTENSION: &str = "jpg";
 
 /// The extensions that mark an address as a picture or a clip.
 const MEDIA_EXTENSIONS: &[&str] = &[
-    "jpg", "jpeg", "png", "webp", "gif", "avif", "bmp", "svg", "tif", "tiff", "heic", "heif", "mp4",
-    "m4v", "webm", "mov",
+    "jpg", "jpeg", "png", "webp", "gif", "avif", "bmp", "svg", "tif", "tiff", "heic", "heif",
+    "mp4", "m4v", "webm", "mov",
 ];
 
 /// The characters a file name may not carry on any of the systems a download
@@ -193,8 +193,13 @@ struct Page {
 
 /// One event of a page.
 enum Event {
-    Start { name: String, attrs: Vec<(String, String)> },
-    End { name: String },
+    Start {
+        name: String,
+        attrs: Vec<(String, String)>,
+    },
+    End {
+        name: String,
+    },
     Text(String),
 }
 
@@ -351,7 +356,9 @@ fn resolve(base: Option<&Url>, value: &str) -> Option<String> {
 
 /// The last segment of an address's path, without the query.
 fn last_segment(url: &Url) -> Option<String> {
-    url.path_segments()?.next_back().map(|segment| segment.to_string())
+    url.path_segments()?
+        .next_back()
+        .map(|segment| segment.to_string())
 }
 
 /// Whether an address names a picture or a clip.
@@ -548,7 +555,8 @@ fn parse_tag(inner: &str) -> (String, Vec<(String, String)>) {
             value.to_string()
         } else {
             let start = index;
-            while index < bytes.len() && !bytes[index].is_ascii_whitespace() && bytes[index] != b'>' {
+            while index < bytes.len() && !bytes[index].is_ascii_whitespace() && bytes[index] != b'>'
+            {
                 index += 1;
             }
             inner[start..index].to_string()
@@ -641,7 +649,11 @@ mod tests {
         assert_eq!(gallery.page.as_deref(), Some("https://example.com/post/1"));
         assert!(!gallery.truncated);
 
-        let names: Vec<&str> = gallery.images.iter().map(|image| image.name.as_str()).collect();
+        let names: Vec<&str> = gallery
+            .images
+            .iter()
+            .map(|image| image.name.as_str())
+            .collect();
         assert_eq!(
             names,
             vec![
@@ -653,14 +665,8 @@ mod tests {
                 "six.jpg"
             ]
         );
-        assert_eq!(
-            gallery.images[0].url,
-            "https://example.com/img/one.jpg"
-        );
-        assert_eq!(
-            gallery.images[1].url,
-            "https://example.com/post/two.jpg"
-        );
+        assert_eq!(gallery.images[0].url, "https://example.com/img/one.jpg");
+        assert_eq!(gallery.images[1].url, "https://example.com/post/two.jpg");
         assert_eq!(
             gallery.images[2].url,
             "https://example.com/post/three-1280.jpg"
@@ -668,7 +674,11 @@ mod tests {
         assert_eq!(gallery.images[4].url, "https://cdn.example.com/five.webp");
         assert_eq!(gallery.images[5].url, "https://example.com/post/six.jpg");
         assert_eq!(
-            gallery.images.iter().map(|image| image.index).collect::<Vec<_>>(),
+            gallery
+                .images
+                .iter()
+                .map(|image| image.index)
+                .collect::<Vec<_>>(),
             vec![1, 2, 3, 4, 5, 6]
         );
     }
@@ -679,7 +689,11 @@ mod tests {
             r#"<img src="/a/photo.jpg"><img src="/a/photo.jpg"><img src="/b/photo.jpg"><img src="/b/other.jpg">"#,
             "https://example.com/g/",
         );
-        let names: Vec<&str> = gallery.images.iter().map(|image| image.name.as_str()).collect();
+        let names: Vec<&str> = gallery
+            .images
+            .iter()
+            .map(|image| image.name.as_str())
+            .collect();
         assert_eq!(names, vec!["photo.jpg", "other.jpg"]);
     }
 
@@ -726,10 +740,7 @@ mod tests {
         };
         assert_eq!(file_name(&image, "Winter Set"), "01_photo.jpg");
 
-        let later = GalleryImage {
-            index: 12,
-            ..image
-        };
+        let later = GalleryImage { index: 12, ..image };
         assert_eq!(file_name(&later, "Winter Set"), "12_photo.jpg");
     }
 
@@ -777,13 +788,20 @@ mod tests {
             r#"<img src="/img/my%20photo.jpg"><img src="/img/no-extension">"#,
             "https://example.com/g/",
         );
-        let names: Vec<&str> = gallery.images.iter().map(|image| image.name.as_str()).collect();
+        let names: Vec<&str> = gallery
+            .images
+            .iter()
+            .map(|image| image.name.as_str())
+            .collect();
         assert_eq!(names, vec!["my photo.jpg", "no-extension.jpg"]);
     }
 
     #[test]
     fn a_heading_is_used_when_the_page_has_no_title() {
-        let gallery = extract(r#"<h1>Autumn Set</h1><img src="/a.jpg">"#, "https://example.com/g/");
+        let gallery = extract(
+            r#"<h1>Autumn Set</h1><img src="/a.jpg">"#,
+            "https://example.com/g/",
+        );
         assert_eq!(gallery.title, "Autumn Set");
     }
 }

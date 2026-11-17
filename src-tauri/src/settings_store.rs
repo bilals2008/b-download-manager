@@ -171,7 +171,7 @@ impl Default for EngineSettings {
             video_button: VideoButtonSettings::default(),
             show_complete_dialog: true,
             show_progress_on_start: false,
-            show_video_window_on_start: true,
+            show_video_window_on_start: false,
             clipboard_capture: false,
             extract_after_done: false,
             delete_archive_after_extract: false,
@@ -275,7 +275,9 @@ pub fn sanitize(mut settings: EngineSettings) -> EngineSettings {
     // job false forever, which is the trap a hand-edited file sets: it reads
     // as zero, the value that says "never stop" in as many words.
     settings.torrent_seed_ratio = if settings.torrent_seed_ratio.is_finite() {
-        settings.torrent_seed_ratio.clamp(0.0, MAX_TORRENT_SEED_RATIO)
+        settings
+            .torrent_seed_ratio
+            .clamp(0.0, MAX_TORRENT_SEED_RATIO)
     } else {
         0.0
     };
@@ -599,7 +601,8 @@ mod tests {
     }
 
     #[test]
-    fn the_chosen_adapter_is_kept_by_its_identity() {        let path = temp_file("adapter");
+    fn the_chosen_adapter_is_kept_by_its_identity() {
+        let path = temp_file("adapter");
         std::fs::write(
             &path,
             br#"{"version":2,"networkAdapter":"  {2E9F7A11-1111-2222-3333-444455556666}  "}"#,
@@ -618,7 +621,8 @@ mod tests {
     }
 
     #[test]
-    fn an_older_version_of_the_file_still_reads() {        let path = temp_file("version");
+    fn an_older_version_of_the_file_still_reads() {
+        let path = temp_file("version");
         let folder = sample_folder("older");
         std::fs::write(
             &path,

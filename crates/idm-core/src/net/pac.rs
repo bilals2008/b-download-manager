@@ -139,10 +139,7 @@ pub fn routes_with_clock(
 ) -> Result<Vec<ProxyRoute>, PacError> {
     let host = host_of(url)?;
     let key = (script_key(script), url.to_owned());
-    if let Some(known) = cache()
-        .as_ref()
-        .and_then(|answers| answers.get(&key))
-    {
+    if let Some(known) = cache().as_ref().and_then(|answers| answers.get(&key)) {
         return Ok(known.clone());
     }
     let answer = js::call_entry(script, url, &host, clock)?;
@@ -289,7 +286,10 @@ mod tests {
 
     #[test]
     fn a_typical_script_is_run() {
-        assert_eq!(route(TYPICAL, "http://intranet/a"), vec![ProxyRoute::Direct]);
+        assert_eq!(
+            route(TYPICAL, "http://intranet/a"),
+            vec![ProxyRoute::Direct]
+        );
         assert_eq!(
             route(TYPICAL, "https://wiki.intranet.test/x"),
             vec![ProxyRoute::Direct]
@@ -369,7 +369,10 @@ mod tests {
             route(script, "http://192.168.1.20/a"),
             vec![ProxyRoute::Proxy("http://lan:8080".into())]
         );
-        assert_eq!(route(script, "http://elsewhere.test/a"), vec![ProxyRoute::Direct]);
+        assert_eq!(
+            route(script, "http://elsewhere.test/a"),
+            vec![ProxyRoute::Direct]
+        );
     }
 
     #[test]
@@ -459,7 +462,10 @@ mod tests {
         );
         assert_eq!(parse(""), vec![ProxyRoute::Direct]);
         assert_eq!(parse("WEIRD x; DIRECT"), vec![ProxyRoute::Direct]);
-        assert_eq!(parse("SOCKS4 s:1080"), vec![ProxyRoute::Proxy("socks4://s:1080".into())]);
+        assert_eq!(
+            parse("SOCKS4 s:1080"),
+            vec![ProxyRoute::Proxy("socks4://s:1080".into())]
+        );
         assert_eq!(
             parse("HTTPS s:443"),
             vec![ProxyRoute::Proxy("https://s:443".into())]
@@ -475,10 +481,16 @@ mod tests {
 
     #[test]
     fn the_host_of_an_address_is_read_without_its_port() {
-        assert_eq!(host_of("http://Example.ORG:8080/a?b").unwrap(), "example.org");
+        assert_eq!(
+            host_of("http://Example.ORG:8080/a?b").unwrap(),
+            "example.org"
+        );
         assert_eq!(host_of("https://example.org").unwrap(), "example.org");
         assert_eq!(host_of("http://[2620:fe::fe]:80/x").unwrap(), "2620:fe::fe");
-        assert_eq!(host_of("http://user:pw@example.org/x").unwrap(), "example.org");
+        assert_eq!(
+            host_of("http://user:pw@example.org/x").unwrap(),
+            "example.org"
+        );
         assert!(host_of("http://").is_err());
     }
 }

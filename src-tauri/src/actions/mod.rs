@@ -97,7 +97,11 @@ impl Reporter for AppReporter {
         // for it. The unpacking runs off this thread: it is minutes of disk
         // work, and the report is what delivers the state of every download.
         if info.status == Status::Completed
-            && self.0.state::<AppState>().engine_settings().extract_after_done
+            && self
+                .0
+                .state::<AppState>()
+                .engine_settings()
+                .extract_after_done
         {
             let app = self.0.clone();
             let id = info.id;

@@ -347,7 +347,9 @@ impl TorrentClient {
             }
         };
         if safe_path(&name).is_none() {
-            return Err(TorrentError::Unsafe(format!("{name} would leave the folder")));
+            return Err(TorrentError::Unsafe(format!(
+                "{name} would leave the folder"
+            )));
         }
         tokio::fs::create_dir_all(&request.directory).await?;
 
@@ -478,8 +480,8 @@ impl TorrentClient {
         // is told here that the torrent is no longer held.
         if let Ok(held) = self.lpd.lock() {
             if let Some(lpd) = held.as_ref() {
-                if let Some(hash) = crate::util::hex_decode(id)
-                    .and_then(|bytes| <[u8; 20]>::try_from(bytes).ok())
+                if let Some(hash) =
+                    crate::util::hex_decode(id).and_then(|bytes| <[u8; 20]>::try_from(bytes).ok())
                 {
                     lpd.forget(hash);
                 }

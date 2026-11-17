@@ -168,7 +168,12 @@ impl AppState {
     }
 
     /// The folder one media job owns for its tracks and join files.
-    pub fn media_work_dir(&self, job_id: u64, dest: &Path, name: &str) -> Option<std::path::PathBuf> {
+    pub fn media_work_dir(
+        &self,
+        job_id: u64,
+        dest: &Path,
+        name: &str,
+    ) -> Option<std::path::PathBuf> {
         self.staging()
             .map(|staging| staging.media_dir(dest, job_id, name))
     }

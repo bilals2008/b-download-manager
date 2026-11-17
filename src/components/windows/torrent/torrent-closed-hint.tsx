@@ -5,6 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { CloseGlyph } from "@/components/icons/ui-icons";
 import { AppMark } from "@/components/shell/app-mark";
 import { isDesktop } from "@/lib/errors";
+import { loadSettings, saveSettings } from "@/lib/settings";
 
 /**
  * The event the backend sends once the torrent window is gone.
@@ -32,7 +33,13 @@ export function TorrentClosedHint() {
       return;
     }
     let stop: (() => void) | undefined;
-    void listen(TORRENT_CLOSED, () => setShown(true))
+    void listen(TORRENT_CLOSED, () => {
+      // The reader can retire the hint for good; the choice is kept with the
+      // window's other preferences.
+      if (loadSettings().torrentClosedHint) {
+        setShown(true);
+      }
+    })
       .then((unlisten) => {
         stop = unlisten;
       })
@@ -95,6 +102,16 @@ export function TorrentClosedHint() {
             <span className="text-chrome-menu-text">Tasks › Torrents</span>, or
             from the tray menu while the tray icon is showing.
           </p>
+          <button
+            type="button"
+            onClick={() => {
+              saveSettings({ ...loadSettings(), torrentClosedHint: false });
+              setShown(false);
+            }}
+            className="mt-1 text-chrome-micro text-chrome-muted underline underline-offset-2 transition-colors hover:text-chrome-menu-text focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:outline-none"
+          >
+            Do not show again
+          </button>
         </div>
       </div>
     </div>

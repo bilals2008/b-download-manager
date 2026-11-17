@@ -67,7 +67,11 @@ impl Storage {
                 tokio::fs::create_dir_all(parent).await?;
             }
             let part = part_path(&path);
-            let working = if path.exists() { path.clone() } else { part.clone() };
+            let working = if path.exists() {
+                path.clone()
+            } else {
+                part.clone()
+            };
             // No truncate: the bytes of a job that was stopped are kept, and
             // the file is never extended with zeros to look complete.
             let handle = tokio::fs::OpenOptions::new()
@@ -115,7 +119,9 @@ impl Storage {
             let to = file_end.min(end);
             let slice = &data[(from - start) as usize..(to - start) as usize];
             let mut handle = file.handle.lock().await;
-            handle.seek(std::io::SeekFrom::Start(from - file.offset)).await?;
+            handle
+                .seek(std::io::SeekFrom::Start(from - file.offset))
+                .await?;
             handle.write_all(slice).await?;
             handle.flush().await?;
         }
@@ -127,10 +133,11 @@ impl Storage {
         let mut finished = Vec::new();
         for file in &self.files {
             let first = self.piece_map.index_at(file.offset);
-            let last = self.piece_map.index_at(file.offset + file.length.saturating_sub(1));
-            let whole = (first..=last).all(|piece| {
-                have.get(piece as usize).copied().unwrap_or(false)
-            });
+            let last = self
+                .piece_map
+                .index_at(file.offset + file.length.saturating_sub(1));
+            let whole =
+                (first..=last).all(|piece| have.get(piece as usize).copied().unwrap_or(false));
             if whole {
                 finished.push(file.index);
             }
@@ -145,14 +152,15 @@ impl Storage {
             .files
             .iter()
             .find(|file| file.index == torrent_index)
-            .ok_or_else(|| TorrentError::Failed(format!("file {torrent_index} is not written here")))?;
+            .ok_or_else(|| {
+                TorrentError::Failed(format!("file {torrent_index} is not written here"))
+            })?;
         if file.working != file.part {
             return Ok(file.path.clone());
         }
         tokio::fs::rename(&file.part, &file.path).await?;
         Ok(file.path.clone())
     }
-
 }
 
 /// The part file of a file: the file's name with `.part` behind it.
@@ -194,7 +202,11 @@ pub fn pieces_on_disk(
         let path = root.join(relative);
         // A file that is whole is read where it is; a file that is still
         // being written is read from its part file.
-        let source = if path.exists() { path } else { part_path(&path) };
+        let source = if path.exists() {
+            path
+        } else {
+            part_path(&path)
+        };
         let Ok(mut handle) = std::fs::File::open(&source) else {
             continue;
         };
@@ -255,7 +267,11 @@ impl BlockSource for Storage {
                 let to = file_end.min(end);
                 let mut handle = file.handle.lock().await;
                 let mut buffer = vec![0u8; (to - from) as usize];
-                if handle.seek(std::io::SeekFrom::Start(from - file.offset)).await.is_err() {
+                if handle
+                    .seek(std::io::SeekFrom::Start(from - file.offset))
+                    .await
+                    .is_err()
+                {
                     return None;
                 }
                 if handle.read_exact(&mut buffer).await.is_err() {
@@ -331,8 +347,12 @@ mod tests {
         for index in storage.finished_files(&[true, true]) {
             storage.finish_file(index).await.unwrap();
         }
-        let one = tokio::fs::read(folder.join("Example").join("one.txt")).await.unwrap();
-        let two = tokio::fs::read(folder.join("Example").join("two.txt")).await.unwrap();
+        let one = tokio::fs::read(folder.join("Example").join("one.txt"))
+            .await
+            .unwrap();
+        let two = tokio::fs::read(folder.join("Example").join("two.txt"))
+            .await
+            .unwrap();
         assert_eq!(one, b"abcdef");
         assert_eq!(two, b"gh");
         let _ = tokio::fs::remove_dir_all(&folder).await;
@@ -342,7 +362,9 @@ mod tests {
     async fn the_bytes_of_a_stopped_job_are_kept() {
         let folder = std::env::temp_dir().join("idm-torrent-storage-keep");
         let _ = tokio::fs::remove_dir_all(&folder).await;
-        tokio::fs::create_dir_all(folder.join("Example")).await.unwrap();
+        tokio::fs::create_dir_all(folder.join("Example"))
+            .await
+            .unwrap();
         tokio::fs::write(folder.join("Example").join("one.txt.part"), b"abcdef")
             .await
             .unwrap();

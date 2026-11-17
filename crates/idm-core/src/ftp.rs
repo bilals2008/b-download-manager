@@ -80,8 +80,8 @@ async fn dial(
     }
     match route {
         crate::net::adapter::Route::Bound(binding) => {
-            let socket = crate::net::adapter::open(target, binding)
-                .map_err(|error| error.to_string())?;
+            let socket =
+                crate::net::adapter::open(target, binding).map_err(|error| error.to_string())?;
             socket
                 .connect(target)
                 .await

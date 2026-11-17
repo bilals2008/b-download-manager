@@ -1,11 +1,11 @@
 //! The download orchestration loop: resolve the page, run the tracks, renew a refused address once, then deliver.
 
-use super::*;
 use super::captions;
 use super::deliver::{deliver, stage_sink, DeliverError};
 use super::tracks::{
     audio_track_path, finish_failed, finish_saved, run_dash, run_files, run_hls, video_track_path,
 };
+use super::*;
 
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn run(

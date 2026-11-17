@@ -51,9 +51,7 @@ impl Handshake {
     /// Read a handshake.
     pub fn decode(bytes: &[u8]) -> Result<Handshake, TorrentError> {
         if bytes.len() < 68 {
-            return Err(TorrentError::Malformed(
-                "the handshake is too short".into(),
-            ));
+            return Err(TorrentError::Malformed("the handshake is too short".into()));
         }
         if &bytes[1..20] != PROTOCOL {
             return Err(TorrentError::Malformed(
@@ -163,19 +161,14 @@ impl Message {
                 index,
                 begin,
                 length,
-            }
-            => {
+            } => {
                 let mut out = vec![6];
                 out.extend_from_slice(&index.to_be_bytes());
                 out.extend_from_slice(&begin.to_be_bytes());
                 out.extend_from_slice(&length.to_be_bytes());
                 out
             }
-            Message::Piece {
-                index,
-                begin,
-                data,
-            } => {
+            Message::Piece { index, begin, data } => {
                 let mut out = vec![7];
                 out.extend_from_slice(&index.to_be_bytes());
                 out.extend_from_slice(&begin.to_be_bytes());
@@ -285,12 +278,10 @@ impl Message {
                     payload: payload[1..].to_vec(),
                 }
             }
-            other => {
-                Message::Unknown {
-                    id: other,
-                    payload: payload.to_vec(),
-                }
-            }
+            other => Message::Unknown {
+                id: other,
+                payload: payload.to_vec(),
+            },
         })
     }
 }

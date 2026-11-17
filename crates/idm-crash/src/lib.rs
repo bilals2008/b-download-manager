@@ -16,7 +16,7 @@ pub mod hang;
 pub mod monitor;
 pub mod sample;
 
-pub use monitor::{FLAG, Monitor};
+pub use monitor::{Monitor, FLAG};
 
 /// How long the application may be quiet before it is called frozen.
 pub const FREEZE_AFTER: Duration = Duration::from_secs(20);
@@ -129,7 +129,9 @@ impl Report {
         if let Some(dump) = &self.dump {
             text.push_str(&format!(
                 "The stacks of the stopped program are in {}.\n\n",
-                dump.file_name().map(|name| name.to_string_lossy().to_string()).unwrap_or_default()
+                dump.file_name()
+                    .map(|name| name.to_string_lossy().to_string())
+                    .unwrap_or_default()
             ));
         }
         if !self.threads.is_empty() {
@@ -157,7 +159,10 @@ pub fn describe(finding: &Finding) -> String {
     match finding {
         Finding::Exited { code } => format!("the application ended on its own (code {code})"),
         Finding::Frozen { quiet_for } => {
-            format!("the application stopped answering for {} seconds", quiet_for.as_secs())
+            format!(
+                "the application stopped answering for {} seconds",
+                quiet_for.as_secs()
+            )
         }
         Finding::Crashed { code } => format!("the application died without warning (code {code})"),
     }
@@ -191,10 +196,7 @@ mod tests {
     use super::*;
 
     fn folder(tag: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "bdm-crash-{tag}-{}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("bdm-crash-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("a folder");
         dir
@@ -205,7 +207,10 @@ mod tests {
         let dir = folder("beat");
         let beat = Heartbeat::at(&dir);
         beat.beat();
-        assert!(!beat.is_frozen(), "a fresh beat is not a frozen application");
+        assert!(
+            !beat.is_frozen(),
+            "a fresh beat is not a frozen application"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -230,10 +235,7 @@ mod tests {
 
     #[test]
     fn a_report_says_what_happened() {
-        let mut report = Report::new(
-            Finding::Crashed { code: -1073741819 },
-            "1.1.1".to_string(),
-        );
+        let mut report = Report::new(Finding::Crashed { code: -1073741819 }, "1.1.1".to_string());
         report.log_tail = vec!["12:00:00 [info] the application is starting".to_string()];
         let text = report.text();
         assert!(text.contains("1.1.1"));

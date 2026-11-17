@@ -65,7 +65,7 @@ pub fn sample(pid: u32, dump: Option<&Path>) -> Option<ProcessSample> {
 fn threads_of(pid: u32) -> Vec<ThreadSample> {
     use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
     use windows_sys::Win32::System::Diagnostics::ToolHelp::{
-        CreateToolhelp32Snapshot, Thread32First, Thread32Next, THREADENTRY32, TH32CS_SNAPTHREAD,
+        CreateToolhelp32Snapshot, Thread32First, Thread32Next, TH32CS_SNAPTHREAD, THREADENTRY32,
     };
 
     /// The hundred-nanosecond ticks a file time counts in.
@@ -140,7 +140,7 @@ unsafe fn write_dump(pid: u32, path: &Path) -> Option<PathBuf> {
         CreateFileW, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ,
     };
     use windows_sys::Win32::System::Diagnostics::Debug::{
-        MiniDumpWriteDump, MiniDumpNormal, MiniDumpWithThreadInfo,
+        MiniDumpNormal, MiniDumpWithThreadInfo, MiniDumpWriteDump,
     };
     use windows_sys::Win32::System::Threading::{
         OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ,

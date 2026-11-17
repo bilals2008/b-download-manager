@@ -32,7 +32,10 @@ pub(crate) fn resolve(url: &str, export: Option<&str>) -> Result<String, String>
 /// The export format the reader picked, with a plain PDF as the default for
 /// anything this build does not know.
 fn export_format(export: Option<&str>) -> ExportFormat {
-    match export.map(|text| text.trim().to_ascii_lowercase()).as_deref() {
+    match export
+        .map(|text| text.trim().to_ascii_lowercase())
+        .as_deref()
+    {
         Some("docx") => ExportFormat::Docx,
         Some("csv") => ExportFormat::Csv,
         Some("xlsx") => ExportFormat::Xlsx,

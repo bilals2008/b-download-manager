@@ -19,9 +19,9 @@ mod fetch;
 mod request;
 mod walk;
 
-pub use events::{Event, Outcome};
 #[cfg(test)]
 pub use events::Stats;
+pub use events::{Event, Outcome};
 pub use request::{Request, Settings};
 pub use walk::run;
 

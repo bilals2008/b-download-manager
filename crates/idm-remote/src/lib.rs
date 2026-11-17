@@ -31,8 +31,8 @@ mod backend;
 mod devices;
 mod http;
 mod net;
-mod pairing;
 mod page;
+mod pairing;
 mod random;
 mod server;
 

@@ -102,7 +102,12 @@ pub(super) fn read_body(file: &mut File, header: &Header) -> Result<Vec<u8>, Mux
     Ok(body)
 }
 
-pub(super) fn read_prefix(file: &mut File, at: u64, len: u64, end: u64) -> Result<Option<Vec<u8>>, MuxError> {
+pub(super) fn read_prefix(
+    file: &mut File,
+    at: u64,
+    len: u64,
+    end: u64,
+) -> Result<Option<Vec<u8>>, MuxError> {
     let available = end.saturating_sub(at).min(len);
     if available == 0 {
         return Ok(None);

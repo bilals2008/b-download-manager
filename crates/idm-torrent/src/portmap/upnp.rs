@@ -51,7 +51,10 @@ pub fn location_from_response(text: &str) -> Option<String> {
 /// a test points it at a closed port to hear the silence of no gateway.
 pub async fn discover(target: SocketAddr, wait: Duration) -> Option<String> {
     let socket = UdpSocket::bind("0.0.0.0:0").await.ok()?;
-    socket.send_to(search_message().as_bytes(), target).await.ok()?;
+    socket
+        .send_to(search_message().as_bytes(), target)
+        .await
+        .ok()?;
     let mut buffer = vec![0u8; 4096];
     let deadline = tokio::time::Instant::now() + wait;
     loop {
@@ -236,7 +239,10 @@ pub async fn refresh(mapping: &Mapping, internal: std::net::Ipv4Addr) -> Result<
     let body = add_port_mapping_body(&mapping.service, mapping.port, internal, mapping.lease);
     let response = client
         .post(&mapping.control)
-        .header("SOAPACTION", soap_action(&mapping.service, "AddPortMapping"))
+        .header(
+            "SOAPACTION",
+            soap_action(&mapping.service, "AddPortMapping"),
+        )
         .header("Content-Type", "text/xml; charset=\"utf-8\"")
         .body(body)
         .send()
@@ -252,7 +258,10 @@ pub async fn unmap(mapping: &Mapping) -> Result<(), TorrentError> {
     let client = crate::tracker::http_client(None)?;
     let response = client
         .post(&mapping.control)
-        .header("SOAPACTION", soap_action(&mapping.service, "DeletePortMapping"))
+        .header(
+            "SOAPACTION",
+            soap_action(&mapping.service, "DeletePortMapping"),
+        )
         .header("Content-Type", "text/xml; charset=\"utf-8\"")
         .body(delete_port_mapping_body(&mapping.service, mapping.port))
         .send()

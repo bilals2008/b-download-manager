@@ -1,7 +1,7 @@
 //! Writing the joined WebM/Matroska: tracks, clusters, cues.
 
-use super::*;
 use super::ebml::*;
+use super::*;
 
 /* ---------------------------------------------------------------- writing */
 

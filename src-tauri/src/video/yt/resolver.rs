@@ -1,8 +1,8 @@
 //! Resolving a watch page: the remembered answer, the page read, and the learned throttling transforms.
 
-use super::*;
 use super::client::{ask_player, ios_profile, vr_profile};
 use super::parse::{check_playable, digits_after, merge_failures, plan_from, text_between};
+use super::*;
 
 /// One remembered answer, so two callers asking at once share the page read.
 struct Remembered {

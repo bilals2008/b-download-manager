@@ -3,9 +3,7 @@
 use reqwest::Url;
 use serde::Deserialize;
 
-use super::super::policy::{
-    self, Accepted, Exclusions, FileKind, MAX_DEPTH, MAX_PAGES,
-};
+use super::super::policy::{self, Accepted, Exclusions, FileKind, MAX_DEPTH, MAX_PAGES};
 
 /// What the window asks for.
 #[derive(Debug, Clone, Deserialize)]

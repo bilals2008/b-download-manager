@@ -35,13 +35,19 @@ impl Weekday {
 
     /// The day before this one, wrapping round the week.
     pub fn previous(self) -> Weekday {
-        let index = Weekday::ALL.iter().position(|day| *day == self).unwrap_or(0);
+        let index = Weekday::ALL
+            .iter()
+            .position(|day| *day == self)
+            .unwrap_or(0);
         Weekday::ALL[(index + 6) % 7]
     }
 
     /// The day after this one, wrapping round the week.
     pub fn next(self) -> Weekday {
-        let index = Weekday::ALL.iter().position(|day| *day == self).unwrap_or(0);
+        let index = Weekday::ALL
+            .iter()
+            .position(|day| *day == self)
+            .unwrap_or(0);
         Weekday::ALL[(index + 1) % 7]
     }
 
@@ -71,8 +77,6 @@ pub enum EndAction {
     /// The computer is asked to power off, after every download is saved.
     ShutDown,
 }
-
-
 
 /// The wall clock of the machine, as the schedule sees it.
 ///
@@ -323,7 +327,10 @@ mod tests {
         let schedule = Schedule::default();
         assert!(schedule.is_empty());
         assert!(!schedule.is_open_at(LocalTime::at(Weekday::Mon, 1, 0)));
-        assert_eq!(schedule.next_open_at(LocalTime::at(Weekday::Mon, 1, 0)), None);
+        assert_eq!(
+            schedule.next_open_at(LocalTime::at(Weekday::Mon, 1, 0)),
+            None
+        );
     }
 
     #[test]

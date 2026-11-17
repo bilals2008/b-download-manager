@@ -79,13 +79,10 @@ impl Store {
 
     /// Remember that a peer has an info hash.
     pub fn announce(&mut self, info_hash: [u8; 20], peer: SocketAddr) {
-        let entry = self
-            .values
-            .entry(info_hash)
-            .or_insert_with(|| Value {
-                peers: Vec::new(),
-                expires: Instant::now() + LIFETIME,
-            });
+        let entry = self.values.entry(info_hash).or_insert_with(|| Value {
+            peers: Vec::new(),
+            expires: Instant::now() + LIFETIME,
+        });
         entry.expires = Instant::now() + LIFETIME;
         if !entry.peers.contains(&peer) {
             entry.peers.push(peer);

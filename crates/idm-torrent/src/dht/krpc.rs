@@ -81,7 +81,10 @@ pub fn encode_query(
     bencode_encode(&BencodeValue::Dict(vec![
         ("t".into(), BencodeValue::Bytes(transaction.to_vec())),
         ("y".into(), BencodeValue::Bytes(b"q".to_vec())),
-        ("q".into(), BencodeValue::Bytes(query.name().as_bytes().to_vec())),
+        (
+            "q".into(),
+            BencodeValue::Bytes(query.name().as_bytes().to_vec()),
+        ),
         ("a".into(), BencodeValue::Dict(arguments)),
     ]))
 }
@@ -219,7 +222,10 @@ pub fn encode_nodes(nodes: &[(NodeId, SocketAddr)]) -> Vec<u8> {
 /// The nodes of an answer, read back.
 pub fn decode_nodes(bytes: &[u8]) -> Vec<(NodeId, SocketAddr)> {
     bytes
-        .as_chunks::<26>().0.iter().map(|chunk| {
+        .as_chunks::<26>()
+        .0
+        .iter()
+        .map(|chunk| {
             let mut id = [0u8; 20];
             id.copy_from_slice(&chunk[0..20]);
             let address = Ipv4Addr::new(chunk[20], chunk[21], chunk[22], chunk[23]);
@@ -258,7 +264,10 @@ pub fn encode_peer_values(peers: &[SocketAddr]) -> BencodeValue {
 /// The peers of an answer, read back.
 pub fn decode_peers(bytes: &[u8]) -> Vec<SocketAddr> {
     bytes
-        .as_chunks::<6>().0.iter().map(|chunk| {
+        .as_chunks::<6>()
+        .0
+        .iter()
+        .map(|chunk| {
             let address = Ipv4Addr::new(chunk[0], chunk[1], chunk[2], chunk[3]);
             let port = u16::from_be_bytes([chunk[4], chunk[5]]);
             SocketAddr::new(IpAddr::V4(address), port)

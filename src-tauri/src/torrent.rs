@@ -169,7 +169,8 @@ pub async fn torrent_start(
     } else {
         Some(torrent_file(source, state.engine_settings().proxy_url.as_str()).await?)
     };
-    let directory = directory_for(&app, &state, source, folder.as_deref(), bytes.as_deref()).await?;
+    let directory =
+        directory_for(&app, &state, source, folder.as_deref(), bytes.as_deref()).await?;
     let chosen = wanted.unwrap_or_default();
     let start_paused = start_paused.unwrap_or(false);
     let sequential = sequential.unwrap_or(false);
@@ -454,8 +455,7 @@ async fn torrent_file(source: &str, proxy: &str) -> Result<Vec<u8>, String> {
         return fetch_torrent(source, proxy).await;
     }
     let path = PathBuf::from(source);
-    std::fs::read(&path)
-        .map_err(|error| format!("the .torrent file could not be read: {error}"))
+    std::fs::read(&path).map_err(|error| format!("the .torrent file could not be read: {error}"))
 }
 
 /// Fetch a `.torrent` from an address.
@@ -563,10 +563,9 @@ fn show_now(app: &AppHandle, id: Option<&str>) {
     builder = builder.initialization_script(marker);
     match builder.build() {
         Ok(window) => crate::window_style::round_corners(&window),
-        Err(error) => idm_core::log::write(
-            "warn",
-            &format!("the torrent window did not open: {error}"),
-        ),
+        Err(error) => {
+            idm_core::log::write("warn", &format!("the torrent window did not open: {error}"))
+        }
     }
 }
 

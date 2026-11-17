@@ -273,7 +273,9 @@ pub struct Hosts {
 impl Hosts {
     /// The addresses pinned to `host`, if any.
     pub fn get(&self, host: &str) -> Option<&[IpAddr]> {
-        self.entries.get(&host.trim().to_ascii_lowercase()).map(Vec::as_slice)
+        self.entries
+            .get(&host.trim().to_ascii_lowercase())
+            .map(Vec::as_slice)
     }
 
     /// Pins `host` to `addresses`, replacing what was there.
@@ -543,7 +545,9 @@ pub fn check_dot_host(host: &str) -> Result<String, String> {
         let starts = bytes.first().map(|b| alnum(*b)).unwrap_or(false);
         let ends = bytes.last().map(|b| alnum(*b)).unwrap_or(false);
         if !starts || !ends {
-            return Err(format!("The label \"{label}\" may not start or end with a hyphen."));
+            return Err(format!(
+                "The label \"{label}\" may not start or end with a hyphen."
+            ));
         }
         if !bytes.iter().all(|b| alnum(*b) || *b == b'-') {
             return Err(
@@ -567,12 +571,10 @@ mod tests {
     #[test]
     fn a_resolver_carries_its_name_address_and_port() {
         let r = Resolver::over_tls("Cloudflare", "one.one.one.one", 853);
-        assert_eq!((r.kind, r.name.as_str(), r.address.as_str(), r.port), (
-            ResolverKind::OverTls,
-            "Cloudflare",
-            "one.one.one.one",
-            853
-        ));
+        assert_eq!(
+            (r.kind, r.name.as_str(), r.address.as_str(), r.port),
+            (ResolverKind::OverTls, "Cloudflare", "one.one.one.one", 853)
+        );
         assert_eq!(r.label(), "Cloudflare (DNS over TLS)");
         assert_eq!(Resolver::over_https("DoH", "https://d.test/q").port, 443);
     }
@@ -651,9 +653,15 @@ mod tests {
 
     #[test]
     fn a_dot_hostname_is_a_name_not_an_address() {
-        assert_eq!(check_dot_host(" One.One.One.One. ").unwrap(), "one.one.one.one");
+        assert_eq!(
+            check_dot_host(" One.One.One.One. ").unwrap(),
+            "one.one.one.one"
+        );
         assert_eq!(check_dot_host("dns.google").unwrap(), "dns.google");
-        assert_eq!(check_dot_host("ABC123.dns.nextdns.io").unwrap(), "abc123.dns.nextdns.io");
+        assert_eq!(
+            check_dot_host("ABC123.dns.nextdns.io").unwrap(),
+            "abc123.dns.nextdns.io"
+        );
         assert!(check_dot_host("").is_err());
         assert!(check_dot_host("1.1.1.1").is_err());
         assert!(check_dot_host("::1").is_err());
@@ -697,7 +705,10 @@ mod tests {
             nextdns_profile: "a1b2c3".into(),
             ..DnsSettings::default()
         };
-        assert_eq!(nextdns.validated().unwrap().address, "a1b2c3.dns.nextdns.io");
+        assert_eq!(
+            nextdns.validated().unwrap().address,
+            "a1b2c3.dns.nextdns.io"
+        );
         let bad = DnsSettings {
             nextdns_profile: "zz".into(),
             ..nextdns

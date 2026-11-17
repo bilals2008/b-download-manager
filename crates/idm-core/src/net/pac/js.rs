@@ -109,7 +109,9 @@ impl ScopeData {
         if let Some(value) = self.vars.get(name) {
             return Some(value.clone());
         }
-        self.parent.as_ref().and_then(|parent| parent.borrow().get(name))
+        self.parent
+            .as_ref()
+            .and_then(|parent| parent.borrow().get(name))
     }
 }
 
@@ -129,11 +131,7 @@ pub(super) fn as_text(value: &Value) -> String {
         Value::Bool(flag) => if *flag { "true" } else { "false" }.to_owned(),
         Value::Num(number) => format!("{number}"),
         Value::Str(text) => text.clone(),
-        Value::Array(items) => items
-            .iter()
-            .map(as_text)
-            .collect::<Vec<String>>()
-            .join(","),
+        Value::Array(items) => items.iter().map(as_text).collect::<Vec<String>>().join(","),
         Value::Closure(_) => "function".to_owned(),
         Value::Native(name) => (*name).to_owned(),
     }
@@ -260,10 +258,10 @@ mod builtins;
 mod lexer;
 mod parser;
 
+use builtins::{indexed, member, method};
+use parser::parse_program;
 pub use parser::Order;
 pub(super) use parser::{Expr, Stmt};
-use parser::parse_program;
-use builtins::{member, indexed, method};
 
 /// Runs the script and asks it where `url` goes.
 pub(super) fn call_entry(
@@ -469,11 +467,7 @@ impl Interp {
                 };
                 Ok(Value::Bool(if *equal { same } else { !same }))
             }
-            Expr::Order {
-                left,
-                right,
-                order,
-            } => {
+            Expr::Order { left, right, order } => {
                 let left = self.eval(left, scope)?;
                 let right = self.eval(right, scope)?;
                 Ok(Value::Bool(matches_order(&left, &right, *order)))
@@ -516,8 +510,8 @@ impl Interp {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::lexer::{tokenize, Tok};
+    use super::*;
 
     #[test]
     fn the_tokens_are_read() {

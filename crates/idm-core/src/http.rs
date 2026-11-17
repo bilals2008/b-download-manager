@@ -78,9 +78,14 @@ pub async fn probe(client: &reqwest::Client, url: &str) -> Result<Probe, Transfe
                 .header(ACCEPT_ENCODING, IDENTITY_ENCODING)
                 .send()
                 .await
-                .map_err(|e| TransferError::msg(format!("the confirmation could not be sent: {e}")))?;
+                .map_err(|e| {
+                    TransferError::msg(format!("the confirmation could not be sent: {e}"))
+                })?;
             if !posted.status().is_success() {
-                return Err(answer_error(posted.status().as_u16(), parse_retry_after(posted.headers())));
+                return Err(answer_error(
+                    posted.status().as_u16(),
+                    parse_retry_after(posted.headers()),
+                ));
             }
             let retry_after = parse_retry_after(posted.headers());
             let _ = retry_after;
@@ -179,12 +184,7 @@ fn attribute(tag: &str, name: &str) -> Option<String> {
         let end = rest[1..].find(first)?;
         Some(rest[1..1 + end].to_string())
     } else {
-        Some(
-            rest.split_whitespace()
-                .next()
-                .unwrap_or("")
-                .to_string(),
-        )
+        Some(rest.split_whitespace().next().unwrap_or("").to_string())
     }
 }
 

@@ -52,3 +52,8 @@ windows-sys = { version = "0.61", features = [
     "Win32_Networking_WinSock",
     "Win32_Foundation",
 ] }
+
+# Linux binds a socket to its adapter with SO_BINDTODEVICE, which socket2 does
+# not wrap on that system; the call is made through the platform constants.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

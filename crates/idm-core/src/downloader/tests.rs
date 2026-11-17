@@ -1,6 +1,6 @@
-use super::*;
 use super::assembly::assemble;
 use super::ranges::fetch_range;
+use super::*;
 use crate::segmenter::SEGMENT_TARGET;
 use std::net::TcpListener;
 use std::sync::mpsc;
@@ -551,7 +551,6 @@ fn spawn_busy_server() -> String {
 
     format!("http://127.0.0.1:{port}/file.bin")
 }
-
 
 mod assembly;
 mod control;

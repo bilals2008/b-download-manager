@@ -34,7 +34,11 @@ fn can_resume(manifest: &Manifest, probe: &Probe) -> bool {
 }
 
 /// Rebuild the segment list, resuming from the manifest when possible.
-pub(super) fn restore(download: &Arc<Download>, probe: &Probe, max_connections: u32) -> Vec<Segment> {
+pub(super) fn restore(
+    download: &Arc<Download>,
+    probe: &Probe,
+    max_connections: u32,
+) -> Vec<Segment> {
     // The head is rebuilt from the range that starts at the first byte: from
     // the part on disk when the download resumes, from the stream when it
     // starts over. An old run's head belongs to none of them.

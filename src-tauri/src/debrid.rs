@@ -291,7 +291,9 @@ mod tests {
             started.elapsed().as_secs()
         );
         assert!(
-            prepared.expect("a link nobody asked for is prepared").is_none(),
+            prepared
+                .expect("a link nobody asked for is prepared")
+                .is_none(),
             "the link is fetched as it is"
         );
     }

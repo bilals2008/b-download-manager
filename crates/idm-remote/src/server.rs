@@ -23,8 +23,8 @@ use crate::backend::RemoteBackend;
 use crate::devices::DeviceStore;
 use crate::http::{self, Request};
 use crate::net::{host_header_is_local, is_local_address, split_host};
-use crate::pairing::{new_pairing_code, PairingCode};
 use crate::page::PAGE;
+use crate::pairing::{new_pairing_code, PairingCode};
 
 /// The port the remote listens on when the reader has not chosen one. It is
 /// next to the bridge's port and has nothing to do with it.
@@ -100,7 +100,9 @@ impl RemoteServer {
             config.interface.unwrap_or_else(default_address),
             config.port,
         );
-        let listener = TcpListener::bind(address).await.map_err(RemoteError::Bind)?;
+        let listener = TcpListener::bind(address)
+            .await
+            .map_err(RemoteError::Bind)?;
         let local_addr = listener.local_addr().map_err(RemoteError::Bind)?;
 
         let (stop, mut stopped) = watch::channel(false);
@@ -151,7 +153,10 @@ impl RemoteServer {
     /// Tell the remote where the downloads are. The application owns them, so
     /// it answers the questions the remote asks.
     pub fn set_backend(&self, backend: Arc<dyn RemoteBackend>) {
-        let mut slot = self.backend.write().unwrap_or_else(|poison| poison.into_inner());
+        let mut slot = self
+            .backend
+            .write()
+            .unwrap_or_else(|poison| poison.into_inner());
         *slot = Some(backend);
     }
 
@@ -256,11 +261,7 @@ async fn route(server: &RemoteServer, request: &Request) -> (u16, &'static str, 
                 return json_reply(401, json!({ "error": "this device is not paired" }));
             }
         }
-        return (
-            200,
-            "text/html; charset=utf-8",
-            PAGE.as_bytes().to_vec(),
-        );
+        return (200, "text/html; charset=utf-8", PAGE.as_bytes().to_vec());
     }
 
     // The pairing exchange is the one route that does not need a token: it
@@ -317,7 +318,10 @@ fn pair(server: &RemoteServer, request: &Request) -> (u16, &'static str, Vec<u8>
         .lock()
         .unwrap_or_else(|poison| poison.into_inner());
     let Some(code) = slot.as_ref() else {
-        return json_reply(401, json!({ "error": "there is no pairing code, ask the app for one" }));
+        return json_reply(
+            401,
+            json!({ "error": "there is no pairing code, ask the app for one" }),
+        );
     };
     if !code.accepts(&body.code) {
         return json_reply(401, json!({ "error": "the pairing code is not valid" }));
@@ -340,7 +344,10 @@ fn pair(server: &RemoteServer, request: &Request) -> (u16, &'static str, Vec<u8>
 /// The list of downloads.
 fn downloads(server: &RemoteServer) -> (u16, &'static str, Vec<u8>) {
     let Some(backend) = backend_of(server) else {
-        return json_reply(503, json!({ "error": "the app has not connected the remote yet" }));
+        return json_reply(
+            503,
+            json!({ "error": "the app has not connected the remote yet" }),
+        );
     };
     let downloads = backend.downloads();
     json_reply(200, json!({ "downloads": downloads }))
@@ -356,7 +363,10 @@ fn add(server: &RemoteServer, request: &Request) -> (u16, &'static str, Vec<u8>)
         return json_reply(400, json!({ "error": "there is no link" }));
     }
     let Some(backend) = backend_of(server) else {
-        return json_reply(503, json!({ "error": "the app has not connected the remote yet" }));
+        return json_reply(
+            503,
+            json!({ "error": "the app has not connected the remote yet" }),
+        );
     };
     let folder = body
         .folder
@@ -372,7 +382,10 @@ fn add(server: &RemoteServer, request: &Request) -> (u16, &'static str, Vec<u8>)
 /// Pause, resume or remove one download.
 fn control(server: &RemoteServer, id: u64, action: &str) -> (u16, &'static str, Vec<u8>) {
     let Some(backend) = backend_of(server) else {
-        return json_reply(503, json!({ "error": "the app has not connected the remote yet" }));
+        return json_reply(
+            503,
+            json!({ "error": "the app has not connected the remote yet" }),
+        );
     };
     let result = match action {
         "pause" => backend.pause(id),
@@ -564,7 +577,10 @@ mod tests {
         )
         .await;
         let value: Value = serde_json::from_str(&body).expect("the answer is JSON");
-        value["token"].as_str().expect("there is a token").to_string()
+        value["token"]
+            .as_str()
+            .expect("there is a token")
+            .to_string()
     }
 
     #[tokio::test]
@@ -604,9 +620,7 @@ mod tests {
                 &server,
                 "POST",
                 "/api/downloads",
-                &format!(
-                    "Authorization: Bearer {token}\r\nContent-Type: application/json\r\n"
-                ),
+                &format!("Authorization: Bearer {token}\r\nContent-Type: application/json\r\n"),
                 "{\"url\":\"https://example.org/file.zip\",\"folder\":\"Downloads\"}",
             ),
         )
@@ -708,11 +722,8 @@ mod tests {
 
     #[tokio::test]
     async fn the_remote_is_off_until_the_reader_turns_it_on() {
-        let result = RemoteServer::start(
-            RemoteConfig::default(),
-            Arc::new(DeviceStore::new()),
-        )
-        .await;
+        let result =
+            RemoteServer::start(RemoteConfig::default(), Arc::new(DeviceStore::new())).await;
         assert!(matches!(result, Err(RemoteError::Disabled)));
     }
 

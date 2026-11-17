@@ -1,7 +1,7 @@
 //! Reading a WebM input: its tracks, clusters and blocks.
 
-use super::*;
 use super::ebml::*;
+use super::*;
 
 /* --------------------------------------------------------------- reading */
 

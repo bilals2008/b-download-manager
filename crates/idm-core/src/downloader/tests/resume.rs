@@ -682,4 +682,3 @@ fn a_move_without_the_bytes_it_records_refuses() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
-

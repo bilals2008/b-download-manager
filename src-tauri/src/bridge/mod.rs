@@ -319,10 +319,7 @@ fn mcp_id(path: &str, suffix: &str) -> Option<u64> {
 /// Pause or resume one download, the way the extension asks for it.
 fn mcp_control(app: &AppHandle, state: &AppState, path: &str, action: &str) -> (u16, Value) {
     let Some(id) = mcp_id(path, &format!("/{action}")) else {
-        return (
-            400,
-            error_body("bad_request", "a download id is a number"),
-        );
+        return (400, error_body("bad_request", "a download id is a number"));
     };
     let result = match action {
         "pause" => crate::actions::pause(app, state, id),
@@ -330,10 +327,7 @@ fn mcp_control(app: &AppHandle, state: &AppState, path: &str, action: &str) -> (
         _ => return (404, error_body("not_found", "no such route")),
     };
     match result {
-        Ok(()) => (
-            200,
-            ok(json!({ "id": id, "status": status_of(state, id) })),
-        ),
+        Ok(()) => (200, ok(json!({ "id": id, "status": status_of(state, id) }))),
         Err(message) if message == "unknown download" => {
             (404, error_body("not_found", "unknown download"))
         }
@@ -424,10 +418,7 @@ fn mcp_add_download(app: &AppHandle, state: &AppState, body: &[u8]) -> (u16, Val
 /// call that says `deleteFile: true`.
 fn mcp_remove(app: &AppHandle, state: &AppState, path: &str, body: &[u8]) -> (u16, Value) {
     let Some(id) = mcp_id(path, "/remove") else {
-        return (
-            400,
-            error_body("bad_request", "a download id is a number"),
-        );
+        return (400, error_body("bad_request", "a download id is a number"));
     };
     #[derive(Deserialize)]
     #[serde(rename_all = "camelCase")]
@@ -435,9 +426,7 @@ fn mcp_remove(app: &AppHandle, state: &AppState, path: &str, body: &[u8]) -> (u1
         #[serde(default)]
         delete_file: bool,
     }
-    let request: Remove = serde_json::from_slice(body).unwrap_or(Remove {
-        delete_file: false,
-    });
+    let request: Remove = serde_json::from_slice(body).unwrap_or(Remove { delete_file: false });
     if request.delete_file {
         // Destroying a byte is the second call and never the first: the
         // download stops, and only a finished file is removed from disk.
@@ -460,7 +449,6 @@ fn mcp_remove(app: &AppHandle, state: &AppState, path: &str, body: &[u8]) -> (u1
     crate::tray::refresh(app);
     (200, ok(json!({ "id": id, "deleted": false })))
 }
-
 
 /// How long the main thread took to answer, in milliseconds.
 ///

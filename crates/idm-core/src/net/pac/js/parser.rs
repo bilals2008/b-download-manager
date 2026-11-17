@@ -1,7 +1,7 @@
 //! Reading the tokens into what the script says.
 
-use super::*;
 use super::lexer::{tokenize, Tok, Token};
+use super::*;
 
 // What the script says.
 

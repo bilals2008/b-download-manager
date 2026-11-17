@@ -22,9 +22,9 @@ mod site;
 
 pub use exclusions::{Accepted, Exclusions};
 pub use kinds::{extension_of, is_page_document, kind_of, short, Candidate, FileKind};
-pub use net::{check_literal, check_public};
 #[cfg(test)]
 pub use net::check_web;
+pub use net::{check_literal, check_public};
 pub use site::{same_site, site_hosts};
 
 use std::time::Duration;

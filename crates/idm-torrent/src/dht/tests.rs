@@ -70,7 +70,10 @@ async fn a_token_is_handed_out_and_taken_back_over_the_wire() {
             ("info_hash".into(), BencodeValue::Bytes(hash.to_vec())),
         ],
     );
-    socket.send_to(&question, node.address()).await.expect("the question");
+    socket
+        .send_to(&question, node.address())
+        .await
+        .expect("the question");
     let answer = read(&socket).await;
     let Message::Response { transaction, body } = answer else {
         panic!("an answer was expected, got {answer:?}");
@@ -92,12 +95,18 @@ async fn a_token_is_handed_out_and_taken_back_over_the_wire() {
             ("token".into(), BencodeValue::Bytes(token)),
         ],
     );
-    socket.send_to(&announce, node.address()).await.expect("the announce");
+    socket
+        .send_to(&announce, node.address())
+        .await
+        .expect("the announce");
     let answer = read(&socket).await;
     assert!(matches!(answer, Message::Response { .. }));
 
     // The next question finds the peer the announce named.
-    socket.send_to(&question, node.address()).await.expect("the question");
+    socket
+        .send_to(&question, node.address())
+        .await
+        .expect("the question");
     let answer = read(&socket).await;
     let Message::Response { body, .. } = answer else {
         panic!("an answer was expected, got {answer:?}");
@@ -129,12 +138,21 @@ async fn an_announce_with_a_foreign_token_is_refused() {
             ("id".into(), BencodeValue::Bytes(vec![9u8; 20])),
             ("info_hash".into(), BencodeValue::Bytes(vec![0x13u8; 20])),
             ("port".into(), BencodeValue::Integer(51413)),
-            ("token".into(), BencodeValue::Bytes(b"not the token".to_vec())),
+            (
+                "token".into(),
+                BencodeValue::Bytes(b"not the token".to_vec()),
+            ),
         ],
     );
-    socket.send_to(&announce, node.address()).await.expect("the announce");
+    socket
+        .send_to(&announce, node.address())
+        .await
+        .expect("the announce");
     let answer = read(&socket).await;
-    let Message::Error { transaction, code, .. } = answer else {
+    let Message::Error {
+        transaction, code, ..
+    } = answer
+    else {
         panic!("a refusal was expected, got {answer:?}");
     };
     assert_eq!(transaction, b"cc");
@@ -150,7 +168,10 @@ async fn a_ping_is_answered_with_the_id_of_the_node() {
         Query::Ping,
         vec![("id".into(), BencodeValue::Bytes(vec![9u8; 20]))],
     );
-    socket.send_to(&ping, node.address()).await.expect("the ping");
+    socket
+        .send_to(&ping, node.address())
+        .await
+        .expect("the ping");
     let answer = read(&socket).await;
     let Message::Response { transaction, body } = answer else {
         panic!("an answer was expected, got {answer:?}");

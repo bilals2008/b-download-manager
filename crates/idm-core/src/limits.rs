@@ -235,7 +235,11 @@ impl LearnedCaps {
         let Some(path) = path else {
             return;
         };
-        let hosts = self.hosts.lock().expect("learned caps lock poisoned").clone();
+        let hosts = self
+            .hosts
+            .lock()
+            .expect("learned caps lock poisoned")
+            .clone();
         let Ok(text) = serde_json::to_string_pretty(&hosts) else {
             return;
         };
@@ -510,10 +514,7 @@ mod tests {
 
     #[test]
     fn a_cap_survives_the_file_it_was_written_to() {
-        let dir = std::env::temp_dir().join(format!(
-            "bdm-learned-caps-{}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("bdm-learned-caps-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("a folder");
         let path = dir.join("host-caps.json");

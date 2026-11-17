@@ -169,7 +169,6 @@ pub(super) fn plan_direct(state: &AppState, folder: &Path, name: &str) -> Direct
     }
 }
 
-
 /// A URL the engine may fetch. It has to name a scheme the engine speaks and a
 /// non-empty host, so `http://` alone is not a download.
 pub(super) fn is_download_url(url: &str) -> bool {
@@ -209,7 +208,6 @@ pub(super) fn is_url(url: &str, schemes: &[&str]) -> bool {
     !authority.is_empty() && !authority.starts_with(':')
 }
 
-
 /// What the extension asks for when it starts a download.
 #[derive(Debug, Deserialize)]
 pub(super) struct AddRequest {
@@ -231,4 +229,3 @@ pub(super) enum Mode {
     Direct,
     Ask,
 }
-

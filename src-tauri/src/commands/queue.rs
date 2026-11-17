@@ -7,13 +7,21 @@ use crate::state::AppState;
 
 /// Park a download in the queue, keeping the bytes it already received.
 #[tauri::command]
-pub(crate) fn queue_download(app: AppHandle, state: State<'_, AppState>, id: u64) -> Result<(), String> {
+pub(crate) fn queue_download(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: u64,
+) -> Result<(), String> {
     actions::queue(&app, &state, id)
 }
 
 /// Take a download out of the queue and leave it paused.
 #[tauri::command]
-pub(crate) fn dequeue_download(app: AppHandle, state: State<'_, AppState>, id: u64) -> Result<(), String> {
+pub(crate) fn dequeue_download(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: u64,
+) -> Result<(), String> {
     actions::dequeue(&app, &state, id)
 }
 
@@ -32,7 +40,11 @@ pub(crate) fn stop_queue(app: AppHandle, state: State<'_, AppState>) -> Result<(
 
 /// Move a queued download to a new position (0 = first).
 #[tauri::command]
-pub(crate) fn set_queue_position(state: State<'_, AppState>, id: u64, position: u32) -> Result<(), String> {
+pub(crate) fn set_queue_position(
+    state: State<'_, AppState>,
+    id: u64,
+    position: u32,
+) -> Result<(), String> {
     actions::set_queue_position(&state, id, position)
 }
 

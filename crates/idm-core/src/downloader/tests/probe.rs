@@ -250,4 +250,3 @@ async fn a_server_that_is_busy_is_not_mistaken_for_a_small_file() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
-

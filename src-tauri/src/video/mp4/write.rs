@@ -1,8 +1,8 @@
 //! Writing the joined progressive MP4: `ftyp`, `moov`, `mdat`.
 
-use super::*;
-use super::boxes::boxed;
 use super::super::mux::is_cancelled;
+use super::boxes::boxed;
+use super::*;
 
 /* ---------------------------------------------------------------- writing */
 

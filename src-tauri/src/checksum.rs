@@ -57,10 +57,7 @@ fn algorithm_for(expected: &str, named: Option<&str>) -> Result<Algorithm, Strin
                 .ok_or_else(|| format!("{name} is not a checksum this build knows"));
         }
     }
-    let digits = expected
-        .chars()
-        .filter(char::is_ascii_hexdigit)
-        .count();
+    let digits = expected.chars().filter(char::is_ascii_hexdigit).count();
     if digits % 2 == 0 {
         if let Some(algorithm) = checksum::algorithm_for_length(digits / 2) {
             return Ok(algorithm);
@@ -186,19 +183,16 @@ mod tests {
     #[test]
     fn a_hash_of_the_wrong_length_for_its_name_is_an_error() {
         let path = a_file_with(FOX);
-        let error = check(&path, &"0".repeat(32), Some("SHA-256")).expect_err("the length is wrong");
+        let error =
+            check(&path, &"0".repeat(32), Some("SHA-256")).expect_err("the length is wrong");
         assert!(error.contains("64"), "{error}");
         let _ = std::fs::remove_file(path);
     }
 
     #[test]
     fn a_file_that_is_not_there_is_an_error() {
-        let error = check(
-            Path::new("there-is-no-such-file.bin"),
-            FOX_SHA256,
-            None,
-        )
-        .expect_err("the file is not there");
+        let error = check(Path::new("there-is-no-such-file.bin"), FOX_SHA256, None)
+            .expect_err("the file is not there");
         assert!(error.contains("not there"), "{error}");
     }
 }

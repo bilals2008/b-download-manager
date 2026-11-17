@@ -159,7 +159,10 @@ pub fn start(
     };
     let delivery = Delivery {
         video: convert.is_none() && !audio_only,
-        audio: convert.is_some() || audio_only || audio_format.is_some() || matches!(format.kind, MediaKind::Muxed),
+        audio: convert.is_some()
+            || audio_only
+            || audio_format.is_some()
+            || matches!(format.kind, MediaKind::Muxed),
         audio_selected: convert.is_some() || audio_only || audio_format.is_some(),
         extension: extension.clone(),
         container,

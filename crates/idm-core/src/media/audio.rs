@@ -163,7 +163,10 @@ impl AudioSelector {
     pub fn extension_for(self, container: &str) -> String {
         match self {
             AudioSelector::Best | AudioSelector::Source => {
-                let container = container.trim().trim_start_matches('.').to_ascii_lowercase();
+                let container = container
+                    .trim()
+                    .trim_start_matches('.')
+                    .to_ascii_lowercase();
                 match container.as_str() {
                     "m4a" | "aac" | "mp4" | "m4v" | "m4s" | "webm" | "opus" | "ogg" | "mp3"
                     | "flac" | "wav" | "ts" => container,
@@ -645,7 +648,10 @@ mod tests {
 
     #[test]
     fn every_output_names_the_file_it_is_written_as() {
-        assert_eq!(AudioSelector::Mp3(Mp3Quality::Constant(320)).extension(), "mp3");
+        assert_eq!(
+            AudioSelector::Mp3(Mp3Quality::Constant(320)).extension(),
+            "mp3"
+        );
         assert_eq!(AudioSelector::Opus.extension(), "opus");
         assert_eq!(AudioSelector::Flac.extension(), "flac");
     }

@@ -101,7 +101,10 @@ impl Dht {
     /// The socket is bound straight away, so the caller knows the address
     /// even when it asked for port zero. A node is a `host:port` text; an
     /// empty list starts a table that waits to be spoken to.
-    pub fn start_with_nodes(bind: SocketAddr, hosts: Vec<String>) -> Result<Arc<Dht>, TorrentError> {
+    pub fn start_with_nodes(
+        bind: SocketAddr,
+        hosts: Vec<String>,
+    ) -> Result<Arc<Dht>, TorrentError> {
         if tokio::runtime::Handle::try_current().is_err() {
             return Err(TorrentError::Failed(
                 "the table needs a runtime to run in".into(),
@@ -462,7 +465,10 @@ async fn serve(
                 }
                 _ => {
                     let _ = socket
-                        .send_to(&encode_error(&transaction, 203, "the target is not twenty bytes"), from)
+                        .send_to(
+                            &encode_error(&transaction, 203, "the target is not twenty bytes"),
+                            from,
+                        )
                         .await;
                     return;
                 }
@@ -542,7 +548,10 @@ async fn serve(
                 Some(BencodeValue::Integer(port)) if (0..=65535).contains(port) => *port as u16,
                 _ => {
                     let _ = socket
-                        .send_to(&encode_error(&transaction, 203, "the port is not a port"), from)
+                        .send_to(
+                            &encode_error(&transaction, 203, "the port is not a port"),
+                            from,
+                        )
                         .await;
                     return;
                 }
@@ -560,9 +569,7 @@ async fn serve(
                     .await;
                 return;
             }
-            table
-                .store
-                .announce(hash, SocketAddr::new(from.ip(), port));
+            table.store.announce(hash, SocketAddr::new(from.ip(), port));
             Some(vec![
                 ("id".into(), BencodeValue::Bytes(table.id.to_vec())),
                 (
@@ -590,9 +597,12 @@ async fn drive(socket: &UdpSocket, table: &mut Table) {
         if table.walks[index].lookup.needs_seeds() {
             let hash = table.walks[index].lookup.hash();
             let seeds = table.routing.closest(&hash, 16);
-            table.walks[index]
-                .lookup
-                .seed(seeds.into_iter().map(|node| (node.id, node.address)).collect());
+            table.walks[index].lookup.seed(
+                seeds
+                    .into_iter()
+                    .map(|node| (node.id, node.address))
+                    .collect(),
+            );
         }
         while !table.walks[index].lookup.finished()
             && table
@@ -675,7 +685,9 @@ async fn drive(socket: &UdpSocket, table: &mut Table) {
                 );
             }
         }
-        table.pending.retain(|_, pending| pending.walk != Some(number));
+        table
+            .pending
+            .retain(|_, pending| pending.walk != Some(number));
     }
 }
 

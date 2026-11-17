@@ -157,13 +157,7 @@ fn simple_block(track: u64, relative: i16, keyframe: bool, frames: &[u8]) -> Vec
     element(SIMPLE_BLOCK, &payload)
 }
 
-fn block_group(
-    track: u64,
-    relative: i16,
-    keyframe: bool,
-    padding: i64,
-    frames: &[u8],
-) -> Vec<u8> {
+fn block_group(track: u64, relative: i16, keyframe: bool, padding: i64, frames: &[u8]) -> Vec<u8> {
     let mut payload = encode_vint(track);
     payload.extend(relative.to_be_bytes());
     // A plain `Block` must not set the keyframe bit: inside a group the

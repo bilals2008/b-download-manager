@@ -153,10 +153,7 @@ impl Queue {
     /// try starting the next one.
     pub fn on_finished(&self, id: u64) -> bool {
         let mut running = self.running.lock().expect("queue running lock poisoned");
-        if !running.remove(&id) {
-            return false;
-        }
-        true
+        running.remove(&id)
     }
 
     /// Activate the queue and start queued downloads up to the limit.

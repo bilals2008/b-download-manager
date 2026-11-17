@@ -145,11 +145,7 @@ impl Session {
     /// With `any` every signed-in account is asked, the first one that takes
     /// the link wins. Without it only the service that owns the link is
     /// asked, which is what the automatic switch means.
-    pub async fn unlock(
-        &self,
-        url: &str,
-        any: bool,
-    ) -> Result<Option<UnlockedLink>, DebridError> {
+    pub async fn unlock(&self, url: &str, any: bool) -> Result<Option<UnlockedLink>, DebridError> {
         let url = url.trim();
         let candidates: Vec<ServiceKind> = if any {
             ServiceKind::ALL

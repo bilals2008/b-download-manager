@@ -49,9 +49,7 @@ pub struct Search {
 
 /// The message as it goes on the wire.
 pub fn encode_search(hashes: &[[u8; 20]], port: u16, cookie: &str) -> Vec<u8> {
-    let mut text = format!(
-        "BT-SEARCH * HTTP/1.1\r\nHost: {GROUP}:{PORT}\r\nPort: {port}\r\n"
-    );
+    let mut text = format!("BT-SEARCH * HTTP/1.1\r\nHost: {GROUP}:{PORT}\r\nPort: {port}\r\n");
     for hash in hashes {
         text.push_str(&format!("Infohash: {}\r\n", hex_encode(hash)));
     }
@@ -122,10 +120,8 @@ impl Lpd {
                 "the discovery needs a runtime to run in".into(),
             ));
         }
-        let socket = std::net::UdpSocket::bind(SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::UNSPECIFIED),
-            PORT,
-        ))?;
+        let socket =
+            std::net::UdpSocket::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), PORT))?;
         socket.set_nonblocking(true)?;
         let cookie = format!("idm-{}", hex_encode(&peer_id()[..8]));
         let (commands, receiver) = mpsc::channel(16);
@@ -298,6 +294,8 @@ mod tests {
         assert!(parse_search(b"GET / HTTP/1.1\r\n\r\n").is_none());
         assert!(parse_search(b"BT-SEARCH * HTTP/1.1\r\n\r\n").is_none());
         assert!(parse_search(b"BT-SEARCH * HTTP/1.1\r\nPort: not a port\r\n\r\n").is_none());
-        assert!(parse_search(b"BT-SEARCH * HTTP/1.1\r\nPort: 6881\r\nInfohash: zz\r\n\r\n").is_none());
+        assert!(
+            parse_search(b"BT-SEARCH * HTTP/1.1\r\nPort: 6881\r\nInfohash: zz\r\n\r\n").is_none()
+        );
     }
 }

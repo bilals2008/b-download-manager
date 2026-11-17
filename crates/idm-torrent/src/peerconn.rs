@@ -65,13 +65,10 @@ impl PeerSession {
         peer_id: [u8; 20],
         piece_count: u64,
     ) -> Result<PeerSession, TorrentError> {
-        let stream = tokio::time::timeout(
-            Duration::from_secs(15),
-            TcpStream::connect(address),
-        )
-        .await
-        .map_err(|_| TorrentError::Network("the peer did not answer".into()))?
-        .map_err(|e| TorrentError::Network(e.to_string()))?;
+        let stream = tokio::time::timeout(Duration::from_secs(15), TcpStream::connect(address))
+            .await
+            .map_err(|_| TorrentError::Network("the peer did not answer".into()))?
+            .map_err(|e| TorrentError::Network(e.to_string()))?;
         let (reader, writer) = stream.into_split();
 
         let mut session = PeerSession {
@@ -96,10 +93,13 @@ impl PeerSession {
             .send_raw(&Handshake::new(info_hash, peer_id).encode())
             .await?;
         let mut bytes = [0u8; 68];
-        tokio::time::timeout(Duration::from_secs(15), session.reader.read_exact(&mut bytes))
-            .await
-            .map_err(|_| TorrentError::Network("the peer did not say hello".into()))?
-            .map_err(|e| TorrentError::Network(e.to_string()))?;
+        tokio::time::timeout(
+            Duration::from_secs(15),
+            session.reader.read_exact(&mut bytes),
+        )
+        .await
+        .map_err(|_| TorrentError::Network("the peer did not say hello".into()))?
+        .map_err(|e| TorrentError::Network(e.to_string()))?;
         let handshake = Handshake::decode(&bytes)?;
         if handshake.info_hash != info_hash {
             return Err(TorrentError::Malformed(
@@ -359,7 +359,10 @@ impl PeerSession {
         while got < size {
             let request = BencodeValue::Dict(vec![
                 ("msg_type".into(), BencodeValue::Integer(0)),
-                ("piece".into(), BencodeValue::Integer((got / BLOCK_SIZE) as i64)),
+                (
+                    "piece".into(),
+                    BencodeValue::Integer((got / BLOCK_SIZE) as i64),
+                ),
             ]);
             self.send(&Message::Extended {
                 id: to_the_peer,
@@ -369,14 +372,14 @@ impl PeerSession {
             loop {
                 match self.read_message().await? {
                     Message::Extended { id: 1, payload } => {
-                        let (value, consumed) =
-                            crate::bencode::decode_value_with_end(&payload)?;
+                        let (value, consumed) = crate::bencode::decode_value_with_end(&payload)?;
                         if value.get("msg_type").and_then(|v| v.as_int()) == Some(2) {
                             return Err(TorrentError::Network(
                                 "the peer rejected the metadata request".into(),
                             ));
                         }
-                        let piece = value.get("piece").and_then(|v| v.as_int()).unwrap_or(0) as usize;
+                        let piece =
+                            value.get("piece").and_then(|v| v.as_int()).unwrap_or(0) as usize;
                         // Some clients put the raw piece bytes straight after
                         // the dictionary instead of in a `data` key.
                         let data: Vec<u8> = match value
@@ -588,23 +591,30 @@ mod tests {
             let theirs = read(&mut socket).await;
             assert_eq!(theirs[0], 20);
             let mut reply = vec![20, 0];
-            reply.extend_from_slice(&crate::bencode::bencode_encode(&crate::bencode::BencodeValue::Dict(vec![
-                (
-                    "m".into(),
-                    crate::bencode::BencodeValue::Dict(vec![(
-                        "ut_metadata".into(),
-                        crate::bencode::BencodeValue::Integer(1),
-                    )]),
-                ),
-                ("metadata_size".into(), crate::bencode::BencodeValue::Integer(size as i64)),
-            ])));
+            reply.extend_from_slice(&crate::bencode::bencode_encode(
+                &crate::bencode::BencodeValue::Dict(vec![
+                    (
+                        "m".into(),
+                        crate::bencode::BencodeValue::Dict(vec![(
+                            "ut_metadata".into(),
+                            crate::bencode::BencodeValue::Integer(1),
+                        )]),
+                    ),
+                    (
+                        "metadata_size".into(),
+                        crate::bencode::BencodeValue::Integer(size as i64),
+                    ),
+                ]),
+            ));
             message(&mut socket, reply).await;
             // The piece request, then the piece: a dictionary in front of the
             // bytes, and the bytes behind it.
             let request = read(&mut socket).await;
             assert_eq!(request[0], 20);
             let mut piece = vec![20, 1];
-            piece.extend_from_slice(format!("d8:msg_typei1e5:piecei0e10:total_sizei{size}ee").as_bytes());
+            piece.extend_from_slice(
+                format!("d8:msg_typei1e5:piecei0e10:total_sizei{size}ee").as_bytes(),
+            );
             piece.extend_from_slice(&script);
             message(&mut socket, piece).await;
             std::future::pending::<()>().await;

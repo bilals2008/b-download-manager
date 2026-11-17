@@ -5,9 +5,7 @@ use reqwest::header::{ACCEPT, ACCEPT_ENCODING, CONTENT_ENCODING, CONTENT_TYPE, L
 use reqwest::{Client, StatusCode, Url};
 use tokio::sync::watch;
 
-use super::super::policy::{
-    self, MAX_PAGE_BYTES, MAX_REDIRECTS, MAX_ROBOTS_BYTES,
-};
+use super::super::policy::{self, MAX_PAGE_BYTES, MAX_REDIRECTS, MAX_ROBOTS_BYTES};
 use super::super::robots::{self, Robots};
 use super::request::{check_target, Settings};
 

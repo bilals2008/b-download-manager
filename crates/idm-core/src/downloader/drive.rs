@@ -1,10 +1,10 @@
 //! Driving one run: probe, plan, fetch every range, assemble.
 
-use super::*;
 use super::assembly::assemble;
 use super::probe::{measure_location, probe_with_retries};
 use super::ranges::{downgrade_to_one_connection, maybe_grow, maybe_redirect, segment_task};
 use super::resume::restore;
+use super::*;
 
 /// Check that the volume the bytes land on has room for the download.
 ///
@@ -90,7 +90,9 @@ pub(super) async fn drive(
     let allowed = match host.as_deref() {
         Some(host) => {
             download.set_learned_connections(limits.learned.get(host));
-            limits.learned.resolve(host, site_max.min(download.max_connections))
+            limits
+                .learned
+                .resolve(host, site_max.min(download.max_connections))
         }
         None => site_max.min(download.max_connections),
     };
@@ -115,9 +117,7 @@ pub(super) async fn drive(
         // A host that answered a range request with the whole file allows one
         // connection; that is worth remembering.
         if let Some(host) = host.as_deref() {
-            limits
-                .learned
-                .observe(host, download.max_connections, 1);
+            limits.learned.observe(host, download.max_connections, 1);
         }
     }
 

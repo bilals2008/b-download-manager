@@ -98,17 +98,29 @@ pub(crate) fn list_downloads(state: State<'_, AppState>) -> Vec<DownloadInfo> {
 }
 
 #[tauri::command]
-pub(crate) fn pause_download(app: AppHandle, state: State<'_, AppState>, id: u64) -> Result<(), String> {
+pub(crate) fn pause_download(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: u64,
+) -> Result<(), String> {
     actions::pause(&app, &state, id)
 }
 
 #[tauri::command]
-pub(crate) fn resume_download(app: AppHandle, state: State<'_, AppState>, id: u64) -> Result<(), String> {
+pub(crate) fn resume_download(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: u64,
+) -> Result<(), String> {
     actions::resume(&app, &state, id, false)
 }
 
 #[tauri::command]
-pub(crate) fn cancel_download(app: AppHandle, state: State<'_, AppState>, id: u64) -> Result<(), String> {
+pub(crate) fn cancel_download(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: u64,
+) -> Result<(), String> {
     actions::cancel(&app, &state, id)
 }
 
@@ -192,7 +204,11 @@ pub(crate) async fn set_download_destination(
 
 /// Delete the file of a finished download, then forget the row.
 #[tauri::command]
-pub(crate) fn delete_download_file(app: AppHandle, state: State<'_, AppState>, id: u64) -> Result<(), String> {
+pub(crate) fn delete_download_file(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: u64,
+) -> Result<(), String> {
     actions::delete_file(&app, &state, id)
 }
 
@@ -223,7 +239,11 @@ pub(crate) fn set_progress_details(window: tauri::WebviewWindow, open: bool, ani
 }
 
 #[tauri::command]
-pub(crate) fn remove_download(app: AppHandle, state: State<'_, AppState>, id: u64) -> Result<(), String> {
+pub(crate) fn remove_download(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: u64,
+) -> Result<(), String> {
     // The download must stop before it leaves the list, or it would keep
     // writing to the disk with nothing to show for it.
     if let Some(download) = state.get(id) {

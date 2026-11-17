@@ -10,11 +10,11 @@
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 use windows_sys::Win32::NetworkManagement::IpHelper::{
-    GetAdaptersAddresses, GAA_FLAG_SKIP_ANYCAST, GAA_FLAG_SKIP_DNS_SERVER,
-    GAA_FLAG_SKIP_MULTICAST, IP_ADAPTER_ADDRESSES_LH,
+    GetAdaptersAddresses, GAA_FLAG_SKIP_ANYCAST, GAA_FLAG_SKIP_DNS_SERVER, GAA_FLAG_SKIP_MULTICAST,
+    IP_ADAPTER_ADDRESSES_LH,
 };
 use windows_sys::Win32::Networking::WinSock::{
-    AF_INET, AF_INET6, AF_UNSPEC, SOCKADDR_INET, SOCKET_ADDRESS, SOCKADDR_STORAGE,
+    AF_INET, AF_INET6, AF_UNSPEC, SOCKADDR_INET, SOCKADDR_STORAGE, SOCKET_ADDRESS,
 };
 
 use super::Adapter;
@@ -74,9 +74,7 @@ unsafe fn read(adapter: &IP_ADAPTER_ADDRESSES_LH) -> Adapter {
             match ip {
                 IpAddr::V4(ip) if ip.is_link_local() => local_only.push(IpAddr::V4(ip)),
                 IpAddr::V4(ip) => v4.push(ip),
-                IpAddr::V6(ip) if ip.is_unicast_link_local() => {
-                    local_only.push(IpAddr::V6(ip))
-                }
+                IpAddr::V6(ip) if ip.is_unicast_link_local() => local_only.push(IpAddr::V6(ip)),
                 IpAddr::V6(ip) => v6.push(ip),
             }
         }

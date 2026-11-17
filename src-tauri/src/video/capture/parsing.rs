@@ -8,9 +8,8 @@ use super::helpers::{
     file_container, infer_kind, is_audio, looks_like_mpd, refused_content_type, title_of,
     youtube_params,
 };
-use crate::video::{lease, FileTrack, SourcePlan};
 use super::{MediaJob, MediaKindHint, MediaState};
-
+use crate::video::{lease, FileTrack, SourcePlan};
 
 /* --------------------------------------------------------------- parsing */
 
@@ -82,7 +81,11 @@ pub(super) async fn parse_job(app: AppHandle, id: u64) {
                     });
                     let inline = job.inline;
                     drop(gate);
-                    if !inline {
+                    if !inline
+                        && app
+                            .state::<crate::state::AppState>()
+                            .show_video_window_on_start()
+                    {
                         crate::video::window::show(&app, id);
                     }
                     return;
@@ -100,7 +103,11 @@ pub(super) async fn parse_job(app: AppHandle, id: u64) {
                 job.manifest = Some(manifest);
                 job.source = Some(source);
             });
-            if !job.inline {
+            if !job.inline
+                && app
+                    .state::<crate::state::AppState>()
+                    .show_video_window_on_start()
+            {
                 crate::video::window::show(&app, id);
             }
         }
@@ -113,7 +120,10 @@ pub(super) async fn parse_job(app: AppHandle, id: u64) {
     }
 }
 
-pub(super) async fn parse_manifest(app: &AppHandle, job: &MediaJob) -> Result<(Manifest, SourcePlan), String> {
+pub(super) async fn parse_manifest(
+    app: &AppHandle,
+    job: &MediaJob,
+) -> Result<(Manifest, SourcePlan), String> {
     // A YouTube page is resolved through the video helper when it is
     // installed, and through the in-house player clients otherwise; the page's
     // own formats carry no usable `url`.

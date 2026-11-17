@@ -303,7 +303,7 @@ pub fn add(app: &AppHandle, state: &AppState, body: &[u8]) -> (u16, Value) {
                 // A batch has no dialog to choose a folder, so the folder its
                 // category saves to decides where the file lands.
                 use_category_folder: true,
-            drive_export: None,
+                drive_export: None,
                 description: None,
                 // A batch has no dialog to ask, so it never replaces a file:
                 // it takes the next free name beside it.

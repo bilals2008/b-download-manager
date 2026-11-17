@@ -272,7 +272,11 @@ pub(crate) fn toggle_from_tray(app: &AppHandle) {
     }
     idm_core::log::write(
         "info",
-        if on { "the phone remote is on" } else { "the phone remote is off" },
+        if on {
+            "the phone remote is on"
+        } else {
+            "the phone remote is off"
+        },
     );
 }
 
@@ -354,10 +358,7 @@ pub(crate) fn start(app: &AppHandle, state: &AppState) -> Result<(), String> {
     server.set_backend(remote.backend.clone());
     let address = server.local_addr();
     *remote.server.lock().expect("remote server lock poisoned") = Some(server);
-    idm_core::log::write(
-        "info",
-        &format!("the phone remote is on: http://{address}"),
-    );
+    idm_core::log::write("info", &format!("the phone remote is on: http://{address}"));
     Ok(())
 }
 
@@ -382,7 +383,12 @@ fn runtime() -> &'static tokio::runtime::Runtime {
 
 /// Stop the listener.
 fn stop() {
-    if let Some(server) = remote().server.lock().expect("remote server lock poisoned").take() {
+    if let Some(server) = remote()
+        .server
+        .lock()
+        .expect("remote server lock poisoned")
+        .take()
+    {
         server.stop();
     }
 }

@@ -21,9 +21,7 @@ pub struct MagnetInfo {
 impl MagnetInfo {
     /// The name to show, when the link has none.
     pub fn display_name(&self) -> String {
-        self.name
-            .clone()
-            .unwrap_or_else(|| self.info_hash.clone())
+        self.name.clone().unwrap_or_else(|| self.info_hash.clone())
     }
 }
 
@@ -106,10 +104,7 @@ mod tests {
             "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567&dn=Big+Buck&tr=http%3A%2F%2Ftracker.one%2Fannounce&tr=udp%3A%2F%2Ftracker.two%3A80",
         )
         .unwrap();
-        assert_eq!(
-            magnet.info_hash,
-            "0123456789abcdef0123456789abcdef01234567"
-        );
+        assert_eq!(magnet.info_hash, "0123456789abcdef0123456789abcdef01234567");
         assert_eq!(magnet.name.as_deref(), Some("Big Buck"));
         assert_eq!(
             magnet.trackers,
@@ -119,8 +114,7 @@ mod tests {
 
     #[test]
     fn a_base32_info_hash_is_read() {
-        let magnet =
-            parse_magnet("magnet:?xt=urn:btih:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA").unwrap();
+        let magnet = parse_magnet("magnet:?xt=urn:btih:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA").unwrap();
         assert_eq!(magnet.info_hash, "0".repeat(40));
         assert_eq!(magnet.display_name(), "0".repeat(40));
     }
