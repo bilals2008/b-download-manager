@@ -21,9 +21,12 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 console.log("magnet probe: a real job against a real swarm (opt-in, not a CI gate)");
 
+// `pnpm probe:magnet -- --seconds 90` passes the bare `--` through to us; it
+// belongs to cargo, not to the probe.
+const probeArgs = process.argv.slice(2).filter((arg) => arg !== "--");
 const child = spawn(
   "cargo",
-  ["run", "-p", "idm-torrent", "--example", "magnet_probe", "--", ...process.argv.slice(2)],
+  ["run", "-p", "idm-torrent", "--example", "magnet_probe", "--", ...probeArgs],
   {
     cwd: root,
     stdio: "inherit",

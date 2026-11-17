@@ -372,6 +372,7 @@
   --theme-swatch-light: #022c1e;
   --theme-swatch-dark: #c8ff00;
   --theme-swatch-bloom: #8a5100;
+  --theme-swatch-bloom-dark: #693c00;
   --theme-swatch-cyberpunk: #00f0ff;
   --theme-swatch-volt: #c8ff00;
   --theme-swatch-softblack: #e9e9e6;
@@ -780,6 +781,13 @@
   body,
   #root {
     height: 100%;
+  }
+
+  /* A small window never scrolls itself; the lists inside it do. */
+  .popup-window,
+  .popup-window body,
+  .popup-window #root {
+    overflow: hidden;
   }
 
   body {

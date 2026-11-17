@@ -451,7 +451,11 @@ pub fn media_reparse(app: AppHandle, job: u64) -> Result<MediaJobView, String> {
 ///
 /// Media rows in the download list are not engine downloads, so they have no
 /// progress window of their own; their window is the quality panel.
-#[tauri::command]
+///
+/// Async on purpose: the window is built on the main thread, and a
+/// synchronous command runs on that same thread, where the build would run
+/// inline inside the IPC handler and never finish.
+#[tauri::command(async)]
 pub fn open_video_window(app: AppHandle, job: u64) -> Result<(), String> {
     if app.state::<AppState>().media_job(job).is_none() {
         return Err("unknown media job".to_string());

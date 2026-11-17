@@ -17,11 +17,19 @@ const DEBIAN_LIST: &str = "https://cdimage.debian.org/debian-cd/current/amd64/bt
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
-    let source = std::env::args().nth(1);
-    let seconds: u64 = std::env::args()
-        .nth(2)
-        .map(|text| text.parse().expect("a number of seconds"))
-        .unwrap_or(120);
+    let mut source: Option<String> = None;
+    let mut seconds = 120u64;
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        if arg == "--seconds" {
+            seconds = args
+                .next()
+                .and_then(|text| text.parse().ok())
+                .expect("a number of seconds");
+        } else if source.is_none() {
+            source = Some(arg);
+        }
+    }
 
     let bytes = match read_torrent(source.as_deref()).await {
         Ok(bytes) => bytes,

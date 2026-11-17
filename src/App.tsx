@@ -561,7 +561,8 @@ export default function App() {
         torrent.openBlank();
         break;
       case "torrents":
-        void showTorrentWindow().catch(() => {});
+        // Any failure is a bug to see: the menu looks broken otherwise.
+        void showTorrentWindow().catch((failure) => console.error(failure));
         break;
       case "options":
         setSettingsOpen(true);

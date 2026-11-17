@@ -34,8 +34,10 @@ const grabber = (window as Window & { __BDM_GRABBER__?: boolean })
   .__BDM_GRABBER__;
 const video = (window as Window & { __BDM_VIDEO__?: { job: number } })
   .__BDM_VIDEO__;
-const torrent = (window as Window & { __BDM_TORRENT__?: { id: string } })
-  .__BDM_TORRENT__;
+const torrentParam = new URLSearchParams(window.location.search).get("window") === "torrent";
+const torrent =
+  (window as Window & { __BDM_TORRENT__?: { id: string } }).__BDM_TORRENT__ ??
+  (torrentParam ? { id: "" } : undefined);
 
 // The small windows round their own corners. The page behind them has to
 // be the same surface, or the curve shows a sliver of the app canvas outside
@@ -45,6 +47,8 @@ if (progress || completed || grabber || video || torrent) {
     "--background",
     "var(--chrome-popup)",
   );
+  // Each small window paints inside itself; only the lists inside it scroll.
+  document.documentElement.classList.add("popup-window");
 }
 
 createRoot(document.getElementById("root")!).render(

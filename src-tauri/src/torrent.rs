@@ -572,7 +572,12 @@ fn show_now(app: &AppHandle, id: Option<&str>) {
 
 /// Open the torrent window, or bring the one that is there forward. There is
 /// one window for every job, so this never opens a second one.
-#[tauri::command]
+///
+/// Async on purpose: the window is built on the main thread, the one the
+/// window toolkit runs on, and a synchronous command runs on that same
+/// thread — there `run_on_main_thread` runs the build inline, inside the
+/// webview's IPC handler, and WebView2 never finishes creating the window.
+#[tauri::command(async)]
 pub fn show_torrent_window(app: AppHandle) {
     show(&app, None);
 }
