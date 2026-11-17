@@ -5,9 +5,12 @@ import { Progress } from "@/components/ui/progress";
 import { ProgressWindowTitle } from "@/components/windows/progress/progress-window-title";
 import { formatEta, formatSize, formatSpeed } from "@/lib/downloads";
 import { describeError } from "@/lib/errors";
+import { openPath } from "@/lib/ipc";
 import {
   mediaCancel,
+  mediaForget,
   mediaJob,
+  mediaRedownload,
   mediaResume,
   type MediaJobView,
 } from "@/lib/media";
@@ -91,15 +94,19 @@ export function MediaProgressWindow({ job }: { job: number }) {
     };
   }, [job]);
 
-  async function act(action: "cancel" | "resume") {
+  async function act(action: "pause" | "resume" | "again" | "cancel") {
     setBusy(true);
     setProblem(null);
     try {
-      if (action === "cancel") {
+      if (action === "pause") {
         await mediaCancel(job);
-        await closeWindow();
-      } else {
+      } else if (action === "resume") {
         setView(await mediaResume(job));
+      } else if (action === "again") {
+        setView(await mediaRedownload(job));
+      } else {
+        await mediaForget(job, false);
+        await closeWindow();
       }
     } catch (failure) {
       setProblem(describeError(failure));
@@ -175,9 +182,31 @@ export function MediaProgressWindow({ job }: { job: number }) {
           <DialogAction tone="quiet" disabled={busy} onClick={() => void act("cancel")}>
             Cancel
           </DialogAction>
+          {view?.done && view.dest ? (
+            <DialogAction
+              tone="quiet"
+              onClick={() => {
+                void openPath(view.dest as string).catch((failure: unknown) =>
+                  setProblem(describeError(failure)),
+                );
+              }}
+            >
+              Open file
+            </DialogAction>
+          ) : null}
+          {view?.downloading ? (
+            <DialogAction tone="quiet" disabled={busy} onClick={() => void act("pause")}>
+              Pause
+            </DialogAction>
+          ) : null}
           {view?.canResume && !view.downloading ? (
             <DialogAction tone="primary" disabled={busy} onClick={() => void act("resume")}>
               Resume
+            </DialogAction>
+          ) : null}
+          {view?.done ? (
+            <DialogAction tone="primary" disabled={busy} onClick={() => void act("again")}>
+              Download again
             </DialogAction>
           ) : null}
           <DialogAction tone="quiet" onClick={() => void closeWindow()}>

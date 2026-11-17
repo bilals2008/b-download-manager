@@ -75,9 +75,6 @@ pub fn start(
     if job.downloading {
         return Err("this video is already being downloaded".to_string());
     }
-    if job.done {
-        return Err("this video has already been downloaded".to_string());
-    }
     let Some(manifest) = job.manifest.as_ref() else {
         return Err("the manifest has not been read yet".to_string());
     };

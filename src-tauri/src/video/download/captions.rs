@@ -69,7 +69,70 @@ pub(super) async fn prepare(
         job.header_origin(),
     )
     .await?;
-    finish(&fetched.text, rendition.container.as_str(), work_dir).map(Some)
+    let mut text = fetched.text;
+    // The site can answer a caption address with nothing at all (YouTube
+    // guards the timed-text endpoint). The video helper fetches the same
+    // track the way the page's own player does, so it is asked before the
+    // captions are given up on.
+    if text.trim().is_empty() {
+        text = helper_caption(app, job, rendition).await.unwrap_or_default();
+    }
+    if text.trim().is_empty() {
+        return Err(
+            "the caption track came back empty; install the video helper to save captions from this site"
+                .to_string(),
+        );
+    }
+    finish(&text, "vtt", work_dir).map(Some)
+}
+
+/// Ask the video helper for one caption track. `None` when it is not there,
+/// or it did not produce a file.
+async fn helper_caption(
+    app: &tauri::AppHandle,
+    job: &MediaJob,
+    rendition: &idm_core::media::subtitles::SubtitleRendition,
+) -> Option<String> {
+    let helper = crate::video::tools::ytdlp(app)?;
+    let folder = std::env::temp_dir().join(format!("bdm-caption-{}", job.id));
+    std::fs::create_dir_all(&folder).ok()?;
+    let language = rendition
+        .language
+        .clone()
+        .or_else(|| rendition.id.rsplit('.').next().map(str::to_string))
+        .unwrap_or_default();
+    let template = folder.join("caption.%(ext)s");
+    let mut command = tokio::process::Command::new(helper);
+    command.args([
+        "--skip-download",
+        "--no-playlist",
+        "--write-subs",
+        "--write-auto-subs",
+        "--sub-format",
+        "vtt",
+    ]);
+    if !language.trim().is_empty() {
+        command.args(["--sub-langs", language.trim()]);
+    }
+    command
+        .arg("--output")
+        .arg(&template)
+        .arg(&job.page_url);
+    #[cfg(windows)]
+    command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    let done = tokio::time::timeout(std::time::Duration::from_secs(120), command.output())
+        .await
+        .ok()?
+        .ok()?;
+    let _ = done;
+    let found = std::fs::read_dir(&folder)
+        .ok()?
+        .flatten()
+        .map(|entry| entry.path())
+        .find(|path| path.extension().is_some_and(|extension| extension == "vtt"));
+    let text = found.and_then(|path| std::fs::read_to_string(path).ok());
+    let _ = std::fs::remove_dir_all(&folder);
+    text
 }
 
 /// Write the caption text as the file the muxer reads.

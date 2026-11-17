@@ -295,6 +295,11 @@ export function mediaResume(job: number): Promise<MediaJobView> {
   return invoke<MediaJobView>("media_resume", { job });
 }
 
+/** Take a finished video again; the new file gets its own name beside the old. */
+export function mediaRedownload(job: number): Promise<MediaJobView> {
+  return invoke<MediaJobView>("media_redownload", { job });
+}
+
 /** Allow the browser's cookies for media requests, once, and read again. */
 export function mediaAllowCookies(job: number): Promise<MediaJobView> {
   return invoke<MediaJobView>("media_allow_cookies", { job });

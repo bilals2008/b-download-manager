@@ -398,7 +398,7 @@ pub fn show_media(app: &AppHandle, job: u64, focus: bool) {
     }
     let built = WebviewWindowBuilder::new(app, WINDOW, WebviewUrl::App("index.html".into()))
         .title(title)
-        .inner_size(WIDTH, DETAILS_HEIGHT)
+        .inner_size(WIDTH, COMPACT_HEIGHT)
         .resizable(false)
         .maximizable(false)
         .decorations(false)

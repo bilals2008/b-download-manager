@@ -346,6 +346,7 @@ pub fn run() {
             video::capture::media_allow_cookies,
             video::capture::media_cancel,
             video::capture::media_resume,
+            video::capture::media_redownload,
             video::capture::media_reparse,
             video::capture::open_video_window,
             video::capture::open_media_progress,

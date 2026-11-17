@@ -205,7 +205,8 @@ pub async fn download(app: &AppHandle, id: u64, body: &[u8]) -> (u16, Value) {
 
     let folder = match request.dest.trim() {
         "" => state
-            .browser_folder()
+            .category_folder("Video")
+            .or_else(|| state.browser_folder())
             .or_else(|| app.path().download_dir().ok())
             .unwrap_or_else(|| PathBuf::from(".")),
         value => {
@@ -279,7 +280,8 @@ pub fn media_download(
     }
     let folder = match request.dest.trim() {
         "" => state
-            .browser_folder()
+            .category_folder("Video")
+            .or_else(|| state.browser_folder())
             .or_else(|| app.path().download_dir().ok())
             .unwrap_or_else(|| PathBuf::from(".")),
         value => {
@@ -461,6 +463,34 @@ pub fn open_media_progress(app: AppHandle, job: u64) -> Result<(), String> {
     let handle = app.clone();
     app.run_on_main_thread(move || crate::progress::show_media(&handle, job, true))
         .map_err(|error| error.to_string())
+}
+
+/// Take a finished video again. The new file gets its own name beside the
+/// old one; the page is not read again, and the quality is the one that was
+/// chosen the first time.
+#[tauri::command]
+pub fn media_redownload(app: AppHandle, job: u64) -> Result<MediaJobView, String> {
+    let state = app.state::<AppState>();
+    let media = state
+        .media_job(job)
+        .ok_or_else(|| "unknown media job".to_string())?;
+    if media.downloading {
+        return Err("this video is already being downloaded".to_string());
+    }
+    let request = media
+        .request
+        .clone()
+        .ok_or_else(|| "this video has not been downloaded yet".to_string())?;
+    let folder = PathBuf::from(request.dest.trim());
+    if !folder.is_absolute() {
+        return Err("this download cannot be started again; choose a quality again".to_string());
+    }
+    let name = dest::sanitize(&media.title).unwrap_or_else(|| "video".to_string());
+    crate::video::download::start(&app, &media, &request, folder, name)?;
+    state
+        .media_job(job)
+        .map(|job| job.view())
+        .ok_or_else(|| "unknown media job".to_string())
 }
 
 /// Bring the quality panel of a media job back to the front.
