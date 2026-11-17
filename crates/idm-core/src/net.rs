@@ -199,17 +199,17 @@ fn bind_to_adapter(
         adapter::Route::Down { label } => Err(format!(
             "the network adapter {label} is not connected, so nothing is downloaded"
         )),
-        adapter::Route::Bound(binding) => {
+        adapter::Route::Bound(_binding) => {
             #[cfg(windows)]
             {
-                let Some(local) = binding
+                let Some(local) = _binding
                     .v4
                     .map(std::net::IpAddr::V4)
-                    .or(binding.v6.map(std::net::IpAddr::V6))
+                    .or(_binding.v6.map(std::net::IpAddr::V6))
                 else {
                     return Err(format!(
                         "the network adapter {} has no address to leave from",
-                        binding.label
+                        _binding.label
                     ));
                 };
                 Ok(builder.local_address(local))
