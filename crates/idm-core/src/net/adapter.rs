@@ -426,6 +426,7 @@ mod tests {
         assert!(matches!(route_for("{VPN}", &up), Route::Bound(_)));
     }
 
+    #[cfg(windows)]
     #[test]
     fn the_interface_option_takes_the_index_in_its_own_byte_order() {
         // Windows takes the IPv4 index in network byte order and the IPv6 one

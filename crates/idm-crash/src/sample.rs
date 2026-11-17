@@ -203,6 +203,7 @@ pub fn sample(_pid: u32, _dump: Option<&Path>) -> Option<ProcessSample> {
 mod tests {
     use super::*;
 
+    #[cfg(windows)]
     #[test]
     fn a_process_can_be_sampled_without_ending_it() {
         let sample = sample(std::process::id(), None);
