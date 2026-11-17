@@ -75,7 +75,9 @@ pub(super) async fn prepare(
     // track the way the page's own player does, so it is asked before the
     // captions are given up on.
     if text.trim().is_empty() {
-        text = helper_caption(app, job, rendition).await.unwrap_or_default();
+        text = helper_caption(app, job, rendition)
+            .await
+            .unwrap_or_default();
     }
     if text.trim().is_empty() {
         return Err(
@@ -114,10 +116,7 @@ async fn helper_caption(
     if !language.trim().is_empty() {
         command.args(["--sub-langs", language.trim()]);
     }
-    command
-        .arg("--output")
-        .arg(&template)
-        .arg(&job.page_url);
+    command.arg("--output").arg(&template).arg(&job.page_url);
     #[cfg(windows)]
     command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
     let done = tokio::time::timeout(std::time::Duration::from_secs(120), command.output())
