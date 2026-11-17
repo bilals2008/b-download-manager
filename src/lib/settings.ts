@@ -374,10 +374,6 @@ export async function syncEngineSettings(): Promise<Settings | null> {
     saved.showVideoWindowOnStart,
     settings.showVideoWindowOnStart,
   );
-  settings.torrentClosedHint = boolean(
-    saved.torrentClosedHint,
-    settings.torrentClosedHint,
-  );
   settings.extractAfterDone = boolean(
     saved.extractAfterDone,
     settings.extractAfterDone,
