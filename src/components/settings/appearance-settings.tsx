@@ -14,6 +14,7 @@ const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
   { value: "auto", label: "Auto" },
   { value: "light", label: "Light" },
   { value: "bloom", label: "Bloom" },
+  { value: "bloom-dark", label: "Bloom Dark" },
   { value: "dark", label: "Dark" },
   { value: "cyberpunk", label: "Cyberpunk" },
   { value: "volt", label: "Volt" },

@@ -470,6 +470,7 @@ export type ThemePreference =
   | "ayu"
   | "graphite"
   | "bloom"
+  | "bloom-dark"
   | "hive";
 
 /** The saved values, in one place so the loader and the picker agree. */
@@ -483,6 +484,7 @@ const THEME_PREFERENCES: readonly ThemePreference[] = [
   "ayu",
   "graphite",
   "bloom",
+  "bloom-dark",
   "hive",
 ];
 

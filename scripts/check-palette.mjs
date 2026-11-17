@@ -56,6 +56,7 @@ const APPEARANCES = [
   "dark",
   "light",
   "bloom",
+  "bloom-dark",
   "cyberpunk",
   "volt",
   "softblack",

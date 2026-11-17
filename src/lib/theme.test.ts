@@ -29,6 +29,7 @@ describe("resolveTheme", () => {
     expect(resolveTheme("ayu")).toBe("ayu");
     expect(resolveTheme("graphite")).toBe("graphite");
     expect(resolveTheme("bloom")).toBe("bloom");
+    expect(resolveTheme("bloom-dark")).toBe("bloom-dark");
     expect(resolveTheme("hive")).toBe("hive");
   });
 
@@ -54,6 +55,7 @@ describe("isLightTheme", () => {
     expect(isLightTheme("softblack")).toBe(false);
     expect(isLightTheme("ayu")).toBe(false);
     expect(isLightTheme("graphite")).toBe(false);
+    expect(isLightTheme("bloom-dark")).toBe(false);
     expect(isLightTheme("hive")).toBe(false);
   });
 });

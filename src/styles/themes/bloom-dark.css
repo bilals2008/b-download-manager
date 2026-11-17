@@ -1,0 +1,79 @@
+/*
+  Bloom Dark. The night side of the honey seed: the whole canvas is tonal
+  warm brown, not a neutral grey with an accent on top, the way Material You
+  draws a dark surface from a wallpaper seed. Ink lines are pale, buttons are
+  honey, and finished work stays green as everywhere else.
+*/
+:root[data-theme="bloom-dark"] {
+  color-scheme: dark;
+
+  --background: #17130e;
+  --foreground: #ebe1d9;
+  --card: #120e0a;
+  --card-foreground: #ebe1d9;
+  --popover: #241f1a;
+  --popover-foreground: #ebe1d9;
+
+  --primary: #ffb95f;
+  --primary-foreground: #4a2800;
+  --progress: #ffb95f;
+
+  --progress-track: rgb(255 185 95 / 0.12);
+  --progress-active-from: #34d399;
+  --progress-active-via: #22d3ee;
+  --progress-active-to: #60a5fa;
+  --progress-complete-from: #34d399;
+  --progress-complete-to: #22c55e;
+  --progress-paused-from: #7f9fe0;
+  --progress-paused-to: #6a86c4;
+  --progress-failed-from: #f87171;
+  --progress-failed-to: #ef4444;
+
+  --secondary: #574330;
+  --secondary-foreground: #f3e0cb;
+
+  --muted: #241f1a;
+  --muted-foreground: #d5c3b5;
+
+  --accent: #693c00;
+  --accent-foreground: #ffddb8;
+
+  --success: #2fd06b;
+  --success-foreground: #04130a;
+
+  --destructive: #ffb4ab;
+  --destructive-foreground: #601410;
+
+  --border: #51453a;
+  --input: #9e8e81;
+  --ring: #ffb95f;
+
+  --float-shadow:
+    0 18px 40px -18px rgb(0 0 0 / 0.8), 0 4px 12px -6px rgb(0 0 0 / 0.55);
+
+  --chrome-title: #120e0a;
+  --chrome-title-text: #ebe1d9;
+  --chrome-menu: #17130e;
+  --chrome-menu-text: #ebe1d9;
+  --chrome-menu-hover: #241f1a;
+  --chrome-menu-active: #2e2924;
+  --chrome-toolbar: #17130e;
+  --chrome-toolbar-text: #ebe1d9;
+  --chrome-toolbar-hover: #241f1a;
+  --chrome-toolbar-active: #2e2924;
+  --chrome-popup: #241f1a;
+  --chrome-popup-hover: #2e2924;
+  --chrome-row-alt: #1c1712;
+  --chrome-muted: #d5c3b5;
+  --chrome-canvas: #17130e;
+  --chrome-panel: #120e0a;
+  --chrome-line: #51453a;
+  --chrome-focus: #ffb95f;
+  --chrome-danger: #ffb4ab;
+  --chrome-danger-text: #601410;
+  --chrome-error: #ffb4ab;
+
+  --file-paper: #f3e5d7;
+  --file-paper-edge: #85766a;
+  --file-mark: #ffffff;
+}
