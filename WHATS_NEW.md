@@ -8,6 +8,16 @@
   section for its own version, and the release page uses the same words.
 -->
 
+## 2.0.1 — 19 November 2026
+
+### Downloads
+
+- Files go to the folder for their type inside your save folder — Videos, Music, Programs, Documents, Compressed and so on — whether they came from the browser or were added by hand.
+- The save folder you pick in Options is now used by every window, including Add URL.
+- Video downloads stay in the list after a restart, and a stopped video continues from where it stopped.
+- The progress window shows every download correctly, even when a video used it just before.
+- Open file now works for every file, including names with # or emoji.
+
 ## 2.0.0 — 17 November 2026
 
 ### Torrents
