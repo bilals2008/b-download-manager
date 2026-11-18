@@ -230,6 +230,7 @@ pub(super) async fn run(
                         job.error = None;
                         job.stage = Some("Stopped".to_string());
                     });
+                    state.save_media_index();
                 }
                 Ok(Err(DeliverError::Failed(message))) => {
                     // The tracks were downloaded once and could not be made
@@ -251,6 +252,7 @@ pub(super) async fn run(
                 job.error = None;
                 job.stage = Some("Stopped".to_string());
             });
+            state.save_media_index();
         }
         Err(Outcome::Failed(error)) => finish_failed(&state, job.id, error.to_string()),
     }

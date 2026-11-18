@@ -117,6 +117,12 @@ pub struct CategoryRule {
     /// does not have to know its name.
     #[serde(default)]
     pub fallback: bool,
+    /// Whether the category saves to the default save folder itself rather
+    /// than a folder of its own name inside it. The window marks the general
+    /// buckets this way; every other category without a folder of its own
+    /// saves under `<default folder>/<name>`, the way the add dialog does.
+    #[serde(default)]
+    pub root: bool,
 }
 
 pub struct AppState {
@@ -136,6 +142,10 @@ pub struct AppState {
     media_gate: Mutex<()>,
     limits: Limits,
     index: Mutex<Option<Index>>,
+    /// Where the media downloads of an earlier run are remembered. The video
+    /// path is a coordinator on top of the engine, so its history needs a
+    /// file of its own beside the engine's index.
+    media_index: Mutex<Option<crate::video::persist::MediaIndex>>,
     /// Where a download handed over by the browser is saved. `None` means the
     /// system Downloads folder.
     browser_folder: Mutex<Option<PathBuf>>,
@@ -212,6 +222,7 @@ impl Default for AppState {
             media_gate: Mutex::new(()),
             limits: Limits::default(),
             index: Mutex::new(None),
+            media_index: Mutex::new(None),
             browser_folder: Mutex::new(None),
             browser_policy: Mutex::new(BrowserPolicy::default()),
             video_button_settings: Mutex::new(VideoButtonSettings::default()),

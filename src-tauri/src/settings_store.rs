@@ -396,6 +396,7 @@ mod tests {
                 folder: films,
                 builtin: true,
                 fallback: false,
+                root: false,
             }],
             speed_limit_enabled: true,
             speed_limit_bytes: 2048,

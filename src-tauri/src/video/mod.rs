@@ -13,6 +13,7 @@ pub(crate) mod ffmpeg;
 pub(crate) mod lease;
 pub(crate) mod mp4;
 pub(crate) mod mux;
+pub(crate) mod persist;
 pub(crate) mod policy;
 pub(crate) mod probe;
 pub(crate) mod tools;
@@ -28,7 +29,7 @@ use idm_core::media::download::TrackControl;
 use idm_core::media::{hls, Format, Manifest, Pair};
 
 /// Where a media job is in its life.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum MediaState {
     Parsing,
@@ -37,7 +38,7 @@ pub enum MediaState {
 }
 
 /// What the extension said the address is.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum MediaKindHint {
     #[default]
@@ -50,7 +51,8 @@ pub enum MediaKindHint {
 }
 
 /// The parsed form a job keeps for the download that follows.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum SourcePlan {
     Hls {
         /// `None` when the address was already a media playlist.
@@ -75,7 +77,7 @@ pub enum SourcePlan {
 /// The address, the client identity it was signed for, its expiry and the
 /// representation it carries all live in [`lease::RequestLease`], because a
 /// bare URL cannot answer any of the questions a retry has to ask.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct FileTrack {
     pub format: Format,
     pub lease: lease::RequestLease,

@@ -182,6 +182,7 @@ pub fn shutdown(app: &AppHandle) {
 
     state.save_manifests();
     state.save_index();
+    state.save_media_index();
     state.save_preferences();
     bridge::stop(&state);
     tray::remove(app);
@@ -208,6 +209,7 @@ pub fn save_on_exit(app: &AppHandle) {
     }
     state.save_manifests();
     state.save_index();
+    state.save_media_index();
     state.save_preferences();
 }
 

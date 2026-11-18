@@ -14,6 +14,7 @@
 //! encryption, and a protection system is named when the manifest names one.
 
 use reqwest::Url;
+use serde::{Deserialize, Serialize};
 
 use super::xml::{self, Element};
 use super::{
@@ -35,7 +36,7 @@ pub struct DashManifest {
 }
 
 /// One representation, with the addresses behind it.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DashTrack {
     pub format: Format,
     pub init: Option<TrackSegment>,

@@ -277,6 +277,7 @@ fn a_category_folder_decides_where_a_start_lands() {
             folder: String::new(),
             builtin: true,
             fallback: false,
+            root: false,
         },
         crate::state::CategoryRule {
             name: "Films".to_string(),
@@ -284,6 +285,7 @@ fn a_category_folder_decides_where_a_start_lands() {
             folder: films.to_string_lossy().to_string(),
             builtin: false,
             fallback: false,
+            root: false,
         },
         crate::state::CategoryRule {
             name: "Relative".to_string(),
@@ -291,6 +293,7 @@ fn a_category_folder_decides_where_a_start_lands() {
             folder: "parts\\nowhere".to_string(),
             builtin: false,
             fallback: false,
+            root: false,
         },
     ]);
 
@@ -309,12 +312,36 @@ fn a_category_folder_decides_where_a_start_lands() {
     );
     assert_eq!(dest, dir.join("elsewhere").join("film.mp4"));
 
-    // A category with no folder, or only a relative one, changes nothing.
+    // A category with no folder of its own saves in a folder of its name
+    // inside the folder the start came with, the way the add dialog does.
     let (dest, category) = category_destination(&state, dir.join("clip.mkv"), None, true);
     assert_eq!(category.as_deref(), Some("Video"));
-    assert_eq!(dest, dir.join("clip.mkv"));
+    assert_eq!(dest, dir.join("Video").join("clip.mkv"));
+    // A relative folder is not a folder; the category derives its own.
     let (dest, _) = category_destination(&state, dir.join("pack.zip"), None, true);
-    assert_eq!(dest, dir.join("pack.zip"), "a relative folder is not used");
+    assert_eq!(
+        dest,
+        dir.join("Relative").join("pack.zip"),
+        "a relative folder is not used"
+    );
+
+    // A general bucket keeps the folder the start came with.
+    state.set_categories(vec![crate::state::CategoryRule {
+        name: "General".to_string(),
+        extensions: Vec::new(),
+        folder: String::new(),
+        builtin: true,
+        fallback: false,
+        root: true,
+    }]);
+    let (dest, category) = category_destination(
+        &state,
+        dir.join("note.bin"),
+        Some("General".to_string()),
+        true,
+    );
+    assert_eq!(category.as_deref(), Some("General"));
+    assert_eq!(dest, dir.join("note.bin"));
 
     let _ = std::fs::remove_dir_all(&dir);
 }

@@ -344,11 +344,13 @@ pub fn start(
 /// The destination a category gives a start, and the category it belongs to.
 ///
 /// Only a start that did not name a folder of its own is moved: the add dialog
-/// clears the flag when the user picked one. A category without a folder
-/// leaves the destination alone. When no category was supplied, the file name
-/// decides, so a hand-over from the browser lands with the rest of its type.
-/// The bridge asks this the same question before it answers the extension, so
-/// a conflict is found on the file the start would really write.
+/// clears the flag when the user picked one. A category without a folder of
+/// its own saves in a folder of its name inside the folder the start came
+/// with, which for a hand-over is the default save folder. When no category
+/// was supplied, the file name decides, so a hand-over from the browser lands
+/// with the rest of its type. The bridge asks this the same question before it
+/// answers the extension, so a conflict is found on the file the start would
+/// really write.
 pub(crate) fn category_destination(
     state: &AppState,
     dest: PathBuf,
@@ -361,7 +363,7 @@ pub(crate) fn category_destination(
     let category = category.or_else(|| state.detect_category(&dest));
     let Some(folder) = category
         .as_deref()
-        .and_then(|name| state.category_folder(name))
+        .and_then(|name| state.category_folder_in(name, dest.parent()))
     else {
         return (dest, category);
     };

@@ -108,13 +108,20 @@ impl Index {
         Self { path }
     }
 
-    /// Read the index. A missing or broken file is an empty index: the
-    /// application must still start.
+    /// Read the index. A missing or broken file is an empty index, and one
+    /// entry this build cannot read is skipped rather than taking the whole
+    /// history down with it: the application must still start.
     pub fn load(&self) -> Vec<KnownDownload> {
         let Ok(text) = std::fs::read_to_string(&self.path) else {
             return Vec::new();
         };
-        serde_json::from_str::<Vec<KnownDownload>>(&text).unwrap_or_default()
+        let Ok(values) = serde_json::from_str::<Vec<serde_json::Value>>(&text) else {
+            return Vec::new();
+        };
+        values
+            .into_iter()
+            .filter_map(|value| serde_json::from_value(value).ok())
+            .collect()
     }
 
     /// Write the index. The write goes to a temporary file that is renamed
@@ -198,6 +205,23 @@ mod tests {
         std::fs::write(&path, "{ not json").expect("write");
         let index = Index::new(path);
         assert!(index.load().is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn one_broken_entry_does_not_take_the_history_down() {
+        let dir = temp_dir("broken-entry");
+        let path = dir.join("downloads.json");
+        let entry = known(&dir.join("a.bin"));
+        let mut values = serde_json::to_value(vec![entry]).expect("json");
+        values
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({ "id": "not a number" }));
+        std::fs::write(&path, serde_json::to_string(&values).unwrap()).expect("write");
+        let loaded = Index::new(path).load();
+        assert_eq!(loaded.len(), 1, "the readable entry survives");
+        assert_eq!(loaded[0].id, 1);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

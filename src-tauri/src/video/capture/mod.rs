@@ -44,7 +44,7 @@ pub struct MediaRequest {
 }
 
 /// What the panel posts when a quality is chosen.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DownloadRequest {
     pub video: String,
@@ -66,6 +66,14 @@ pub struct DownloadRequest {
     /// or a conversion. Empty means an ordinary download.
     #[serde(default)]
     pub audio_format: Option<String>,
+}
+
+/// The folder the reader picked, when they picked one. An empty choice is
+/// left to the start, which routes the file by its category once the
+/// finished name is known.
+fn picked_folder(dest: &str) -> Option<PathBuf> {
+    let trimmed = dest.trim();
+    (!trimmed.is_empty()).then(|| PathBuf::from(trimmed))
 }
 
 /// `POST /v1/media`
@@ -203,20 +211,10 @@ pub async fn download(app: &AppHandle, id: u64, body: &[u8]) -> (u16, Value) {
         );
     }
 
-    let folder = match request.dest.trim() {
-        "" => state
-            .category_folder("Video")
-            .or_else(|| state.browser_folder())
-            .or_else(|| app.path().download_dir().ok())
-            .unwrap_or_else(|| PathBuf::from(".")),
-        value => {
-            let folder = PathBuf::from(value);
-            if !folder.is_absolute() || !folder.is_dir() {
-                return (400, error_body("bad_request", "the folder is not usable"));
-            }
-            folder
-        }
-    };
+    // An empty folder leaves the choice to the start, which routes the file
+    // by its category once the finished name is known. A folder the reader
+    // picked is checked there too.
+    let folder = picked_folder(&request.dest);
 
     let name = dest::sanitize(&request.name)
         .filter(|name| !name.contains("open the failure details"))
@@ -252,6 +250,7 @@ pub fn cancel(app: &AppHandle, id: u64) -> (u16, Value) {
         job.stage = Some("Stopped".to_string());
         job.downloading = false;
     });
+    state.save_media_index();
     (200, ok(json!({ "job": id, "state": "stopped" })))
 }
 
@@ -278,20 +277,7 @@ pub fn media_download(
     if media.state != MediaState::Ready {
         return Err("the manifest has not been read yet".to_string());
     }
-    let folder = match request.dest.trim() {
-        "" => state
-            .category_folder("Video")
-            .or_else(|| state.browser_folder())
-            .or_else(|| app.path().download_dir().ok())
-            .unwrap_or_else(|| PathBuf::from(".")),
-        value => {
-            let folder = PathBuf::from(value);
-            if !folder.is_absolute() || !folder.is_dir() {
-                return Err("the folder is not usable".to_string());
-            }
-            folder
-        }
-    };
+    let folder = picked_folder(&request.dest);
     let name = dest::sanitize(&request.name)
         .filter(|name| !name.contains("open the failure details"))
         .or_else(|| dest::sanitize(&media.title))
@@ -357,6 +343,7 @@ pub fn media_forget(app: AppHandle, job: u64, delete_file: bool) -> Result<(), S
     // A removed row's folder is gone, and so is any older one no live job
     // claims: the media tree and the list agree again.
     state.sweep_media_folders();
+    state.save_media_index();
     Ok(())
 }
 
@@ -380,6 +367,7 @@ pub fn media_allow_cookies(app: AppHandle, job: u64) -> Result<MediaJobView, Str
         job.done = false;
         job.progress = Default::default();
     });
+    state.save_media_index();
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
         parse_job(handle, job).await;
@@ -406,6 +394,7 @@ pub fn media_cancel(app: AppHandle, job: u64) -> Result<(), String> {
         job.stage = Some("Stopped".to_string());
         job.downloading = false;
     });
+    state.save_media_index();
     Ok(())
 }
 
@@ -439,6 +428,7 @@ pub fn media_reparse(app: AppHandle, job: u64) -> Result<MediaJobView, String> {
         job.progress = Default::default();
         job.fraction = 0.0;
     });
+    state.save_media_index();
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
         parse_job(handle, job).await;
@@ -481,10 +471,9 @@ pub fn media_redownload(app: AppHandle, job: u64) -> Result<MediaJobView, String
         .request
         .clone()
         .ok_or_else(|| "this video has not been downloaded yet".to_string())?;
-    let folder = PathBuf::from(request.dest.trim());
-    if !folder.is_absolute() {
-        return Err("this download cannot be started again; choose a quality again".to_string());
-    }
+    // The folder of the first run is kept when it was a real one; an empty
+    // choice is routed by category again, like a fresh start.
+    let folder = picked_folder(&request.dest);
     let name = dest::sanitize(&media.title).unwrap_or_else(|| "video".to_string());
     crate::video::download::start(&app, &media, &request, folder, name)?;
     state

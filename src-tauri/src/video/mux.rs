@@ -17,7 +17,8 @@ use std::sync::Mutex;
 use idm_core::media::{Format, MediaKind};
 
 /// The container the joined file is written in.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Container {
     Mp4,
     /// Sound alone in an MP4 container, which is what an `.m4a` file is.

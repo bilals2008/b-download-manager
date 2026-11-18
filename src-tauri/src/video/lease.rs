@@ -24,9 +24,11 @@ use std::fmt;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use reqwest::Url;
+use serde::{Deserialize, Serialize};
 
 /// Who issued the address.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Authority {
     /// The page's own player fetched it, and the extension passed it on with
     /// the browser's headers.
@@ -49,7 +51,8 @@ impl Authority {
 /// A playlist's segments and a plain file are both one address serving one
 /// representation; only the media layer above knows which shape the list of
 /// addresses took, so the lease does not try to say.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Transport {
     /// One address serving the whole track, or one address per segment.
     Progressive,
@@ -69,7 +72,7 @@ impl Transport {
 /// different CDN host — while the representation stays the same, and a resume
 /// is only safe when the representation stayed the same too. `key` is what the
 /// engine's resume guard compares; it must never contain a signed value.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RepresentationFingerprint {
     /// The provider's name for this stream: an itag, a representation id.
     pub id: String,
@@ -108,7 +111,7 @@ impl RepresentationFingerprint {
 }
 
 /// Which headers of the page may travel with a lease, and to which origin.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Credentials {
     /// The only origin a page header or cookie may be sent to.
     pub origin: String,
@@ -132,7 +135,7 @@ impl Credentials {
 }
 
 /// One address, with everything needed to use it honestly and to replace it.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RequestLease {
     pub url: String,
     /// The origin of `url`, kept not as a restatement of the URL but as the

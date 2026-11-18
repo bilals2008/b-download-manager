@@ -15,6 +15,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import {
   loadCategories,
   OTHER_CATEGORY,
+  savesToRootFolder,
   type CategoryDefinition,
 } from "@/lib/categories";
 
@@ -621,6 +622,8 @@ export interface CategoryFolderRule {
   builtin: boolean;
   /** Whether a type nobody claims lands here, as it does in the add dialog. */
   fallback: boolean;
+  /** Whether the category saves to the default folder itself, not a subfolder. */
+  root: boolean;
 }
 
 /**
@@ -654,6 +657,7 @@ export async function pushCategoryRules(
       folder: category.folder.trim(),
       builtin: category.builtin,
       fallback: category.name === OTHER_CATEGORY,
+      root: savesToRootFolder(category.name),
     })),
   );
 }

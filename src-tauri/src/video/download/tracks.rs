@@ -467,6 +467,7 @@ pub(super) fn finish_saved(state: &AppState, id: u64, dest: PathBuf) {
         job.dest = Some(dest.to_string_lossy().to_string());
         job.fraction = 1.0;
     });
+    state.save_media_index();
 }
 
 pub(super) fn finish_failed(state: &AppState, id: u64, error: String) {
@@ -475,6 +476,7 @@ pub(super) fn finish_failed(state: &AppState, id: u64, error: String) {
         job.error = Some(error);
         job.stage = Some("Failed".to_string());
     });
+    state.save_media_index();
 }
 
 /// The headers a track request carries: the page's, scoped to the origin

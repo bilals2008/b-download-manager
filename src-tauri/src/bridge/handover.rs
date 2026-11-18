@@ -66,7 +66,9 @@ pub(super) async fn add_download(app: &AppHandle, body: &[u8]) -> (u16, Value) {
 
             // The destination is looked at before anything is started: a file
             // that is already there is a question for the window, not a name
-            // to talk around with a silent rename.
+            // to talk around with a silent rename. The plan resolves the
+            // category folder for the question only; the start is given the
+            // unresolved name and applies the category once itself.
             let target = match plan_direct(&state, &folder, &name) {
                 DirectPlan::Taken { dest } => {
                     ask_window(
@@ -78,7 +80,7 @@ pub(super) async fn add_download(app: &AppHandle, body: &[u8]) -> (u16, Value) {
                     );
                     return (200, ok(json!({ "mode": "ask" })));
                 }
-                DirectPlan::Free { dest } => dest,
+                DirectPlan::Free => folder.join(&name),
             };
             let referer = if referer.is_empty() {
                 None
@@ -144,7 +146,7 @@ pub(super) fn ask_window(app: &AppHandle, url: &str, name: &str, referer: &str, 
 /// What a direct hand-over may do with its destination.
 pub(super) enum DirectPlan {
     /// Nothing is in the way: the engine can start at once.
-    Free { dest: PathBuf },
+    Free,
     /// A file is already there, or another row is writing that name: the
     /// window has to ask before anything starts.
     Taken { dest: PathBuf },
@@ -160,12 +162,12 @@ pub(super) enum DirectPlan {
 pub(super) fn plan_direct(state: &AppState, folder: &Path, name: &str) -> DirectPlan {
     let (target, _) = crate::actions::category_destination(state, folder.join(name), None, true);
     let Ok(status) = crate::conflict::inspect(state, &target) else {
-        return DirectPlan::Free { dest: target };
+        return DirectPlan::Free;
     };
     if status.file_exists || status.active {
         DirectPlan::Taken { dest: target }
     } else {
-        DirectPlan::Free { dest: target }
+        DirectPlan::Free
     }
 }
 

@@ -6,7 +6,12 @@ import {
   type SetStateAction,
 } from "react";
 
-import { splitPath, type Download } from "@/lib/downloads";
+import {
+  categoryOfFile,
+  splitPath,
+  type CategoryDefinition,
+  type Download,
+} from "@/lib/downloads";
 import { isDesktop } from "@/lib/errors";
 import { listMediaJobs, type MediaJobView } from "@/lib/media";
 import { etaSeconds } from "@/lib/speed";
@@ -32,6 +37,7 @@ export function useMediaRows(
   setState: SetWorkspace,
   sampleFor: SampleFor,
   dismissed: { current: Set<string> },
+  categories: { current: readonly CategoryDefinition[] },
 ) {
   /** When each media row first appeared, so it does not jump in the order. */
   const added = useRef(new Map<number, number>());
@@ -65,7 +71,9 @@ export function useMediaRows(
         mediaJob: job.job,
         fileName,
         url: job.pageUrl || job.title,
-        category: "Video",
+        // The finished name decides, so a sound saved as MP3 is Music, not
+        // Video, and a custom rule claiming the type is respected.
+        category: categoryOfFile(fileName, categories.current),
         size: job.total,
         downloaded: job.downloaded,
         status,
@@ -87,7 +95,7 @@ export function useMediaRows(
         mediaCanResume: job.canResume,
       };
     },
-    [sampleFor],
+    [sampleFor, categories],
   );
 
   // Media jobs are a coordinator on top of the engine, so they are read as
@@ -131,25 +139,40 @@ export function useMediaRows(
               `${job.job}:${job.state}:${job.downloaded}:${job.fraction}:${job.error ?? ""}:${job.stage ?? ""}`,
           )
           .join("|");
+        const merge = (current: WorkspaceState): WorkspaceState => {
+          const previous = new Map(
+            current.downloads.map((item) => [item.id, item]),
+          );
+          const rows = shown.map((job) =>
+            toMediaDownload(job, previous.get(MEDIA_ROW_BASE + job.job)),
+          );
+          // A media row that is gone is gone; the engine rows are untouched.
+          const normal = current.downloads.filter((item) => !item.mediaJob);
+          const downloads = [...normal, ...rows];
+          return {
+            ...current,
+            downloads,
+            selected: current.selected.filter((id) =>
+              downloads.some((item) => item.id === id),
+            ),
+          };
+        };
         if (next !== signature.current) {
           signature.current = next;
+          setState(merge);
+        } else {
+          // The engine list reloads beside this poll and replaces the rows
+          // it holds. When that lands after this poll, the media rows are
+          // missing even though nothing about the jobs changed: put them
+          // back instead of waiting for a job to move.
           setState((current) => {
-            const previous = new Map(
-              current.downloads.map((item) => [item.id, item]),
+            const missing = shown.some(
+              (job) =>
+                !current.downloads.some(
+                  (item) => item.id === MEDIA_ROW_BASE + job.job,
+                ),
             );
-            const rows = shown.map((job) =>
-              toMediaDownload(job, previous.get(MEDIA_ROW_BASE + job.job)),
-            );
-            // A media row that is gone is gone; the engine rows are untouched.
-            const normal = current.downloads.filter((item) => !item.mediaJob);
-            const downloads = [...normal, ...rows];
-            return {
-              ...current,
-              downloads,
-              selected: current.selected.filter((id) =>
-                downloads.some((item) => item.id === id),
-              ),
-            };
+            return missing ? merge(current) : current;
           });
         }
       } catch {

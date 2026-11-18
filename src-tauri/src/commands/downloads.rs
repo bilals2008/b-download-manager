@@ -361,14 +361,20 @@ pub(crate) async fn probe_link(
     })
 }
 
-/// A sensible starting point for the destination path.
+/// The folder new downloads land in: the one the options window chose, or the
+/// system Downloads folder when it chose none.
+///
+/// The add dialog opens on it and hangs a category's folder under it, so a
+/// file added by hand lands where a browser hand-over would. Reading the
+/// system folder here instead ignored the reader's choice.
 #[tauri::command]
 pub(crate) fn default_destination(app: AppHandle) -> String {
     use tauri::Manager;
 
-    let downloads = app
-        .path()
-        .download_dir()
-        .unwrap_or_else(|_| std::path::PathBuf::from("."));
-    downloads.join("download.bin").to_string_lossy().to_string()
+    let folder = app
+        .state::<AppState>()
+        .browser_folder()
+        .or_else(|| app.path().download_dir().ok())
+        .unwrap_or_else(|| std::path::PathBuf::from("."));
+    folder.join("download.bin").to_string_lossy().to_string()
 }

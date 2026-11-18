@@ -22,6 +22,7 @@
 //! file whose timeline claims bytes it does not have.
 
 use reqwest::Url;
+use serde::{Deserialize, Serialize};
 
 use super::subtitles::{self, SubtitleRendition};
 use super::{drm, MediaError, MAX_DURATION, MAX_SEGMENTS};
@@ -31,7 +32,7 @@ use super::{drm, MediaError, MAX_DURATION, MAX_SEGMENTS};
 const MAX_VARIANTS: usize = 64;
 
 /// One variant of a master playlist.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Variant {
     /// The id the panel shows and the download asks for back.
     pub id: String,
@@ -50,7 +51,7 @@ pub struct Variant {
 }
 
 /// One audio rendition of a master playlist.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AudioRendition {
     pub id: String,
     pub uri: String,
@@ -63,7 +64,7 @@ pub struct AudioRendition {
 }
 
 /// A master playlist.
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct Master {
     pub variants: Vec<Variant>,
     pub audio: Vec<AudioRendition>,
@@ -90,7 +91,7 @@ impl Master {
 }
 
 /// One segment of a media playlist.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HlsSegment {
     /// The absolute address, with the byte range when the manifest named one.
     pub url: String,
@@ -100,7 +101,7 @@ pub struct HlsSegment {
 }
 
 /// A media playlist.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MediaPlaylist {
     pub segments: Vec<HlsSegment>,
     pub init: Option<HlsSegment>,

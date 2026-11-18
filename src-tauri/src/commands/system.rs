@@ -257,21 +257,49 @@ pub(crate) fn open_url(url: String) -> Result<(), String> {
 /// Hand the path to the shell of the system.
 #[cfg(target_os = "windows")]
 pub(crate) fn open_in_os(target: &std::path::Path) -> Result<(), String> {
-    let mut command = if target.is_dir() {
-        let mut command = std::process::Command::new("explorer");
-        command.arg(target);
-        command
-    } else {
-        // `explorer` would open the folder of a file, so a file goes through
-        // the shell handler that opens it with its own program.
-        let mut command = std::process::Command::new("rundll32");
-        command.arg("url.dll,FileProtocolHandler").arg(target);
-        command
+    if target.is_dir() {
+        return std::process::Command::new("explorer")
+            .arg(target)
+            .spawn()
+            .map(|_| ())
+            .map_err(|error| format!("the system could not open it: {error}"));
+    }
+    // `rundll32 url.dll,FileProtocolHandler` reads its argument as a URL, so a
+    // file named `film #1.mp4` would be cut at the `#` and never open.
+    // ShellExecuteW takes the path itself and leaves the name to the shell,
+    // which is what the file's own program needs.
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::UI::Shell::ShellExecuteW;
+    use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+
+    let wide = |value: &std::ffi::OsStr| -> Vec<u16> {
+        let mut wide: Vec<u16> = value.encode_wide().collect();
+        wide.push(0);
+        wide
     };
-    command
-        .spawn()
-        .map(|_| ())
-        .map_err(|error| format!("the system could not open it: {error}"))
+    let operation = wide(std::ffi::OsStr::new("open"));
+    let file = wide(target.as_os_str());
+    // SAFETY: both strings are NUL terminated and outlive the call; the shell
+    // copies what it needs.
+    let result = unsafe {
+        ShellExecuteW(
+            std::ptr::null_mut(),
+            operation.as_ptr(),
+            file.as_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            SW_SHOWNORMAL,
+        )
+    };
+    // The answer is a value above 32 when the shell took the request.
+    if result as usize > 32 {
+        Ok(())
+    } else {
+        Err(format!(
+            "the system could not open it (code {})",
+            result as usize
+        ))
+    }
 }
 
 #[cfg(target_os = "macos")]

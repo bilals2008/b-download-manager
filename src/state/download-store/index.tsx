@@ -113,7 +113,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
 
   const { samples, sampleFor, toDownload } = useRowMapping({ categoriesRef });
 
-  const media = useMediaRows(setState, sampleFor, dismissedMedia);
+  const media = useMediaRows(setState, sampleFor, dismissedMedia, categoriesRef);
 
   // A link that the browser extension handed over.
   useEffect(() => {
@@ -215,13 +215,21 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
           samples.current.delete(id);
         }
       }
-      setState((current) => ({
-        ...current,
-        downloads,
-        selected: current.selected.filter((id) =>
-          downloads.some((item) => item.id === id),
-        ),
-      }));
+      setState((current) => {
+        // The media rows are a list of their own, polled beside this one. A
+        // reload that lands after their poll must not wipe them: the engine
+        // rows are replaced, the media rows stay until their own poll says
+        // otherwise.
+        const media = current.downloads.filter((item) => item.mediaJob);
+        const merged = [...downloads, ...media];
+        return {
+          ...current,
+          downloads: merged,
+          selected: current.selected.filter((id) =>
+            merged.some((item) => item.id === id),
+          ),
+        };
+      });
       setError(null);
     } catch (failure) {
       setError(describeError(failure));

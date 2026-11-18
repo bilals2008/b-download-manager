@@ -427,7 +427,15 @@ pub(crate) fn normalize_category_rules(
     let mut out = Vec::new();
     for rule in rules {
         let name = rule.name.trim();
-        if name.is_empty() {
+        // The name becomes a folder component when the category derives its
+        // own folder, so a name that could leave the default folder is not a
+        // category at all.
+        if name.is_empty()
+            || name == "."
+            || name == ".."
+            || name.contains(['/', '\\', ':'])
+            || name.chars().any(char::is_control)
+        {
             continue;
         }
         let mut extensions: Vec<String> = Vec::new();
@@ -454,6 +462,7 @@ pub(crate) fn normalize_category_rules(
             folder,
             builtin: rule.builtin,
             fallback: rule.fallback,
+            root: rule.root,
         });
         if out.len() >= MAX_RULES {
             break;

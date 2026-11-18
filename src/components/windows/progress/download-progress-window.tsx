@@ -17,6 +17,7 @@ import { fileNameFromUrl, splitPath } from "@/lib/downloads";
 import { describeError, isDesktop } from "@/lib/errors";
 import {
   cancelDownload,
+  listDownloads,
   openPath,
   pauseDownload,
   resumeDownload,
@@ -36,6 +37,10 @@ import type { DownloadInfo, DownloadStatus } from "@/types";
  *
  * The download is handed in by the backend through `window.__BDM_PROGRESS__`,
  * the video job through `window.__BDM_PROGRESS_MEDIA__`, before this renders.
+ * A window that was opened for a video has no engine download of its own: when
+ * an engine download takes it over, the job id arrives on `progress://job`
+ * and its state is read from the list, so the switch shows the download
+ * rather than an empty frame.
  */
 export function DownloadProgressWindow({
   initial,
@@ -45,6 +50,7 @@ export function DownloadProgressWindow({
   mediaJob?: number;
 }) {
   const [media, setMedia] = useState<number | null>(mediaJob ?? null);
+  const [engine, setEngine] = useState<number | null>(initial?.id ?? null);
 
   useEffect(() => {
     if (!isDesktop()) {
@@ -65,8 +71,9 @@ export function DownloadProgressWindow({
       .catch(() => {
         // The desktop runtime is not there; the marker still picks a mode.
       });
-    void listen("progress://job", () => {
+    void listen<{ job: number }>("progress://job", (event) => {
       setMedia(null);
+      setEngine(event.payload.job);
     })
       .then((stop) => {
         if (live) {
@@ -87,10 +94,53 @@ export function DownloadProgressWindow({
   if (media !== null) {
     return <MediaProgressWindow job={media} />;
   }
-  if (!initial) {
+  if (engine === null) {
     return null;
   }
-  return <DownloadBody initial={initial} />;
+  return (
+    <EngineProgress
+      key={engine}
+      id={engine}
+      initial={initial?.id === engine ? initial : undefined}
+    />
+  );
+}
+
+/** The engine download the window follows, read from the list when the
+ * window was opened for a video and has no seed of its own. */
+function EngineProgress({
+  id,
+  initial,
+}: {
+  id: number;
+  initial?: DownloadInfo;
+}) {
+  const [seed, setSeed] = useState<DownloadInfo | null>(initial ?? null);
+
+  useEffect(() => {
+    if (seed !== null) {
+      return;
+    }
+    let live = true;
+    void listDownloads()
+      .then((rows) => {
+        if (live) {
+          setSeed(rows.find((row) => row.id === id) ?? null);
+        }
+      })
+      .catch(() => {
+        // The list is polled by the main window; a failed read here leaves
+        // the frame empty rather than showing another download's numbers.
+      });
+    return () => {
+      live = false;
+    };
+  }, [id, seed]);
+
+  if (seed === null) {
+    return null;
+  }
+  return <DownloadBody initial={seed} />;
 }
 
 /** The engine download side of the window. */

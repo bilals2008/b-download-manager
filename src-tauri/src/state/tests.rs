@@ -1,6 +1,86 @@
 use super::*;
 use crate::video::SourcePlan;
 
+fn media_job(id: u64, dest: &Path) -> crate::video::MediaJob {
+    let mut job = crate::video::MediaJob::new(
+        id,
+        "https://example.org/watch".to_string(),
+        "https://cdn.example.org/master.m3u8".to_string(),
+        crate::video::MediaKindHint::Hls,
+        "Film".to_string(),
+        String::new(),
+        Vec::new(),
+        None,
+    );
+    job.state = crate::video::MediaState::Ready;
+    job.dest = Some(dest.to_string_lossy().to_string());
+    job.request = Some(crate::video::capture::DownloadRequest {
+        video: "1080p".to_string(),
+        audio: None,
+        name: "Film.mp4".to_string(),
+        dest: dest.parent().unwrap().to_string_lossy().to_string(),
+        subtitle: None,
+        subtitle_file: None,
+        audio_format: None,
+    });
+    job
+}
+
+#[test]
+fn media_downloads_survive_a_restart() {
+    let dir = temp_dir("media-restore");
+    let index = crate::video::persist::MediaIndex::new(dir.join("media.json"));
+
+    let state = AppState::default();
+    state.set_media_index(index.clone());
+
+    // A finished video: its file is on disk.
+    let finished_dest = dir.join("Film.mp4");
+    std::fs::write(&finished_dest, b"finished bytes").expect("write");
+    let mut finished = media_job(1, &finished_dest);
+    finished.done = true;
+    finished.stage = Some("Saved".to_string());
+    state.insert_media_job(finished);
+
+    // A video that was running when the app died: its tracks are on disk.
+    let work = dir.join("staging").join("media").join("video-2-film");
+    std::fs::create_dir_all(&work).expect("folder");
+    std::fs::write(work.join("video.seg0"), vec![0u8; 40]).expect("write");
+    let mut stopped = media_job(2, &dir.join("Other.mp4"));
+    stopped.downloading = true;
+    stopped.work_dir = Some(work.to_string_lossy().to_string());
+    stopped.progress.total = 100;
+    state.insert_media_job(stopped);
+
+    // A video that left nothing behind is forgotten, like an engine row.
+    state.insert_media_job(media_job(3, &dir.join("Gone.mp4")));
+
+    state.save_media_index();
+
+    let restarted = AppState::default();
+    restarted.set_media_index(index);
+    restarted.restore_media_jobs();
+
+    let jobs = restarted.media_jobs_snapshot();
+    assert_eq!(jobs.len(), 2, "the gone job is forgotten");
+    let finished = jobs.iter().find(|job| job.id == 1).expect("finished row");
+    assert!(finished.done);
+    assert!(!finished.downloading);
+    assert_eq!(finished.stage.as_deref(), Some("Saved"));
+    assert_eq!(finished.progress.downloaded, 14);
+    let stopped = jobs.iter().find(|job| job.id == 2).expect("stopped row");
+    assert!(!stopped.done);
+    assert!(!stopped.downloading);
+    assert_eq!(stopped.stage.as_deref(), Some("Stopped"));
+    assert_eq!(stopped.progress.downloaded, 40, "the bytes on disk decide");
+    assert!(stopped.view().can_resume, "the tracks can continue");
+    assert!(
+        restarted.next_media_id() > 3,
+        "a restored id is never handed out again"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 fn temp_dir(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("my-idm-clone-state-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
@@ -218,6 +298,7 @@ fn a_rule_finds_the_category_and_its_folder() {
             folder: "relative\\folder".to_string(),
             builtin: true,
             fallback: false,
+            root: false,
         },
         CategoryRule {
             name: "Films".to_string(),
@@ -225,6 +306,7 @@ fn a_rule_finds_the_category_and_its_folder() {
             folder: dir.join("films").to_string_lossy().to_string(),
             builtin: false,
             fallback: false,
+            root: false,
         },
         CategoryRule {
             name: "Other".to_string(),
@@ -232,6 +314,7 @@ fn a_rule_finds_the_category_and_its_folder() {
             folder: dir.join("misc").to_string_lossy().to_string(),
             builtin: true,
             fallback: true,
+            root: false,
         },
     ]);
 
@@ -250,12 +333,12 @@ fn a_rule_finds_the_category_and_its_folder() {
         "a type only the built-in knows still lands there"
     );
     assert_eq!(
-        state.category_folder("Films"),
+        state.category_folder_in("Films", None),
         Some(dir.join("films")),
         "the folder the rule names"
     );
     assert_eq!(
-        state.category_folder("Video"),
+        state.category_folder_in("Video", None),
         None,
         "a relative folder is not applied"
     );
@@ -273,7 +356,10 @@ fn a_rule_finds_the_category_and_its_folder() {
         Some("Other"),
         "a name with no type at all is the same case"
     );
-    assert_eq!(state.category_folder("Other"), Some(dir.join("misc")));
+    assert_eq!(
+        state.category_folder_in("Other", None),
+        Some(dir.join("misc"))
+    );
 
     // Without a fallback the answer is no category at all, and the
     // destination stays where the start put it.
@@ -283,10 +369,75 @@ fn a_rule_finds_the_category_and_its_folder() {
         folder: String::new(),
         builtin: true,
         fallback: false,
+        root: false,
     }]);
     assert_eq!(
         state.detect_category(Path::new("C:\\Downloads\\unknown.bin")),
         None
     );
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_category_without_a_folder_derives_one_under_the_default() {
+    let state = AppState::default();
+    state.set_categories(vec![
+        CategoryRule {
+            name: "Video".to_string(),
+            extensions: vec!["mp4".to_string()],
+            folder: String::new(),
+            builtin: true,
+            fallback: false,
+            root: false,
+        },
+        CategoryRule {
+            name: "General".to_string(),
+            extensions: Vec::new(),
+            folder: String::new(),
+            builtin: true,
+            fallback: false,
+            root: true,
+        },
+        CategoryRule {
+            name: "Other".to_string(),
+            extensions: Vec::new(),
+            folder: String::new(),
+            builtin: true,
+            fallback: true,
+            root: true,
+        },
+    ]);
+    let root = Path::new("C:\\Downloads");
+    assert_eq!(
+        state.category_folder_in("Video", Some(root)),
+        Some(root.join("Video")),
+        "a category without a folder saves in one of its own name"
+    );
+    assert_eq!(
+        state.category_folder_in("General", Some(root)),
+        None,
+        "a general bucket keeps the default folder itself"
+    );
+    assert_eq!(state.category_folder_in("Other", Some(root)), None);
+    assert_eq!(
+        state.category_folder_in("Video", None),
+        None,
+        "no default folder means nothing to hang a name under"
+    );
+    assert_eq!(state.category_folder_in("Nobody", Some(root)), None);
+
+    // A folder set on the category wins over the derived one, and a
+    // relative one is still not a folder.
+    state.set_categories(vec![CategoryRule {
+        name: "Video".to_string(),
+        extensions: vec!["mp4".to_string()],
+        folder: "D:\\Media".to_string(),
+        builtin: true,
+        fallback: false,
+        root: false,
+    }]);
+    assert_eq!(
+        state.category_folder_in("Video", Some(root)),
+        Some(PathBuf::from("D:\\Media"))
+    );
 }

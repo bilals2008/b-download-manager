@@ -18,6 +18,7 @@ use std::sync::{Arc, Mutex};
 
 use futures_util::StreamExt;
 use reqwest::Url;
+use serde::{Deserialize, Serialize};
 
 use crate::disk;
 use crate::downloader::{self, Download, DownloadInfo, Reporter, Status};
@@ -146,7 +147,7 @@ impl From<&str> for TrackError {
 }
 
 /// The numbers the window shows while a track downloads.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TrackProgress {
     pub downloaded: u64,
     /// The bytes the segments promise. Zero until the first one is probed.

@@ -130,10 +130,16 @@ pub fn run() {
             state.set_settings_path(dir.join(settings_store::FILE_NAME), dir.clone());
             state.restore_downloads();
             state.restore_queue();
+            // The video downloads of an earlier run come back the same way:
+            // their history is a file of its own, read before the bridge
+            // binds so the list is whole when the window opens.
+            state.set_media_index(video::persist::MediaIndex::new(dir.join("media.json")));
+            state.restore_media_jobs();
             // The sweep of abandoned staging folders waits until the restored
             // rows exist: a resumable download claims its own folder.
             if let Some(tree) = staging {
                 state.set_staging(tree);
+                state.sweep_media_folders();
             }
             // The tray and the close button follow a file of their own: they
             // are consulted before a page has loaded, and a webview that has

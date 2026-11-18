@@ -33,7 +33,7 @@ pub struct Started {
 }
 
 /// What the finished file has to be, decided before a byte is fetched.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Delivery {
     /// The extension the file is given. It is what the finished bytes are
     /// checked against.
@@ -62,11 +62,16 @@ pub struct Delivery {
 
 /// Start the chosen track(s). The work is done on a task of its own; the
 /// answer carries the destination the panel shows at once.
+///
+/// `folder` is the folder the reader picked, when they picked one. `None`
+/// leaves the choice to the file's category, decided once the finished name
+/// and its extension are known: a video lands with the rest of its type, and
+/// a sound saved as MP3 lands in Music rather than Video.
 pub fn start(
     app: &AppHandle,
     job: &MediaJob,
     request: &DownloadRequest,
-    folder: PathBuf,
+    folder: Option<PathBuf>,
     name: String,
 ) -> Result<Started, String> {
     if job.state != MediaState::Ready {
@@ -168,6 +173,7 @@ pub fn start(
         convert,
     };
     let file_name = with_extension(&name, &extension);
+    let folder = destination_folder(app, folder, &file_name)?;
     let dest = crate::bridge::dest::unique(&folder, &file_name);
     let stem = dest
         .file_stem()
@@ -211,6 +217,7 @@ pub fn start(
         job.control = Some(control.clone());
         job.work_dir = Some(work_dir.to_string_lossy().to_string());
     });
+    app_state.save_media_index();
 
     show_progress(app, job.id);
 
@@ -230,6 +237,42 @@ pub fn start(
         id: job_id,
         dest: dest.to_string_lossy().to_string(),
     })
+}
+
+/// The folder the finished file goes to.
+///
+/// A folder the reader picked is used as it is, and must already be there.
+/// Without one, the file's category decides — the same rule a browser
+/// hand-over follows — under the default save folder, or the system's
+/// Downloads folder when none was chosen. The folder is created here: the
+/// delivery step moves a finished file into place and does not make folders.
+fn destination_folder(
+    app: &AppHandle,
+    picked: Option<PathBuf>,
+    file_name: &str,
+) -> Result<PathBuf, String> {
+    let folder = match picked {
+        Some(folder) => {
+            if !folder.is_absolute() || !folder.is_dir() {
+                return Err("the folder is not usable".to_string());
+            }
+            folder
+        }
+        None => {
+            let state = app.state::<AppState>();
+            let root = state
+                .browser_folder()
+                .or_else(|| app.path().download_dir().ok())
+                .unwrap_or_else(|| PathBuf::from("."));
+            state
+                .detect_category(Path::new(file_name))
+                .and_then(|category| state.category_folder_in(&category, Some(&root)))
+                .unwrap_or(root)
+        }
+    };
+    std::fs::create_dir_all(&folder)
+        .map_err(|error| format!("the destination folder could not be made: {error}"))?;
+    Ok(folder)
 }
 
 /// Open the panel that shows the download going.
@@ -291,6 +334,7 @@ pub fn resume(app: &AppHandle, job: &MediaJob) -> Result<Started, String> {
         job.stage = Some("Starting".to_string());
         job.control = Some(control.clone());
     });
+    app.state::<AppState>().save_media_index();
 
     show_progress(app, job.id);
 

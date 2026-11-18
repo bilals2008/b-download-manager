@@ -235,7 +235,7 @@ pub fn looks_protected(bytes: &[u8]) -> bool {
 
 /// One address that has to be downloaded for a track, with the byte range the
 /// manifest named when it named one.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TrackSegment {
     pub url: String,
     /// Inclusive byte range inside `url`, for an HLS `#EXT-X-BYTERANGE` or a

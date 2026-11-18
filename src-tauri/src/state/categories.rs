@@ -47,19 +47,34 @@ impl AppState {
             .map(|rule| rule.name.clone())
     }
 
-    /// The folder a category saves to, when the window gave one. A relative
-    /// path is ignored: it would depend on where the app was started.
-    pub fn category_folder(&self, name: &str) -> Option<PathBuf> {
+    /// The folder a category saves to, given the default folder in force.
+    ///
+    /// A folder set on the category wins; a relative one is ignored, it would
+    /// depend on where the app was started. Without a folder of its own, every
+    /// category except the general buckets saves in a folder of its own name
+    /// inside the default folder — the same rule the add dialog applies, so a
+    /// hand-over with no dialog lands where the dialog would have put it. The
+    /// general buckets keep the default folder itself, which the caller has
+    /// already chosen.
+    pub fn category_folder_in(&self, name: &str, default: Option<&Path>) -> Option<PathBuf> {
         let rules = self
             .category_rules
             .lock()
             .expect("category rules lock poisoned");
-        let folder = rules
-            .iter()
-            .find(|rule| rule.name == name)
-            .map(|rule| rule.folder.trim())
-            .filter(|folder| !folder.is_empty())?;
-        let path = PathBuf::from(folder);
-        path.is_absolute().then_some(path)
+        let rule = rules.iter().find(|rule| rule.name == name)?;
+        let folder = rule.folder.trim();
+        if !folder.is_empty() {
+            let path = PathBuf::from(folder);
+            if path.is_absolute() {
+                return Some(path);
+            }
+            // A relative folder is not a folder; the category derives its
+            // own below, the way the window's saved preference would.
+        }
+        if rule.root || rule.fallback {
+            return None;
+        }
+        let root = default.filter(|path| path.is_absolute())?;
+        Some(root.join(&rule.name))
     }
 }

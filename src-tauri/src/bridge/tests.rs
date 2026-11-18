@@ -215,7 +215,7 @@ fn a_file_that_is_already_there_sends_the_handover_to_the_window() {
                 "the question is about the real file"
             );
         }
-        DirectPlan::Free { .. } => {
+        DirectPlan::Free => {
             panic!("a taken name is a question, not a silent rename")
         }
     }
@@ -228,9 +228,14 @@ fn a_free_name_starts_without_a_question() {
     let state = AppState::default();
 
     match plan_direct(&state, &dir, "film.mp4") {
-        DirectPlan::Free { dest } => assert_eq!(dest, dir.join("film.mp4")),
+        DirectPlan::Free => {}
         DirectPlan::Taken { .. } => panic!("nothing holds that name"),
     }
+    // The free target is the one the start would write: the category folder
+    // applied exactly once to the name in the default folder.
+    let (target, _) =
+        crate::actions::category_destination(&state, dir.join("film.mp4"), None, true);
+    assert_eq!(target, dir.join("film.mp4"));
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -244,7 +249,7 @@ fn a_name_another_row_is_writing_is_a_question_too() {
     // elsewhere — but the name belongs to that row.
     match plan_direct(&state, &dir, "film.mp4") {
         DirectPlan::Taken { .. } => {}
-        DirectPlan::Free { dest } => panic!("that name is held, but it starts at {dest:?}"),
+        DirectPlan::Free => panic!("that name is held, but the plan says free"),
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -263,6 +268,7 @@ fn the_question_follows_the_category_folder() {
         folder: films.to_string_lossy().to_string(),
         builtin: false,
         fallback: false,
+        root: false,
     }]);
 
     // The Downloads folder is free; the folder the file's category saves
@@ -270,7 +276,7 @@ fn the_question_follows_the_category_folder() {
     // written.
     match plan_direct(&state, &dir, "film.mp4") {
         DirectPlan::Taken { dest } => assert_eq!(dest, films.join("film.mp4")),
-        DirectPlan::Free { dest } => panic!("the category folder is taken, not {dest:?}"),
+        DirectPlan::Free => panic!("the category folder is taken, not free"),
     }
     let _ = std::fs::remove_dir_all(&dir);
 }

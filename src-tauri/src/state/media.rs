@@ -3,6 +3,7 @@
 use std::path::Path;
 use std::sync::atomic::Ordering;
 
+use crate::video::persist::{folder_bytes, KnownMediaJob, MediaIndex};
 use crate::video::{MediaJob, MediaState, SourcePlan};
 
 use super::AppState;
@@ -10,6 +11,87 @@ use super::AppState;
 impl AppState {
     pub fn next_media_id(&self) -> u64 {
         self.next_media_id.fetch_add(1, Ordering::SeqCst)
+    }
+
+    /// Point the state at the file the media history lives in.
+    pub fn set_media_index(&self, index: MediaIndex) {
+        *self.media_index.lock().expect("media index lock poisoned") = Some(index);
+    }
+
+    /// Write the media downloads the app remembers. Called at every change
+    /// of state — start, stop, finish, forget — and once more on the way out,
+    /// so a restart finds the same list the reader left.
+    pub fn save_media_index(&self) {
+        let index = self.media_index.lock().expect("media index lock poisoned");
+        let Some(index) = index.as_ref() else { return };
+        let known: Vec<KnownMediaJob> = self
+            .media_jobs_snapshot()
+            .iter()
+            .filter_map(KnownMediaJob::from_job)
+            .collect();
+        let _ = index.save(&known);
+    }
+
+    /// Bring the media downloads of an earlier run back.
+    ///
+    /// The same rule the engine's index follows: a job whose finished file is
+    /// on disk is completed, one whose tracks are still in its work folder
+    /// stopped and resumable, and one that left nothing behind is forgotten.
+    /// The bytes on disk decide the numbers, not the last saved report.
+    pub fn restore_media_jobs(&self) {
+        let known = {
+            let index = self.media_index.lock().expect("media index lock poisoned");
+            let Some(index) = index.as_ref() else { return };
+            index.load()
+        };
+
+        let mut highest = 0u64;
+        for record in known {
+            highest = highest.max(record.id);
+            let dest_there = record
+                .dest
+                .as_deref()
+                .is_some_and(|dest| Path::new(dest).exists());
+            let work_there = record
+                .work_dir
+                .as_deref()
+                .is_some_and(|dir| Path::new(dir).is_dir());
+            if !dest_there && !work_there {
+                continue;
+            }
+            let mut job = record.into_job();
+            job.downloading = false;
+            if dest_there {
+                job.done = true;
+                job.error = None;
+                job.stage = Some("Saved".to_string());
+                job.fraction = 1.0;
+                if let Some(dest) = job.dest.as_deref() {
+                    if let Ok(meta) = std::fs::metadata(dest) {
+                        job.progress.downloaded = meta.len();
+                        job.progress.total = job.progress.total.max(meta.len());
+                    }
+                }
+            } else {
+                job.done = false;
+                job.stage = Some("Stopped".to_string());
+                if let Some(dir) = job.work_dir.as_deref() {
+                    let bytes = folder_bytes(Path::new(dir));
+                    job.progress.downloaded = bytes;
+                    job.progress.total = job.progress.total.max(bytes);
+                    job.fraction = if job.progress.total > 0 {
+                        bytes as f64 / job.progress.total as f64
+                    } else {
+                        0.0
+                    };
+                }
+            }
+            self.insert_media_job(job);
+        }
+
+        // The ids of the restored jobs must not be handed out again.
+        self.next_media_id.fetch_max(highest + 1, Ordering::SeqCst);
+        self.save_media_index();
     }
 
     /// Keep a parsed (or parsing) manifest until its download is started.
@@ -178,12 +260,12 @@ impl AppState {
             .map(|staging| staging.media_dir(dest, job_id, name))
     }
 
-    /// Remove the media folders no running job owns.
+    /// Remove the media folders no known job owns.
     ///
-    /// A media job lives in memory; a folder that no job names is the leftover
-    /// of one that was forgotten or died with the last run. Called when a row
-    /// is removed, so the reader sees the disk match the list at once instead
-    /// of after the next start.
+    /// A folder that no job names is the leftover of one that was forgotten
+    /// or died with the last run. Called when a row is removed and once at
+    /// start-up after the history is restored, so the reader sees the disk
+    /// match the list at once instead of after the next start.
     pub fn sweep_media_folders(&self) {
         let Some(staging) = self.staging() else {
             return;
