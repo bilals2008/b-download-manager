@@ -10,6 +10,18 @@ edit one before its release ships if a bullet needs better words.
 
 ---
 
+## [2.0.1] - 19 November 2026
+
+### Changed
+
+- **whats-new:** Add the 2.0.1 release notes
+
+### Fixed
+
+- **downloads:** Route files to category folders, keep video history, and repair progress and open-file
+- **extension:** Pack the Firefox add-on with AMO-compatible ZIP paths
+
+
 ## [2.0.0] - 18 November 2026
 
 ### Added
