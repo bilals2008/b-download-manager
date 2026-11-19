@@ -47,7 +47,7 @@ styling work.
 pnpm tauri build
 ```
 
-The installer and the binary land in `src-tauri/target/release/bundle/`.
+The installer and the binary land in `target/release/bundle/` at the repository root.
 Application icons are generated from the single brand source:
 
 ```bash
@@ -79,7 +79,7 @@ the port is reported as a mismatch, not as a connection.
 - **Firefox** (`extension-firefox/`): Manifest V3 with an event page, the
   right-click hand-off, download takeover and a download button on each detected
   video with live progress. Load it temporarily from `about:debugging#/runtime/this-firefox`;
-  a permanent install needs a signed `.xpi`.
+  the signed release is on Mozilla Add-ons.
 - **Chrome and Edge** (`browser-extension/`): the right-click hand-off and
   download takeover, with no video overlay and no live download list. Load it
   with **Load unpacked** on `chrome://extensions` or `edge://extensions`.
@@ -98,7 +98,8 @@ deleted.
 
 ## What is not built yet
 
-The scheduler with named queues, batch adding from the toolbar, export and
-import, the drop target, the sounds page and site logins are still open.
-`planning/09-remaining-work.md` in the repository keeps the authoritative list,
-with the file that proves each line.
+Named queues, batch adding, export and import, the drop target, phone pairing
+(Remote) and live-stream recording are still open. The basic scheduler — days,
+hours and power-off when the queue is empty — works today in **Settings →
+Downloads**. `planning/09-remaining-work.md` in the repository tracks the rest,
+though parts of it date from v1.0.

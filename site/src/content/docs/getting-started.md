@@ -21,7 +21,7 @@ The window has your downloads in the middle and a column of folders down the lef
 
 The app checks the link before it starts, so the file's real name and size appear instead of whatever the link claimed. If the link has expired or needs you to sign in, it says so straight away rather than failing ten minutes later.
 
-The file is saved in your Downloads folder. To put it somewhere else, change the folder in that same small window before you press Enter.
+The file is saved into a folder for its kind inside your save folder — Videos, Music, Documents and so on. General files go straight into the save folder. To put it somewhere else, change the folder in that same small window before you press Enter, or set the default in **Settings → Save locations**.
 
 ## While it downloads
 

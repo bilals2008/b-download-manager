@@ -44,16 +44,20 @@ If a file with the same name is already in the folder, the app asks before it ov
 
 ## Where your files go
 
-A new download goes to the folder you last used, then to the folder saved in Settings, then to your usual Downloads folder. You can pick a different folder for each download when you add it.
+Files land in the save folder you choose in **Settings → Save locations**, sorted into a folder for their kind — Videos, Music, Documents, Programs, Compressed and so on. General and Other go in the save folder itself. You can give any category its own folder on that page, and pick a different folder for a single download when you add it.
 
 ## Slow it down
 
 If the app is taking too much of your connection:
 
-- **Everything at once:** open **Downloads → Options… → Network**, turn on **Limit the speed of all downloads** and type a number.
+- **Everything at once:** open **Settings → Connections**, turn on **Limit the speed of all downloads** and type a number.
 - **One file:** open the download, go to **Speed limiter**, and set a limit for that file alone.
 
-**Options → Downloads** also sets how many pieces of a file are fetched at once, under **Default number of connections**. Eight suits most connections; if downloads keep failing, try four.
+**Settings → Downloads** sets how many pieces of a file are fetched at once, under **Default number of connections** (32 by default). If downloads keep failing, try fewer. **Settings → Connections** caps the total the whole app may open.
+
+## Schedule the queue
+
+**Settings → Downloads** can run the queue only on chosen days and hours. It starts and stops by itself, and can turn the computer off once the queue is empty — never in the middle of a download.
 
 ## Find a download
 
@@ -75,7 +79,7 @@ The icon itself is yours to choose: **View → B Download Manager tray icon** ta
 
 ## Making it yours
 
-**Options → General** holds the theme — **Auto** follows Windows — and the font with its weight. Changes appear immediately in every open window.
+**Settings → Appearance** holds the theme — **Auto** follows the system — with ten looks to choose from, and the font with its weight. The language switch is under **View → Language** (English, Français, Deutsch, العربية; Arabic mirrors the whole window). Changes appear immediately in every open window.
 
 ## The toolbar
 
@@ -83,7 +87,7 @@ The bar under the menu can switch between five styles and your own button order.
 
 [Toolbar packs](/toolbars/) explains how to install a custom toolbar from a JSON file, or make one yourself.
 
-The File types, Browser capture, Sites Logins, Dial Up / VPN and Sounds pages are listed but not built yet. They say so when you open them.
+Settings is one dialog with pages for General, Appearance, Toolbar, Shortcuts, Tips, Downloads, Save locations, Browser, Video download button, Debrid, Torrent, Connections, Proxy, Advanced and About. The Remote page is still on the way, and batch adding, export and import remain disabled in the Tasks menu.
 
 ## Keyboard
 

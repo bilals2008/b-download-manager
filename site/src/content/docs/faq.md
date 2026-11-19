@@ -29,28 +29,28 @@ Yes. Every download keeps a note of how far it got, so after a reboot it resumes
 
 ## Can it download videos from streaming sites?
 
-No. It saves files that have a direct link. Video sites usually hide the video behind a player, and putting those streams back together is not something this app does. If a page does offer a direct video or sound file, right-click it and copy the link, then add that link to the app.
+Yes. Pages that stream video in small pieces (HLS and MPEG-DASH) are captured and joined into one MP4 without re-encoding. On YouTube, the extension offers the qualities the page has and the captions it offers, and you can save just the sound as MP3, Opus or FLAC.
 
 ## Can I limit how fast it goes?
 
-Yes, either for everything at once in **Options → Network**, or for a single download in its **Speed limiter** tab.
+Yes, either for everything at once in **Settings → Connections**, or for a single download in its **Speed limiter** tab.
 
 ## How many downloads at a time?
 
-As many as you like, but a share of the connection goes to each. The queue buttons at the top start and stop the whole list.
+The queue buttons at the top start and stop the whole list. Each file uses up to 32 connections, and **Settings → Connections** caps how many the app may open in total.
 
 ## Can I schedule downloads for later?
 
-Not yet. **Downloads → Scheduler and queues** says it is coming soon rather than opening a screen that does not work.
+Yes. **Settings → Downloads** sets the days and hours the queue runs. It starts and stops by itself, and can turn the computer off once the queue is empty — never in the middle of a download.
 
 ## Does it collect anything about me?
 
-No account, no analytics, no update check. The only things it reaches out to are the files you ask it to download, plus the browser hand-off, which stays on your own computer.
+No account, no analytics, no ads. The app reaches out for the files you ask it to download, checks for a newer version of itself, and talks to the browser extension on your own computer. Nothing about you is sent anywhere.
 
 ## Where are my downloads kept?
 
-Wherever you chose for that download — by default your usual Downloads folder. Removing an entry from the list never deletes the file.
+In the save folder you choose, sorted into a folder per kind — Videos, Music, Documents, Programs, Compressed and so on. General and Other files land in the save folder itself. You can give a category its own folder in **Settings → Save locations**, and pick a different folder for one download when you add it. Removing an entry from the list never deletes the file.
 
 ## Can I use the pictures and fonts in my own project?
 
-The app is not published under a licence yet, so please ask before reusing any of it.
+Yes. The app is published under the [MIT licence](https://github.com/bilals2008/b-download-manager/blob/main/LICENSE); the bundled fonts keep their own open-font licences.

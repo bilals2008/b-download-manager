@@ -10,7 +10,7 @@ description: What to try when a download, the browser button or the window does 
 - **Did you load Firefox's copy by hand?** A temporary add-on is forgotten when Firefox closes. Install the signed copy from Mozilla Add-ons instead, or load it again the way [Building from source](/developers/#browser-extensions) describes.
 - **Chrome or Edge:** these builds are not released yet; there is no add-on button to click.
 - **Does the add-on say "Not running"?** Start B Download Manager. There is no code to copy and nothing to pair: the add-on reports **Connected** as soon as the app is open. If it says **Version mismatch**, the add-on and the app are from different releases.
-- **Right-click a link, not empty page space.** Pictures, videos and sound files work too. A page that only shows a player, like most video sites, is not a link to a file.
+- **Right-click a link, a picture, a video or a sound file.** On a page with a detected video, use the extension's download button instead: it lists the qualities the page offers. A page that only shows a player and offers no media link has nothing for the right-click hand-off.
 
 ## A download will not start
 
@@ -28,7 +28,7 @@ Select it and press **Resume**. If the file's website does not allow a download 
 
 ## It is slower than expected
 
-- Check **Options → Network** for a **Speed limit**, and the **Speed limiter** tab of the download itself.
+- Check **Settings → Connections** for a **Speed limit**, and the **Speed limiter** tab of the download itself.
 - Several downloads at once share your connection. Pause the ones you do not need yet.
 - Some websites only allow a file to be fetched in one piece, and then there is nothing to speed up.
 
@@ -46,9 +46,9 @@ If closing the window should quit the app instead of hiding it, open **Options �
 
 Some sites hand back a web page instead of the file — usually a sign-in page or a "not found" page. The download looks finished but the file is small and nothing opens it. Open the original link in your browser to see what the site is actually sending.
 
-## A settings page is empty
+## A setting or menu item is missing
 
-File types, Browser capture, Sites Logins, Dial Up / VPN and Sounds are not built yet. The page says so, rather than pretending to work.
+The Remote page (pairing a phone) is still on the way, and so are batch adding, export and import, and the drop target in the Tasks menu. They say so where they appear. Everything else in Settings works today.
 
 ## Asking for help
 
