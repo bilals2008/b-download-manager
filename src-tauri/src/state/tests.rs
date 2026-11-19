@@ -407,37 +407,51 @@ fn a_category_without_a_folder_derives_one_under_the_default() {
             root: true,
         },
     ]);
-    let root = Path::new("C:\\Downloads");
+    // An absolute path here has to be absolute on the runner's OS: a Windows
+    // drive letter is a relative name on Linux, where it fails the folder check.
+    let root = std::env::temp_dir().join("Downloads");
     assert_eq!(
-        state.category_folder_in("Video", Some(root)),
+        state.category_folder_in("Video", Some(&root)),
         Some(root.join("Video")),
         "a category without a folder saves in one of its own name"
     );
     assert_eq!(
-        state.category_folder_in("General", Some(root)),
+        state.category_folder_in("General", Some(&root)),
         None,
         "a general bucket keeps the default folder itself"
     );
-    assert_eq!(state.category_folder_in("Other", Some(root)), None);
+    assert_eq!(state.category_folder_in("Other", Some(&root)), None);
     assert_eq!(
         state.category_folder_in("Video", None),
         None,
         "no default folder means nothing to hang a name under"
     );
-    assert_eq!(state.category_folder_in("Nobody", Some(root)), None);
+    assert_eq!(state.category_folder_in("Nobody", Some(&root)), None);
 
-    // A folder set on the category wins over the derived one, and a
+    // An absolute folder of its own wins over the derived one, and a
     // relative one is still not a folder.
+    let own = std::env::temp_dir().join("Media");
     state.set_categories(vec![CategoryRule {
         name: "Video".to_string(),
         extensions: vec!["mp4".to_string()],
-        folder: "D:\\Media".to_string(),
+        folder: own.to_string_lossy().into_owned(),
+        builtin: true,
+        fallback: false,
+        root: false,
+    }]);
+    assert_eq!(state.category_folder_in("Video", Some(&root)), Some(own));
+
+    state.set_categories(vec![CategoryRule {
+        name: "Video".to_string(),
+        extensions: vec!["mp4".to_string()],
+        folder: "Media".to_string(),
         builtin: true,
         fallback: false,
         root: false,
     }]);
     assert_eq!(
-        state.category_folder_in("Video", Some(root)),
-        Some(PathBuf::from("D:\\Media"))
+        state.category_folder_in("Video", Some(&root)),
+        Some(root.join("Video")),
+        "a relative folder falls back to the derived one"
     );
 }
