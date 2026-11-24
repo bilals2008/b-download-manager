@@ -7,9 +7,13 @@
 export const REPO = "bilals2008/b-download-manager";
 export const RELEASES_URL = `https://github.com/${REPO}/releases/latest`;
 
-/// The published Firefox add-on. Chrome and Edge are not in a store yet.
+/// The published Firefox add-on. Chrome, Edge and Safari are not in a store
+/// yet, so every other build is installed from the repository.
 export const FIREFOX_ADDON_URL =
   "https://addons.mozilla.org/en-US/firefox/addon/b-download-manager/";
+
+/// What the other browsers follow: the install steps on the docs site.
+export const EXTENSION_INSTALL_URL = "/installation/#browser-extension";
 
 const API_URL = `https://api.github.com/repos/${REPO}/releases/latest`;
 const CACHE_KEY = "bdm-latest-release";

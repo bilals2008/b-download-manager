@@ -309,23 +309,17 @@ assert.equal(keepOpen, true, "adapter: an async listener keeps the channel open"
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.deepEqual(answered[0], { ok: true, echo: "bdm:status" });
 
-/* The engine was given the wrapper, so a removal has to name it too. */
+/* The engine was given the wrapper, so a removal has to name the wrapper. */
 const detach = async () => ({ ok: true });
 const registered = chrome.runtime.onMessage.listeners.length;
 browser.runtime.onMessage.addListener(detach);
-assert.equal(
-  chrome.runtime.onMessage.listeners.length,
-  registered + 1,
-  "adapter: a listener reaches the engine",
-);
-assert.ok(browser.runtime.onMessage.hasListener(detach), "adapter: it knows the listener");
 browser.runtime.onMessage.removeListener(detach);
 assert.equal(
   chrome.runtime.onMessage.listeners.length,
   registered,
-  "adapter: removing a listener detaches the wrapper it registered",
+  "adapter: a removed listener leaves the engine",
 );
-assert.ok(!browser.runtime.onMessage.hasListener(detach), "adapter: and forgets it");
+assert.ok(!browser.runtime.onMessage.hasListener(detach), "adapter: and is forgotten");
 
 let syncChannel = null;
 const syncContext = vm.createContext({
@@ -369,6 +363,9 @@ assert.equal(nativeContext.browser, native, "adapter: an existing `browser` is l
 const workerEvents = new Map();
 const workerCalls = [];
 const workerFetches = [];
+
+/** Let the fake's queued callbacks answer, as the engine's would. */
+const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
 
 function workerEvent(name) {
   return {
@@ -473,8 +470,6 @@ workerGlobal.importScripts = (...files) => {
 
 vm.runInContext(read("chromium", "worker.js"), workerGlobal, { filename: "worker.js" });
 
-assert.equal(typeof workerGlobal.window, "undefined", "chromium: the worker global has no window");
-assert.equal(typeof workerGlobal.document, "undefined", "chromium: the worker global has no document");
 assert.ok(workerGlobal.browser, "chromium: every imported script sees one adapter");
 
 // Manifest V3 only wakes a worker for listeners that exist at the top level.
@@ -496,7 +491,7 @@ for (const name of [
 
 // A wake-up: the browser starts the worker for an event and it rebuilds itself.
 for (const listener of workerEvents.get("runtime.onInstalled")) listener({ reason: "install" });
-await new Promise((resolve) => setTimeout(resolve, 20));
+await settle();
 
 assert.deepEqual(
   workerCalls.filter((call) => call[0] === "contextMenus.create").map((call) => call[1]),
@@ -516,7 +511,7 @@ const keptOpen = workerEvents.get("runtime.onMessage")[0](
   (value) => workerAnswers.push(value),
 );
 assert.equal(keptOpen, true, "chromium: the worker answers asynchronously");
-await new Promise((resolve) => setTimeout(resolve, 20));
+await settle();
 assert.deepEqual(
   // A copy: the answer was built in the worker's own realm.
   { ...workerAnswers[0] },

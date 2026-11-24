@@ -51,9 +51,8 @@
    * other engines also accept a listener that returns a promise. Adapting it
    * here is what lets one handler serve every build.
    *
-   * The engine is given the wrapper, not the listener, so the wrapper has to be
-   * the thing a removal names: a page that adds a listener and then removes it
-   * would otherwise leave the wrapper attached and answer twice.
+   * The engine is given the wrapper, so the wrapper is what a removal has to
+   * name; the listener a page passes is kept beside it.
    */
   function messageChannel(register) {
     /** The wrapper each listener was registered as. */
@@ -61,7 +60,6 @@
 
     return {
       addListener(listener) {
-        if (typeof listener !== "function") return;
         const wrapper = (message, sender, sendResponse) => {
           let answer;
           try {
