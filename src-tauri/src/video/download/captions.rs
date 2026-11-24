@@ -20,15 +20,50 @@ pub(super) struct Captions {
     pub path: PathBuf,
 }
 
+/// What a job's caption request came to.
+pub(super) struct Prepared {
+    /// The SRT to mux, and to write beside the video.
+    pub captions: Option<Captions>,
+    /// Why the captions are not there, when they are not. It is said on the
+    /// finished row: a caption the site would not hand over must never cost
+    /// the reader a video whose bytes are already on disk.
+    pub warning: Option<String>,
+}
+
+impl Prepared {
+    /// No captions were asked for, or there is nowhere for them to go.
+    pub(super) fn none() -> Self {
+        Prepared {
+            captions: None,
+            warning: None,
+        }
+    }
+
+    /// The captions are not there, and here is why.
+    fn missing(reason: impl Into<String>) -> Self {
+        Prepared {
+            captions: None,
+            warning: Some(reason.into()),
+        }
+    }
+
+    fn with(captions: Captions) -> Self {
+        Prepared {
+            captions: Some(captions),
+            warning: None,
+        }
+    }
+}
+
 /// The captions this job asked for: the reader's file, or the rendition the
-/// manifest offered. `Ok(None)` when none were asked for.
+/// manifest offered. A caption that cannot be had is reported, not thrown:
+/// it is the video the reader asked for, and the captions are the extra.
 pub(super) async fn prepare(
     app: &tauri::AppHandle,
     job: &MediaJob,
     request: &DownloadRequest,
     work_dir: &Path,
-) -> Result<Option<Captions>, String> {
-    let _ = app;
+) -> Prepared {
     // A file the reader picked wins over a rendition.
     if let Some(file) = request
         .subtitle_file
@@ -38,54 +73,121 @@ pub(super) async fn prepare(
     {
         let path = PathBuf::from(file);
         if !path.is_file() {
-            return Err("the caption file is not there any more".to_string());
+            return Prepared::missing("the caption file is not there any more");
         }
-        let text = std::fs::read_to_string(&path)
-            .map_err(|error| format!("the caption file could not be read: {error}"))?;
+        let text = match std::fs::read_to_string(&path) {
+            Ok(text) => text,
+            Err(error) => {
+                return Prepared::missing(format!("the caption file could not be read: {error}"))
+            }
+        };
         let extension = path
             .extension()
             .map(|extension| extension.to_string_lossy().to_string())
             .unwrap_or_default();
-        return finish(&text, &extension, work_dir).map(Some);
+        return match finish(&text, &extension, work_dir) {
+            Ok(captions) => Prepared::with(captions),
+            Err(reason) => Prepared::missing(reason),
+        };
     }
     let Some(id) = request.subtitle.as_deref() else {
-        return Ok(None);
+        return Prepared::none();
     };
-    let manifest = job
-        .manifest
-        .as_ref()
-        .ok_or_else(|| "the manifest is not there any more; read the page again".to_string())?;
+    let Some(manifest) = job.manifest.as_ref() else {
+        return Prepared::missing("the manifest is not there any more; read the page again");
+    };
     let Some(rendition) = manifest
         .subtitles
         .iter()
         .find(|rendition| rendition.id == id)
     else {
-        return Err("that caption track is not in the manifest any more".to_string());
+        return Prepared::missing("that caption track is not in the manifest any more");
     };
-    let fetched = crate::video::probe::fetch(
-        &rendition.url,
-        &job.referer,
-        &job.headers,
-        job.header_origin(),
-    )
-    .await?;
-    let mut text = fetched.text;
-    // The site can answer a caption address with nothing at all (YouTube
-    // guards the timed-text endpoint). The video helper fetches the same
-    // track the way the page's own player does, so it is asked before the
-    // captions are given up on.
-    if text.trim().is_empty() {
-        text = helper_caption(app, job, rendition)
-            .await
-            .unwrap_or_default();
+    let fetched = match fetch_caption(app, job, rendition).await {
+        Ok(fetched) => fetched,
+        Err(reason) => {
+            return Prepared::missing(format!(
+                "the captions could not be saved ({reason}); the video was saved without them"
+            ))
+        }
+    };
+    match finish(&fetched.text, &fetched.container, work_dir) {
+        Ok(captions) => Prepared::with(captions),
+        Err(reason) => Prepared::missing(reason),
     }
-    if text.trim().is_empty() {
-        return Err(
-            "the caption track came back empty; install the video helper to save captions from this site"
-                .to_string(),
-        );
+}
+
+/// One caption body, and the format the bytes are written in.
+struct Fetched {
+    text: String,
+    /// `srt` or `vtt`. The site names it in the manifest, and a track that
+    /// names SRT is handed the SRT parser: YouTube lists both forms, and a
+    /// comma-decimal file read as WebVTT loses every cue.
+    container: String,
+}
+
+/// Fetch one caption track: the address the manifest holds, asked again while
+/// the site says it is busy, then the video helper, which asks the same track
+/// the way the page's own player does.
+///
+/// YouTube answers its timed-text endpoint with 429 on many addresses, and
+/// the browser helper cannot always get past that either; the answer is what
+/// the finished row says, not a stopped download.
+async fn fetch_caption(
+    app: &tauri::AppHandle,
+    job: &MediaJob,
+    rendition: &idm_core::media::subtitles::SubtitleRendition,
+) -> Result<Fetched, String> {
+    let mut last = "the caption track came back empty".to_string();
+    for attempt in 1..=3u32 {
+        match crate::video::probe::fetch(
+            &rendition.url,
+            &job.referer,
+            &job.headers,
+            job.header_origin(),
+        )
+        .await
+        {
+            Ok(fetched) if !fetched.text.trim().is_empty() => {
+                return Ok(Fetched {
+                    text: fetched.text,
+                    container: container_of(rendition),
+                });
+            }
+            Ok(_) => break,
+            Err(message) => {
+                // A busy site is asked again after its own pause; a refusal
+                // for another reason will not pass by waiting.
+                let busy = message.contains("429") || message.contains("503");
+                last = message;
+                if !busy || attempt == 3 {
+                    break;
+                }
+                tokio::time::sleep(idm_core::http::backoff(attempt)).await;
+            }
+        }
     }
-    finish(&text, "vtt", work_dir).map(Some)
+    match helper_caption(app, job, rendition).await {
+        // The helper is asked for WebVTT, whatever the site listed.
+        Some(text) if !text.trim().is_empty() => Ok(Fetched {
+            text,
+            container: "vtt".to_string(),
+        }),
+        _ => Err(last),
+    }
+}
+
+/// The format a rendition's own answer is written in.
+///
+/// The manifest names it, and the name decides the parser: YouTube lists both
+/// an `.srt` and a `.vtt` rendition of the same track, and only one of them
+/// has dots as its decimal separator.
+fn container_of(rendition: &idm_core::media::subtitles::SubtitleRendition) -> String {
+    if rendition.container.eq_ignore_ascii_case("srt") {
+        "srt".to_string()
+    } else {
+        "vtt".to_string()
+    }
 }
 
 /// Ask the video helper for one caption track. `None` when it is not there,
@@ -178,6 +280,22 @@ fn finish(text: &str, extension: &str, work_dir: &Path) -> Result<Captions, Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_rendition_is_read_in_the_format_its_manifest_named() {
+        let rendition = |container: &str| idm_core::media::subtitles::SubtitleRendition {
+            id: "sub-en".to_string(),
+            name: "English".to_string(),
+            language: Some("en".to_string()),
+            url: "https://www.youtube.com/api/timedtext?v=x".to_string(),
+            container: container.to_string(),
+            is_default: false,
+        };
+        assert_eq!(container_of(&rendition("srt")), "srt");
+        assert_eq!(container_of(&rendition("SRT")), "srt");
+        assert_eq!(container_of(&rendition("vtt")), "vtt");
+        assert_eq!(container_of(&rendition("")), "vtt");
+    }
 
     #[test]
     fn the_captions_are_written_beside_the_video_under_its_name() {

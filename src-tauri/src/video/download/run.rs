@@ -182,24 +182,23 @@ pub(super) async fn run(
 
     match result {
         Ok(()) => {
-            // The captions go to their own file before anything else joins:
-            // a caption page that cannot be read is better said now than
-            // after a film's worth of bytes.
+            // The captions go to their own file before anything else joins.
+            // A caption that cannot be fetched is reported on the finished
+            // row and the video is delivered without it: the bytes are on
+            // disk already, and a site that guards its caption endpoint must
+            // not cost the reader the download.
             // A conversion keeps only the sound, so a caption track has
-            // nowhere to go: it is not fetched either, rather than failing an
-            // audio-only download over a file it could not use.
-            let captions = if delivery.convert.is_some() {
-                None
+            // nowhere to go: it is not fetched either, rather than paying for
+            // a file that could not be used.
+            let prepared = if delivery.convert.is_some() {
+                captions::Prepared::none()
             } else {
-                match captions::prepare(app, &job, &request, &work_dir).await {
-                    Ok(captions) => captions,
-                    Err(message) => {
-                        let _ = std::fs::remove_dir_all(&work_dir);
-                        finish_failed(&state, job.id, message);
-                        return;
-                    }
-                }
+                captions::prepare(app, &job, &request, &work_dir).await
             };
+            let captions::Prepared {
+                captions: prepared_captions,
+                warning: caption_warning,
+            } = prepared;
             let mut inputs = vec![video_track_path(&work_dir)];
             if request.audio.is_some() {
                 let audio = audio_track_path(&work_dir);
@@ -222,7 +221,7 @@ pub(super) async fn run(
             // failing at the last step: putting them inside is the part that
             // needs FFmpeg.
             let can_embed = delivery.ffmpeg.is_some();
-            let caption_file = captions.map(|captions| captions.path);
+            let caption_file = prepared_captions.map(|captions| captions.path);
             plan.captions = caption_file.as_ref().filter(|_| can_embed).cloned();
             let staging = work_dir.clone();
             let finished = tokio::task::spawn_blocking(move || {
@@ -248,7 +247,7 @@ pub(super) async fn run(
                     // The finished file is in place and checked, so the pieces
                     // can go.
                     let _ = std::fs::remove_dir_all(&work_dir);
-                    finish_saved(&state, job.id, path);
+                    finish_saved(&state, job.id, path, caption_warning);
                 }
                 Ok(Err(DeliverError::Cancelled)) => {
                     state.update_media_job(job.id, |job| {

@@ -208,6 +208,8 @@ pub fn start(
         job.downloading = true;
         job.done = false;
         job.error = None;
+        // What a previous run could not deliver is not this run's news.
+        job.notice = None;
         job.dest = Some(dest_text.clone());
         job.stage = Some("Starting".to_string());
         job.progress = TrackProgress::default();
@@ -330,6 +332,8 @@ pub fn resume(app: &AppHandle, job: &MediaJob) -> Result<Started, String> {
         job.downloading = true;
         job.done = false;
         job.error = None;
+        // What a previous run could not deliver is not this run's news.
+        job.notice = None;
         job.dest = Some(dest_text.clone());
         job.stage = Some("Starting".to_string());
         job.control = Some(control.clone());
