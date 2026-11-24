@@ -10,6 +10,14 @@ import {
 } from "@/lib/completion-sound";
 
 describe("the completion sound", () => {
+  it("offers thirteen sounds, each with its own name", () => {
+    expect(COMPLETION_SOUNDS).toHaveLength(13);
+    expect(new Set(COMPLETION_SOUNDS.map((sound) => sound.value)).size).toBe(13);
+    for (const sound of COMPLETION_SOUNDS) {
+      expect(sound.label.trim()).not.toBe("");
+    }
+  });
+
   it("is a few short, audible notes per sound", () => {
     for (const { value } of COMPLETION_SOUNDS) {
       const notes = completionNotes(value);
