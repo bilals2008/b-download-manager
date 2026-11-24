@@ -7,10 +7,15 @@
 //! transcript of one video in a single answer, and it needs no token the page
 //! itself would have to mint.
 //!
-//! It is a fallback and not the first choice, because it cannot name a
-//! language: the panel shows the video's own transcript, the one YouTube would
-//! show. The lines carry the moment they begin and no end, so each one lasts
-//! until the next begins.
+//! It is a fallback and not the first choice, because the track it serves is
+//! chosen by the client's language rather than by a track id, and because the
+//! lines carry the moment they begin and no end, so each one lasts until the
+//! next begins.
+//!
+//! The language is the request's `hl`: asking for `de` answers in German when
+//! the video has German captions, and answers in the video's own language when
+//! it does not. There is no field in the protobuf for a language, so `hl` is
+//! the only place a chosen track can be named.
 
 use serde_json::Value;
 
@@ -27,12 +32,16 @@ const CLIENT_VERSION: &str = "2.20250101.00.00";
 /// How long the last line stays on screen when nothing follows it.
 const LAST_LINE_SECONDS: f64 = 5.0;
 
-/// The video's own transcript, as SubRip text.
+/// The video's transcript in the language asked for, as SubRip text.
+///
+/// `language` is the code of the track the reader chose (`de`, `pt-BR`). A
+/// video that has no captions in it answers in its own language instead, so
+/// the caller says which language it asked for rather than assuming.
 ///
 /// `Ok` with the text is an answer; `Err` is why the panel did not give one.
 /// Both are the caller's to report, and neither may cost a reader the video
 /// whose bytes are already on disk.
-pub(crate) async fn fetch(page_url: &str) -> Result<String, String> {
+pub(crate) async fn fetch(page_url: &str, language: Option<&str>) -> Result<String, String> {
     let id = super::video_id(page_url).ok_or("the page is not a YouTube watch page")?;
     let client = idm_core::net::client_builder(None, None, None)?
         .build()
@@ -42,7 +51,7 @@ pub(crate) async fn fetch(page_url: &str) -> Result<String, String> {
             "client": {
                 "clientName": "WEB",
                 "clientVersion": CLIENT_VERSION,
-                "hl": "en",
+                "hl": hl_of(language),
                 "gl": "US"
             }
         },
@@ -74,6 +83,17 @@ pub(crate) async fn fetch(page_url: &str) -> Result<String, String> {
         return Err("the transcript came back empty".to_string());
     }
     Ok(to_srt(&cues))
+}
+
+/// The language a transcript is asked in.
+///
+/// A track the manifest named is named here too; a job with no language is
+/// asked in English, which is the language the panel would show anyway.
+fn hl_of(language: Option<&str>) -> &str {
+    language
+        .map(str::trim)
+        .filter(|language| !language.is_empty())
+        .unwrap_or("en")
 }
 
 /// The `params` of a transcript request: the video id in a protobuf message,
@@ -215,6 +235,14 @@ mod tests {
         // The value YouTube's own page sends for this video.
         assert_eq!(params("nu_pCVPKzTk"), "qgkPCgtudV9wQ1ZQS3pUaxgB");
         assert_eq!(params("jNQXAC9IVRw"), "qgkPCgtqTlFYQUM5SVZSdxgB");
+    }
+
+    #[test]
+    fn the_transcript_is_asked_in_the_chosen_language() {
+        assert_eq!(hl_of(Some("de")), "de");
+        assert_eq!(hl_of(Some("pt-BR")), "pt-BR");
+        assert_eq!(hl_of(Some("  ")), "en");
+        assert_eq!(hl_of(None), "en");
     }
 
     #[test]

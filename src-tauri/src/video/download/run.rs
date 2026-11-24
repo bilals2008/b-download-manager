@@ -226,8 +226,11 @@ pub(super) async fn run(
             // failing at the last step: putting them inside is the part that
             // needs FFmpeg.
             let can_embed = delivery.ffmpeg.is_some();
-            let caption_file = prepared_captions.map(|captions| captions.path);
-            plan.captions = caption_file.as_ref().filter(|_| can_embed).cloned();
+            let caption_file = prepared_captions;
+            plan.captions = caption_file
+                .as_ref()
+                .filter(|_| can_embed)
+                .map(|captions| captions.path.clone());
             let staging = work_dir.clone();
             let finished = tokio::task::spawn_blocking(move || {
                 deliver(&destination, inputs, &staging, &plan, stage.as_ref())

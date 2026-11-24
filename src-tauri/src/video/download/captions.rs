@@ -18,6 +18,11 @@ use idm_core::media::subtitles;
 pub(super) struct Captions {
     /// The SRT file to mux.
     pub path: PathBuf,
+    /// The language of the words in it, when it has one: the track the reader
+    /// chose names it, and a file the reader picked does not. It goes into the
+    /// name the file is saved under, so a folder says which language a `.srt`
+    /// is in without the file being opened.
+    pub language: Option<String>,
 }
 
 /// What a job's caption request came to.
@@ -28,10 +33,10 @@ pub(super) struct Prepared {
     /// finished row: a caption the site would not hand over must never cost
     /// the reader a video whose bytes are already on disk.
     pub warning: Option<String>,
-    /// What is worth knowing about captions that *are* there. The transcript
-    /// panel answers with the video's own transcript and cannot be asked for
-    /// another language, so a reader who chose one track may get another, and
-    /// that is said rather than passed off as the chosen track.
+    /// What is worth knowing about captions that *are* there: the video's
+    /// transcript stood in for the chosen track, so the words may be another
+    /// language than the manifest named, and which one is said rather than
+    /// passed off as the track the reader picked.
     pub note: Option<String>,
 }
 
@@ -94,7 +99,8 @@ pub(super) async fn prepare(
             .extension()
             .map(|extension| extension.to_string_lossy().to_string())
             .unwrap_or_default();
-        return match finish(&text, &extension, work_dir) {
+        // A file the reader picked says nothing about its language.
+        return match finish(&text, &extension, None, work_dir) {
             Ok(captions) => Prepared::with(captions, None),
             Err(reason) => Prepared::missing(reason),
         };
@@ -112,6 +118,15 @@ pub(super) async fn prepare(
     else {
         return Prepared::missing("that caption track is not in the manifest any more");
     };
+    // The language the transcript is asked in, and the one the saved file is
+    // named after. A rendition with no language of its own is asked in the
+    // panel's own default, and is not labelled with anything.
+    let language = rendition
+        .language
+        .as_deref()
+        .map(str::trim)
+        .filter(|language| !language.is_empty())
+        .map(str::to_string);
     let fetched = match fetch_caption(app, job, rendition).await {
         Ok(fetched) => fetched,
         Err(reason) => {
@@ -120,11 +135,15 @@ pub(super) async fn prepare(
             ))
         }
     };
-    let note = fetched.transcript.then(|| {
-        "the chosen caption track could not be fetched; the video's own transcript was saved instead"
-            .to_string()
+    let note = fetched.transcript.then(|| match &language {
+        Some(code) => format!(
+            "the chosen caption track did not come; the video's transcript was saved in {} ({code})",
+            rendition.name
+        ),
+        None => "the chosen caption track did not come; the video's transcript was saved instead"
+            .to_string(),
     });
-    match finish(&fetched.text, &fetched.container, work_dir) {
+    match finish(&fetched.text, &fetched.container, language, work_dir) {
         Ok(captions) => Prepared::with(captions, note),
         Err(reason) => Prepared::missing(reason),
     }
@@ -188,12 +207,21 @@ async fn fetch_caption(
         }
     }
     // The panel is asked before the helper, because it is a different service
-    // than the throttled one, and it answers in one request.
-    if let Ok(text) = crate::video::yt::transcript::fetch(&job.page_url).await {
+    // than the throttled one, it answers in one request, and it can be asked
+    // in the language of the chosen track.
+    if let Ok(text) = crate::video::yt::transcript::fetch(
+        &job.page_url,
+        rendition.language.as_deref(),
+    )
+    .await
+    {
         if !text.trim().is_empty() {
             idm_core::log::write(
                 "info",
-                "the caption address did not answer; the video's own transcript was used",
+                &format!(
+                    "the caption address did not answer; the transcript was read in {}",
+                    rendition.language.as_deref().unwrap_or("the video's own language")
+                ),
             );
             return Ok(Fetched {
                 text,
@@ -274,17 +302,33 @@ async fn helper_caption(
 
 /// Write the caption text beside the finished video.
 ///
-/// The name matches the video's own, which is the one a player looks for by
-/// itself, so the captions are there whether or not the container took them
-/// and the reader can open and edit the text.
-pub(super) fn beside(captions: &Path, video: &Path) -> std::io::Result<PathBuf> {
-    let sidecar = video.with_extension("srt");
-    std::fs::copy(captions, &sidecar)?;
-    Ok(sidecar)
+/// The name starts with the video's own, which is what a player looks for by
+/// itself, and carries the language when the file has one, which is the form a
+/// media library reads the language from (`A video 1080p.de.srt`). The
+/// captions are there whether or not the container took them, and the reader
+/// can open and edit the text.
+pub(super) fn beside(captions: &Captions, video: &Path) -> std::io::Result<PathBuf> {
+    let name = match &captions.language {
+        Some(language) => {
+            let stem = video
+                .file_stem()
+                .map(|stem| stem.to_string_lossy().to_string())
+                .unwrap_or_else(|| "captions".to_string());
+            video.with_file_name(format!("{stem}.{language}.srt"))
+        }
+        None => video.with_extension("srt"),
+    };
+    std::fs::copy(&captions.path, &name)?;
+    Ok(name)
 }
 
 /// Write the caption text as the file the muxer reads.
-fn finish(text: &str, extension: &str, work_dir: &Path) -> Result<Captions, String> {
+fn finish(
+    text: &str,
+    extension: &str,
+    language: Option<String>,
+    work_dir: &Path,
+) -> Result<Captions, String> {
     let extension = extension.trim().to_ascii_lowercase();
     if extension != "vtt" && extension != "srt" {
         // A rendition named for something this build does not read is an
@@ -310,7 +354,10 @@ fn finish(text: &str, extension: &str, work_dir: &Path) -> Result<Captions, Stri
     };
     std::fs::write(&out, body)
         .map_err(|error| format!("the caption file could not be written: {error}"))?;
-    Ok(Captions { path: out })
+    Ok(Captions {
+        path: out,
+        language,
+    })
 }
 
 #[cfg(test)]
@@ -334,18 +381,32 @@ mod tests {
     }
 
     #[test]
-    fn the_captions_are_written_beside_the_video_under_its_name() {
+    fn the_captions_are_written_beside_the_video_under_its_name_and_language() {
         let dir = std::env::temp_dir().join(format!("bdm-sidecar-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("a folder");
         let captions = dir.join("captions.srt");
         std::fs::write(&captions, "1\n00:00:01,000 --> 00:00:02,000\nHello\n").expect("text");
-
         let video = dir.join("A video 1080p.mp4");
-        let sidecar = beside(&captions, &video).expect("a sidecar");
-        assert_eq!(sidecar, dir.join("A video 1080p.srt"));
+
+        let named = Captions {
+            path: captions.clone(),
+            language: Some("de".to_string()),
+        };
+        let sidecar = beside(&named, &video).expect("a sidecar");
+        assert_eq!(sidecar, dir.join("A video 1080p.de.srt"));
         assert!(std::fs::read_to_string(&sidecar)
             .expect("the sidecar reads")
             .contains("Hello"));
+
+        // A file with no language of its own keeps the video's own name.
+        let plain = Captions {
+            path: captions,
+            language: None,
+        };
+        assert_eq!(
+            beside(&plain, &video).expect("a sidecar"),
+            dir.join("A video 1080p.srt")
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }
