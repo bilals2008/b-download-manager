@@ -94,6 +94,7 @@ fn a_page_or_a_wrong_host_is_refused() {
 fn an_extension_origin_is_recognised() {
     assert!(is_extension_origin("moz-extension://3c1e8f2a"));
     assert!(is_extension_origin("chrome-extension://abc"));
+    assert!(is_extension_origin("safari-web-extension://3c1e8f2a-1"));
     assert!(!is_extension_origin("https://example.org"));
     assert!(!is_extension_origin("null"));
 }
