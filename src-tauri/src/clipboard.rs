@@ -32,6 +32,16 @@ const POLL: Duration = Duration::from_millis(700);
 /// download link.
 const MAX_LINK: usize = 4096;
 
+/// The text on the clipboard right now, or nothing when it is empty.
+///
+/// The watch above offers a copied link on its own; this is the menu's own
+/// question, asked when the reader chooses "Add batch download from
+/// clipboard", so the pattern is built from what is there at that moment.
+#[tauri::command]
+pub fn clipboard_text(app: AppHandle) -> String {
+    app.clipboard().read_text().unwrap_or_default()
+}
+
 /// Start watching the clipboard. It runs until the application ends.
 pub fn start(app: AppHandle) {
     tauri::async_runtime::spawn(async move {

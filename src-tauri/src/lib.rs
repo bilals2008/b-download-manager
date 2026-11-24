@@ -224,6 +224,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             start_download,
+            clipboard::clipboard_text,
             list_downloads,
             pause_download,
             resume_download,

@@ -50,11 +50,10 @@ export function buildMenus(
       { command: "add-download", label: "Add new download...", shortcut: key("add-download") },
       { command: "add-torrent", label: "Add torrent..." },
       { command: "torrents", label: "Torrents", shortcut: key("torrents") },
-      { command: "add-batch", label: "Add batch download...", disabled: true },
+      { command: "add-batch", label: "Add batch download..." },
       {
         command: "add-batch-clipboard",
         label: "Add batch download from clipboard",
-        disabled: true,
       },
       { command: "run-grabber", label: "Run site grabber" },
       { command: "drop-target", label: "Show drop target", disabled: true },

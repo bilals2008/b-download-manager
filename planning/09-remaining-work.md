@@ -143,9 +143,12 @@ which is why several of its unchecked items were already shipped. Rule 5 of
 - [ ] **The export and import** of an export file in the reference product's
       own format, or of a text file. Four disabled menu items
       (`menus.ts:61-73`) and no writer anywhere.
-- [ ] **Add batch download** and **Show drop target**: also disabled stubs
-      (`menus.ts:51`, `menus.ts:58`). The bridge already accepts a batch from
-      the extension (`bridge/batch.rs`), so the in-app version is a UI job.
+- [x] **Add batch download**, and the clipboard variant: one address with a
+      `*` and the range it stands for, previewed before anything starts
+      (`src/lib/batch.ts`, `add-batch-dialog.tsx`; the clipboard is read by
+      `clipboard_text`).
+- [ ] **Show drop target**: still a disabled stub (`menus.ts:58`). The bridge
+      already accepts a batch from the extension (`bridge/batch.rs`).
 - [x] **A first run** notice in the add dialog (`firstRunDone`). It explains
       where files land, not the connection setting — the sentence the original
       plan asked for is still not written.

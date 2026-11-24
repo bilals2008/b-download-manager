@@ -13,6 +13,7 @@ import { useShellShortcuts } from "@/components/shell/use-shell-shortcuts";
 import { cycleSectionFocus } from "@/components/shell/section-focus";
 import { TipOfTheDayDialog } from "@/components/tips/tip-of-the-day-dialog";
 import { AboutDialog } from "@/components/workspace/about-dialog";
+import { AddBatchDialog } from "@/components/workspace/add-batch-dialog";
 import { AddDownloadDialog } from "@/components/workspace/add-download-dialog";
 import { AddTorrentDialog } from "@/components/workspace/add-torrent-dialog";
 import { CloseConfirmDialog } from "@/components/workspace/close-confirm-dialog";
@@ -73,6 +74,7 @@ import {
   type ToolbarPreference,
   type ToolbarToken,
 } from "@/lib/toolbars";
+import { useBatchHandoff } from "@/components/workspace/batch-handoff";
 import { useTorrentHandoff } from "@/components/workspace/torrent-handoff";
 import { runCheck, type UpdateFound } from "@/lib/updates";
 import { useDownloads } from "@/state/download-store";
@@ -90,6 +92,7 @@ export default function App() {
   const [addDownloadOpen, setAddDownloadOpen] = useState(false);
   // Torrents are a job of their own, so they have a dialog of their own.
   const torrent = useTorrentHandoff();
+  const batch = useBatchHandoff();
   const [clipboardLink, setClipboardLink] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   // The page the options window shows. The menu opens it straight on the
@@ -554,6 +557,12 @@ export default function App() {
       case "add-torrent":
         torrent.openBlank();
         break;
+      case "add-batch":
+        batch.openBlank();
+        break;
+      case "add-batch-clipboard":
+        batch.openFromClipboard();
+        break;
       case "torrents":
         // Any failure is a bug to see: the menu looks broken otherwise.
         void showTorrentWindow().catch((failure) => console.error(failure));
@@ -690,6 +699,7 @@ export default function App() {
         onTorrent={(source) => { closeAddDownload(); torrent.openWith(source); }}
       />
       <AddTorrentDialog open={torrent.open} initialSource={torrent.seed} onClose={torrent.close} />
+      <AddBatchDialog open={batch.open} seed={batch.seed} onClose={batch.close} />
       <SettingsDialog
         open={settingsOpen}
         onClose={() => {
