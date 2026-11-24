@@ -101,7 +101,7 @@ export function buildMenus(
       "separator",
       { command: "find", label: "Find", shortcut: key("find") },
       { command: "find-next", label: "Find Next", shortcut: key("find-next") },
-      { command: "scheduler", label: "Scheduler and queues (coming soon)", disabled: true },
+      { command: "scheduler", label: "Scheduler and queues..." },
       "separator",
       { command: "options", label: "Options...", shortcut: key("options") },
       "separator",
@@ -209,11 +209,7 @@ export function buildMenus(
     rows: [
       { command: "help-contents", label: "Help contents", shortcut: "F1", disabled: true },
       { command: "tutorials", label: "Tutorials", disabled: true },
-      {
-        command: "help-scheduler-queues",
-        label: "Scheduler and queues (coming soon)",
-        disabled: true,
-      },
+      { command: "help-scheduler-queues", label: "Scheduler and queues" },
       { command: "grabber-help", label: "Grabber Help", disabled: true },
       { command: "tip-of-the-day", label: "Tip of the Day..." },
       { command: "whats-new", label: "What's new..." },

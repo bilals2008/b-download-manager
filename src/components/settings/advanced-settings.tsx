@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { SettingsButton } from "@/components/settings/settings-button";
+import { Switch } from "@/components/ui/switch";
 import {
   Section,
   SettingRow,
@@ -9,6 +10,7 @@ import {
 import { Tooltip } from "@/components/ui/tooltip";
 import { describeError, isDesktop } from "@/lib/errors";
 import { appPaths, openPath, type AppPaths } from "@/lib/ipc";
+import { mcpEnabled, setMcpEnabled } from "@/lib/ipc-mcp";
 
 interface AdvancedSettingsProps {
   /** Restore every preference, after the second click. */
@@ -16,15 +18,41 @@ interface AdvancedSettingsProps {
 }
 
 /**
- * Advanced: where the application keeps its data, a guarded reset, and the
- * features that are planned. A planned feature is written out as a plain
- * "Coming soon" note, never as a control: a greyed-out switch would suggest
- * the feature already exists and only needs to be turned on.
+ * Advanced: where the application keeps its data, the door an AI assistant
+ * comes through, and a guarded reset.
  */
 export function AdvancedSettings({ onReset }: AdvancedSettingsProps) {
   const [paths, setPaths] = useState<AppPaths | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [armed, setArmed] = useState(false);
+  const [assistants, setAssistants] = useState(false);
+
+  useEffect(() => {
+    if (!isDesktop()) {
+      return;
+    }
+    let active = true;
+    void mcpEnabled()
+      .then((answer) => {
+        if (active) {
+          setAssistants(answer);
+        }
+      })
+      .catch(() => {
+        // The switch stays off when the engine cannot say.
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  function toggleAssistants(on: boolean) {
+    setAssistants(on);
+    void setMcpEnabled(on).catch((failure: unknown) => {
+      setProblem(describeError(failure));
+      setAssistants(!on);
+    });
+  }
 
   useEffect(() => {
     let active = true;
@@ -141,14 +169,16 @@ export function AdvancedSettings({ onReset }: AdvancedSettingsProps) {
           settingId="setting-mcp"
           label="Let AI assistants drive this app"
         >
-          <span className="text-chrome-micro text-chrome-muted">
-            Coming soon
-          </span>
+          <Switch
+            label="Let AI assistants drive this app"
+            checked={assistants}
+            onChange={toggleAssistants}
+          />
         </SettingRow>
         <p className="pt-1 text-chrome-micro leading-4 text-chrome-muted">
-          Not available yet. An assistant will run the idm-mcp program beside
-          this app and may list, add, pause, resume and remove downloads.
-          Deleting a file from disk will need a second, explicit call.
+          Off by default. An assistant starts the idm-mcp program beside this app
+          and may list, add, pause, resume and remove downloads. Deleting a
+          file from disk needs a second, explicit call.
         </p>
       </Section>
 

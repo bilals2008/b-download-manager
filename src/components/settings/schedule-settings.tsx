@@ -122,7 +122,10 @@ export function ScheduleSettings() {
   return (
     <>
       <Section title="Schedule">
-        <SettingRow label="Run the queue on a schedule">
+        <SettingRow
+          settingId="setting-queue-schedule"
+          label="Run the queue on a schedule"
+        >
           <Switch
             checked={schedule.enabled}
             label="Run the queue on a schedule"
@@ -151,7 +154,7 @@ export function ScheduleSettings() {
             })}
           </div>
         </SettingRow>
-        <SettingRow label="Start">
+        <SettingRow settingId="setting-queue-start" label="Start">
           <input
             id="setting-queue-start"
             type="time"
@@ -165,7 +168,7 @@ export function ScheduleSettings() {
             className="h-8 rounded-chrome border border-chrome-line bg-chrome-panel px-2 text-xs tabular-nums text-chrome-title-text"
           />
         </SettingRow>
-        <SettingRow label="Stop">
+        <SettingRow settingId="setting-queue-stop" label="Stop">
           <input
             id="setting-queue-stop"
             type="time"
@@ -179,7 +182,10 @@ export function ScheduleSettings() {
             className="h-8 rounded-chrome border border-chrome-line bg-chrome-panel px-2 text-xs tabular-nums text-chrome-title-text"
           />
         </SettingRow>
-        <SettingRow label="When the window closes">
+        <SettingRow
+          settingId="setting-queue-end"
+          label="When the window closes"
+        >
           <ListBox
             label="When the window closes"
             options={END_ACTIONS}

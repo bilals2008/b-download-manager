@@ -74,6 +74,11 @@ import { resetTipCursor } from "@/lib/tips";
 interface SettingsDialogProps {
   open: boolean;
   onClose: () => void;
+  /** The page that is open. The shell may open one page straight away. */
+  page: SettingsPageId;
+  onPageChange: (page: SettingsPageId) => void;
+  /** A row to scroll to and flash when the window opens. */
+  anchor?: string | null;
   /** Open the latest release notes from the About page. */
   onWhatsNew: () => void;
   /** The toolbar page reads and writes the bar the shell already owns. */
@@ -120,13 +125,15 @@ const ENGINE_KEYS: readonly (keyof Settings)[] = [
 export function SettingsDialog({
   open,
   onClose,
+  page,
+  onPageChange,
+  anchor,
   onWhatsNew,
   toolbar,
   tray,
 }: SettingsDialogProps) {
   const t = useT();
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const [page, setPage] = useState<SettingsPageId>("general");
   // A search result asks for one anchor after the page has changed. The hook
   // scrolls it into view, focuses it and flashes it once the page has drawn.
   const [settingTarget, setSettingTarget] = useState<SettingTarget | null>(null);
@@ -165,10 +172,15 @@ export function SettingsDialog({
     void syncEngineSettings()
       .then((synced) => adopt(synced ?? loadSettings()))
       .catch(() => adopt(loadSettings()));
+    // A menu row that names one setting opens the window on it, so the row
+    // is not just on the page but in front of the reader.
+    if (anchor) {
+      setSettingTarget({ anchor });
+    }
     return () => {
       active = false;
     };
-  }, [open]);
+  }, [open, anchor]);
 
   // The extension can change the capture rules while this window is open.
   // Its answer is what the app already stored, so the page follows it without
@@ -220,7 +232,7 @@ export function SettingsDialog({
   );
 
   function openSetting(entry: SettingsCatalogEntry) {
-    setPage(entry.page);
+    onPageChange(entry.page);
     setSettingTarget({ anchor: entry.id });
   }
 
@@ -351,7 +363,7 @@ export function SettingsDialog({
     broadcastSettings();
     setError(null);
     setNotice(null);
-    setPage("general");
+    onPageChange("general");
 
     if (pushTimer.current) {
       clearTimeout(pushTimer.current);
@@ -451,7 +463,7 @@ export function SettingsDialog({
       }
     >
       <div className="flex min-h-0 w-full flex-1">
-        <SettingsSidebar page={page} onSelect={setPage} />
+        <SettingsSidebar page={page} onSelect={onPageChange} />
         <SettingsSearch page={page} onNavigate={openSetting}>
           <div
             role="region"

@@ -292,7 +292,7 @@ export const PAGE_ENTRIES_NETWORK: readonly SettingsCatalogEntry[] = [  {
     page: "remote",
     section: "Phone and LAN",
     title: "Let a phone on this network drive the app",
-    description: "Coming soon: A phone pairs once, then lists, adds, pauses, resumes and removes downloads.",
+    description: "A phone pairs once, then lists, adds, pauses, resumes and removes downloads.",
     keywords: [
       "remote",
       "phone",
@@ -310,7 +310,7 @@ export const PAGE_ENTRIES_NETWORK: readonly SettingsCatalogEntry[] = [  {
     page: "remote",
     section: "Phone and LAN",
     title: "Pair a phone",
-    description: "Coming soon: A one-time code that is good for one phone.",
+    description: "A one-time code that is good for one phone.",
     keywords: [
       "remote",
       "pair",
@@ -458,7 +458,7 @@ export const PAGE_ENTRIES_NETWORK: readonly SettingsCatalogEntry[] = [  {
     page: "advanced",
     section: "AI assistants",
     title: "Let AI assistants drive this app",
-    description: "Coming soon: the MCP door an assistant will start.",
+    description: "The MCP door an assistant starts to list, add, pause and resume downloads.",
     keywords: [
       "mcp",
       "assistant",
