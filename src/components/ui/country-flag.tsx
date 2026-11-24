@@ -1,5 +1,12 @@
-import { flagUrl } from "@/lib/flags";
+import { FLAG_ATLAS, flagCell } from "@/lib/flags";
 import { cn } from "@/lib/utils";
+
+/**
+ * How much smaller the flag is drawn than its cell: 32 by 24 in the picture,
+ * 16 by 12 on screen, so a screen with more pixels than points still has its
+ * own for the flag.
+ */
+const DRAWN_SCALE = 0.5;
 
 /**
  * The flag of the country a download's server answers from.
@@ -16,20 +23,23 @@ export function CountryFlag({
   code: string | null | undefined;
   className?: string;
 }) {
-  const url = flagUrl(code);
-  if (!url) {
+  const cell = flagCell(code);
+  if (!cell) {
     return null;
   }
+  const { url, columns, rows, cellWidth, cellHeight } = FLAG_ATLAS;
   return (
-    <img
-      src={url}
-      alt=""
+    <span
       aria-hidden
-      draggable={false}
       className={cn(
-        "h-3 w-4 shrink-0 rounded-[2px] object-cover ring-1 ring-chrome-line ring-inset",
+        "h-3 w-4 shrink-0 rounded-[2px] bg-no-repeat ring-1 ring-chrome-line ring-inset",
         className,
       )}
+      style={{
+        backgroundImage: `url("${url}")`,
+        backgroundSize: `${columns * cellWidth * DRAWN_SCALE}px ${rows * cellHeight * DRAWN_SCALE}px`,
+        backgroundPosition: `${-cell.x * DRAWN_SCALE}px ${-cell.y * DRAWN_SCALE}px`,
+      }}
     />
   );
 }
