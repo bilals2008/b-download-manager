@@ -198,7 +198,12 @@ pub(super) async fn run(
             let captions::Prepared {
                 captions: prepared_captions,
                 warning: caption_warning,
+                note: caption_note,
             } = prepared;
+            // A caption that came as the video's own transcript is worth
+            // saying on the finished row; a caption that did not come at all
+            // is worth more, and a run has only one line to say it on.
+            let caption_notice = caption_warning.or(caption_note);
             let mut inputs = vec![video_track_path(&work_dir)];
             if request.audio.is_some() {
                 let audio = audio_track_path(&work_dir);
@@ -247,7 +252,7 @@ pub(super) async fn run(
                     // The finished file is in place and checked, so the pieces
                     // can go.
                     let _ = std::fs::remove_dir_all(&work_dir);
-                    finish_saved(&state, job.id, path, caption_warning);
+                    finish_saved(&state, job.id, path, caption_notice);
                 }
                 Ok(Err(DeliverError::Cancelled)) => {
                     state.update_media_job(job.id, |job| {

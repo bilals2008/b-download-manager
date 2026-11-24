@@ -28,6 +28,11 @@ pub(super) struct Prepared {
     /// finished row: a caption the site would not hand over must never cost
     /// the reader a video whose bytes are already on disk.
     pub warning: Option<String>,
+    /// What is worth knowing about captions that *are* there. The transcript
+    /// panel answers with the video's own transcript and cannot be asked for
+    /// another language, so a reader who chose one track may get another, and
+    /// that is said rather than passed off as the chosen track.
+    pub note: Option<String>,
 }
 
 impl Prepared {
@@ -36,6 +41,7 @@ impl Prepared {
         Prepared {
             captions: None,
             warning: None,
+            note: None,
         }
     }
 
@@ -44,13 +50,16 @@ impl Prepared {
         Prepared {
             captions: None,
             warning: Some(reason.into()),
+            note: None,
         }
     }
 
-    fn with(captions: Captions) -> Self {
+    /// The captions, and what the reader should know about them.
+    fn with(captions: Captions, note: Option<String>) -> Self {
         Prepared {
             captions: Some(captions),
             warning: None,
+            note,
         }
     }
 }
@@ -86,7 +95,7 @@ pub(super) async fn prepare(
             .map(|extension| extension.to_string_lossy().to_string())
             .unwrap_or_default();
         return match finish(&text, &extension, work_dir) {
-            Ok(captions) => Prepared::with(captions),
+            Ok(captions) => Prepared::with(captions, None),
             Err(reason) => Prepared::missing(reason),
         };
     }
@@ -111,8 +120,12 @@ pub(super) async fn prepare(
             ))
         }
     };
+    let note = fetched.transcript.then(|| {
+        "the chosen caption track could not be fetched; the video's own transcript was saved instead"
+            .to_string()
+    });
     match finish(&fetched.text, &fetched.container, work_dir) {
-        Ok(captions) => Prepared::with(captions),
+        Ok(captions) => Prepared::with(captions, note),
         Err(reason) => Prepared::missing(reason),
     }
 }
@@ -124,15 +137,21 @@ struct Fetched {
     /// names SRT is handed the SRT parser: YouTube lists both forms, and a
     /// comma-decimal file read as WebVTT loses every cue.
     container: String,
+    /// Whether this text is the video's own transcript rather than the track
+    /// the reader chose.
+    transcript: bool,
 }
 
 /// Fetch one caption track: the address the manifest holds, asked again while
-/// the site says it is busy, then the video helper, which asks the same track
-/// the way the page's own player does.
+/// the site says it is busy; then the video's own transcript, which YouTube
+/// answers from a different service; then the video helper, which asks the
+/// same track the way the page's own player does.
 ///
-/// YouTube answers its timed-text endpoint with 429 on many addresses, and
-/// the browser helper cannot always get past that either; the answer is what
-/// the finished row says, not a stopped download.
+/// YouTube answers its timed-text endpoint with 429 on many addresses, and a
+/// helper that asks that same address is throttled with it; the transcript
+/// panel is a separate call and still answers. Whichever of them gives the
+/// text, the answer to a caption that none of them give is what the finished
+/// row says, not a stopped download.
 async fn fetch_caption(
     app: &tauri::AppHandle,
     job: &MediaJob,
@@ -152,6 +171,7 @@ async fn fetch_caption(
                 return Ok(Fetched {
                     text: fetched.text,
                     container: container_of(rendition),
+                    transcript: false,
                 });
             }
             Ok(_) => break,
@@ -167,11 +187,27 @@ async fn fetch_caption(
             }
         }
     }
+    // The panel is asked before the helper, because it is a different service
+    // than the throttled one, and it answers in one request.
+    if let Ok(text) = crate::video::yt::transcript::fetch(&job.page_url).await {
+        if !text.trim().is_empty() {
+            idm_core::log::write(
+                "info",
+                "the caption address did not answer; the video's own transcript was used",
+            );
+            return Ok(Fetched {
+                text,
+                container: "srt".to_string(),
+                transcript: true,
+            });
+        }
+    }
     match helper_caption(app, job, rendition).await {
         // The helper is asked for WebVTT, whatever the site listed.
         Some(text) if !text.trim().is_empty() => Ok(Fetched {
             text,
             container: "vtt".to_string(),
+            transcript: false,
         }),
         _ => Err(last),
     }
