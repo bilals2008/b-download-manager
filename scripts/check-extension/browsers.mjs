@@ -12,7 +12,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 import { buildExtension, BROWSERS } from "../../extensions/build.mjs";
-import { pngSize } from "./common.mjs";
+import { pngSize, setTimeoutShim } from "./common.mjs";
 
 const extensionRoot = fileURLToPath(new URL("../../extensions/", import.meta.url));
 
@@ -190,13 +190,22 @@ function answer(value, owner, name) {
   };
 }
 
-const event = (slot) => ({
-  addListener: (fn) => {
-    if (slot) channel = fn;
-  },
-  removeListener: () => {},
-  hasListener: () => true,
-});
+/** An event that keeps what was registered, so a removal can be checked. */
+const event = (slot) => {
+  const listeners = [];
+  return {
+    listeners,
+    addListener: (fn) => {
+      listeners.push(fn);
+      if (slot) channel = fn;
+    },
+    removeListener: (fn) => {
+      const index = listeners.indexOf(fn);
+      if (index >= 0) listeners.splice(index, 1);
+    },
+    hasListener: (fn) => listeners.includes(fn),
+  };
+};
 
 const chrome = {
   runtime: {
@@ -300,6 +309,24 @@ assert.equal(keepOpen, true, "adapter: an async listener keeps the channel open"
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.deepEqual(answered[0], { ok: true, echo: "bdm:status" });
 
+/* The engine was given the wrapper, so a removal has to name it too. */
+const detach = async () => ({ ok: true });
+const registered = chrome.runtime.onMessage.listeners.length;
+browser.runtime.onMessage.addListener(detach);
+assert.equal(
+  chrome.runtime.onMessage.listeners.length,
+  registered + 1,
+  "adapter: a listener reaches the engine",
+);
+assert.ok(browser.runtime.onMessage.hasListener(detach), "adapter: it knows the listener");
+browser.runtime.onMessage.removeListener(detach);
+assert.equal(
+  chrome.runtime.onMessage.listeners.length,
+  registered,
+  "adapter: removing a listener detaches the wrapper it registered",
+);
+assert.ok(!browser.runtime.onMessage.hasListener(detach), "adapter: and forgets it");
+
 let syncChannel = null;
 const syncContext = vm.createContext({
   chrome: {
@@ -329,3 +356,202 @@ vm.runInContext(read("chromium", "lib/platform.js"), nativeContext, {
   filename: "lib/platform.js",
 });
 assert.equal(nativeContext.browser, native, "adapter: an existing `browser` is left alone");
+
+/* --------------------------------------------------------- the worker itself
+
+   A Chromium background is a service worker: one entry file that imports the
+   rest, a global with no `window` and no `document`, and a `chrome` whose
+   methods take callbacks. The chain is run here in exactly that shape, so a
+   broken import list, a name two scripts both declare, a DOM call at load, a
+   listener registered too late or a top-level throw fails this check instead of
+   the reader's browser. */
+
+const workerEvents = new Map();
+const workerCalls = [];
+const workerFetches = [];
+
+function workerEvent(name) {
+  return {
+    addListener: (fn) => {
+      workerEvents.set(name, [...(workerEvents.get(name) || []), fn]);
+    },
+  };
+}
+
+function workerAnswer(value, name) {
+  return (...args) => {
+    const callback = args.pop();
+    workerCalls.push([name, ...args]);
+    setTimeout(() => callback(value), 0);
+  };
+}
+
+const workerChrome = {
+  runtime: {
+    id: "check-worker",
+    getURL: (file) => `chrome-extension://check/${file}`,
+    getManifest: () => ({ version: "1.1.6" }),
+    sendMessage: workerAnswer(undefined, "runtime.sendMessage"),
+    openOptionsPage: workerAnswer(undefined, "runtime.openOptionsPage"),
+    onMessage: workerEvent("runtime.onMessage"),
+    onInstalled: workerEvent("runtime.onInstalled"),
+    onStartup: workerEvent("runtime.onStartup"),
+    get lastError() {
+      return undefined;
+    },
+  },
+  storage: {
+    local: {
+      get: workerAnswer({}, "storage.get"),
+      set: workerAnswer(undefined, "storage.set"),
+    },
+    onChanged: workerEvent("storage.onChanged"),
+  },
+  action: {
+    setBadgeText: workerAnswer(undefined, "action.setBadgeText"),
+    setBadgeBackgroundColor: workerAnswer(undefined, "action.setBadgeBackgroundColor"),
+    setBadgeTextColor: workerAnswer(undefined, "action.setBadgeTextColor"),
+  },
+  contextMenus: {
+    create: (props, callback) => {
+      workerCalls.push(["contextMenus.create", props.id]);
+      callback?.();
+    },
+    removeAll: workerAnswer(undefined, "contextMenus.removeAll"),
+    onClicked: workerEvent("contextMenus.onClicked"),
+  },
+  tabs: {
+    create: workerAnswer({}, "tabs.create"),
+    sendMessage: workerAnswer({ ok: true }, "tabs.sendMessage"),
+    onUpdated: workerEvent("tabs.onUpdated"),
+    onRemoved: workerEvent("tabs.onRemoved"),
+  },
+  windows: { create: workerAnswer({}, "windows.create") },
+  downloads: {
+    pause: workerAnswer(undefined, "downloads.pause"),
+    resume: workerAnswer(undefined, "downloads.resume"),
+    cancel: workerAnswer(undefined, "downloads.cancel"),
+    erase: workerAnswer(undefined, "downloads.erase"),
+    onCreated: workerEvent("downloads.onCreated"),
+  },
+  cookies: { getAll: workerAnswer([], "cookies.getAll") },
+  alarms: {
+    create: (...args) => workerCalls.push(["alarms.create", ...args]),
+    onAlarm: workerEvent("alarms.onAlarm"),
+  },
+};
+
+/** The bridge's answers, so a hand-over can be driven to the end. */
+const bridgeAnswers = {
+  "/v1/ping": { app: "b-download-manager", api: 1, version: "2.0.1", connected: true },
+  "/v1/capture": { capture: true, ask: false, types: [], skipSites: [] },
+};
+
+async function workerFetch(url, options) {
+  const route = new URL(url).pathname;
+  workerFetches.push([route, options?.method || "GET"]);
+  const data = bridgeAnswers[route] || {};
+  return { status: 200, text: async () => JSON.stringify({ ok: true, data }) };
+}
+
+// A service worker's global: no window, no document, and `importScripts`.
+const workerGlobal = vm.createContext({
+  chrome: workerChrome,
+  console,
+  setTimeout: setTimeoutShim,
+  clearTimeout,
+  URL,
+  AbortController,
+  fetch: workerFetch,
+  navigator: { userAgent: "check-worker" },
+});
+workerGlobal.importScripts = (...files) => {
+  for (const file of files) {
+    vm.runInContext(read("chromium", file), workerGlobal, { filename: file });
+  }
+};
+
+vm.runInContext(read("chromium", "worker.js"), workerGlobal, { filename: "worker.js" });
+
+assert.equal(typeof workerGlobal.window, "undefined", "chromium: the worker global has no window");
+assert.equal(typeof workerGlobal.document, "undefined", "chromium: the worker global has no document");
+assert.ok(workerGlobal.browser, "chromium: every imported script sees one adapter");
+
+// Manifest V3 only wakes a worker for listeners that exist at the top level.
+for (const name of [
+  "runtime.onMessage",
+  "runtime.onInstalled",
+  "runtime.onStartup",
+  "contextMenus.onClicked",
+  "downloads.onCreated",
+  "tabs.onUpdated",
+  "tabs.onRemoved",
+  "alarms.onAlarm",
+]) {
+  assert.ok(
+    workerEvents.get(name)?.length,
+    `chromium: the worker listens for ${name} without being asked`,
+  );
+}
+
+// A wake-up: the browser starts the worker for an event and it rebuilds itself.
+for (const listener of workerEvents.get("runtime.onInstalled")) listener({ reason: "install" });
+await new Promise((resolve) => setTimeout(resolve, 20));
+
+assert.deepEqual(
+  workerCalls.filter((call) => call[0] === "contextMenus.create").map((call) => call[1]),
+  ["bdm-download", "bdm-links", "bdm-separator", "bdm-open", "bdm-settings"],
+  "chromium: the wake-up builds the menus",
+);
+assert.ok(
+  workerCalls.some((call) => call[0] === "action.setBadgeBackgroundColor"),
+  "chromium: the worker paints the badge at load",
+);
+
+// A message from a page: promise in, sendResponse out, `true` returned.
+const workerAnswers = [];
+const keptOpen = workerEvents.get("runtime.onMessage")[0](
+  { type: "bdm:status" },
+  {},
+  (value) => workerAnswers.push(value),
+);
+assert.equal(keptOpen, true, "chromium: the worker answers asynchronously");
+await new Promise((resolve) => setTimeout(resolve, 20));
+assert.deepEqual(
+  // A copy: the answer was built in the worker's own realm.
+  { ...workerAnswers[0] },
+  { ok: true, version: "2.0.1", api: 1, connected: true },
+  "chromium: the worker answers a status message",
+);
+
+// The link window, from the right-click menu.
+workerCalls.length = 0;
+await workerEvents.get("contextMenus.onClicked")[0]({ menuItemId: "bdm-links", tab: { id: 3 } });
+const windowCall = workerCalls.find((call) => call[0] === "windows.create");
+assert.ok(windowCall, "chromium: the link menu opens a window");
+assert.match(
+  windowCall[1].url,
+  /links\/links\.html\?tab=3$/,
+  "chromium: the window names the tab it describes",
+);
+
+// A download the browser started: frozen, handed over, then stopped.
+workerCalls.length = 0;
+await workerEvents.get("downloads.onCreated")[0]({
+  id: 7,
+  url: "https://example.org/file.zip",
+  referrer: "https://example.org/",
+  filename: "C:\\Users\\check\\Downloads\\file.zip",
+});
+assert.ok(
+  workerCalls.some((call) => call[0] === "downloads.pause"),
+  "chromium: the browser copy is frozen before the hand-over",
+);
+assert.ok(
+  workerFetches.some(([route, method]) => route === "/v1/downloads" && method === "POST"),
+  "chromium: the download reaches the bridge",
+);
+assert.ok(
+  workerCalls.some((call) => call[0] === "downloads.cancel"),
+  "chromium: the browser copy is stopped once the app has answered",
+);

@@ -50,11 +50,19 @@
    * A Chromium message listener answers with `sendResponse` and `true`; the
    * other engines also accept a listener that returns a promise. Adapting it
    * here is what lets one handler serve every build.
+   *
+   * The engine is given the wrapper, not the listener, so the wrapper has to be
+   * the thing a removal names: a page that adds a listener and then removes it
+   * would otherwise leave the wrapper attached and answer twice.
    */
   function messageChannel(register) {
+    /** The wrapper each listener was registered as. */
+    const wrappers = new Map();
+
     return {
       addListener(listener) {
-        register.addListener((message, sender, sendResponse) => {
+        if (typeof listener !== "function") return;
+        const wrapper = (message, sender, sendResponse) => {
           let answer;
           try {
             answer = listener(message, sender, sendResponse);
@@ -73,10 +81,17 @@
             });
           });
           return true;
-        });
+        };
+        wrappers.set(listener, wrapper);
+        register.addListener(wrapper);
       },
-      removeListener: (listener) => register.removeListener?.(listener),
-      hasListener: (listener) => Boolean(register.hasListener?.(listener)),
+      removeListener(listener) {
+        const wrapper = wrappers.get(listener);
+        if (!wrapper) return;
+        wrappers.delete(listener);
+        register.removeListener?.(wrapper);
+      },
+      hasListener: (listener) => wrappers.has(listener),
     };
   }
 
