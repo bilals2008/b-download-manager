@@ -11,11 +11,12 @@
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import path from "node:path";
 import vm from "node:vm";
 
-const rootDir = fileURLToPath(new URL("../extension-firefox/", import.meta.url));
+import { buildExtension } from "../extensions/build.mjs";
+
+const rootDir = buildExtension("firefox") + path.sep;
 const read = (file) => readFileSync(path.join(rootDir, file), "utf8");
 
 /* ------------------------------------------------------------ the document */

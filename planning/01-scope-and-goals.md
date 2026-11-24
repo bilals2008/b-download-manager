@@ -39,7 +39,7 @@ scope" rows below turned into features anyway.
 | FTP | shipped (`ftp.rs`, `REST` per chunk) — was post-MVP, then built |
 | A proxy, HTTP and SOCKS | shipped (`reqwest` `socks` feature) — was post-MVP, then built |
 | Media: HLS, MPEG-DASH, plain-file tracks, quality panel, native remux | shipped (`media/`, `src-tauri/src/video/`) — was not in scope at all |
-| Browser capture (extensions + loopback bridge) | shipped (`browser-extension/`, `src-tauri/src/bridge/`) — was declared out of scope |
+| Browser capture (extensions + loopback bridge) | shipped (`extensions/`, `src-tauri/src/bridge/`) — was declared out of scope |
 | Site Grabber | shipped (`src-tauri/src/grabber/`) — was declared out of scope |
 
 ## Deliberately out of scope

@@ -30,6 +30,7 @@
     "check:tray": "node scripts/check-tray.mjs",
     "check:settings": "node scripts/check-settings.mjs",
     "check:extension": "node scripts/check-extension.mjs",
+    "build:extensions": "node extensions/build.mjs",
     "pack:firefox": "python scripts/pack-firefox.py",
     "probe:bridge": "node scripts/bridge-probe.mjs",
     "probe:magnet": "node scripts/magnet-probe.mjs",

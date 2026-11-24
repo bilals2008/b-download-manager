@@ -1,8 +1,9 @@
 # Dependencies
 node_modules
 
-# Build output: Vite/Astro web, Rust/Tauri bundles
+# Build output: Vite/Astro web, Rust/Tauri bundles, per-browser extensions
 dist
+extensions/dist
 dist-ssr
 /build
 target

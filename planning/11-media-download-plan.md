@@ -43,7 +43,7 @@ product, through a cleaner pipeline.
 - A quality list per player, with audio paired to video automatically.
 - Segment download through the existing range engine, resume included.
 - Remux to `mp4` / `mkv` without re-encoding.
-- Extensions for both builds (`extension-firefox`, `browser-extension`).
+- Extensions for every browser (`extensions/`: one shared source, one folder per engine).
 
 **Out of scope, permanently**
 
@@ -69,9 +69,9 @@ Do not rebuild these.
 | Loopback bridge for the extensions | `src-tauri/src/bridge/mod.rs` | working, routes listed below |
 | Download start path | `src-tauri/src/actions.rs::start` | working |
 | Video button settings (style, label, hover) | `src-tauri/src/state.rs`, `src/components/settings/video-download-button-settings.tsx`, `GET /v1/video-button-settings` | working |
-| `<video>` discovery, overlay button | `extension-firefox/content/video-registry.js`, `page-media.js`, `overlay.js` | working |
-| Media classification by itag, audio/video/muxed | `extension-firefox/lib/media.js` | working |
-| Chrome/Edge build | `browser-extension/` (`background.js`, `manifest.json`, `popup.js`) | thin, needs parity |
+| `<video>` discovery, overlay button | `extensions/source/content/video-registry.js`, `page-media.js`, `overlay.js` | working |
+| Media classification by itag, audio/video/muxed | `extensions/source/lib/media.js` | working |
+| Chromium build | `extensions/chromium/` (`manifest.json`, `worker.js`) | the shared source, adapted by `lib/platform.js` |
 
 Bridge routes today: `GET /v1/ping`, `GET /v1/capture`,
 `GET /v1/video-button-settings`, `GET|POST /v1/downloads`,
@@ -80,7 +80,7 @@ Bridge routes today: `GET /v1/ping`, `GET /v1/capture`,
 
 ### The one line that decides this whole feature
 
-`extension-firefox/lib/media.js` today:
+`extensions/source/lib/media.js` today:
 
 ```
 A manifest is never offered, because it would save as a playlist.

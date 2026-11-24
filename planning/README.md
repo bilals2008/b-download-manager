@@ -58,7 +58,7 @@ the file that proves it.
 | Scheduler (start times, named queues) | not implemented; the menu item is disabled | `src/components/shell/menus.ts` |
 | Media capture (HLS / DASH / file) | implemented: parsers, quality panel, segment resume, native remux | `media/{hls,dash,download,quality}.rs`, `src-tauri/src/video/mp4.rs` |
 | YouTube extraction | implemented in-house; `yt-dlp` and `ffmpeg` removed | `src-tauri/src/video/yt.rs`, [14](./14-own-youtube-and-native-muxer-plan.md) |
-| Browser capture | implemented: Firefox and Chrome/Edge extensions, paired loopback bridge, referer, batch hand-over | `browser-extension/`, `extension-firefox/`, `src-tauri/src/bridge/` |
+| Browser capture | implemented: one extension source packaged for Chromium, Firefox and Safari, paired loopback bridge, referer, batch hand-over | `extensions/`, `src-tauri/src/bridge/` |
 | Site Grabber | implemented: crawl, robots, filters, its own window | `src-tauri/src/grabber/` |
 | Integrity verification of chunk heads | implemented | `downloader.rs`, tested in `downloader/tests.rs` |
 | File-signature verification (content of a range) | not implemented | — |

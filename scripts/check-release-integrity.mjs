@@ -222,22 +222,21 @@ check("build wiring", () => {
 
 const bridgeMod = read("src-tauri/src/bridge/mod.rs");
 const bridgeAuth = read("src-tauri/src/bridge/auth.rs");
-const firefoxBridge = read("extension-firefox/lib/bridge.js");
-const chromeWorker = read("browser-extension/background.js");
-const firefoxManifest = readJson("extension-firefox/manifest.json");
-const chromeManifest = readJson("browser-extension/manifest.json");
+// One implementation now: the port, the API version and the client header live
+// in the shared bridge, and every browser manifest allows the port.
+const extensionBridge = read("extensions/source/lib/bridge.js");
+const extensionManifests = {
+  Chromium: readJson("extensions/chromium/manifest.json"),
+  Firefox: readJson("extensions/firefox/manifest.json"),
+  Safari: readJson("extensions/safari/manifest.json"),
+};
 
 check("bridge port", () => {
   const rustPort = /pub const PORT: u16 = (\d+);/.exec(bridgeMod)?.[1];
   assert.ok(rustPort, "PORT is not declared in src-tauri/src/bridge/mod.rs");
-  const firefoxPort = /base: "http:\/\/127\.0\.0\.1:(\d+)"/.exec(firefoxBridge)?.[1];
-  const chromePort = /const BRIDGE = "http:\/\/127\.0\.0\.1:(\d+)"/.exec(chromeWorker)?.[1];
-  assert.equal(firefoxPort, rustPort, `the Firefox extension uses port ${firefoxPort}`);
-  assert.equal(chromePort, rustPort, `the Chrome extension uses port ${chromePort}`);
-  for (const [name, manifest] of [
-    ["Firefox", firefoxManifest],
-    ["Chrome", chromeManifest],
-  ]) {
+  const extensionPort = /base: "http:\/\/127\.0\.0\.1:(\d+)"/.exec(extensionBridge)?.[1];
+  assert.equal(extensionPort, rustPort, `the extension uses port ${extensionPort}`);
+  for (const [name, manifest] of Object.entries(extensionManifests)) {
     const hosts = manifest.host_permissions ?? [];
     assert.ok(
       hosts.includes(`http://127.0.0.1:${rustPort}/*`),
@@ -248,24 +247,17 @@ check("bridge port", () => {
 
 check("bridge API version", () => {
   const rustApi = /pub const API_VERSION: u32 = (\d+);/.exec(bridgeMod)?.[1];
-  const firefoxApi = /api: (\d+)/.exec(firefoxBridge)?.[1];
+  const extensionApi = /api: (\d+)/.exec(extensionBridge)?.[1];
   assert.ok(rustApi, "API_VERSION is not declared in src-tauri/src/bridge/mod.rs");
-  assert.equal(firefoxApi, rustApi, `the Firefox extension expects API ${firefoxApi}`);
+  assert.equal(extensionApi, rustApi, `the extension expects API ${extensionApi}`);
 });
 
 check("bridge client header", () => {
   const rustClient = /pub const CLIENT_VALUE: &str = "([^"]+)";/.exec(bridgeAuth)?.[1];
-  const firefoxClient = /client: "([^"]+)"/.exec(firefoxBridge)?.[1];
-  const chromeClient = /const CLIENT = "([^"]+)"/.exec(chromeWorker)?.[1];
+  const extensionClient = /client: "([^"]+)"/.exec(extensionBridge)?.[1];
   assert.ok(rustClient, "CLIENT_VALUE is not declared in src-tauri/src/bridge/auth.rs");
-  assert.equal(firefoxClient, rustClient, `the Firefox extension sends client ${firefoxClient}`);
-  assert.equal(chromeClient, rustClient, `the Chrome extension sends client ${chromeClient}`);
-  for (const [name, text] of [
-    ["Firefox", firefoxBridge],
-    ["Chrome", chromeWorker],
-  ]) {
-    assert.match(text, /X-BDM-Client/i, `the ${name} extension does not send X-BDM-Client`);
-  }
+  assert.equal(extensionClient, rustClient, `the extension sends client ${extensionClient}`);
+  assert.match(extensionBridge, /X-BDM-Client/i, "the extension does not send X-BDM-Client");
 });
 
 /* ----------------------------------------------------- workspace layout */

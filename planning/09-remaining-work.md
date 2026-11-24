@@ -81,12 +81,12 @@ which is why several of its unchecked items were already shipped. Rule 5 of
       8 KiB, nothing written to disk or the log, and only after the one-time
       consent held in `DesktopPreferences::cookie_consent`. The Firefox add-on
       fills those headers from the browser's own cookies
-      (`extension-firefox/background.js:169`), so a protected stream plays. The
+      (`extensions/source/background.js:169`), so a protected stream plays. The
       referer travels for ordinary links too (`bridge/batch.rs:239` into
       `transfer.rs:183`), and a referer that would start a header is refused.
 - [ ] **Credentials on the other paths.** The Chrome/Edge extension declares
       the `cookies` permission and never reads it — no file under
-      `browser-extension/` uses it — so a manifest captured there arrives
+      `extensions/chromium/` uses it — so a manifest captured there arrives
       without a session. A plain-file hand-over still carries only a URL and a
       referer, and there is no stored site-login list to fall back on.
 
@@ -110,13 +110,14 @@ which is why several of its unchecked items were already shipped. Rule 5 of
       hidden from the first frame does not.
 - [x] **The browser integration**: the pairing code, the context menu, the
       takeover of the browser's own downloads, the file-type list and the site
-      skip list. Both extensions ship: `browser-extension/` for Chrome and
-      Edge, `extension-firefox/` published on AMO.
-      - [ ] The Chrome/Edge cookie hand-off; Firefox already does it, as the
-            protocols section says.
-      - [ ] The popup shows the takeover switch and whether the app is running
-            (`browser-extension/popup.html`); it does not show the live
-            downloads, their total speed, or a way to pause them.
+      skip list. One integration is written once in `extensions/source/` and
+      packaged per engine: `extensions/chromium/` for Chrome, Edge, Brave,
+      Opera and Vivaldi, `extensions/firefox/` published on AMO, and
+      `extensions/safari/`.
+      - [x] The cookie hand-off reaches every build: the shared background asks
+            the app once before a cookie is forwarded.
+      - [x] The popup shows the live downloads, their speed and a way to pause
+            them, in every build (`extensions/source/popup/popup.js`).
       - [ ] A native-messaging path, if the loopback bridge ever proves
             unreliable at startup; today the pairing code is the whole
             handshake (`bridge/auth.rs`).

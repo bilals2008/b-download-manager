@@ -1,21 +1,24 @@
-"""Pack extension-firefox into a ZIP that addons.mozilla.org accepts.
+"""Pack the Firefox build into a ZIP that addons.mozilla.org accepts.
 
-PowerShell's Compress-Archive writes local file headers with '\\' but the
-central directory with '/'. AMO reads the local headers and rejects the
-upload with "Invalid file name in archive". python's zipfile writes one
-name to both, so the archive is spec-compliant.
+The archive is made from `extensions/dist/firefox`, which `extensions/build.mjs`
+assembles from the shared source plus the Firefox manifest, so a stale file
+cannot be shipped. PowerShell's Compress-Archive writes local file headers with
+'\\' but the central directory with '/'; AMO reads the local headers and
+rejects the upload with "Invalid file name in archive". Python's zipfile writes
+one name to both, so the archive is spec-compliant.
 
 Usage: python scripts/pack-firefox.py [output.zip]
 """
 
 import json
 import struct
+import subprocess
 import sys
 import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SRC = ROOT / "extension-firefox"
+SRC = ROOT / "extensions" / "dist" / "firefox"
 DESKTOP = Path.home() / "Desktop"
 
 
@@ -33,6 +36,9 @@ def local_header_names(path: Path) -> list[str]:
 
 
 def main() -> None:
+    subprocess.run(
+        ["node", str(ROOT / "extensions" / "build.mjs"), "firefox"], check=True
+    )
     version = json.loads((SRC / "manifest.json").read_text(encoding="utf-8"))["version"]
     out = (
         Path(sys.argv[1])

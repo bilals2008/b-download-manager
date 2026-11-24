@@ -47,7 +47,7 @@ reused address survive past the first play. That gap is the `403`, and the
 
 ## Current state (what the plan touches)
 
-- `extension-firefox/content/page-sources.js` reads `ytInitialPlayerResponse`
+- `extensions/source/content/page-sources.js` reads `ytInitialPlayerResponse`
   and takes only the plain `format.url` field; it drops `signatureCipher`
   forms and does not transform `n`.
 - `src-tauri/src/video/capture.rs` parses each itag URL as a plain
