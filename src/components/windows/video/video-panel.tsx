@@ -12,6 +12,7 @@ import { formatSize } from "@/lib/downloads";
 import { describeError } from "@/lib/errors";
 import { openPath } from "@/lib/ipc";
 import {
+  captionChoices,
   formatDuration,
   initialQuality,
   mediaAllowCookies,
@@ -39,6 +40,9 @@ export function VideoPanel({ initialJob }: { initialJob: number }) {
   const [audioFormat, setAudioFormat] = useState<"source" | "mp3" | "opus" | "flac">(
     "source",
   );
+  // The caption track the reader chose, or "" for none. It rides along with
+  // the quality, so the finished file carries the text.
+  const [captions, setCaptions] = useState("");
   const [busy, setBusy] = useState(false);
   const [consentBusy, setConsentBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -84,6 +88,7 @@ export function VideoPanel({ initialJob }: { initialJob: number }) {
       setSelected(initialQuality(view));
       setActionError(null);
       setAudioFormat("source");
+      setCaptions("");
       // A newer video in the same window gets its own chance to set the
       // helpers up.
       setOfferDismissed(false);
@@ -123,6 +128,9 @@ export function VideoPanel({ initialJob }: { initialJob: number }) {
         video: row.id,
         audio: row.audio ?? null,
         audioFormat,
+        // A conversion keeps the sound alone; a caption track rides with the
+        // picture.
+        subtitle: audioFormat === "source" && captions ? captions : null,
         // The chosen quality belongs in the name, so two files of the same
         // video do not replace each other.
         name: `${view.title || "video"} ${row.label}`,
@@ -355,6 +363,26 @@ export function VideoPanel({ initialJob }: { initialJob: number }) {
                 <p className="text-chrome-micro text-chrome-muted">
                   The sound is written as {audioFormat.toUpperCase()}; the
                   picture is not saved.
+                </p>
+              ) : null}
+              {(view.subtitles ?? []).length > 0 ? (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-chrome-micro text-chrome-muted">
+                    Captions
+                  </span>
+                  <ListBox
+                    label="Captions"
+                    options={captionChoices(view.subtitles)}
+                    value={captions}
+                    onChange={setCaptions}
+                    disabled={busy || view.downloading || view.done}
+                  />
+                </div>
+              ) : null}
+              {captions && helperStatus?.ffmpeg === false ? (
+                <p className="text-chrome-micro text-chrome-muted">
+                  The captions are saved beside the video. Putting them inside
+                  it needs FFmpeg, from the video settings page.
                 </p>
               ) : null}
             </div>

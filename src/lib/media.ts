@@ -110,7 +110,7 @@ export function mediaRows(view: MediaJobView): QualityRow[] {
   const videoRows: QualityRow[] = [];
   for (const pair of view.pairs) {
     const video = formats.get(pair.video);
-    if (!video || video.kind === "audio") {
+    if (!video || video.kind === "audio" || video.kind === "subtitle") {
       continue;
     }
     const audio = pair.audio ? formats.get(pair.audio) : undefined;
@@ -132,10 +132,15 @@ export function mediaRows(view: MediaJobView): QualityRow[] {
   }
 
   // A format the pairs do not mention (a manifest with no pair list, or an
-  // extra video track) is still a row of its own.
+  // extra video track) is still a row of its own. A caption track is never
+  // one: it is text, and it is chosen in the caption list below the rows.
   const listed = new Set(videoRows.map((row) => row.id));
   for (const format of view.formats) {
-    if (format.kind === "audio" || listed.has(format.id)) {
+    if (
+      format.kind === "audio" ||
+      format.kind === "subtitle" ||
+      listed.has(format.id)
+    ) {
       continue;
     }
     videoRows.push({
@@ -166,6 +171,28 @@ export function mediaRows(view: MediaJobView): QualityRow[] {
   videoRows.sort(byQuality);
   audioRows.sort(byQuality);
   return [...videoRows, ...audioRows];
+}
+
+/**
+ * The caption choices the panel offers: none, then every track the manifest
+ * named. The empty value is what a request sends for "no captions".
+ */
+export function captionChoices(
+  subtitles: readonly SubtitleChoice[],
+): { value: string; label: string }[] {
+  return [
+    { value: "", label: "None" },
+    ...subtitles.map((track) => ({ value: track.id, label: trackLabel(track) })),
+  ];
+}
+
+/** "English (en)", "English (en, default)", or the id when it has no name. */
+function trackLabel(track: SubtitleChoice): string {
+  const name = track.name.trim() || track.language?.trim() || track.id;
+  const detail = [track.language?.trim(), track.isDefault ? "default" : ""]
+    .filter(Boolean)
+    .join(", ");
+  return detail ? `${name} (${detail})` : name;
 }
 
 function byQuality(left: QualityRow, right: QualityRow): number {

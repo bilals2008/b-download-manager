@@ -134,6 +134,17 @@ async fn helper_caption(
     text
 }
 
+/// Write the caption text beside the finished video.
+///
+/// The name matches the video's own, which is the one a player looks for by
+/// itself, so the captions are there whether or not the container took them
+/// and the reader can open and edit the text.
+pub(super) fn beside(captions: &Path, video: &Path) -> std::io::Result<PathBuf> {
+    let sidecar = video.with_extension("srt");
+    std::fs::copy(captions, &sidecar)?;
+    Ok(sidecar)
+}
+
 /// Write the caption text as the file the muxer reads.
 fn finish(text: &str, extension: &str, work_dir: &Path) -> Result<Captions, String> {
     let extension = extension.trim().to_ascii_lowercase();
@@ -162,4 +173,26 @@ fn finish(text: &str, extension: &str, work_dir: &Path) -> Result<Captions, Stri
     std::fs::write(&out, body)
         .map_err(|error| format!("the caption file could not be written: {error}"))?;
     Ok(Captions { path: out })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_captions_are_written_beside_the_video_under_its_name() {
+        let dir = std::env::temp_dir().join(format!("bdm-sidecar-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("a folder");
+        let captions = dir.join("captions.srt");
+        std::fs::write(&captions, "1\n00:00:01,000 --> 00:00:02,000\nHello\n").expect("text");
+
+        let video = dir.join("A video 1080p.mp4");
+        let sidecar = beside(&captions, &video).expect("a sidecar");
+        assert_eq!(sidecar, dir.join("A video 1080p.srt"));
+        assert!(std::fs::read_to_string(&sidecar)
+            .expect("the sidecar reads")
+            .contains("Hello"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
