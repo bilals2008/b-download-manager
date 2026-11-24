@@ -43,6 +43,7 @@ import {
   sortDownloads,
 } from "./list";
 import { useMediaRows } from "./media";
+import { useCompletionSound } from "../use-completion-sound";
 import { useRowMapping } from "./rows";
 import { useStartPath } from "./start";
 import type { AddOutcome, DownloadStore, WorkspaceState } from "./types";
@@ -86,6 +87,10 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     latest.current = state;
   }, [state]);
+
+  // Every finished download is announced once, media rows included: they
+  // arrive in the same list.
+  useCompletionSound(state.downloads);
 
   const run = useCallback((task: Promise<unknown>) => {
     task.catch((failure: unknown) => setError(describeError(failure)));

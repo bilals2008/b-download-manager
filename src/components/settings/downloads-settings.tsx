@@ -1,10 +1,12 @@
 import { NumberInput } from "@/components/settings/fields";
 import { ScheduleSettings } from "@/components/settings/schedule-settings";
+import { SettingsButton } from "@/components/settings/settings-button";
 import {
   Section,
   SettingRow,
   SettingsPage,
 } from "@/components/settings/settings-page";
+import { COMPLETION_SOUNDS, playCompletionSound } from "@/lib/completion-sound";
 import { ListBox } from "@/components/ui/listbox";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -113,6 +115,55 @@ export function DownloadsSettings({ settings, onChange }: DownloadsSettingsProps
             label="Remove the archive after a clean unpack"
             checked={settings.deleteArchiveAfterExtract}
             onChange={(checked) => onChange("deleteArchiveAfterExtract", checked)}
+          />
+        </SettingRow>
+        <SettingRow
+          settingId="setting-completion-sound"
+          label="Play a sound when a download finishes"
+        >
+          <Switch
+            label="Play a sound when a download finishes"
+            checked={settings.completionSound}
+            onChange={(checked) => onChange("completionSound", checked)}
+          />
+        </SettingRow>
+        <SettingRow settingId="setting-completion-sound-name" label="The sound">
+          <div className="flex items-center gap-2">
+            <div className="w-36">
+              <ListBox
+                label="The sound"
+                value={settings.completionSoundName}
+                onChange={(value) => onChange("completionSoundName", value)}
+                options={COMPLETION_SOUNDS}
+                disabled={!settings.completionSound}
+              />
+            </div>
+            <SettingsButton
+              disabled={!settings.completionSound}
+              onClick={() => {
+                playCompletionSound(
+                  settings.completionSoundName,
+                  settings.completionSoundVolume,
+                );
+              }}
+            >
+              Play
+            </SettingsButton>
+          </div>
+        </SettingRow>
+        <SettingRow
+          settingId="setting-completion-sound-volume"
+          label="Sound volume"
+          htmlFor="completion-sound-volume"
+        >
+          <NumberInput
+            id="completion-sound-volume"
+            value={settings.completionSoundVolume}
+            min={0}
+            max={100}
+            suffix="%"
+            disabled={!settings.completionSound}
+            onChange={(value) => onChange("completionSoundVolume", value)}
           />
         </SettingRow>
       </Section>
