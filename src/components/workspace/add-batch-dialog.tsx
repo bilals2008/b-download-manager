@@ -5,15 +5,11 @@ import { Dialog } from "@/components/ui/dialog";
 import { DialogAction } from "@/components/ui/dialog-action";
 import { FIELD } from "@/components/ui/field";
 import { Tooltip } from "@/components/ui/tooltip";
+import { useBatchSeed } from "@/components/workspace/batch-seed";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { detectCategory } from "@/lib/categories";
-import {
-  PREVIEW_LIMIT,
-  emptyBatchPattern,
-  expandBatch,
-  type BatchPattern,
-} from "@/lib/batch";
+import { PREVIEW_LIMIT, expandBatch, type BatchPattern } from "@/lib/batch";
 import { fileNameFromUrl, safeFileName, splitPath } from "@/lib/downloads";
 import { describeError, isDesktop } from "@/lib/errors";
 import { chooseFolder, defaultDestination } from "@/lib/ipc";
@@ -87,9 +83,11 @@ function Segmented({
  * Every address starts as an ordinary download, in the folder chosen here and
  * in the category its own name belongs to.
  */
-export function AddBatchDialog({ open, seed, onClose }: AddBatchDialogProps) {
+export function AddBatchDialog({ open, seed = null, onClose }: AddBatchDialogProps) {
   const { addDownload, categories } = useDownloads();
-  const [pattern, setPattern] = useState<BatchPattern>(emptyBatchPattern);
+  // The clipboard answer can arrive after the dialog is open; the hook keeps
+  // it from replacing what the reader has already written.
+  const { pattern, change: changePattern } = useBatchSeed(open, seed);
   const [folder, setFolder] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -104,7 +102,6 @@ export function AddBatchDialog({ open, seed, onClose }: AddBatchDialogProps) {
     if (!open) {
       return;
     }
-    setPattern(seed ?? emptyBatchPattern());
     setFolder(preferredFolder() ?? "");
     setError(null);
     setBusy(false);
@@ -127,7 +124,7 @@ export function AddBatchDialog({ open, seed, onClose }: AddBatchDialogProps) {
     return () => {
       live = false;
     };
-  }, [open, seed]);
+  }, [open]);
 
   const { urls, problem } = useMemo(() => expandBatch(pattern), [pattern]);
   const canStart = urls.length > 0 && problem === null && !busy;
@@ -136,7 +133,7 @@ export function AddBatchDialog({ open, seed, onClose }: AddBatchDialogProps) {
   const remaining = urls.length - shown.length;
 
   function change(update: Partial<BatchPattern>) {
-    setPattern((current) => ({ ...current, ...update }));
+    changePattern(update);
     setError(null);
   }
 
