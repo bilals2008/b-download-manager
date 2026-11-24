@@ -15,9 +15,9 @@ The app asks the website what the file really is before it starts, which is why 
 
 ## From your browser
 
-Install the [Firefox extension](/installation/#browser-extension), keep the app running, and right-click any link, picture, video or sound file to choose **Download with B Download Manager**. On supported videos a small button shows the qualities the page offers, and the toolbar popup shows the connection and the downloads already in the app.
+Install the [browser extension](/installation/#browser-extension) — Firefox from Mozilla Add-ons, Chrome, Edge, Brave and Safari from this repository — keep the app running, and right-click any link, picture, video or sound file to choose **Download with B Download Manager**. On supported videos a small button shows the qualities the page offers, and the toolbar popup shows the connection and the downloads already in the app.
 
-There is no code to copy and nothing to pair: the extension finds the app on your own computer. Chrome, Edge and Brave builds are still being finished.
+There is no code to copy and nothing to pair: the extension finds the app on your own computer.
 
 ## Pause, resume, stop
 
