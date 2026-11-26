@@ -33,6 +33,10 @@ pub struct GalleryInspect {
     pub count: usize,
     /// Whether more were found than the cap, so the dialog says so.
     pub truncated: bool,
+    /// The video and the sound the page names. The Add URL dialog offers them
+    /// beside the gallery: this is the one fetch of the page, so a page is
+    /// never read twice for two questions.
+    pub media: crate::page_media::PageMedia,
 }
 
 /// What became of the gallery download.
@@ -59,12 +63,14 @@ pub async fn gallery_inspect(
     let _ = app;
     let page = fetch(&url, referer.as_deref()).await?;
     let found = gallery::extract(&page.text, &url);
+    let media = crate::page_media::inspect(&page.text, &page.url);
     if !gallery::looks_like_gallery(&url, &page.text) || found.images.len() < 2 {
         return Ok(GalleryInspect {
             is_gallery: false,
             folder: String::new(),
             count: 0,
             truncated: false,
+            media,
         });
     }
     let folder = gallery::folder_name(&found);
@@ -73,6 +79,7 @@ pub async fn gallery_inspect(
         folder,
         count: found.images.len(),
         truncated: found.truncated,
+        media,
     })
 }
 

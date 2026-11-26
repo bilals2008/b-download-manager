@@ -5,7 +5,7 @@ use super::*;
 #[tokio::test]
 async fn a_file_of_several_ranges_is_joined_in_the_right_order() {
     // Two ranges, so the parts have to be joined in the right order.
-    let data: Vec<u8> = (0..(2 * SEGMENT_TARGET)).map(|i| (i % 251) as u8).collect();
+    let data: Vec<u8> = (0..(2 * MIN_SPLIT)).map(|i| (i % 251) as u8).collect();
     let (url, _requests) = spawn_range_server(data.clone());
     let dir = temp_dir("several-ranges");
     let dest = dir.join("out.bin");

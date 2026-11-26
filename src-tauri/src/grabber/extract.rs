@@ -106,6 +106,66 @@ pub fn links(html: &str, base: &Url) -> Vec<Link> {
     out
 }
 
+/// The media addresses a page's metadata names.
+///
+/// A player built by a script leaves its real file in `og:video` and its kin
+/// instead of in a tag a reader could click. Add URL reads these beside the
+/// ordinary links; the grabber's crawl keeps its own list, so a page's
+/// metadata never widens what it follows.
+pub fn meta_media(html: &str, base: &Url) -> Vec<Url> {
+    const PROPERTIES: &[&str] = &[
+        "og:video",
+        "og:video:url",
+        "og:video:secure_url",
+        "og:audio",
+        "og:audio:url",
+        "og:audio:secure_url",
+        "twitter:player:stream",
+    ];
+    let mut out: Vec<Url> = Vec::new();
+    for tag in tags(html) {
+        if tag.name != "meta" {
+            continue;
+        }
+        let Some(property) = tag.attribute("property").or_else(|| tag.attribute("name")) else {
+            continue;
+        };
+        if !PROPERTIES
+            .iter()
+            .any(|known| property.eq_ignore_ascii_case(known))
+        {
+            continue;
+        }
+        let Some(content) = tag.attribute("content") else {
+            continue;
+        };
+        let Some(url) = resolve(base, &content) else {
+            continue;
+        };
+        if !out.contains(&url) {
+            out.push(url);
+        }
+    }
+    out
+}
+
+/// Whether the markup holds a player, even when the address of what it plays
+/// is only in a script. Comments, scripts and styles are skipped, so a player
+/// a page never shows does not count.
+pub fn plays_video(html: &str) -> bool {
+    tags(html).iter().any(|tag| {
+        tag.name == "video"
+            || (tag.name == "meta"
+                && tag
+                    .attribute("property")
+                    .or_else(|| tag.attribute("name"))
+                    .is_some_and(|property| {
+                        let property = property.to_ascii_lowercase();
+                        property.starts_with("og:video") || property == "twitter:player"
+                    }))
+    })
+}
+
 /// Resolve one attribute value against the page and keep it when it is a web
 /// address. The fragment is dropped: it names a place in a page, not a page.
 fn resolve(base: &Url, raw: &str) -> Option<Url> {
@@ -472,6 +532,27 @@ mod tests {
             vec!["/a.jpg", "/b.jpg", "/c.jpg", "/film.mp4", "/film.webm"]
         );
         assert!(found.iter().all(|link| !link.crawl));
+    }
+
+    #[test]
+    fn media_metadata_is_read_but_its_type_is_not_a_file() {
+        let found = meta_media(
+            r#"<meta property="og:video:type" content="video/mp4">
+               <meta property="og:video" content="/media/clip.mp4">
+               <meta name="twitter:player:stream" content="https://cdn.example.net/stream.m3u8">
+               <meta property="og:image" content="/poster.jpg">
+               <meta property="og:video" content="/media/clip.mp4">
+               <meta property="og:audio" content="javascript:alert(1)">"#,
+            &base(),
+        );
+        let addresses: Vec<String> = found.iter().map(|url| url.to_string()).collect();
+        assert_eq!(
+            addresses,
+            vec![
+                "https://example.org/media/clip.mp4",
+                "https://cdn.example.net/stream.m3u8"
+            ]
+        );
     }
 
     #[test]

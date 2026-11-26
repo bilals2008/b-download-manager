@@ -17,6 +17,7 @@ mod lifecycle;
 mod mcp;
 mod migrate;
 mod network;
+mod page_media;
 mod prefs;
 mod progress;
 mod proxy;
@@ -363,6 +364,7 @@ pub fn run() {
             video::capture::media_redownload,
             video::capture::media_reparse,
             video::capture::open_video_window,
+            video::capture::page::page_media_open,
             video::capture::open_media_progress,
             video::capture::video_helper_status,
             video::capture::video_helper_install,

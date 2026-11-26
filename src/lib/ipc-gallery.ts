@@ -6,6 +6,7 @@
  */
 
 import { invoke } from "@/lib/ipc";
+import type { PageMedia } from "@/lib/ipc-page-media";
 
 /** What the dialog shows before anything starts. */
 export interface GalleryInspect {
@@ -17,6 +18,9 @@ export interface GalleryInspect {
   count: number;
   /** Whether there were more than the cap, so the dialog says so. */
   truncated: boolean;
+  /** The video and the sound the page names. The page is read once for both
+   * questions, so this arrives with the gallery's answer. */
+  media: PageMedia;
 }
 
 /** What became of the gallery download. */

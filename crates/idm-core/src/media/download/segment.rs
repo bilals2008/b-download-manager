@@ -122,7 +122,7 @@ async fn fetch_whole(
     downloader::run(reporter, limits.clone(), download.clone()).await;
 
     if let Some(control) = control {
-        control.detach();
+        control.detach(&download);
     }
     if download.status() == Status::Cancelled || is_cancelled(control) {
         return Err(FetchFailure::Cancelled);

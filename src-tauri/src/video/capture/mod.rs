@@ -17,6 +17,7 @@ use crate::state::AppState;
 use super::{MediaJob, MediaJobView, MediaKindHint, MediaState};
 
 mod helpers;
+pub(crate) mod page;
 mod parsing;
 
 use helpers::*;

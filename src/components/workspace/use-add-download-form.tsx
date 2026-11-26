@@ -29,6 +29,8 @@ import {
   galleryInspect,
   type GalleryInspect,
 } from "@/lib/ipc-gallery";
+import { pageMediaOpen } from "@/lib/ipc-page-media";
+import { grabberDownload } from "@/lib/grabber";
 import { debridAskUnlock, debridServices } from "@/lib/ipc-debrid";
 import {
   chooseFolder,
@@ -101,6 +103,9 @@ export function useAddDownloadForm({
   );
   const [probe, setProbe] = useState<Probe>({ kind: "idle" });
   const [gallery, setGallery] = useState<GalleryInspect | null>(null);
+  // The files of the page's media list the reader unticked. Everything the
+  // page names starts chosen, so only the edits are kept.
+  const [mediaRemoved, setMediaRemoved] = useState<string[]>([]);
   const [debridAvailable, setDebridAvailable] = useState(false);
   const [debridUnlock, setDebridUnlock] = useState(false);
   const [destination, setDestination] = useState<DestinationInfo | null>(null);
@@ -165,6 +170,7 @@ export function useAddDownloadForm({
     setCategoryOverride(null);
     setCategoryAt(null);
     setProbe({ kind: "idle" });
+    setMediaRemoved([]);
     setDestination(null);
     setError(null);
     setTouched(false);
@@ -400,6 +406,10 @@ export function useAddDownloadForm({
     };
   }, [open, driveProbeAddress, referer]);
 
+  const mediaChoice = (gallery?.media.files ?? [])
+    .map((file) => file.url)
+    .filter((url) => !mediaRemoved.includes(url));
+
   // The name and the category follow what was detected until the user picks a
   // category. Nothing here is typed.
   const suggestedName = valid ? safeFileName(fileNameFromUrl(address)) : "";
@@ -588,6 +598,81 @@ export function useAddDownloadForm({
     }
   }
 
+  // The page's video opens the quality panel, the one video list in the app:
+  // it resolves the page and shows every quality the site offers.
+  async function openMediaQuality() {
+    const media = gallery?.media;
+    if (running.current || !media?.video) {
+      return;
+    }
+    running.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      await pageMediaOpen(media.page, referer || undefined);
+      onClose();
+    } catch (failure) {
+      setError(describeError(failure));
+    } finally {
+      running.current = false;
+      setBusy(false);
+    }
+  }
+
+  // The files the page names are ordinary downloads: the same hand-over the
+  // site grabber uses, so each one queues, resumes and categorises like any
+  // other file.
+  async function downloadMediaFiles() {
+    const chosen = (gallery?.media.files ?? []).filter((file) =>
+      mediaChoice.includes(file.url),
+    );
+    const target = folder.trim();
+    if (running.current || chosen.length === 0) {
+      return;
+    }
+    if (!target) {
+      setError("Choose a folder to save the files in.");
+      folderButton.current?.focus();
+      return;
+    }
+    running.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      const results = await grabberDownload({
+        items: chosen.map((file) => ({
+          url: file.url,
+          name: file.name,
+          category,
+        })),
+        folder: target,
+        referer: referer || undefined,
+      });
+      const started = results.filter(
+        (result) => result.status === "started" || result.status === "queued",
+      ).length;
+      if (started === 0) {
+        setError(results[0]?.message || "No file could be started.");
+        return;
+      }
+      saveLastFolder(target);
+      onClose();
+    } catch (failure) {
+      setError(describeError(failure));
+    } finally {
+      running.current = false;
+      setBusy(false);
+    }
+  }
+
+  function toggleMedia(url: string) {
+    setMediaRemoved((current) =>
+      current.includes(url)
+        ? current.filter((entry) => entry !== url)
+        : [...current, url],
+    );
+  }
+
   function toggleCategoryMenu() {
     const box = categoryButton.current?.getBoundingClientRect();
     setCategoryAt(
@@ -693,6 +778,11 @@ export function useAddDownloadForm({
     pickFolder,
     submit,
     downloadGallery,
+    media: gallery?.media ?? null,
+    mediaChoice,
+    toggleMedia,
+    openMediaQuality,
+    downloadMediaFiles,
     toggleCategoryMenu,
     categoryRows,
     showProblem,

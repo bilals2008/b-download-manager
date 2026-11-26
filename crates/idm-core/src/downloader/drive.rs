@@ -288,13 +288,5 @@ pub(super) async fn drive(
     }
 
     assemble(download).await?;
-    // Every range of the plan finished: the host honoured what it was asked
-    // for, so the next download from it starts at that number.
-    if let Some(host) = host.as_deref() {
-        if !download.degraded.load(Ordering::SeqCst) {
-            let planned = segments.len() as u32;
-            limits.learned.observe(host, planned, planned);
-        }
-    }
     Ok(())
 }

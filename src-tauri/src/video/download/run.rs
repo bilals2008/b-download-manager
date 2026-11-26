@@ -20,7 +20,11 @@ pub(super) async fn run(
 ) {
     let state = app.state::<AppState>();
     let limits = state.limits().clone();
-    let connections = state.browser_connections().clamp(1, 16);
+    // A video is fetched by the same engine as any other download, so it is
+    // given the connection count the Connections page sets. Capping it at 16
+    // here meant a reader who raised the setting past that watched a video
+    // download go no faster.
+    let connections = state.engine_settings().default_connections.clamp(1, 32);
 
     // A YouTube address is bound to the moment it was resolved: the client
     // identity it was signed for, and a deadline the provider chose. The plan

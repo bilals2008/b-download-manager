@@ -99,13 +99,8 @@ impl Segment {
     }
 }
 
-/// Target size of one segment. The reference download manager splits a file
-/// into a handful of large ranges rather than into many small ones, so the
-/// same rule is used here: the segment count grows with the file size but
-/// stays bounded by the connection limit.
-pub const SEGMENT_TARGET: u64 = 16 * 1024 * 1024;
-
-/// Smallest remainder worth handing to another connection.
+/// Smallest remainder worth handing to another connection, and the size of
+/// one range when the file is big enough to use every connection.
 pub const MIN_SPLIT: u64 = 1024 * 1024;
 
 /// How many bytes one connection should get.
@@ -126,14 +121,14 @@ pub fn connections_for(total: u64, max: u32) -> u32 {
 }
 
 /// Split `total` bytes into at most `max_segments` contiguous ranges.
+///
+/// The caller passes the number of connections the file deserves, so this
+/// makes one range per megabyte and stops at that count. Dividing by a fixed
+/// target size instead gave every file under 16 MiB a single connection,
+/// whatever the reader asked for, which is what made small videos crawl.
 pub fn plan(total: u64, max_segments: u32, dir: &Path, stem: &str) -> Vec<Segment> {
     let max_segments = max_segments.max(1) as u64;
-    let count = if total == 0 {
-        1
-    } else {
-        total.div_ceil(SEGMENT_TARGET)
-    }
-    .clamp(1, max_segments);
+    let count = (total / MIN_SPLIT).clamp(1, max_segments);
 
     let base = total / count;
     let mut remainder = total % count;
@@ -220,7 +215,7 @@ mod tests {
     #[test]
     fn plan_covers_the_whole_file_without_gaps() {
         let dir = Path::new("/tmp");
-        let total = 4 * SEGMENT_TARGET + 12345;
+        let total = 4 * MIN_SPLIT + 12345;
         let segments = plan(total, 4, dir, "file");
 
         assert_eq!(segments.len(), 4);
@@ -238,6 +233,22 @@ mod tests {
         let segments = plan(1000, 4, Path::new("/tmp"), "file");
         assert_eq!(segments.len(), 1);
         assert_eq!(segments[0].len(), 1000);
+    }
+
+    #[test]
+    fn a_fifteen_megabyte_file_uses_every_connection() {
+        // A fixed 16 MiB target gave this file one range and one connection,
+        // which is the slow download this planner used to cause.
+        let segments = plan(15 * MIN_SPLIT, 8, Path::new("/tmp"), "file");
+        assert_eq!(segments.len(), 8);
+        assert!(segments.iter().all(|segment| segment.len() >= MIN_SPLIT));
+    }
+
+    #[test]
+    fn no_range_is_smaller_than_the_smallest_split() {
+        let segments = plan(3 * MIN_SPLIT + 7, 8, Path::new("/tmp"), "file");
+        assert_eq!(segments.len(), 3);
+        assert!(segments.iter().all(|segment| segment.len() >= MIN_SPLIT));
     }
 
     #[test]

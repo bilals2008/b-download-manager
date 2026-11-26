@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use futures_util::StreamExt;
+use futures_util::{stream, StreamExt};
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 
@@ -159,17 +159,20 @@ pub struct TrackProgress {
 /// Where a finished track is reported.
 pub type ProgressSink = Arc<dyn Fn(TrackProgress) + Send + Sync>;
 
-/// Stops a track between segments, and the segment that is in flight.
+/// Stops a track between segments, and the segments that are in flight.
 pub struct TrackControl {
     cancelled: AtomicBool,
-    current: Mutex<Option<Arc<Download>>>,
+    /// Every fragment being fetched right now. Fragments are fetched side by
+    /// side, so this is a list and not one slot: a cancel that reached only
+    /// the last one would leave the others running.
+    current: Mutex<Vec<Arc<Download>>>,
 }
 
 impl Default for TrackControl {
     fn default() -> Self {
         Self {
             cancelled: AtomicBool::new(false),
-            current: Mutex::new(None),
+            current: Mutex::new(Vec::new()),
         }
     }
 }
@@ -181,13 +184,8 @@ impl TrackControl {
 
     pub fn cancel(&self) {
         self.cancelled.store(true, Ordering::SeqCst);
-        if let Some(download) = self
-            .current
-            .lock()
-            .expect("the track control")
-            .as_ref()
-            .cloned()
-        {
+        let running = self.current.lock().expect("the track control").clone();
+        for download in running {
             download.cancel();
         }
     }
@@ -196,18 +194,26 @@ impl TrackControl {
         self.cancelled.load(Ordering::SeqCst)
     }
 
-    /// Hold the segment that is running so a cancel reaches it. `false` means
+    /// Hold a fragment that is running so a cancel reaches it. `false` means
     /// the cancel arrived first.
     fn attach(&self, download: &Arc<Download>) -> bool {
         if self.is_cancelled() {
             return false;
         }
-        *self.current.lock().expect("the track control") = Some(download.clone());
+        let mut current = self.current.lock().expect("the track control");
+        // A fragment that is no longer running cannot be stopped: a track of
+        // hundreds of them must not collect one entry per fragment.
+        current.retain(|held| held.is_running());
+        current.push(download.clone());
+        drop(current);
         !self.is_cancelled()
     }
 
-    fn detach(&self) {
-        *self.current.lock().expect("the track control") = None;
+    fn detach(&self, download: &Arc<Download>) {
+        self.current
+            .lock()
+            .expect("the track control")
+            .retain(|held| !Arc::ptr_eq(held, download));
     }
 }
 
@@ -378,6 +384,14 @@ pub async fn download_track_typed(
         }
     }
 
+    // The fragments of a track are separate files, so they are fetched beside
+    // each other: one connection each, and as many at once as the track was
+    // given connections. Fetching them one after another made a segmented
+    // video take the sum of every fragment's latency, which is why a measure
+    // of the same link may crawl here while the player itself fills it. Every
+    // fragment already has its own file and its own resume point, so the
+    // joined track is the same whichever order they finish in.
+    let mut waiting: Vec<(usize, &TrackSegment)> = Vec::new();
     for (index, segment) in source.segments.iter().enumerate() {
         if is_cancelled(control.as_deref()) {
             return Ok(TrackOutcome::Cancelled);
@@ -399,26 +413,38 @@ pub async fn download_track_typed(
             report(&state, &progress);
             continue;
         }
+        waiting.push((index, segment));
+    }
 
-        let result = fetch_segment(
+    // A single fragment keeps every connection the track was given, because
+    // there is nothing beside it to share them with.
+    let width = source.connections.clamp(1, 32) as usize;
+    let per_fragment = if source.segments.len() > 1 {
+        1
+    } else {
+        source.connections
+    };
+
+    // The futures are built one by one rather than through a closure: a
+    // closure that borrows the track is not general enough over lifetimes to
+    // be spawned by the callers that run a track on their own task.
+    let mut fragments = Vec::with_capacity(waiting.len());
+    for (index, segment) in waiting {
+        fragments.push(fetch_fragment(
             &limits,
+            &source,
             segment,
-            &file,
             index,
             &state,
             &progress,
             control.as_deref(),
-            source.proxy.as_deref(),
-            source.referer.as_deref(),
-            source.connections,
-            &source.headers,
-            source.header_origin.as_deref(),
-        )
-        .await;
+            per_fragment,
+        ));
+    }
+    let mut running = stream::iter(fragments).buffer_unordered(width);
+    while let Some((index, result)) = running.next().await {
         match result {
-            Ok(()) => {
-                report(&state, &progress);
-            }
+            Ok(()) => report(&state, &progress),
             Err(FetchFailure::Cancelled) => return Ok(TrackOutcome::Cancelled),
             Err(FetchFailure::Failed(error)) => {
                 return Err(error.wrapped(format!("segment {index} failed: ")))
@@ -694,6 +720,37 @@ fn safe_stem(stem: &str) -> String {
     } else {
         safe
     }
+}
+
+/// Fetch one fragment of a track, reporting its index with the outcome.
+#[allow(clippy::too_many_arguments)]
+async fn fetch_fragment(
+    limits: &Limits,
+    source: &TrackSource,
+    segment: &TrackSegment,
+    index: usize,
+    state: &Arc<Mutex<ProgressState>>,
+    progress: &Option<ProgressSink>,
+    control: Option<&TrackControl>,
+    connections: u32,
+) -> (usize, Result<(), FetchFailure>) {
+    let file = source.segment_file(index);
+    let result = fetch_segment(
+        limits,
+        segment,
+        &file,
+        index,
+        state,
+        progress,
+        control,
+        source.proxy.as_deref(),
+        source.referer.as_deref(),
+        connections,
+        &source.headers,
+        source.header_origin.as_deref(),
+    )
+    .await;
+    (index, result)
 }
 
 mod segment;

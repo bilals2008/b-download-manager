@@ -13,6 +13,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { ListBox } from "@/components/ui/listbox";
 import { DialogAction } from "@/components/ui/dialog-action";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { FIELD } from "@/components/ui/field";
 import { Tooltip } from "@/components/ui/tooltip";
 import { driveExports } from "@/lib/drive";
@@ -29,6 +30,12 @@ interface AddDownloadDialogProps {
 }
 
 const LABEL = "mb-1.5 block text-xs text-chrome-muted";
+
+/** The word beside one media row. */
+const MEDIA_KIND: Record<string, string> = {
+  video: "Video",
+  audio: "Audio",
+};
 
 const FOLDER_ROW =
   "group flex h-9 w-full min-w-0 items-center gap-2 rounded-chrome border border-chrome-line bg-chrome-canvas px-2.5 text-left transition-colors hover:border-chrome-muted focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none disabled:cursor-default disabled:opacity-60 disabled:hover:border-chrome-line";
@@ -96,6 +103,11 @@ export function AddDownloadDialog({
     pickFolder,
     submit,
     downloadGallery,
+    media,
+    mediaChoice,
+    toggleMedia,
+    openMediaQuality,
+    downloadMediaFiles,
     toggleCategoryMenu,
     categoryRows,
     showProblem,
@@ -253,6 +265,58 @@ export function AddDownloadDialog({
             >
               Download gallery
             </DialogAction>
+          </div>
+        ) : null}
+
+        {/* A page that plays a video goes to the quality panel, which is the
+            one place qualities are chosen. The files below it are the ones the
+            markup names plainly: a page can offer both. */}
+        {valid && media?.video ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-chrome bg-chrome-canvas px-3 py-2.5">
+            <p className="min-w-0 text-chrome-micro text-chrome-menu-text">
+              This page plays a video.
+            </p>
+            <DialogAction
+              tone="quiet"
+              disabled={busy}
+              onClick={() => void openMediaQuality()}
+            >
+              Choose quality
+            </DialogAction>
+          </div>
+        ) : null}
+
+        {valid && media && media.files.length > 0 ? (
+          <div className="rounded-chrome bg-chrome-canvas px-3 py-2.5">
+            <p className="text-chrome-micro text-chrome-menu-text">
+              {media.video
+                ? "The page also names these files."
+                : media.files.length === 1
+                  ? "This page offers one media file."
+                  : `This page offers ${media.files.length} media files.`}
+              {media.truncated ? " Only the first ones are shown." : null}
+            </p>
+            <div className="mt-1.5 flex flex-col gap-0.5">
+              {media.files.map((file) => (
+                <Checkbox
+                  key={file.url}
+                  label={file.name}
+                  hint={MEDIA_KIND[file.kind]}
+                  checked={mediaChoice.includes(file.url)}
+                  disabled={busy}
+                  onChange={() => toggleMedia(file.url)}
+                />
+              ))}
+            </div>
+            <div className="mt-2 flex justify-end">
+              <DialogAction
+                tone="quiet"
+                disabled={busy || mediaChoice.length === 0}
+                onClick={() => void downloadMediaFiles()}
+              >
+                Download selected
+              </DialogAction>
+            </div>
           </div>
         ) : null}
 
