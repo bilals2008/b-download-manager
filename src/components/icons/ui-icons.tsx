@@ -148,6 +148,71 @@ export function MinimizeToTrayGlyph({ className }: GlyphProps) {
   );
 }
 
+/**
+ * The magnet: the one mark everyone reads as a torrent.
+ *
+ * The body is an arch with a band across it, so it stays a magnet at 14px
+ * beside a file name, where the two poles of a drawn magnet become noise.
+ */
+export function TorrentGlyph({ className }: GlyphProps) {
+  return (
+    <Glyph className={className} width={1.6}>
+      <path d="M4.1 13.2V6.6a3.9 3.9 0 0 1 7.8 0v6.6" />
+      <path d="M4.1 10h7.8" />
+    </Glyph>
+  );
+}
+
+/** The torrent tabs: one small mark each, at the same weight as the rest. */
+export type TorrentGlyphKind =
+  | "overview"
+  | "files"
+  | "pieces"
+  | "peers"
+  | "trackers";
+
+export function TorrentTabGlyph({
+  kind,
+  className,
+}: GlyphProps & { kind: TorrentGlyphKind }) {
+  return (
+    <Glyph className={className}>
+      {kind === "overview" ? (
+        <>
+          <rect x="2.4" y="2.8" width="11.2" height="10.4" rx="1.6" />
+          <path d="M2.4 6.4h11.2" />
+        </>
+      ) : kind === "files" ? (
+        <>
+          <path d="M4 2.6h5.1l2.9 2.9v7.9H4Z" />
+          <path d="M9.1 2.6v2.9h2.9" />
+          <path d="M6 8.4h4M6 10.6h4" />
+        </>
+      ) : kind === "pieces" ? (
+        <>
+          <rect x="2.8" y="2.8" width="4" height="4" rx="0.8" />
+          <rect x="9.2" y="2.8" width="4" height="4" rx="0.8" />
+          <rect x="2.8" y="9.2" width="4" height="4" rx="0.8" />
+          <rect x="9.2" y="9.2" width="4" height="4" rx="0.8" />
+        </>
+      ) : kind === "peers" ? (
+        <>
+          <circle cx="6" cy="5.6" r="2.1" />
+          <path d="M2.6 12.6c0-1.9 1.5-3.2 3.4-3.2s3.4 1.3 3.4 3.2" />
+          <path d="M10.4 4.2a2 2 0 0 1 0 3.6" />
+          <path d="M11.6 9.6c1.1.4 1.8 1.5 1.8 3" />
+        </>
+      ) : (
+        <>
+          <circle cx="8" cy="12.4" r="1.3" />
+          <path d="M5.1 9.6a4.1 4.1 0 0 1 5.8 0" />
+          <path d="M2.9 7.2a7.2 7.2 0 0 1 10.2 0" />
+        </>
+      )}
+    </Glyph>
+  );
+}
+
 export function SpinnerGlyph({ className }: GlyphProps) {
   return (
     <Glyph className={className} width={1.8}>

@@ -17,8 +17,14 @@ interface TorrentJobsState {
   problem: string | null;
   /** Look at another job. */
   select: (id: string) => void;
-  /** Do something to a job and read the jobs again. */
-  run: (action: () => Promise<unknown>) => Promise<void>;
+  /**
+   * Do something to a job and read the jobs again. `patch` is drawn before the
+   * command leaves, so a pause reads as pressed instead of as ignored.
+   */
+  run: (
+    action: () => Promise<unknown>,
+    patch?: (jobs: TorrentJob[]) => TorrentJob[],
+  ) => Promise<void>;
   /** Whether something is being done right now. */
   busy: boolean;
 }
@@ -60,9 +66,22 @@ export function useTorrentJobs(): TorrentJobsState {
 
   useEffect(() => {
     void read();
-    const timer = window.setInterval(() => void read(), TICK);
+    // A hidden window has nothing to keep current; it reads once more when it
+    // comes back, so it never draws a picture that is minutes old.
+    const timer = window.setInterval(() => {
+      if (!document.hidden) {
+        void read();
+      }
+    }, TICK);
+    const onVisible = () => {
+      if (!document.hidden) {
+        void read();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
       asked.current += 1;
     };
   }, [read]);
@@ -103,12 +122,18 @@ export function useTorrentJobs(): TorrentJobsState {
   }, [job, jobs]);
 
   const run = useCallback(
-    async (action: () => Promise<unknown>) => {
+    async (
+      action: () => Promise<unknown>,
+      patch?: (jobs: TorrentJob[]) => TorrentJob[],
+    ) => {
       if (busy) {
         return;
       }
       setBusy(true);
       setProblem(null);
+      if (patch) {
+        setJobs((current) => patch(current));
+      }
       try {
         await action();
       } catch (failure) {

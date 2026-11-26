@@ -31,12 +31,12 @@ use crate::state::AppState;
 /// The one client of the whole app, so the request budget of a torrent is
 /// one budget and not one per window.
 pub struct Torrents {
-    client: TorrentClient,
+    pub(crate) client: TorrentClient,
 }
 
 static TORRENTS: OnceLock<Torrents> = OnceLock::new();
 
-fn torrents() -> &'static Torrents {
+pub(crate) fn torrents() -> &'static Torrents {
     TORRENTS.get_or_init(|| Torrents {
         client: TorrentClient::new(),
     })

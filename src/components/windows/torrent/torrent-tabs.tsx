@@ -1,8 +1,12 @@
 import { useRef } from "react";
 
+import {
+  TorrentTabGlyph,
+  type TorrentGlyphKind,
+} from "@/components/icons/ui-icons";
 import { cn } from "@/lib/utils";
 
-export type TorrentTabId = "overview" | "files" | "pieces" | "peers" | "trackers";
+export type TorrentTabId = TorrentGlyphKind;
 
 interface Tab {
   id: TorrentTabId;
@@ -26,11 +30,12 @@ interface TorrentTabsProps {
 /**
  * Five tabs over one panel.
  *
- * The chosen page is named by the text and a short accent rule under it, not
- * by a filled block: the tabs sit between the summary and the table, and a
- * slab of accent there would out-shout both. Arrow keys walk the strip, Home
- * and End go to its ends, and the unselected tabs leave the Tab order, which
- * is the pattern the ARIA authoring practices describe.
+ * The chosen page is a soft chip with its mark in the accent, not an underline
+ * under plain text: the tabs sit between the summary and the table, and a tint
+ * says which page is open without drawing a rule across the window. Arrow
+ * keys walk the strip, Home and End go to its ends, and the unselected tabs
+ * leave the Tab order, which is the pattern the ARIA authoring practices
+ * describe.
  */
 export function TorrentTabs({ active, onChange }: TorrentTabsProps) {
   const refs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -42,7 +47,11 @@ export function TorrentTabs({ active, onChange }: TorrentTabsProps) {
   }
 
   return (
-    <div role="tablist" aria-label="Torrent details" className="flex gap-7">
+    <div
+      role="tablist"
+      aria-label="Torrent details"
+      className="flex w-fit max-w-full gap-0.5 overflow-x-auto rounded-chrome bg-chrome-menu p-1 scrollbar-thin"
+    >
       {TABS.map((tab, index) => {
         const selected = tab.id === active;
         return (
@@ -74,20 +83,20 @@ export function TorrentTabs({ active, onChange }: TorrentTabsProps) {
               }
             }}
             className={cn(
-              "relative pb-2.5 text-[13px] transition-colors focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:outline-none",
+              "flex items-center gap-1.5 rounded-chrome px-2.5 py-1 text-[13px] transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none",
               selected
-                ? "text-chrome-title-text"
-                : "text-chrome-muted hover:text-chrome-menu-text",
+                ? "bg-chrome-menu-active text-chrome-title-text"
+                : "text-chrome-muted hover:bg-chrome-menu-hover hover:text-chrome-menu-text",
             )}
           >
-            {tab.label}
-            <span
-              aria-hidden="true"
+            <TorrentTabGlyph
+              kind={tab.id}
               className={cn(
-                "absolute inset-x-0 bottom-0 h-0.5 rounded-full transition-colors",
-                selected ? "bg-chrome-focus" : "bg-transparent",
+                "size-3.5 shrink-0 transition-colors duration-150",
+                selected ? "text-chrome-focus" : "opacity-70",
               )}
             />
+            {tab.label}
           </button>
         );
       })}

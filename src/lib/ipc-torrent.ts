@@ -147,6 +147,38 @@ export interface TorrentJob {
   error: string | null;
 }
 
+/** One job, as the download list shows it: enough for a row, nothing more. */
+export interface TorrentSummary {
+  /** The info hash, the id of the job. */
+  infoHash: string;
+  /** The name of the torrent. */
+  name: string;
+  /** The folder the files are written into. */
+  directory: string;
+  /** How many bytes came in. */
+  downloaded: number;
+  /** How many bytes the torrent holds. */
+  totalLength: number;
+  /** How many bytes a second come in. */
+  downSpeed: number;
+  /** How many bytes a second go out. */
+  upSpeed: number;
+  /** How many seconds are left, when the speed says so. */
+  eta: number | null;
+  /** What the job is doing. */
+  status: TorrentStatus;
+  /** What went wrong, when something did. */
+  error: string | null;
+  /** How many peers have the whole torrent. */
+  seeders: number;
+  /** How many peers have part of it. */
+  leechers: number;
+  /** How many files it holds. */
+  files: number;
+  /** When the job was added, in milliseconds since the epoch. */
+  addedAt: number;
+}
+
 /** What a torrent holds, before it is started. */
 export interface TorrentInfo {
   /** The info hash, the id of the torrent. */
@@ -336,6 +368,11 @@ export function torrentPauseAll(): Promise<void> {
 /** Let every job of the session go on. */
 export function torrentResumeAll(): Promise<void> {
   return invoke<void>("torrent_resume_all");
+}
+
+/** Every job of the session, as the download list shows them. */
+export function torrentSummaries(): Promise<TorrentSummary[]> {
+  return invoke<TorrentSummary[]>("torrent_summaries");
 }
 
 /** The choices the reader makes about torrents. */

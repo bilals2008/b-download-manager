@@ -59,7 +59,7 @@ export function TorrentJobList({
               onClick={() => onSelect(job.infoHash)}
               aria-current={selected}
               className={cn(
-                "flex w-full flex-col gap-1.5 rounded-chrome px-2.5 py-2 text-left transition-colors focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none",
+                "flex w-full flex-col gap-1 rounded-chrome px-2.5 py-[7px] text-left transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none",
                 selected
                   ? "bg-chrome-menu-active"
                   : "hover:bg-chrome-menu-hover",
@@ -82,10 +82,12 @@ export function TorrentJobList({
                   {job.totalLength > 0 ? `${percent}%` : ""}
                 </span>
               </span>
+              {/* A hairline, not a meter: the rail is a list of jobs, and
+                  the number beside the name already says how far it is. */}
               <Progress
                 value={fraction(job) * 100}
                 aria-label={`Progress of ${job.name}`}
-                className="h-1"
+                className="h-[3px] rounded-none"
               />
               <span className="flex min-w-0 items-baseline justify-between gap-2 text-chrome-micro">
                 <span

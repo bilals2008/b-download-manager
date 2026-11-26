@@ -10,7 +10,7 @@ interface TorrentFilesProps {
 
 /** The head of a table of the window: small, quiet and sticky. */
 const HEAD =
-  "sticky top-0 z-10 bg-chrome-popup pb-1.5 text-chrome-micro font-normal text-chrome-muted";
+  "sticky top-0 z-10 bg-chrome-row-alt py-1.5 text-chrome-micro font-normal text-chrome-muted";
 
 /**
  * The files of a job, each one with how much of it is on disk.

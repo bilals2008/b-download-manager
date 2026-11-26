@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { SpinnerGlyph } from "@/components/icons/ui-icons";
 import { DialogAction } from "@/components/ui/dialog-action";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -29,7 +30,33 @@ interface TorrentDetailsProps {
   /** Whether something is being done right now. */
   busy: boolean;
   /** Do something to the job and read the jobs again. */
-  run: (action: () => Promise<unknown>) => Promise<void>;
+  run: (
+    action: () => Promise<unknown>,
+    patch?: (jobs: TorrentJob[]) => TorrentJob[],
+  ) => Promise<void>;
+}
+
+/**
+ * The same jobs with one of them held or let go, drawn the moment the button
+ * is pressed. The engine answers a fraction of a second later, and a button
+ * that waits for it reads as a button that did not hear the click.
+ */
+function shown(
+  jobs: TorrentJob[],
+  id: string,
+  state: "paused" | "downloading",
+): TorrentJob[] {
+  return jobs.map((entry) =>
+    entry.infoHash === id
+      ? {
+          ...entry,
+          downSpeed: state === "paused" ? 0 : entry.downSpeed,
+          upSpeed: state === "paused" ? 0 : entry.upSpeed,
+          eta: state === "paused" ? null : entry.eta,
+          status: { state } as TorrentJob["status"],
+        }
+      : entry,
+  );
 }
 
 /**
@@ -43,6 +70,8 @@ interface TorrentDetailsProps {
 export function TorrentDetails({ job, busy, run }: TorrentDetailsProps) {
   const [tab, setTab] = useState<TorrentTabId>("overview");
   const [removing, setRemoving] = useState(false);
+  // The command that is on its way, so its own button shows it.
+  const [working, setWorking] = useState<string | null>(null);
 
   if (!job) {
     return (
@@ -62,6 +91,23 @@ export function TorrentDetails({ job, busy, run }: TorrentDetailsProps) {
   const done = job.status.state === "completed" || job.status.state === "seeding";
   const seeding = job.status.state === "seeding";
   const percent = Math.round(fraction(job) * 100);
+
+  /** Run one command with its button marked until it answers. */
+  function act(
+    label: string,
+    action: () => Promise<unknown>,
+    patch?: (jobs: TorrentJob[]) => TorrentJob[],
+  ) {
+    setWorking(label);
+    void run(action, patch).finally(() => setWorking(null));
+  }
+
+  /** The spinner of a button, when that button is the one waiting. */
+  function wheel(label: string) {
+    return working === label ? (
+      <SpinnerGlyph className="size-3.5 shrink-0 motion-safe:animate-spin motion-reduce:animate-none" />
+    ) : undefined;
+  }
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col px-4">
@@ -101,12 +147,14 @@ export function TorrentDetails({ job, busy, run }: TorrentDetailsProps) {
       </div>
 
       {/* The gutter is reserved even when a page does not scroll, so a table
-          never jumps sideways and the bar never sits on the last column. */}
+          never jumps sideways and the bar never sits on the last column. The
+          page rises the last few pixels as it replaces the one before it. */}
       <div
+        key={tab}
         role="tabpanel"
         id={`torrent-panel-${tab}`}
         aria-labelledby={`torrent-tab-${tab}`}
-        className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto pt-2 pr-2 scrollbar-thin [scrollbar-gutter:stable]"
+        className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto pt-2 pr-2 scrollbar-thin [scrollbar-gutter:stable] motion-safe:animate-page-in motion-reduce:animate-none"
       >
         {tab === "overview" ? <TorrentOverview job={job} /> : null}
         {tab === "files" ? <TorrentFiles job={job} /> : null}
@@ -119,16 +167,26 @@ export function TorrentDetails({ job, busy, run }: TorrentDetailsProps) {
         {paused ? (
           <DialogAction
             tone="primary"
+            icon={wheel("resume")}
             disabled={busy}
-            onClick={() => void run(() => torrentResume(job.infoHash))}
+            onClick={() =>
+              act("resume", () => torrentResume(job.infoHash), (jobs) =>
+                shown(jobs, job.infoHash, "downloading"),
+              )
+            }
           >
             Resume
           </DialogAction>
         ) : (
           <DialogAction
             tone="primary"
+            icon={wheel("pause")}
             disabled={busy || done}
-            onClick={() => void run(() => torrentPause(job.infoHash))}
+            onClick={() =>
+              act("pause", () => torrentPause(job.infoHash), (jobs) =>
+                shown(jobs, job.infoHash, "paused"),
+              )
+            }
           >
             Pause
           </DialogAction>
@@ -136,9 +194,12 @@ export function TorrentDetails({ job, busy, run }: TorrentDetailsProps) {
         {done ? (
           <DialogAction
             tone="secondary"
+            icon={wheel("seeding")}
             disabled={busy}
             onClick={() =>
-              void run(() => torrentSetSeeding(job.infoHash, !job.seeding))
+              act("seeding", () =>
+                torrentSetSeeding(job.infoHash, !job.seeding),
+              )
             }
           >
             {seeding ? "Stop seeding" : "Seed this"}
@@ -146,8 +207,9 @@ export function TorrentDetails({ job, busy, run }: TorrentDetailsProps) {
         ) : null}
         <DialogAction
           tone="quiet"
+          icon={wheel("recheck")}
           disabled={busy}
-          onClick={() => void run(() => torrentRecheck(job.infoHash))}
+          onClick={() => act("recheck", () => torrentRecheck(job.infoHash))}
         >
           Check again
         </DialogAction>
@@ -174,20 +236,22 @@ export function TorrentDetails({ job, busy, run }: TorrentDetailsProps) {
             </DialogAction>
             <DialogAction
               tone="danger"
+              icon={wheel("remove")}
               disabled={busy}
               onClick={() => {
                 setRemoving(false);
-                void run(() => torrentRemove(job.infoHash, false));
+                act("remove", () => torrentRemove(job.infoHash, false));
               }}
             >
               Keep files
             </DialogAction>
             <DialogAction
               tone="danger"
+              icon={wheel("remove-files")}
               disabled={busy}
               onClick={() => {
                 setRemoving(false);
-                void run(() => torrentRemove(job.infoHash, true));
+                act("remove-files", () => torrentRemove(job.infoHash, true));
               }}
             >
               Delete files

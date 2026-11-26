@@ -1,15 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 
+import { emit } from "@tauri-apps/api/event";
+
 import { CloseGlyph, SidebarGlyph } from "@/components/icons/ui-icons";
 import { DialogAction } from "@/components/ui/dialog-action";
 import { Tooltip } from "@/components/ui/tooltip";
 import { formatSpeed } from "@/lib/downloads";
 import { torrentPauseAll, torrentResumeAll } from "@/lib/ipc-torrent";
 import { cn } from "@/lib/utils";
-import { closeWindow, showWindowWhenPainted } from "@/lib/window";
+import { hideWindow, showWindowWhenPainted } from "@/lib/window";
 
 import { TorrentDetails } from "./torrent-details";
 import { TorrentJobList } from "./torrent-job-list";
+import { TORRENT_CLOSED } from "./torrent-closed-hint";
 import { useTorrentJobs } from "./use-torrent-jobs";
 
 const LIST_ID = "torrent-job-list";
@@ -33,10 +36,23 @@ export function TorrentWindow() {
     void showWindowWhenPainted();
   }, []);
 
+  /**
+   * Put the window away instead of destroying it.
+   *
+   * The window is the slower half of opening it: a webview that was thrown
+   * away has to be built again, while one that is hidden comes back at once.
+   * The jobs keep running, and the next open is the same window looking at
+   * them. The main window still hears that it went away, so its hint stays.
+   */
+  function putAway() {
+    void emit(TORRENT_CLOSED).catch(() => undefined);
+    void hideWindow();
+  }
+
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape" && !event.defaultPrevented) {
-        void closeWindow();
+        putAway();
       }
     }
     window.addEventListener("keydown", onKey);
@@ -109,7 +125,7 @@ export function TorrentWindow() {
         <Tooltip content="Close">
           <button
             type="button"
-            onClick={() => void closeWindow()}
+            onClick={putAway}
             aria-label="Close"
             className="flex size-7 shrink-0 items-center justify-center rounded-chrome text-chrome-muted transition-colors hover:bg-chrome-menu-hover hover:text-chrome-menu-text focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
           >
@@ -130,9 +146,12 @@ export function TorrentWindow() {
       <div className="flex min-h-0 flex-1 gap-1 px-1 pb-1">
         <aside
           id={LIST_ID}
+          aria-hidden={!railOpen}
           className={cn(
-            "w-64 shrink-0 flex-col overflow-y-auto rounded-chrome bg-chrome-menu scrollbar-thin",
-            railOpen ? "flex" : "hidden",
+            "flex shrink-0 flex-col overflow-y-auto rounded-chrome bg-chrome-menu scrollbar-thin transition-[width,opacity] duration-200 ease-out motion-reduce:transition-none",
+            railOpen
+              ? "w-64 opacity-100"
+              : "pointer-events-none w-0 opacity-0",
           )}
         >
           <TorrentJobList jobs={jobs} chosen={chosen} onSelect={select} />

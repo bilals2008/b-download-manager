@@ -31,6 +31,7 @@ mod staging;
 mod state;
 mod toolbars;
 mod torrent;
+mod torrent_list;
 mod tray;
 mod updater;
 mod video;
@@ -251,6 +252,7 @@ pub fn run() {
             torrent::torrent_start,
             torrent::torrent_lookup,
             torrent::torrent_jobs,
+            torrent_list::torrent_summaries,
             torrent::torrent_job,
             torrent::torrent_pause,
             torrent::torrent_resume,

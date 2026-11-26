@@ -226,7 +226,11 @@ export function useCategories({
       ),
     }));
     for (const item of changed) {
-      run(setDownloadCategory(item.id, category));
+      // A torrent row is not an engine download, so its category is kept in
+      // the list until the torrent names itself again.
+      if (item.torrent === undefined) {
+        run(setDownloadCategory(item.id, category));
+      }
     }
   }
 
@@ -267,6 +271,7 @@ export function useCategories({
       (item) =>
         ids.includes(item.id) &&
         !item.mediaJob &&
+        item.torrent === undefined &&
         item.status !== "completed" &&
         item.status !== "queued",
     );
@@ -289,7 +294,11 @@ export function useCategories({
   /** Take queued rows out of the queue and leave them paused. */
   function dequeue(ids: number[]) {
     const changed = latest.current.downloads.filter(
-      (item) => ids.includes(item.id) && !item.mediaJob && item.status === "queued",
+      (item) =>
+        ids.includes(item.id) &&
+        !item.mediaJob &&
+        item.torrent === undefined &&
+        item.status === "queued",
     );
     if (changed.length === 0) {
       return;

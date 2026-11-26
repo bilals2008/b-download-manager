@@ -22,7 +22,7 @@ interface TorrentTrackersProps {
 
 /** The head of a table of the window: small, quiet and sticky. */
 const HEAD =
-  "sticky top-0 z-10 bg-chrome-popup pb-1.5 text-chrome-micro font-normal text-chrome-muted";
+  "sticky top-0 z-10 bg-chrome-row-alt py-1.5 text-chrome-micro font-normal text-chrome-muted";
 
 /** The short name of a tracker: its host, without the scheme or the path. */
 function trackerHost(url: string): string {
