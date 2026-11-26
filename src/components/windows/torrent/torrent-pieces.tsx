@@ -14,15 +14,15 @@ export function Legend() {
     <ul className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-chrome-micro text-chrome-muted">
       <li className="flex items-center gap-1.5">
         <span aria-hidden="true" className="size-1.5 bg-chrome-focus" />
-        On disk
+        Downloaded
       </li>
       <li className="flex items-center gap-1.5">
         <span aria-hidden="true" className="size-1.5 bg-chrome-line" />
-        Missing
+        Not yet
       </li>
       <li className="flex items-center gap-1.5">
         <span aria-hidden="true" className="size-1.5 bg-chrome-focus/55" />
-        Coming in
+        Downloading
       </li>
     </ul>
   );

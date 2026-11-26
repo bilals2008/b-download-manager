@@ -13,10 +13,11 @@ import { Dialog } from "@/components/ui/dialog";
 import { ListBox } from "@/components/ui/listbox";
 import { DialogAction } from "@/components/ui/dialog-action";
 import { Switch } from "@/components/ui/switch";
-import { Checkbox } from "@/components/ui/checkbox";
 import { FIELD } from "@/components/ui/field";
+import { FormatCheckList, FormatList } from "@/components/ui/quality-list";
 import { Tooltip } from "@/components/ui/tooltip";
 import { driveExports } from "@/lib/drive";
+import { formatDuration, type QualityRow } from "@/lib/media";
 import { useAddDownloadForm } from "@/components/workspace/use-add-download-form";
 
 interface AddDownloadDialogProps {
@@ -106,7 +107,12 @@ export function AddDownloadDialog({
     media,
     mediaChoice,
     toggleMedia,
-    openMediaQuality,
+    videoPage,
+    video,
+    qualities,
+    qualityChoice,
+    chooseQuality,
+    qualityError,
     downloadMediaFiles,
     toggleCategoryMenu,
     categoryRows,
@@ -114,6 +120,34 @@ export function AddDownloadDialog({
     details,
   } = useAddDownloadForm({ open, onClose, seedUrl });
 
+  // The files a page names, drawn as the same rows as its qualities.
+  const fileRows: QualityRow[] = (media?.files ?? []).map((file) => ({
+    id: file.url,
+    label: file.name,
+    note: MEDIA_KIND[file.kind] ?? null,
+    size: null,
+    audio: null,
+    kind: file.kind,
+    height: null,
+    bandwidth: null,
+  }));
+
+  const qualitySummary = (() => {
+    if (qualityError) {
+      return "The page's video could not be read.";
+    }
+    if (!qualities.length) {
+      return video?.state === "ready"
+        ? "This page offers no downloadable quality."
+        : "Reading the page's video…";
+    }
+    const count =
+      qualities.length === 1 ? "1 quality" : `${qualities.length} qualities`;
+    const duration = formatDuration(video?.duration ?? null);
+    return [video?.title?.trim() || null, count, duration || null]
+      .filter(Boolean)
+      .join(" · ");
+  })();
 
   return (
     <Dialog
@@ -159,6 +193,12 @@ export function AddDownloadDialog({
         id="add-url-form"
         onSubmit={(event) => {
           event.preventDefault();
+          // Enter on a magnet link opens the torrent dialog, the one place a
+          // torrent's files are chosen; submitting here would do nothing.
+          if (torrent) {
+            onTorrent?.(address);
+            return;
+          }
           void submit();
         }}
         aria-busy={busy}
@@ -218,6 +258,13 @@ export function AddDownloadDialog({
         {/* What the address adds up to, before anything starts: the file it
             becomes, its size and whether it can be resumed. It is the answer
             to "did I paste the right link"; the category below it. */}
+        {torrent ? (
+          <p className="text-chrome-micro text-chrome-menu-text">
+            This is a magnet link. It opens in Add torrent, where its files are
+            chosen before anything starts.
+          </p>
+        ) : null}
+
         {valid ? (
           <div className="flex min-w-0 items-center gap-2.5">
             <FileTypeIcon
@@ -241,7 +288,7 @@ export function AddDownloadDialog({
           </div>
         ) : null}
 
-        {valid && probe.kind === "failed" ? (
+        {valid && probe.kind === "failed" && !videoPage ? (
           <p
             role="status"
             className="flex items-start gap-1.5 text-chrome-micro text-chrome-menu-text"
@@ -268,45 +315,55 @@ export function AddDownloadDialog({
           </div>
         ) : null}
 
-        {/* A page that plays a video goes to the quality panel, which is the
-            one place qualities are chosen. The files below it are the ones the
-            markup names plainly: a page can offer both. */}
-        {valid && media?.video ? (
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-chrome bg-chrome-canvas px-3 py-2.5">
-            <p className="min-w-0 text-chrome-micro text-chrome-menu-text">
-              This page plays a video.
-            </p>
-            <DialogAction
-              tone="quiet"
-              disabled={busy}
-              onClick={() => void openMediaQuality()}
-            >
-              Choose quality
-            </DialogAction>
+        {/* A page that plays a video shows its qualities here, in the same
+            list the quality panel draws: the reader chooses without a second
+            window. The files below it are the ones the markup names plainly,
+            and only when the page's video could not be read. */}
+        {videoPage ? (
+          <div className="rounded-chrome bg-chrome-canvas px-3 py-2.5">
+            <Tooltip content={qualitySummary} side="top" className="block min-w-0">
+              <p className="truncate text-chrome-micro text-chrome-menu-text">
+                {qualitySummary}
+              </p>
+            </Tooltip>
+            {qualityError ? (
+              <p
+                role="alert"
+                className="mt-1 text-chrome-micro break-words text-chrome-error"
+              >
+                {qualityError}
+              </p>
+            ) : null}
+            {qualities.length > 0 ? (
+              <div className="mt-1.5 flex max-h-56 flex-col">
+                <FormatList
+                  rows={qualities}
+                  value={qualityChoice}
+                  onSelect={chooseQuality}
+                  onActivate={() => void submit()}
+                  disabled={busy}
+                />
+              </div>
+            ) : null}
           </div>
         ) : null}
 
-        {valid && media && media.files.length > 0 ? (
+        {valid && media && fileRows.length > 0 && (!videoPage || qualityError) ? (
           <div className="rounded-chrome bg-chrome-canvas px-3 py-2.5">
             <p className="text-chrome-micro text-chrome-menu-text">
-              {media.video
-                ? "The page also names these files."
-                : media.files.length === 1
-                  ? "This page offers one media file."
-                  : `This page offers ${media.files.length} media files.`}
+              {fileRows.length === 1
+                ? "This page offers one media file."
+                : `This page offers ${fileRows.length} media files.`}
               {media.truncated ? " Only the first ones are shown." : null}
             </p>
-            <div className="mt-1.5 flex flex-col gap-0.5">
-              {media.files.map((file) => (
-                <Checkbox
-                  key={file.url}
-                  label={file.name}
-                  hint={MEDIA_KIND[file.kind]}
-                  checked={mediaChoice.includes(file.url)}
-                  disabled={busy}
-                  onChange={() => toggleMedia(file.url)}
-                />
-              ))}
+            <div className="mt-1.5 flex max-h-56 flex-col">
+              <FormatCheckList
+                label="Media files"
+                rows={fileRows}
+                values={mediaChoice}
+                onToggle={toggleMedia}
+                disabled={busy}
+              />
             </div>
             <div className="mt-2 flex justify-end">
               <DialogAction

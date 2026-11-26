@@ -8,7 +8,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::Serialize;
 use tokio::task::JoinHandle;
 
+mod trackers;
+
 use crate::engine::{self, Control, Job, JobState, Limits, Source};
+use crate::tracker_list::TrackerEdits;
 use crate::error::TorrentError;
 use crate::lpd::Lpd;
 use crate::magnet::{parse_magnet, MagnetInfo};
@@ -223,6 +226,8 @@ struct Entry {
     task: Option<JoinHandle<()>>,
     added_at: u64,
     sequential: bool,
+    /// The trackers the reader added and dropped, shared with the running job.
+    edits: Arc<Mutex<TrackerEdits>>,
 }
 
 /// The torrent jobs of the application.
@@ -393,6 +398,7 @@ impl TorrentClient {
                     task: None,
                     added_at: now_millis(),
                     sequential: request.sequential,
+                    edits: Arc::new(Mutex::new(TrackerEdits::default())),
                 },
             );
         }
@@ -420,6 +426,7 @@ impl TorrentClient {
             options: self.options.clone(),
             lpd: self.lpd.clone(),
             sequential: entry.sequential,
+            edits: entry.edits.clone(),
         });
         entry.task = Some(tokio::spawn(engine::run(job)));
         Ok(())

@@ -2,16 +2,19 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import { open as pickFile } from "@tauri-apps/plugin-dialog";
 
+import { DownloadGlyph, SpinnerGlyph } from "@/components/icons/ui-icons";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog } from "@/components/ui/dialog";
 import { DialogAction } from "@/components/ui/dialog-action";
-import { Checkbox } from "@/components/ui/checkbox";
 import { FIELD } from "@/components/ui/field";
+import { Tooltip } from "@/components/ui/tooltip";
 import {
   FolderGlyph,
   TorrentFileTree,
 } from "@/components/workspace/torrent-file-tree";
-import { formatSize, joinPath } from "@/lib/downloads";
+import { formatSize } from "@/lib/downloads";
 import { describeError, isDesktop } from "@/lib/errors";
+import { chooseFolder } from "@/lib/ipc";
 import {
   torrentLookup,
   torrentStart,
@@ -19,7 +22,6 @@ import {
   type TorrentStartOptions,
 } from "@/lib/ipc-torrent";
 import { preferredFolder } from "@/lib/settings";
-import { cn } from "@/lib/utils";
 
 interface AddTorrentDialogProps {
   open: boolean;
@@ -30,11 +32,14 @@ interface AddTorrentDialogProps {
 }
 
 /**
- * Where the dialog is: the link, the wait for its file list, or the files.
- * A torrent is read before it starts, so the reader sees what it holds and
- * leaves out what they do not want.
+ * Where the dialog is: the link, the wait for its file list, the files, or a
+ * look-up that did not answer.
+ *
+ * The wait is never a gate. A magnet is a job the engine can start on its own;
+ * the list only lets the reader leave files out, so a swarm that is slow to
+ * answer must not keep the torrent out of the app.
  */
-type Phase = "link" | "looking" | "files";
+type Phase = "link" | "looking" | "files" | "unanswered";
 
 /** What the field still needs, or null when it can be looked up. */
 function torrentProblem(source: string): string | null {
@@ -51,36 +56,42 @@ function torrentProblem(source: string): string | null {
   return torrentish ? null : "That is not a magnet link, a .torrent file or an address.";
 }
 
-/** The small browse button that sits at a field's right edge. */
-function EllipsisButton({
-  label,
-  onClick,
-  disabled,
-}: {
-  label: string;
-  onClick: () => void;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      onClick={onClick}
-      disabled={disabled}
-      className="flex w-8 shrink-0 items-center justify-center rounded-r-chrome text-chrome-muted transition-colors hover:bg-chrome-menu-hover hover:text-chrome-menu-text focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none disabled:cursor-default disabled:opacity-45 disabled:hover:bg-transparent disabled:hover:text-chrome-muted"
-    >
-      <span aria-hidden="true">...</span>
-    </button>
-  );
+/** Whether the link is a magnet, which the engine can start without a list. */
+function isMagnet(source: string): boolean {
+  return source.trim().toLowerCase().startsWith("magnet:");
 }
+
+/** The name the magnet carries in its `dn`, before any peer has answered. */
+function magnetName(link: string): string | null {
+  const at = link.indexOf("?");
+  if (at < 0) {
+    return null;
+  }
+  for (const pair of link.slice(at + 1).split("&")) {
+    const [key, value = ""] = pair.split("=");
+    if (key !== "dn") {
+      continue;
+    }
+    try {
+      const name = decodeURIComponent(value.replace(/\+/g, " ")).trim();
+      return name || null;
+    } catch {
+      return value.trim() || null;
+    }
+  }
+  return null;
+}
+
+const FOLDER_ROW =
+  "group flex h-9 w-full min-w-0 items-center gap-2 rounded-chrome bg-chrome-canvas px-2.5 text-left transition-colors hover:bg-chrome-popup-hover focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none disabled:cursor-default disabled:opacity-60";
 
 /**
  * Add torrent: a magnet link, the `.torrent` file itself, or its address.
  *
- * The link is looked up first and its files are listed, the way the reference
- * download manager does it: a magnet asks its peers for the list, a file says
- * it at once. Only the ticked files are downloaded, into a folder named after
- * the torrent, and the torrent window then shows what the job is doing.
+ * The link is read first and its files are listed, so the reader can leave out
+ * what they do not want. A magnet that no peer answers for is still a job: the
+ * dialog says the list is not in yet and offers to add the torrent anyway,
+ * because waiting for the swarm is not a reason to refuse the link.
  */
 export function AddTorrentDialog({
   open,
@@ -88,7 +99,6 @@ export function AddTorrentDialog({
   initialSource,
 }: AddTorrentDialogProps) {
   const fieldId = useId();
-  const saveFieldId = `${fieldId}-save`;
   const filesHintId = `${fieldId}-files`;
   const [source, setSource] = useState("");
   const [phase, setPhase] = useState<Phase>("link");
@@ -110,7 +120,10 @@ export function AddTorrentDialog({
     if (phase !== "looking") {
       return;
     }
-    const timer = window.setInterval(() => setWaited((seconds) => seconds + 1), 1000);
+    const timer = window.setInterval(
+      () => setWaited((seconds) => seconds + 1),
+      1000,
+    );
     return () => window.clearInterval(timer);
   }, [phase]);
 
@@ -148,6 +161,7 @@ export function AddTorrentDialog({
     if (typeof picked === "string" && picked) {
       setSource(picked);
       setProblem(null);
+      void lookUp(picked);
     }
   }
 
@@ -155,9 +169,13 @@ export function AddTorrentDialog({
     if (busy) {
       return;
     }
-    const picked = await pickFile({ directory: true, multiple: false });
-    if (typeof picked === "string" && picked) {
-      setFolder(picked);
+    try {
+      const picked = await chooseFolder(folder?.trim() || preferredFolder());
+      if (picked) {
+        setFolder(picked);
+      }
+    } catch (failure) {
+      setProblem(describeError(failure));
     }
   }
 
@@ -194,7 +212,7 @@ export function AddTorrentDialog({
         return;
       }
       setProblem(describeError(failure));
-      setPhase("link");
+      setPhase("unanswered");
     }
   }
 
@@ -217,15 +235,27 @@ export function AddTorrentDialog({
     setWaited(0);
   }
 
-  async function start(options: TorrentStartOptions) {
-    if (busy || !info || selected.length === 0) {
+  async function start(options: TorrentStartOptions, blind = false) {
+    if (busy) {
+      return;
+    }
+    if (!blind && (!info || selected.length === 0)) {
+      return;
+    }
+    const value = source.trim();
+    if (!value) {
       return;
     }
     setBusy(true);
     setProblem(null);
     try {
       // The engine opens the torrent window on its own once the job is in.
-      await torrentStart(source.trim(), folder ?? undefined, selected, options);
+      await torrentStart(
+        value,
+        folder ?? undefined,
+        blind ? undefined : selected,
+        options,
+      );
       reset();
       onClose();
     } catch (failure) {
@@ -238,12 +268,16 @@ export function AddTorrentDialog({
   // app's remembered or configured folder. An empty one means the engine's own
   // download folder, which has no honest path to print here.
   const saveFolder = folder?.trim() || preferredFolder().trim();
+  const magnet = isMagnet(source);
+  const carried = magnet ? magnetName(source) : null;
+  const title =
+    info?.name ?? carried ?? (source ? source.replace(/\.[^.\\/]+$/, "") : "");
   const filesHint = saveFolder
-    ? `Files go to: ${joinPath(saveFolder, info?.name ?? "")}`
-    : "Saved in your download folder, in a folder named after the torrent.";
+    ? `Files go to ${saveFolder}${info ? ` in a folder named ${info.name}` : ""}.`
+    : "Files go to your download folder, in a folder named after the torrent.";
 
   const footer =
-    phase === "files" ? (
+    phase === "files" && info ? (
       <>
         <Checkbox
           label="Download in order"
@@ -254,16 +288,15 @@ export function AddTorrentDialog({
         />
         <DialogAction
           tone="primary"
+          icon={<DownloadGlyph className="size-3.5" />}
           disabled={busy || selected.length === 0}
           onClick={() => void start({ sequential: inOrder })}
         >
-          Download Now
+          {busy ? "Starting…" : "Download now"}
         </DialogAction>
         <DialogAction
           disabled={busy || selected.length === 0}
-          onClick={() =>
-            void start({ startPaused: true, sequential: inOrder })
-          }
+          onClick={() => void start({ startPaused: true, sequential: inOrder })}
         >
           Later
         </DialogAction>
@@ -271,131 +304,228 @@ export function AddTorrentDialog({
           Cancel
         </DialogAction>
       </>
+    ) : phase === "looking" ? (
+      <>
+        <DialogAction onClick={stopLooking}>Stop</DialogAction>
+        {magnet ? (
+          <DialogAction
+            tone="primary"
+            disabled={busy}
+            onClick={() => void start({ sequential: inOrder }, true)}
+          >
+            Add without the list
+          </DialogAction>
+        ) : null}
+        <DialogAction onClick={close} disabled={busy}>
+          Cancel
+        </DialogAction>
+      </>
+    ) : phase === "unanswered" ? (
+      <>
+        <DialogAction onClick={() => void lookUp()}>Try again</DialogAction>
+        {magnet ? (
+          <DialogAction
+            tone="primary"
+            disabled={busy}
+            onClick={() => void start({ sequential: inOrder }, true)}
+          >
+            Add anyway
+          </DialogAction>
+        ) : null}
+        <DialogAction onClick={close} disabled={busy}>
+          Cancel
+        </DialogAction>
+      </>
     ) : (
       <>
-        <DialogAction onClick={phase === "looking" ? stopLooking : close}>
-          {phase === "looking" ? "Stop" : "Cancel"}
+        <DialogAction
+          tone="quiet"
+          className="mr-auto"
+          disabled={busy}
+          onClick={() => void pickTorrentFile()}
+        >
+          Open .torrent file…
         </DialogAction>
-        {phase === "looking" ? null : (
-          <DialogAction tone="primary" onClick={() => void lookUp()}>
-            Look up
-          </DialogAction>
-        )}
+        <DialogAction onClick={close} disabled={busy}>
+          Cancel
+        </DialogAction>
+        <DialogAction
+          tone="primary"
+          disabled={busy || !source.trim()}
+          onClick={() => void lookUp()}
+        >
+          Look up
+        </DialogAction>
       </>
     );
 
   return (
     <Dialog
       open={open}
-      title="Add Torrent"
+      title="Add torrent"
       onClose={close}
       dismissible={!busy}
-      className="w-[560px]"
+      className="w-[min(38rem,calc(100vw-2rem))]"
       footer={footer}
     >
       {phase === "files" && info ? (
-        <>
-          <div className="flex items-center gap-2 pb-2">
-            <FolderGlyph className="size-4 shrink-0 text-chrome-muted" />
-            <p className="min-w-0 truncate text-sm font-medium text-chrome-title-text">
-              {info.name} ({info.files.length}{" "}
-              {info.files.length === 1 ? "file" : "files"}, {" "}
-              {formatSize(info.totalLength)})
+        <div className="flex flex-col gap-3">
+          <div className="min-w-0">
+            <Tooltip content={info.name} side="top" className="block min-w-0">
+              <p className="truncate text-[13px] font-medium text-chrome-title-text">
+                {info.name}
+              </p>
+            </Tooltip>
+            <p className="mt-0.5 text-chrome-micro tabular-nums text-chrome-muted">
+              {info.files.length}{" "}
+              {info.files.length === 1 ? "file" : "files"} ·{" "}
+              {formatSize(info.totalLength)} ·{" "}
+              {info.trackers.length === 0
+                ? "no trackers, peers from the peer table"
+                : `${info.trackers.length} ${info.trackers.length === 1 ? "tracker" : "trackers"}`}
             </p>
           </div>
+
           <TorrentFileTree
             files={info.files}
             selected={selected}
             onChange={setSelected}
             disabled={busy}
           />
-          <div className="pt-3">
-            <label
-              htmlFor={saveFieldId}
-              className="block pb-1 text-xs text-chrome-menu-text"
-            >
+
+          <div>
+            <span className="mb-1.5 block text-xs text-chrome-muted">
               Save to
-            </label>
-            <div className="relative">
-              <input
-                id={saveFieldId}
-                readOnly
-                value={saveFolder}
-                placeholder="Your download folder"
-                aria-describedby={filesHintId}
-                className={cn(FIELD, "pr-9")}
-              />
-              <div className="absolute inset-y-0 right-0 flex">
-                <EllipsisButton
-                  label="Choose save folder"
-                  disabled={busy}
-                  onClick={() => void pickFolder()}
-                />
-              </div>
-            </div>
-            <p
-              id={filesHintId}
-              className="pt-1 text-chrome-micro text-chrome-muted"
+            </span>
+            <Tooltip
+              content={saveFolder || "Your download folder"}
+              side="top"
+              className="block w-full min-w-0"
             >
+              <button
+                type="button"
+                onClick={() => void pickFolder()}
+                disabled={busy}
+                aria-label={
+                  saveFolder
+                    ? `Change the save folder, currently ${saveFolder}`
+                    : "Choose a save folder"
+                }
+                className={FOLDER_ROW}
+              >
+                <FolderGlyph className="size-3.5 shrink-0 text-chrome-muted" />
+                <span className="min-w-0 flex-1 truncate font-mono text-chrome-micro text-chrome-menu-text">
+                  {saveFolder || "Your download folder"}
+                </span>
+                <span className="shrink-0 text-chrome-micro text-chrome-muted transition-colors group-hover:text-chrome-menu-text">
+                  Change
+                </span>
+              </button>
+            </Tooltip>
+            <p id={filesHintId} className="mt-1.5 text-chrome-micro text-chrome-muted">
               {filesHint}
             </p>
           </div>
-        </>
-      ) : (
-        <>
-          <label
-            htmlFor={fieldId}
-            className="block pb-1 text-xs text-chrome-menu-text"
-          >
-            Magnet link, .torrent file or address
-          </label>
-          <input
-            id={fieldId}
-            data-autofocus
-            value={source}
-            placeholder="magnet:?xt=urn:btih:..."
-            spellCheck={false}
-            autoComplete="off"
-            readOnly={phase === "looking"}
-            aria-invalid={problem !== null || undefined}
-            className={cn(
-              FIELD,
-              "font-mono",
-              problem && "border-chrome-danger hover:border-chrome-danger",
-            )}
-            onChange={(event) => {
-              setSource(event.target.value);
-              setProblem(null);
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                void lookUp();
-              }
-            }}
-          />
 
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pt-3">
-            <DialogAction
-              tone="quiet"
-              disabled={phase === "looking"}
-              onClick={() => void pickTorrentFile()}
-            >
-              Open .torrent file...
-            </DialogAction>
-            <p className="min-w-0 flex-1 text-chrome-micro leading-4 text-chrome-muted">
-              {phase === "looking"
-                ? `Looking for the torrent's files (${waited}s). A magnet needs a peer to answer; this can take a moment.`
-                : "The files are looked up first, so you can leave out what you do not want."}
+          {problem ? (
+            <p role="alert" className="text-chrome-micro break-words text-chrome-error">
+              {problem}
             </p>
+          ) : null}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <div>
+            <label
+              htmlFor={fieldId}
+              className="mb-1.5 block text-xs text-chrome-muted"
+            >
+              Magnet link, .torrent file or address
+            </label>
+            <input
+              id={fieldId}
+              data-autofocus
+              value={source}
+              placeholder="magnet:?xt=urn:btih:…"
+              spellCheck={false}
+              autoComplete="off"
+              readOnly={phase === "looking"}
+              aria-invalid={problem !== null || undefined}
+              aria-describedby={problem ? `${fieldId}-problem` : filesHintId}
+              className={`${FIELD} h-9 font-mono`}
+              onChange={(event) => {
+                setSource(event.target.value);
+                setProblem(null);
+                if (phase === "unanswered") {
+                  setPhase("link");
+                }
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void lookUp();
+                }
+              }}
+            />
           </div>
-        </>
-      )}
 
-      {problem ? (
-        <p role="alert" className="pt-2 text-chrome-micro text-chrome-error">
-          {problem}
-        </p>
-      ) : null}
+          {phase === "looking" ? (
+            <div className="rounded-chrome bg-chrome-canvas px-3 py-2.5">
+              <p className="flex items-center gap-2 text-xs text-chrome-menu-text">
+                <SpinnerGlyph className="size-3.5 shrink-0 text-chrome-muted motion-safe:animate-spin" />
+                <span className="min-w-0 truncate">
+                  {title
+                    ? `Looking for the files of ${title}`
+                    : "Looking for the torrent's files"}
+                </span>
+                <span className="ml-auto shrink-0 text-chrome-micro tabular-nums text-chrome-muted">
+                  {waited}s
+                </span>
+              </p>
+              <p className="mt-1 text-chrome-micro text-chrome-muted">
+                {magnet
+                  ? "A magnet asks a peer for its file list and some swarms take a while to answer. The torrent can be added now and the list appears in its window once a peer answers."
+                  : "The address is being read; a .torrent file usually answers at once."}
+              </p>
+            </div>
+          ) : (
+            <p id={filesHintId} className="text-chrome-micro text-chrome-muted">
+              {source.trim()
+                ? filesHint
+                : "A magnet needs a peer to name its files. A .torrent file already holds them."}
+            </p>
+          )}
+
+          {phase === "unanswered" && magnet ? (
+            <div className="rounded-chrome bg-chrome-canvas px-3 py-2.5">
+              <p className="text-xs text-chrome-menu-text">
+                No peer sent the file list yet.
+              </p>
+              <p className="mt-1 text-chrome-micro text-chrome-muted">
+                The torrent can still be added. Its window shows the files as
+                soon as the swarm answers, and the download starts from them.
+              </p>
+            </div>
+          ) : null}
+
+          {magnet && phase !== "looking" ? (
+            <p className="text-chrome-micro text-chrome-muted">
+              The magnet names {carried || "this torrent"}; its size is known
+              once a peer answers.
+            </p>
+          ) : null}
+
+          {problem ? (
+            <p
+              id={`${fieldId}-problem`}
+              role="alert"
+              className="text-chrome-micro break-words text-chrome-error"
+            >
+              {problem}
+            </p>
+          ) : null}
+        </div>
+      )}
     </Dialog>
   );
 }

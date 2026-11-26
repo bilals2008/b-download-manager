@@ -26,10 +26,11 @@ interface TorrentTabsProps {
 /**
  * Five tabs over one panel.
  *
- * The window owns the panel, so the tabs only report which page it should
- * draw. Arrow keys walk the strip, Home and End go to its ends, and the tab
- * that is not selected leaves the Tab order, which is the pattern the ARIA
- * authoring practices describe for a tab list.
+ * The chosen page is named by the text and a short accent rule under it, not
+ * by a filled block: the tabs sit between the summary and the table, and a
+ * slab of accent there would out-shout both. Arrow keys walk the strip, Home
+ * and End go to its ends, and the unselected tabs leave the Tab order, which
+ * is the pattern the ARIA authoring practices describe.
  */
 export function TorrentTabs({ active, onChange }: TorrentTabsProps) {
   const refs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -41,19 +42,7 @@ export function TorrentTabs({ active, onChange }: TorrentTabsProps) {
   }
 
   return (
-    <div
-      role="tablist"
-      aria-label="Torrent details"
-      className="relative grid w-full max-w-md shrink-0 auto-cols-fr grid-flow-col self-start"
-    >
-      <span
-        aria-hidden="true"
-        style={{
-          width: `${100 / TABS.length}%`,
-          transform: `translateX(${TABS.findIndex((tab) => tab.id === active) * 100}%)`,
-        }}
-        className="pointer-events-none absolute inset-y-0 left-0 rounded-chrome bg-primary transition-transform duration-300 ease-out motion-reduce:transition-none"
-      />
+    <div role="tablist" aria-label="Torrent details" className="flex gap-7">
       {TABS.map((tab, index) => {
         const selected = tab.id === active;
         return (
@@ -85,13 +74,20 @@ export function TorrentTabs({ active, onChange }: TorrentTabsProps) {
               }
             }}
             className={cn(
-              "relative truncate rounded-chrome px-3 py-1.5 text-xs transition-colors focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:outline-none",
+              "relative pb-2.5 text-[13px] transition-colors focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:outline-none",
               selected
-                ? "font-medium text-primary-foreground"
+                ? "text-chrome-title-text"
                 : "text-chrome-muted hover:text-chrome-menu-text",
             )}
           >
             {tab.label}
+            <span
+              aria-hidden="true"
+              className={cn(
+                "absolute inset-x-0 bottom-0 h-0.5 rounded-full transition-colors",
+                selected ? "bg-chrome-focus" : "bg-transparent",
+              )}
+            />
           </button>
         );
       })}

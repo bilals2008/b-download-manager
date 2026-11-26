@@ -4,6 +4,25 @@ use serde::Serialize;
 
 use crate::metainfo::Metainfo;
 
+/// The next piece to ask a peer for. In order, only the first missing one: a
+/// peer that lacks it yields nothing, so the caller drops the session and
+/// tries another peer instead of skipping ahead. Out of order, the first
+/// missing piece the peer actually has, which is today's fastest fill.
+pub(crate) fn choose_piece(
+    missing: &[u64],
+    peer_has: impl Fn(u32) -> bool,
+    sequential: bool,
+) -> Option<u64> {
+    let first = *missing.first()?;
+    if sequential {
+        return peer_has(first as u32).then_some(first);
+    }
+    missing
+        .iter()
+        .copied()
+        .find(|index| peer_has(*index as u32))
+}
+
 /// Where the pieces of a torrent are.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
