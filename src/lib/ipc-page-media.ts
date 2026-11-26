@@ -36,10 +36,13 @@ export function pageMediaOpen(
   url: string,
   referer?: string,
   title?: string,
+  /** Draw the list in the caller, without opening the quality window. */
+  inline?: boolean,
 ): Promise<number> {
   return invoke<number>("page_media_open", {
     url,
     referer: referer ?? null,
     title: title ?? null,
+    inline: inline ?? null,
   });
 }

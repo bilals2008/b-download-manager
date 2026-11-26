@@ -12,11 +12,9 @@ import type { MenuRow } from "@/components/shell/menu-popup";
 import {
   categoryTargetFolder,
   detectCategory,
-  downloadUrl,
   fileNameFromUrl,
   formatSize,
   joinPath,
-  probeWarning,
   safeFileName,
   sameAddress,
   splitPath,
@@ -24,19 +22,14 @@ import {
   type CategoryName,
 } from "@/lib/downloads";
 import { describeError, isDesktop } from "@/lib/errors";
-import {
-  galleryDownload,
-  galleryInspect,
-  type GalleryInspect,
-} from "@/lib/ipc-gallery";
-import { pageMediaOpen } from "@/lib/ipc-page-media";
+import { galleryDownload } from "@/lib/ipc-gallery";
+import { isYoutubePage } from "@/lib/media";
 import { grabberDownload } from "@/lib/grabber";
 import { debridAskUnlock, debridServices } from "@/lib/ipc-debrid";
 import {
   chooseFolder,
   defaultDestination,
   inspectDestination,
-  probeLink,
   type DestinationInfo,
 } from "@/lib/ipc";
 import {
@@ -52,6 +45,8 @@ import {
   parseDriveLink,
 } from "@/lib/drive";
 import { useDownloads } from "@/state/download-store";
+import { useLinkInspection } from "@/components/workspace/use-link-inspection";
+import { usePageVideo } from "@/components/workspace/use-page-video";
 
 interface AddDownloadFormProps {
   open: boolean;
@@ -59,18 +54,6 @@ interface AddDownloadFormProps {
   /** An address to open with, from a link watched on the clipboard. */
   seedUrl?: string | null;
 }
-
-/** What the server said about the address, in the order the dialog asks. */
-type Probe =
-  | { kind: "idle" }
-  | { kind: "checking" }
-  | {
-      kind: "ready";
-      name: string | null;
-      total: number | null;
-      resumable: boolean;
-    }
-  | { kind: "failed"; reason: string };
 
 /** A link the browser extension handed over, while it is still this address. */
 interface HandedOver {
@@ -101,8 +84,6 @@ export function useAddDownloadForm({
   const [categoryAt, setCategoryAt] = useState<{ x: number; y: number } | null>(
     null,
   );
-  const [probe, setProbe] = useState<Probe>({ kind: "idle" });
-  const [gallery, setGallery] = useState<GalleryInspect | null>(null);
   // The files of the page's media list the reader unticked. Everything the
   // page names starts chosen, so only the edits are kept.
   const [mediaRemoved, setMediaRemoved] = useState<string[]>([]);
@@ -169,7 +150,6 @@ export function useAddDownloadForm({
     baseFolder.current = "";
     setCategoryOverride(null);
     setCategoryAt(null);
-    setProbe({ kind: "idle" });
     setMediaRemoved([]);
     setDestination(null);
     setError(null);
@@ -271,6 +251,16 @@ export function useAddDownloadForm({
         ? driveFileEndpoint(drive.id)
         : address;
 
+  // The probe and the gallery check are advice about this address; the form
+  // reads their answer rather than asking the server itself.
+  const { probe, gallery } = useLinkInspection({
+    open,
+    address,
+    probeAddress: driveProbeAddress,
+    referer,
+    editing: url,
+  });
+
   // Each editor is offered its own export list, so a sheet never shows a
   // PowerPoint entry that was never there.
   useEffect(() => {
@@ -284,72 +274,6 @@ export function useAddDownloadForm({
         : options[0].value;
     });
   }, [driveDocument]);
-
-  // Ask the server what the address holds once it has settled: the name it
-  // gives the file, the size, and whether a stop could resume. The probe is
-  // advice, not a gate: a server that does not answer still gets a download.
-  // For a Drive link it asks the endpoint the export will actually be fetched
-  // from, so the name and the size are the real ones.
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    setProbe({ kind: "idle" });
-    if (!isDesktop() || !downloadUrl(url.trim())) {
-      return;
-    }
-    let active = true;
-    let deadline: ReturnType<typeof setTimeout> | undefined;
-    setProbe({ kind: "checking" });
-    const timer = setTimeout(() => {
-      // A server that accepts the connection and then says nothing would keep
-      // the check spinning forever. The download can still start, so the
-      // dialog says so and stops waiting.
-      const tooLong = new Promise<"too long">((resolve) => {
-        deadline = setTimeout(() => resolve("too long"), 8_000);
-      });
-      Promise.race([probeLink(driveProbeAddress, referer), tooLong])
-        .then((answer) => {
-          if (!active) {
-            return;
-          }
-          if (answer === "too long") {
-            setProbe({
-              kind: "failed",
-              reason:
-                "The site did not answer in time. You can still start the download.",
-            });
-            return;
-          }
-          setProbe({
-            kind: "ready",
-            name: answer.name,
-            total: answer.total,
-            resumable: answer.resumable,
-          });
-        })
-        .catch((failure: unknown) => {
-          if (active) {
-            setProbe({
-              kind: "failed",
-              reason: probeWarning(describeError(failure)),
-            });
-          }
-        })
-        .finally(() => {
-          if (deadline) {
-            clearTimeout(deadline);
-          }
-        });
-    }, 450);
-    return () => {
-      active = false;
-      clearTimeout(timer);
-      if (deadline) {
-        clearTimeout(deadline);
-      }
-    };
-  }, [open, driveProbeAddress, referer]);
 
   // A signed-in debrid service unlocks the host links it takes before the
   // download starts; the toggle asks for this one.
@@ -378,34 +302,6 @@ export function useAddDownloadForm({
     };
   }, [open]);
 
-  // A page that reads as a gallery is offered as one: the same link, the
-  // count of images, one click. The fetch is the dialog's own, advice only.
-  useEffect(() => {
-    setGallery(null);
-    if (!open) {
-      return;
-    }
-    if (!isDesktop() || !downloadUrl(url.trim())) {
-      return;
-    }
-    let active = true;
-    const timer = setTimeout(() => {
-      galleryInspect(url.trim(), referer || undefined)
-        .then((answer) => {
-          if (active) {
-            setGallery(answer);
-          }
-        })
-        .catch(() => {
-          // A page that does not answer still gets an ordinary download.
-        });
-    }, 450);
-    return () => {
-      active = false;
-      clearTimeout(timer);
-    };
-  }, [open, driveProbeAddress, referer]);
-
   const mediaChoice = (gallery?.media.files ?? [])
     .map((file) => file.url)
     .filter((url) => !mediaRemoved.includes(url));
@@ -427,6 +323,26 @@ export function useAddDownloadForm({
   )?.icon;
   const target =
     folder.trim() && name.trim() ? joinPath(folder.trim(), name.trim()) : "";
+
+  // A page that plays a video is read here, not in a window of its own: the
+  // dialog draws the qualities, in the same list the panel shows.
+  const videoPage =
+    valid && (isYoutubePage(address) || Boolean(gallery?.media.video));
+  const pageVideo = usePageVideo({
+    open,
+    address,
+    referer,
+    videoPage,
+    folder,
+    name,
+    running,
+    setBusy,
+    setError,
+    onStarted: (chosen) => {
+      saveLastFolder(chosen);
+      onClose();
+    },
+  });
 
   // A category starts the dialog in its own folder: the one set on it, or the
   // folder of that name under the default save folder. General and Other, and a
@@ -480,7 +396,6 @@ export function useAddDownloadForm({
     setFolder("");
     setCategoryOverride(null);
     setCategoryAt(null);
-    setProbe({ kind: "idle" });
     setDestination(null);
     setTouched(false);
     setError(null);
@@ -521,6 +436,18 @@ export function useAddDownloadForm({
     if (!valid) {
       // The field explains itself; do not say it twice.
       urlField.current?.focus();
+      return;
+    }
+    // A page that plays a video is never downloaded as a file: the address is
+    // a player, and the only download from it is a quality the list shows.
+    if (videoPage) {
+      if (pageVideo.rows.length > 0 && pageVideo.choice) {
+        await pageVideo.download();
+      } else if (!pageVideo.error) {
+        setError(
+          "The page's video is still being read. Try again when its qualities appear.",
+        );
+      }
       return;
     }
     const chosenName = name.trim();
@@ -589,27 +516,6 @@ export function useAddDownloadForm({
     setError(null);
     try {
       await galleryDownload(url.trim(), undefined, referer || undefined);
-      onClose();
-    } catch (failure) {
-      setError(describeError(failure));
-    } finally {
-      running.current = false;
-      setBusy(false);
-    }
-  }
-
-  // The page's video opens the quality panel, the one video list in the app:
-  // it resolves the page and shows every quality the site offers.
-  async function openMediaQuality() {
-    const media = gallery?.media;
-    if (running.current || !media?.video) {
-      return;
-    }
-    running.current = true;
-    setBusy(true);
-    setError(null);
-    try {
-      await pageMediaOpen(media.page, referer || undefined);
       onClose();
     } catch (failure) {
       setError(describeError(failure));
@@ -727,9 +633,7 @@ export function useAddDownloadForm({
     categoryAt,
     setCategoryAt,
     probe,
-    setProbe,
     gallery,
-    setGallery,
     debridAvailable,
     setDebridAvailable,
     debridUnlock,
@@ -781,7 +685,12 @@ export function useAddDownloadForm({
     media: gallery?.media ?? null,
     mediaChoice,
     toggleMedia,
-    openMediaQuality,
+    videoPage,
+    video: pageVideo.view,
+    qualities: pageVideo.rows,
+    qualityChoice: pageVideo.choice,
+    chooseQuality: pageVideo.choose,
+    qualityError: pageVideo.error,
     downloadMediaFiles,
     toggleCategoryMenu,
     categoryRows,

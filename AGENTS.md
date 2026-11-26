@@ -87,6 +87,13 @@ Also, structure the design system  to support multiple themes in the future. Swi
 
 -Avoid useEffect: Do not use React's useEffect by default. Prefer event handlers, derived state, and proper data flow. Use it only when genuinely necessary.
 
+## Media qualities
+
+- Strict rule: a page's qualities and its media files are drawn in the dialog
+  that asked for the link (`src/components/ui/quality-list.tsx`), never in a
+  second window that replaces the dialog. Pasting a link shows the list in
+  place, and a media job that never started is not an existing download.
+
 ## Commits
 
 - Never add a `Co-Authored-By` trailer, an "Generated with" line, or any other

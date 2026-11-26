@@ -129,8 +129,12 @@ export function useMediaRows(
           return (
             job.downloading ||
             job.done ||
-            Boolean(job.error) ||
-            job.stage === "Stopped"
+            job.stage === "Stopped" ||
+            // A job that never started has no destination. A page that could
+            // not be read is a failure of the quality list, not a download:
+            // showing it as a row made the Add URL dialog answer "Already in
+            // your list" for a link that was never downloaded.
+            Boolean(job.dest)
           );
         });
         const next = shown

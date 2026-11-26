@@ -5,7 +5,7 @@ import { DialogAction } from "@/components/ui/dialog-action";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip } from "@/components/ui/tooltip";
 import { ListBox } from "@/components/ui/listbox";
-import { FormatList } from "@/components/windows/video/format-list";
+import { FormatList } from "@/components/ui/quality-list";
 import { HelperOffer } from "@/components/windows/video/helper-offer";
 import { useMediaJob } from "@/components/windows/video/use-media-job";
 import { formatSize } from "@/lib/downloads";

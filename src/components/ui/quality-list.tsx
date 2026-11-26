@@ -4,6 +4,42 @@ import { CheckGlyph } from "@/components/icons/ui-icons";
 import { formatSize } from "@/lib/downloads";
 import type { QualityRow } from "@/lib/media";
 
+const ROW =
+  "flex w-full items-center gap-2 rounded-chrome px-2.5 py-2 text-left transition-colors focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none disabled:cursor-default disabled:opacity-45";
+
+function rowClass(selected: boolean): string {
+  return `${ROW} ${
+    selected
+      ? "bg-chrome-menu-active text-chrome-menu-text"
+      : "text-chrome-menu-text hover:bg-chrome-popup-hover"
+  }`;
+}
+
+/** The tick, the name, the note and the size: one row of either list. */
+function RowBody({ row, selected }: { row: QualityRow; selected: boolean }) {
+  const size = row.size === null ? null : formatSize(row.size);
+  return (
+    <>
+      <CheckGlyph
+        className={`size-3.5 shrink-0 ${selected ? "opacity-100" : "opacity-0"}`}
+      />
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="truncate text-xs">{row.label}</span>
+        {row.note ? (
+          <span className="truncate text-chrome-micro text-chrome-muted">
+            {row.note}
+          </span>
+        ) : null}
+      </span>
+      {size ? (
+        <span className="shrink-0 text-chrome-micro tabular-nums text-chrome-muted">
+          {size}
+        </span>
+      ) : null}
+    </>
+  );
+}
+
 interface FormatListProps {
   rows: QualityRow[];
   value: string | null;
@@ -121,28 +157,59 @@ export function FormatList({
               onSelect(row.id);
             }}
             onFocus={() => setActive(index)}
-            className={`flex w-full items-center gap-2 rounded-chrome px-2.5 py-2 text-left transition-colors focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none disabled:cursor-default disabled:opacity-45 ${
-              selected
-                ? "bg-chrome-menu-active text-chrome-menu-text"
-                : "text-chrome-menu-text hover:bg-chrome-popup-hover"
-            }`}
+            className={rowClass(selected)}
           >
-            <CheckGlyph
-              className={`size-3.5 shrink-0 ${selected ? "opacity-100" : "opacity-0"}`}
-            />
-            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <span className="truncate text-xs">{row.label}</span>
-              {row.note ? (
-                <span className="truncate text-chrome-micro text-chrome-muted">
-                  {row.note}
-                </span>
-              ) : null}
-            </span>
-            {size ? (
-              <span className="shrink-0 text-chrome-micro tabular-nums text-chrome-muted">
-                {size}
-              </span>
-            ) : null}
+            <RowBody row={row} selected={selected} />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+interface FormatCheckListProps {
+  label: string;
+  rows: QualityRow[];
+  values: string[];
+  onToggle: (id: string) => void;
+  disabled?: boolean;
+}
+
+/**
+ * The same rows for a page that names several files.
+ *
+ * Each row is an option of a multi-select listbox rather than a bare checkbox,
+ * so a page's files and its qualities read as one list of choices.
+ */
+export function FormatCheckList({
+  label,
+  rows,
+  values,
+  onToggle,
+  disabled = false,
+}: FormatCheckListProps) {
+  return (
+    <div
+      role="listbox"
+      aria-label={label}
+      aria-multiselectable="true"
+      className="flex min-h-0 flex-col gap-0.5 overflow-y-auto"
+    >
+      {rows.map((row) => {
+        const selected = values.includes(row.id);
+        const size = row.size === null ? null : formatSize(row.size);
+        return (
+          <button
+            key={row.id}
+            type="button"
+            role="option"
+            aria-selected={selected}
+            aria-label={`${row.label}${row.note ? `, ${row.note}` : ""}${size ? `, ${size}` : ""}`}
+            disabled={disabled}
+            onClick={() => onToggle(row.id)}
+            className={rowClass(selected)}
+          >
+            <RowBody row={row} selected={selected} />
           </button>
         );
       })}
