@@ -8,12 +8,14 @@ import {
 
 import {
   categoryOfFile,
+  knownCategory,
   type CategoryDefinition,
   type Download,
 } from "@/lib/downloads";
 import { isDesktop } from "@/lib/errors";
 import { torrentSummaries, type TorrentSummary } from "@/lib/ipc-torrent";
 
+import { forgetTorrentCategory, torrentCategoryOf } from "./torrent-categories";
 import type { WorkspaceState } from "./types";
 
 /**
@@ -74,7 +76,11 @@ export function useTorrentRows(
         torrentFiles: job.files,
         fileName: job.name,
         url: job.directory,
-        category: categoryOfFile(job.name, categories.current),
+        // The reader's choice wins over what the name suggests; a category
+        // that was removed since is no choice at all, so the name decides.
+        category:
+          knownCategory(torrentCategoryOf(job.infoHash), categories.current) ??
+          categoryOfFile(job.name, categories.current),
         size: job.totalLength,
         downloaded: done ? job.totalLength : job.downloaded,
         status,
@@ -103,6 +109,7 @@ export function useTorrentRows(
       for (const hash of [...assigned.current.keys()]) {
         if (!live.has(hash)) {
           assigned.current.delete(hash);
+          forgetTorrentCategory(hash);
         }
       }
       const rows = jobs.map((job) => {
