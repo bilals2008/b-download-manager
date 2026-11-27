@@ -20,6 +20,7 @@ import {
   type Download,
 } from "@/lib/downloads";
 import { describeError } from "@/lib/errors";
+import { showTorrentWindow } from "@/lib/ipc-torrent";
 import { openMediaProgress } from "@/lib/media";
 import { openPath, openProgressWindow, extractDownload } from "@/lib/ipc";
 import { useDownloads } from "@/state/download-store";
@@ -158,7 +159,11 @@ export function DownloadContextMenu({
         dequeue(items.map((download) => download.id));
         break;
       case "recover":
-        if (item.mediaJob !== undefined) {
+        if (item.torrent !== undefined) {
+          showTorrentWindow().catch((failure: unknown) => {
+            reportError(describeError(failure));
+          });
+        } else if (item.mediaJob !== undefined) {
           openMediaProgress(item.mediaJob).catch((failure: unknown) => {
             reportError(describeError(failure));
           });
@@ -179,10 +184,15 @@ export function DownloadContextMenu({
         open(item.dest);
         break;
       case "open-folder":
-        open(splitPath(item.dest).dir);
+        // A torrent row's path is the folder the files are written into.
+        open(item.torrent ? item.savePath : splitPath(item.dest).dir);
         break;
       case "open-window":
-        if (item.mediaJob !== undefined) {
+        if (item.torrent !== undefined) {
+          showTorrentWindow().catch((failure: unknown) => {
+            reportError(describeError(failure));
+          });
+        } else if (item.mediaJob !== undefined) {
           openMediaProgress(item.mediaJob).catch((failure: unknown) => {
             reportError(describeError(failure));
           });
@@ -247,11 +257,15 @@ function rowsFor(
   const canQueue = items.some(
     (item) =>
       item.mediaJob === undefined &&
+      item.torrent === undefined &&
       item.status !== "completed" &&
       item.status !== "queued",
   );
   const canDequeue = items.some(
-    (item) => item.mediaJob === undefined && item.status === "queued",
+    (item) =>
+      item.mediaJob === undefined &&
+      item.torrent === undefined &&
+      item.status === "queued",
   );
   const canResume = items.some((item) =>
     item.mediaJob !== undefined
@@ -265,7 +279,12 @@ function rowsFor(
   );
   // Deleting the file is the one command that loses something on the disk, so
   // it is offered for one finished row and never for a batch.
-  const canDelete = single !== null && canDeleteFile(single);
+  // The engine deletes the file of a row it wrote; a torrent's files belong
+  // to its own window.
+  const canDelete =
+    single !== null &&
+    single.torrent === undefined &&
+    canDeleteFile(single);
 
   const rows: MenuRow<RowCommand>[] = [
     {
@@ -301,9 +320,11 @@ function rowsFor(
     {
       command: "recover",
       label:
-        single?.mediaJob !== undefined
-          ? "Open video window"
-          : "Show error and retry...",
+        single?.torrent !== undefined
+          ? "Open torrent window"
+          : single?.mediaJob !== undefined
+            ? "Open video window"
+            : "Show error and retry...",
       icon: <WarningMark tone="red" className="size-3.5" />,
       disabled: single?.status !== "error",
     },
@@ -315,6 +336,7 @@ function rowsFor(
       // a row it is still writing. A media row is started from its window.
       disabled:
         single?.mediaJob !== undefined ||
+        single?.torrent !== undefined ||
         items.some(
           (item) => item.status === "downloading" || item.status === "queued",
         ),
@@ -324,7 +346,9 @@ function rowsFor(
       command: "open-file",
       label: "Open file",
       icon: <OpenFileGlyph className="size-3.5" />,
-      disabled: single?.status !== "completed",
+      // A torrent row names a folder, not a file to open.
+      disabled:
+        single?.status !== "completed" || single?.torrent !== undefined,
     },
     {
       command: "open-folder",
@@ -334,7 +358,10 @@ function rowsFor(
     },
     {
       command: "open-window",
-      label: "Download progress window",
+      label:
+        single?.torrent !== undefined
+          ? "Torrent window"
+          : "Download progress window",
       icon: <DownloadGlyph className="size-3.5" />,
       disabled: single === null,
     },
@@ -346,6 +373,7 @@ function rowsFor(
       // video is not something to unpack.
       disabled:
         single === null ||
+        single.torrent !== undefined ||
         single.status !== "completed" ||
         !isArchive(single.fileName),
     },
@@ -390,9 +418,10 @@ function rowsFor(
       command: "properties",
       label: "Properties...",
       icon: <InfoGlyph className="size-3.5" />,
-      // A media row's file is placed by its video window, not by the engine's
-      // name and destination commands.
-      disabled: single?.mediaJob !== undefined,
+      // A media row's file is placed by its video window, and a torrent's by
+      // its own window, not by the engine's name and destination commands.
+      disabled:
+        single?.mediaJob !== undefined || single?.torrent !== undefined,
     },
     "separator",
     {

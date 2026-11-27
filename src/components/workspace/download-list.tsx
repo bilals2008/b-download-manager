@@ -31,6 +31,7 @@ import {
   type SortKey,
 } from "@/lib/downloads";
 import { describeError } from "@/lib/errors";
+import { showTorrentWindow } from "@/lib/ipc-torrent";
 import { openMediaProgress } from "@/lib/media";
 import {
   chooseFolder,
@@ -126,6 +127,14 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
 
   /** Open the window that shows this download in flight. */
   function openProgress(item: Download) {
+    // A torrent has one window for every job, so its row opens that window on
+    // the job the torrent window shows first.
+    if (item.torrent) {
+      showTorrentWindow().catch((failure: unknown) => {
+        reportError(describeError(failure));
+      });
+      return;
+    }
     // A video download shows the same progress window an engine download
     // does; its job is read by the page once a second.
     const shown =
@@ -140,7 +149,7 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
   function openFailure(item: Download) {
     // A media row has no engine recovery; its window explains the failure and
     // offers the download again after the cause is fixed.
-    if (item.mediaJob !== undefined) {
+    if (item.mediaJob !== undefined || item.torrent !== undefined) {
       openProgress(item);
       return;
     }
@@ -363,7 +372,7 @@ export function DownloadList({ onAddDownload }: DownloadListProps) {
                           : undefined
                     }
                     className={cn(
-                      "sticky top-0 z-10 bg-chrome-panel px-3 py-2 text-chrome-micro font-medium tracking-wide text-chrome-muted",
+                      "sticky top-0 z-10 bg-chrome-row-alt px-3 py-2 text-chrome-micro font-medium tracking-wide text-chrome-muted",
                       column.align === "right" ? "text-right" : "text-left",
                     )}
                   >

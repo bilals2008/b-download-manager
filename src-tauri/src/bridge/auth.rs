@@ -115,19 +115,22 @@ pub fn check(request: &Request) -> Result<(), Denial> {
 }
 
 /// An extension origin. Firefox uses `moz-extension://<uuid>`, Chromium
-/// `chrome-extension://<id>`; nothing else may follow the scheme.
+/// `chrome-extension://<id>` and Safari `safari-web-extension://<uuid>`;
+/// nothing else may follow the scheme. Safari's identifier can carry a dot,
+/// and the rest of the rules (no path, no spaces, bounded length) still hold.
 pub fn is_extension_origin(origin: &str) -> bool {
     let Some(rest) = origin
         .strip_prefix("moz-extension://")
         .or_else(|| origin.strip_prefix("chrome-extension://"))
+        .or_else(|| origin.strip_prefix("safari-web-extension://"))
     else {
         return false;
     };
     !rest.is_empty()
         && rest.len() <= 128
-        && rest
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+        && rest.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_' || byte == b'.'
+        })
 }
 
 /// Whether the `Host` header names the bridge itself.
@@ -181,6 +184,12 @@ mod tests {
     fn only_an_extension_origin_is_an_extension_origin() {
         assert!(is_extension_origin("moz-extension://3c1e8f2a"));
         assert!(is_extension_origin("chrome-extension://abc"));
+        assert!(is_extension_origin(
+            "safari-web-extension://e0b5d7c7-c079-484b-8825-44d261383cb6"
+        ));
+        assert!(is_extension_origin("safari-web-extension://com.example.app.Ext"));
+        assert!(!is_extension_origin("safari-web-extension://"));
+        assert!(!is_extension_origin("safari-web-extension://a/path"));
         assert!(!is_extension_origin("moz-extension://"));
         assert!(!is_extension_origin("moz-extension://a/path"));
         assert!(!is_extension_origin("moz-extension://a b"));

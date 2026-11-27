@@ -74,6 +74,10 @@ export interface Download {
   description: string | null;
   /** The media job this row came from, when it did not come from the engine. */
   mediaJob?: number;
+  /** The info hash of the torrent this row stands for, when it is one. */
+  torrent?: string;
+  /** How many files a torrent row holds. */
+  torrentFiles?: number;
   /** The stage of a media coordinator: Video, Audio, Joining, Saved, ... */
   mediaStage?: string | null;
   /** Completed and total segments of a media job, for a stable percentage. */

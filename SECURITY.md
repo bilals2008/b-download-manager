@@ -54,7 +54,8 @@ protect, and what they do not:
 - **A request is refused before the code is read** when its `Host` is not
   `127.0.0.1:27500` or `localhost:27500` (a page whose name resolves to loopback
   is DNS rebinding), when an `Origin` is present and is not a well-formed
-  `moz-extension://` or `chrome-extension://` origin, or when a POST body is not
+  `moz-extension://`, `chrome-extension://` or `safari-web-extension://` origin,
+  or when a POST body is not
   JSON.
 - **One code belongs to one extension.** The first extension origin that presents
   the code is pinned in the pairing file; a different extension carrying the same

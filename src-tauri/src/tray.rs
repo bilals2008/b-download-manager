@@ -213,13 +213,11 @@ fn install(app: &AppHandle) -> tauri::Result<()> {
         true,
         None::<&str>,
     )?;
-    // The remote is marked coming soon in the settings window; the tray
-    // item stays visible and inert until it ships.
     let remote = MenuItem::with_id(
         app,
         "remote-toggle",
-        "Phone remote (coming soon)",
-        false,
+        "Phone remote: on or off",
+        true,
         None::<&str>,
     )?;
     let quit = MenuItem::with_id(app, "quit", "Exit", true, None::<&str>)?;

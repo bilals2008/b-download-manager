@@ -147,6 +147,38 @@ export interface TorrentJob {
   error: string | null;
 }
 
+/** One job, as the download list shows it: enough for a row, nothing more. */
+export interface TorrentSummary {
+  /** The info hash, the id of the job. */
+  infoHash: string;
+  /** The name of the torrent. */
+  name: string;
+  /** The folder the files are written into. */
+  directory: string;
+  /** How many bytes came in. */
+  downloaded: number;
+  /** How many bytes the torrent holds. */
+  totalLength: number;
+  /** How many bytes a second come in. */
+  downSpeed: number;
+  /** How many bytes a second go out. */
+  upSpeed: number;
+  /** How many seconds are left, when the speed says so. */
+  eta: number | null;
+  /** What the job is doing. */
+  status: TorrentStatus;
+  /** What went wrong, when something did. */
+  error: string | null;
+  /** How many peers have the whole torrent. */
+  seeders: number;
+  /** How many peers have part of it. */
+  leechers: number;
+  /** How many files it holds. */
+  files: number;
+  /** When the job was added, in milliseconds since the epoch. */
+  addedAt: number;
+}
+
 /** What a torrent holds, before it is started. */
 export interface TorrentInfo {
   /** The info hash, the id of the torrent. */
@@ -274,6 +306,60 @@ export function torrentSetFiles(
   return invoke<void>("torrent_set_files", { id, wanted: [...wanted] });
 }
 
+/** What one tracker answered when the window asked about a job. */
+export interface TrackerCheck {
+  /** The address that was asked. */
+  url: string;
+  /** Whether it answered at all. */
+  ok: boolean;
+  /** How many peers it named. */
+  peers: number;
+  /** How many of them have the whole torrent. */
+  seeders: number;
+  /** How many of them have part of it. */
+  leechers: number;
+  /** What it said back, when it said no. */
+  message: string | null;
+}
+
+/**
+ * Add trackers to a job, on top of the ones the torrent came with. The answer
+ * is the job, so the tracker list updates in one round trip.
+ */
+export function torrentAddTrackers(
+  id: string,
+  urls: readonly string[],
+): Promise<TorrentJob> {
+  return invoke<TorrentJob>("torrent_add_trackers", { id, urls: [...urls] });
+}
+
+/** Drop trackers from a job. The torrent's own list is untouched on disk. */
+export function torrentRemoveTrackers(
+  id: string,
+  urls: readonly string[],
+): Promise<TorrentJob> {
+  return invoke<TorrentJob>("torrent_remove_trackers", { id, urls: [...urls] });
+}
+
+/** Ask the job's trackers again now, instead of at their interval. */
+export function torrentAnnounceNow(id: string): Promise<void> {
+  return invoke<void>("torrent_announce_now", { id });
+}
+
+/**
+ * Ask trackers about this job without adding them, so a dead address is not
+ * saved. Every address is asked at the same time.
+ */
+export function torrentCheckTrackers(
+  id: string,
+  urls: readonly string[],
+): Promise<TrackerCheck[]> {
+  return invoke<TrackerCheck[]>("torrent_check_trackers", {
+    id,
+    urls: [...urls],
+  });
+}
+
 /** Stop every job of the session where it is. */
 export function torrentPauseAll(): Promise<void> {
   return invoke<void>("torrent_pause_all");
@@ -282,6 +368,11 @@ export function torrentPauseAll(): Promise<void> {
 /** Let every job of the session go on. */
 export function torrentResumeAll(): Promise<void> {
   return invoke<void>("torrent_resume_all");
+}
+
+/** Every job of the session, as the download list shows them. */
+export function torrentSummaries(): Promise<TorrentSummary[]> {
+  return invoke<TorrentSummary[]>("torrent_summaries");
 }
 
 /** The choices the reader makes about torrents. */

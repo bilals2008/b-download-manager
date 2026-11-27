@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { arrangeKey } from "@/components/shell/arrange";
 import { SettingsDialog } from "@/components/settings/settings-dialog";
+import type { SettingsPageId } from "@/components/settings/settings-nav";
 import type { ShellCommand } from "@/components/shell/commands";
 import { CustomizeToolbarDialog } from "@/components/shell/customize-toolbar-dialog";
 import { ToolbarsDialog } from "@/components/shell/toolbars-dialog";
@@ -11,6 +13,7 @@ import { useShellShortcuts } from "@/components/shell/use-shell-shortcuts";
 import { cycleSectionFocus } from "@/components/shell/section-focus";
 import { TipOfTheDayDialog } from "@/components/tips/tip-of-the-day-dialog";
 import { AboutDialog } from "@/components/workspace/about-dialog";
+import { AddBatchDialog } from "@/components/workspace/add-batch-dialog";
 import { AddDownloadDialog } from "@/components/workspace/add-download-dialog";
 import { AddTorrentDialog } from "@/components/workspace/add-torrent-dialog";
 import { CloseConfirmDialog } from "@/components/workspace/close-confirm-dialog";
@@ -20,7 +23,7 @@ import { Workspace } from "@/components/workspace/workspace";
 import { WhatsNewDialog } from "@/components/whats-new/whats-new-dialog";
 import { useWhatsNew } from "@/components/whats-new/use-whats-new";
 import { setLanguage } from "@/i18n";
-import { APP_HOME_PAGE, APP_NAME, APP_TAGLINE } from "@/lib/brand";
+import { APP_HOME_PAGE } from "@/lib/brand";
 import { describeError, isDesktop } from "@/lib/errors";
 import { applyFont } from "@/lib/fonts";
 import { openGrabberWindow } from "@/lib/grabber";
@@ -37,7 +40,6 @@ import {
   setTrayDarkMode,
   setTrayHidden,
   setUrlProtocols,
-  shareToSystem,
 } from "@/lib/ipc";
 import {
   loadSettings,
@@ -46,7 +48,7 @@ import {
   saveToolbarSize,
   type ToolbarSize,
 } from "@/lib/settings";
-import { shareApp } from "@/lib/share";
+import { tellFriend } from "@/lib/invitation";
 import { nextTipIndex, saveTipCursor } from "@/lib/tips";
 import {
   DEFAULT_TRAY_PREFERENCES,
@@ -72,6 +74,7 @@ import {
   type ToolbarPreference,
   type ToolbarToken,
 } from "@/lib/toolbars";
+import { useBatchHandoff } from "@/components/workspace/batch-handoff";
 import { useTorrentHandoff } from "@/components/workspace/torrent-handoff";
 import { runCheck, type UpdateFound } from "@/lib/updates";
 import { useDownloads } from "@/state/download-store";
@@ -89,8 +92,13 @@ export default function App() {
   const [addDownloadOpen, setAddDownloadOpen] = useState(false);
   // Torrents are a job of their own, so they have a dialog of their own.
   const torrent = useTorrentHandoff();
+  const batch = useBatchHandoff();
   const [clipboardLink, setClipboardLink] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // The page the options window shows. The menu opens it straight on the
+  // schedule, so the queue's rule is one click from Downloads.
+  const [settingsPage, setSettingsPage] = useState<SettingsPageId>("general");
+  const [settingsAnchor, setSettingsAnchor] = useState<string | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [updateOpen, setUpdateOpen] = useState(false);
   const [tipsOpen, setTipsOpen] = useState(false);
@@ -505,24 +513,6 @@ export default function App() {
     setOfferedUpdate(null);
   }
 
-  // No box in between: the Help row and the toolbar button hand the invitation
-  // straight to the share window of the system. Only a machine that can show
-  // neither that window nor the Web Share API falls back to the clipboard, and
-  // only a clipboard that refuses says anything.
-  function tellFriend() {
-    const system = isDesktop()
-      ? () => shareToSystem(APP_NAME, APP_TAGLINE, APP_HOME_PAGE)
-      : undefined;
-    void shareApp(system).then((outcome) => {
-      if (outcome === "failed") {
-        downloads.reportError(
-          "The invitation could not be shared or copied. The address is " +
-            APP_HOME_PAGE,
-        );
-      }
-    });
-  }
-
   function handleCommand(command: ShellCommand) {
     if (command.startsWith("font:")) {
       chooseFont(command.slice("font:".length));
@@ -547,6 +537,13 @@ export default function App() {
       return;
     }
 
+    // The eight Arrange files rows are one question: which order.
+    const order = arrangeKey(command);
+    if (order) {
+      downloads.sortBy(order);
+      return;
+    }
+
     switch (command) {
       case "exit":
         void quitApp();
@@ -560,11 +557,26 @@ export default function App() {
       case "add-torrent":
         torrent.openBlank();
         break;
+      case "add-batch":
+        batch.openBlank();
+        break;
+      case "add-batch-clipboard":
+        batch.openFromClipboard();
+        break;
       case "torrents":
         // Any failure is a bug to see: the menu looks broken otherwise.
         void showTorrentWindow().catch((failure) => console.error(failure));
         break;
       case "options":
+        setSettingsAnchor(null);
+        setSettingsOpen(true);
+        break;
+      case "scheduler":
+      case "help-scheduler-queues":
+        // The rule lives on the Downloads page, beside the connections and the
+        // completion choices it acts with.
+        setSettingsPage("downloads");
+        setSettingsAnchor("setting-queue-schedule");
         setSettingsOpen(true);
         break;
       case "run-grabber":
@@ -577,7 +589,7 @@ export default function App() {
         setAboutOpen(true);
         break;
       case "tell-friend":
-        tellFriend();
+        tellFriend((message) => downloads.reportError(message));
         break;
       case "tip-of-the-day":
         openTips();
@@ -634,30 +646,6 @@ export default function App() {
       case "stop-queue":
         downloads.stopQueue();
         break;
-      case "arrange-order":
-        downloads.sortBy("order");
-        break;
-      case "arrange-name":
-        downloads.sortBy("name");
-        break;
-      case "arrange-size":
-        downloads.sortBy("size");
-        break;
-      case "arrange-status":
-        downloads.sortBy("status");
-        break;
-      case "arrange-eta":
-        downloads.sortBy("eta");
-        break;
-      case "arrange-speed":
-        downloads.sortBy("speed");
-        break;
-      case "arrange-last-try":
-        downloads.sortBy("lastTry");
-        break;
-      case "arrange-path":
-        downloads.sortBy("path");
-        break;
       case "toolbar-large":
         setToolbar("large");
         break;
@@ -711,9 +699,16 @@ export default function App() {
         onTorrent={(source) => { closeAddDownload(); torrent.openWith(source); }}
       />
       <AddTorrentDialog open={torrent.open} initialSource={torrent.seed} onClose={torrent.close} />
+      <AddBatchDialog open={batch.open} seed={batch.seed} onClose={batch.close} />
       <SettingsDialog
         open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
+        onClose={() => {
+          setSettingsOpen(false);
+          setSettingsAnchor(null);
+        }}
+        page={settingsPage}
+        onPageChange={setSettingsPage}
+        anchor={settingsAnchor}
         onWhatsNew={whatsNew.openManually}
         toolbar={{
           pack: activeToolbar,

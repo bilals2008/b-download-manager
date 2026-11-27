@@ -60,6 +60,23 @@ pub struct Delivery {
     pub convert: Option<idm_core::media::audio::AudioSelector>,
 }
 
+/// The conversion an `audioFormat` asks for, if any.
+///
+/// The panel names the untransformed track `source`, which is the same choice
+/// as naming no conversion at all; the reference product writes `ba` for it.
+/// Anything else is a selector the core reads.
+fn conversion(asked: Option<&str>) -> Result<Option<idm_core::media::audio::AudioSelector>, String> {
+    let asked = asked.map(str::trim).unwrap_or("");
+    if asked.is_empty() || asked.eq_ignore_ascii_case("source") {
+        return Ok(None);
+    }
+    idm_core::media::audio::AudioSelector::parse(asked)
+        // `b` and `ba` name the file as the site has it, so they ask for no
+        // conversion either; only a selector that names a container does.
+        .map(|selector| selector.is_conversion().then_some(selector))
+        .map_err(|error| error.to_string())
+}
+
 /// Start the chosen track(s). The work is done on a task of its own; the
 /// answer carries the destination the panel shows at once.
 ///
@@ -120,15 +137,7 @@ pub fn start(
     // The sound may be asked for as the original track or as a conversion. A
     // conversion is a sound-only outcome whatever row it was asked from, so
     // it is the one thing that changes what gets delivered.
-    let convert = request
-        .audio_format
-        .as_deref()
-        .map(str::trim)
-        .filter(|format| !format.is_empty())
-        .map(idm_core::media::audio::AudioSelector::parse)
-        .transpose()
-        .map_err(|error| error.to_string())?
-        .filter(|selector| selector.is_conversion());
+    let convert = conversion(request.audio_format.as_deref())?;
 
     // An audio-only row is saved with its own container. A plain file that is
     // already in a final container and has no second track is already the
@@ -208,6 +217,8 @@ pub fn start(
         job.downloading = true;
         job.done = false;
         job.error = None;
+        // What a previous run could not deliver is not this run's news.
+        job.notice = None;
         job.dest = Some(dest_text.clone());
         job.stage = Some("Starting".to_string());
         job.progress = TrackProgress::default();
@@ -330,6 +341,8 @@ pub fn resume(app: &AppHandle, job: &MediaJob) -> Result<Started, String> {
         job.downloading = true;
         job.done = false;
         job.error = None;
+        // What a previous run could not deliver is not this run's news.
+        job.notice = None;
         job.dest = Some(dest_text.clone());
         job.stage = Some("Starting".to_string());
         job.control = Some(control.clone());

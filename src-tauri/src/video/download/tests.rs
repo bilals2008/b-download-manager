@@ -125,3 +125,20 @@ fn a_join_that_fails_never_replaces_the_destination() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn the_original_track_is_not_a_conversion() {
+    // The panel calls the untransformed track "source"; naming it used to be
+    // refused as an unknown selector, so every download from the panel failed.
+    assert_eq!(conversion(None), Ok(None));
+    assert_eq!(conversion(Some("")), Ok(None));
+    assert_eq!(conversion(Some(" source ")), Ok(None));
+    // `b` and `ba` are the reference product's names for the same untransformed
+    // file; neither names a container, so neither is a conversion.
+    assert_eq!(conversion(Some("b")), Ok(None));
+    assert_eq!(conversion(Some("ba")), Ok(None));
+    assert!(conversion(Some("mp3"))
+        .expect("an MP3 choice")
+        .is_some_and(|choice| choice.is_conversion()));
+    assert!(conversion(Some("nonsense")).is_err());
+}

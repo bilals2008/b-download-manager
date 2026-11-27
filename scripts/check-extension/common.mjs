@@ -6,10 +6,13 @@
 
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
-import { pathToFileURL, fileURLToPath } from "node:url";
+import { pathToFileURL } from "node:url";
 import path from "node:path";
+import { buildExtension } from "../../extensions/build.mjs";
 
-export const rootDir = fileURLToPath(new URL("../../extension-firefox/", import.meta.url));
+// The checks read the folder a browser is loaded from, so they run after the
+// same build the reader runs: the shared source and the Firefox manifest.
+export const rootDir = buildExtension("firefox") + path.sep;
 export const rootUrl = pathToFileURL(rootDir + path.sep);
 export const read = (file) => readFileSync(new URL(file, rootUrl), "utf8");
 export const exists = (file) => existsSync(new URL(file, rootUrl));

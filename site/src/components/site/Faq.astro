@@ -1,6 +1,6 @@
 ---
 import TextLink from "./TextLink.astro";
-import { FIREFOX_ADDON_URL } from "../../lib/releases";
+import { EXTENSION_INSTALL_URL } from "../../lib/releases";
 
 type FaqItem = {
   question: string;
@@ -23,11 +23,10 @@ const faqs: FaqItem[] = [
   {
     question: "Which browsers can send links to the app?",
     answer:
-      "Firefox, through the extension on Mozilla Add-ons. It hands links, videos and files to the app over a bridge that stays on your own computer. Chrome, Edge and Brave versions are still being finished.",
+      "Firefox, Chrome, Edge, Brave, Opera, Vivaldi and Safari 16.4 or newer, through the extension. It hands links, videos and files to the app over a bridge that stays on your own computer. Firefox installs from Mozilla Add-ons; the other builds load from this repository.",
     link: {
-      href: FIREFOX_ADDON_URL,
-      label: "Get the Firefox extension",
-      external: true,
+      href: EXTENSION_INSTALL_URL,
+      label: "How to install it",
     },
   },
   {

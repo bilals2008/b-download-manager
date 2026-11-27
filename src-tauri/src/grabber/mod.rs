@@ -11,7 +11,7 @@
 //! and offers links; the window decides what to keep.
 
 mod crawl;
-mod extract;
+pub(crate) mod extract;
 pub(crate) mod policy;
 mod robots;
 mod window;

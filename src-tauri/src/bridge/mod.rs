@@ -697,8 +697,9 @@ fn media_route(path: &str) -> Option<(u64, Option<&str>)> {
 }
 
 /// An extension origin. Firefox uses `moz-extension://`, Chromium
-/// `chrome-extension://`; the older extension build is still recognised. The
-/// real rule lives in [`auth`], where the token is checked beside it.
+/// `chrome-extension://`, Safari `safari-web-extension://`; the older extension
+/// build is still recognised. The real rule lives in [`auth`], where the token
+/// is checked beside it.
 fn is_extension_origin(origin: &str) -> bool {
     auth::is_extension_origin(origin)
 }

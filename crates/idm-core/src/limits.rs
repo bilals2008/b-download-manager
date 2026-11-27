@@ -128,10 +128,11 @@ pub const LEARNED_CAP_DAYS: u64 = 30;
 
 /// The caps learned from what each server actually allowed.
 ///
-/// A host that answered two ranges and refused the rest is asked for two the
-/// next time, instead of being asked for eight and failing eight times. The
-/// user's own setting stays the ceiling: learning can only lower what a host
-/// gets, never raise it past what the reader asked for.
+/// The only thing a run can prove is that a host does not honour ranges: it
+/// answered a range request with the whole file, and every later download
+/// from it starts with one connection. The reader's own setting stays the
+/// ceiling: learning can only lower what a host gets, never raise it past
+/// what was asked for.
 #[derive(Debug, Clone, Default)]
 pub struct LearnedCaps {
     hosts: Arc<Mutex<HashMap<String, LearnedCap>>>,
@@ -151,6 +152,14 @@ impl LearnedCaps {
     pub fn open(&self, path: &Path) {
         if let Ok(text) = std::fs::read_to_string(path) {
             if let Ok(hosts) = serde_json::from_str::<HashMap<String, LearnedCap>>(&text) {
+                // An older build wrote the size of its own plan here, so a
+                // host that served a 32 MB file once was capped at two
+                // connections for a month. Only a host seen to answer a range
+                // with the whole file is real evidence, and that is one.
+                let hosts = hosts
+                    .into_iter()
+                    .filter(|(_, cap)| cap.connections <= 1)
+                    .collect();
                 *self.hosts.lock().expect("learned caps lock poisoned") = hosts;
             }
         }
@@ -521,11 +530,33 @@ mod tests {
 
         let caps = LearnedCaps::new();
         caps.open(&path);
-        caps.observe("example.com", 8, 2);
+        caps.observe("example.com", 8, 1);
 
         let again = LearnedCaps::new();
         again.open(&path);
-        assert_eq!(again.get("example.com"), Some(2));
+        assert_eq!(again.get("example.com"), Some(1));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_cap_written_from_an_old_plan_is_dropped() {
+        // The old build recorded the size of its own plan, so a host that
+        // served a 32 MB file was capped at two connections for a month.
+        let dir = std::env::temp_dir().join(format!("bdm-legacy-caps-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("a folder");
+        let path = dir.join("host-caps.json");
+        std::fs::write(
+            &path,
+            r#"{"slow.example":{"connections":2,"seenAt":9999999999},"plain.example":{"connections":1,"seenAt":9999999999}}"#,
+        )
+        .expect("a caps file");
+
+        let caps = LearnedCaps::new();
+        caps.open(&path);
+        assert_eq!(caps.get("slow.example"), None, "a plan size is not a cap");
+        assert_eq!(caps.get("plain.example"), Some(1));
+
         let _ = std::fs::remove_dir_all(&dir);
     }
 

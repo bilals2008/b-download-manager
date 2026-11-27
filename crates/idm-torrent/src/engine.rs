@@ -12,11 +12,11 @@ use crate::metainfo::{metainfo_from_metadata, Metainfo, TorrentFile};
 use crate::options::TorrentOptions;
 use crate::peer::{client_name, Message, PeerInfo};
 use crate::peerconn::PeerSession;
-use crate::pieces::{file_selection, present_bytes, PieceMap};
+use crate::pieces::{choose_piece, file_selection, present_bytes, PieceMap};
 use crate::rates;
 use crate::session::{JobStatus, TrackerState};
 use crate::storage::{pieces_on_disk, Storage};
-use crate::tracker;
+use crate::tracker_list::{trackers_of, TrackerEdits};
 use crate::util::{hex_encode, sha1_bytes};
 
 /// What the reader allows a job: how fast it may upload, and when a finished
@@ -51,6 +51,9 @@ pub(crate) struct Control {
     paused: AtomicBool,
     cancelled: AtomicBool,
     seeding: AtomicBool,
+    /// Set when the trackers changed or the reader asked again, so the next
+    /// round announces instead of waiting out the interval.
+    announce: AtomicBool,
     /// The limits sit behind a mutex because the ratio is a fraction and the
     /// reader may change them at any moment of a running job.
     limits: Mutex<Limits>,
@@ -62,6 +65,7 @@ impl Control {
             paused: AtomicBool::new(false),
             cancelled: AtomicBool::new(false),
             seeding: AtomicBool::new(false),
+            announce: AtomicBool::new(false),
             limits: Mutex::new(Limits::default()),
         }
     }
@@ -88,6 +92,16 @@ impl Control {
 
     pub fn set_seeding(&self, seeding: bool) {
         self.seeding.store(seeding, Ordering::Relaxed);
+    }
+
+    /// Ask the job to announce to its trackers in the next round.
+    pub fn request_announce(&self) {
+        self.announce.store(true, Ordering::Relaxed);
+    }
+
+    /// Take the request, so one ask makes one announce.
+    pub fn take_announce(&self) -> bool {
+        self.announce.swap(false, Ordering::Relaxed)
     }
 
     /// The limits the reader set, as they are now. A job reads them every
@@ -176,15 +190,26 @@ pub(crate) struct Job {
     pub lpd: Arc<Mutex<Option<Arc<Lpd>>>>,
     /// Whether pieces are fetched strictly in order.
     pub sequential: bool,
+    /// The trackers the reader added and dropped, shared with the client so a
+    /// change made in the window reaches the job without a restart.
+    pub edits: Arc<Mutex<TrackerEdits>>,
 }
 
 impl Job {
-    /// The trackers of the job, from the magnet or from the torrent file.
+    /// The trackers of the job: the ones it came with, and the reader's edits.
     pub fn trackers(&self) -> Vec<String> {
-        match &self.source {
-            Source::Magnet(magnet) => magnet.trackers.clone(),
-            Source::Metainfo(metainfo) => metainfo.trackers.clone(),
-        }
+        let edits = self
+            .edits
+            .lock()
+            .map(|edits| (edits.added.clone(), edits.removed.clone()))
+            .unwrap_or_default();
+        trackers_of(
+            &self.source,
+            &TrackerEdits {
+                added: edits.0,
+                removed: edits.1,
+            },
+        )
     }
 
     /// The metadata, when the job already has it.
@@ -194,21 +219,6 @@ impl Job {
             Source::Magnet(_) => None,
         }
     }
-}
-
-/// The next piece to ask a peer for. In order, only the first missing one: a
-/// peer that lacks it yields nothing, so the caller drops the session and
-/// tries another peer instead of skipping ahead. Out of order, the first
-/// missing piece the peer actually has, which is today's fastest fill.
-fn choose_piece(missing: &[u64], peer_has: impl Fn(u32) -> bool, sequential: bool) -> Option<u64> {
-    let first = *missing.first()?;
-    if sequential {
-        return peer_has(first as u32).then_some(first);
-    }
-    missing
-        .iter()
-        .copied()
-        .find(|index| peer_has(*index as u32))
 }
 
 /// Run a job until it is done, or until it is removed.
@@ -262,6 +272,12 @@ pub(crate) async fn run(job: Arc<Job>) {
         // The trackers are asked now and then who has the torrent. What each
         // one answers is kept as that tracker's row, so the window can show
         // which tracker is quiet and which one has nobody.
+        // A tracker the reader just added, or a "Check again" in the window,
+        // is announced in this round rather than at the end of the interval.
+        if job.control.take_announce() {
+            next_announce = Instant::now();
+        }
+
         if Instant::now() >= next_announce {
             next_announce = Instant::now() + interval;
             tried.clear();
@@ -270,40 +286,19 @@ pub(crate) async fn run(job: Arc<Job>) {
             // unknown size is sent as the smallest real one instead. Reporting
             // zero made a new magnet look like a seeder and get no peers back.
             let left = metainfo.as_ref().map(|m| m.total_length).unwrap_or(1);
-            let mut tracker_ok = false;
-            for url in job.trackers() {
-                let answer = tracker::announce(
-                    &url,
-                    &job.id,
-                    &peer_id_text,
-                    options.listen_port(),
-                    "started",
-                    left,
-                    options.proxy.as_deref(),
-                )
-                .await;
-                if let Ok(result) = &answer {
-                    tracker_ok = true;
-                    for address in &result.peers {
-                        if !addresses.contains(address) {
-                            addresses.push(*address);
-                            known.push(PeerInfo {
-                                address: address.to_string(),
-                                ..PeerInfo::default()
-                            });
-                        }
-                    }
-                    if result.interval > 0 {
-                        interval = Duration::from_secs(result.interval.clamp(30, 3600));
-                    }
-                }
-                if let Ok(mut state) = job.state.lock() {
-                    trackers::note_tracker(&mut state, &url, &answer, interval.as_secs());
-                    state.seeders = state.trackers.iter().map(|t| t.seeders).max().unwrap_or(0);
-                    state.leechers = state.trackers.iter().map(|t| t.leechers).max().unwrap_or(0);
-                    set_peers(&mut state, &known, &session);
-                }
-            }
+            let (tracker_ok, waited) = trackers::announce_all(
+                &job,
+                &peer_id_text,
+                options.listen_port(),
+                left,
+                options.proxy.as_deref(),
+                &mut addresses,
+                &mut known,
+                &session,
+                interval,
+            )
+            .await;
+            interval = waited;
 
             if !tracker_ok {
                 discovery::dht_fallback(

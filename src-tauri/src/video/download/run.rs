@@ -20,7 +20,11 @@ pub(super) async fn run(
 ) {
     let state = app.state::<AppState>();
     let limits = state.limits().clone();
-    let connections = state.browser_connections().clamp(1, 16);
+    // A video is fetched by the same engine as any other download, so it is
+    // given the connection count the Connections page sets. Capping it at 16
+    // here meant a reader who raised the setting past that watched a video
+    // download go no faster.
+    let connections = state.engine_settings().default_connections.clamp(1, 32);
 
     // A YouTube address is bound to the moment it was resolved: the client
     // identity it was signed for, and a deadline the provider chose. The plan
@@ -182,17 +186,28 @@ pub(super) async fn run(
 
     match result {
         Ok(()) => {
-            // The captions go to their own file before anything else joins:
-            // a caption page that cannot be read is better said now than
-            // after a film's worth of bytes.
-            let captions = match captions::prepare(app, &job, &request, &work_dir).await {
-                Ok(captions) => captions,
-                Err(message) => {
-                    let _ = std::fs::remove_dir_all(&work_dir);
-                    finish_failed(&state, job.id, message);
-                    return;
-                }
+            // The captions go to their own file before anything else joins.
+            // A caption that cannot be fetched is reported on the finished
+            // row and the video is delivered without it: the bytes are on
+            // disk already, and a site that guards its caption endpoint must
+            // not cost the reader the download.
+            // A conversion keeps only the sound, so a caption track has
+            // nowhere to go: it is not fetched either, rather than paying for
+            // a file that could not be used.
+            let prepared = if delivery.convert.is_some() {
+                captions::Prepared::none()
+            } else {
+                captions::prepare(app, &job, &request, &work_dir).await
             };
+            let captions::Prepared {
+                captions: prepared_captions,
+                warning: caption_warning,
+                note: caption_note,
+            } = prepared;
+            // A caption that came as the video's own transcript is worth
+            // saying on the finished row; a caption that did not come at all
+            // is worth more, and a run has only one line to say it on.
+            let caption_notice = caption_warning.or(caption_note);
             let mut inputs = vec![video_track_path(&work_dir)];
             if request.audio.is_some() {
                 let audio = audio_track_path(&work_dir);
@@ -210,7 +225,16 @@ pub(super) async fn run(
             let stage = stage_sink(app, job.id);
             let destination = dest.clone();
             let mut plan = delivery.clone();
-            plan.captions = captions.map(|captions| captions.path);
+            // The text is written beside the video as well, so a machine
+            // without FFmpeg keeps the captions and the download instead of
+            // failing at the last step: putting them inside is the part that
+            // needs FFmpeg.
+            let can_embed = delivery.ffmpeg.is_some();
+            let caption_file = prepared_captions;
+            plan.captions = caption_file
+                .as_ref()
+                .filter(|_| can_embed)
+                .map(|captions| captions.path.clone());
             let staging = work_dir.clone();
             let finished = tokio::task::spawn_blocking(move || {
                 deliver(&destination, inputs, &staging, &plan, stage.as_ref())
@@ -219,10 +243,23 @@ pub(super) async fn run(
 
             match finished {
                 Ok(Ok(path)) => {
+                    // A player reads a `.srt` named after the video by itself,
+                    // and a reader can edit that one. It is the copy that
+                    // makes the captions visible in a file browser.
+                    if let Some(captions) = caption_file.as_ref() {
+                        if let Err(error) = captions::beside(captions, &path) {
+                            idm_core::log::write(
+                                "warn",
+                                &format!(
+                                    "the captions could not be written beside the video: {error}"
+                                ),
+                            );
+                        }
+                    }
                     // The finished file is in place and checked, so the pieces
                     // can go.
                     let _ = std::fs::remove_dir_all(&work_dir);
-                    finish_saved(&state, job.id, path);
+                    finish_saved(&state, job.id, path, caption_notice);
                 }
                 Ok(Err(DeliverError::Cancelled)) => {
                     state.update_media_job(job.id, |job| {

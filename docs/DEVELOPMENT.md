@@ -94,14 +94,18 @@ src-tauri/src/
     robots.rs      robots.txt groups, rules and crawl delay
     extract.rs     the tolerant link scanner
     window.rs      the grabber window
-browser-extension/
-  manifest.json  the Chrome/Edge build
-extension-firefox/
-  manifest.json  the Firefox build; MV3 event page, video overlay, popup and settings
+extensions/
+  source/        the extension, written once: background, content scripts,
+                 popup, link window, settings page, shared libraries, theme
+  lib/platform.js  the promise adapter that lets one source run on Chromium
   lib/link-rules.js  what a link is, shared by the reader and the link window
   lib/manifest.js    what a stream manifest is, and the playback headers
   content/page-links.js  the time-sliced reader of a page's links
   links/         the Download all links window (filters, selection, report)
+  chromium/      manifest.json + worker.js: Chrome, Edge, Brave, Opera, Vivaldi
+  firefox/       manifest.json: MV3 event page
+  safari/        manifest.json: MV3 background document
+  build.mjs      dist/<browser>/ from source/ + <browser>/
 src/
   App.tsx        screen composition and command routing only
   main.tsx       React root

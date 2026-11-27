@@ -41,6 +41,7 @@ pub async fn resolve_page(
     page_url: &str,
     fallback_title: &str,
 ) -> Result<(Manifest, SourcePlan), String> {
+    let mut failure = None;
     if available(app) {
         match resolve(app, page_url, fallback_title).await {
             Ok(answer) => return Ok(answer),
@@ -49,12 +50,11 @@ pub async fn resolve_page(
                     "warn",
                     &format!("the video helper could not read the page: {error}"),
                 );
+                failure = Some(error);
             }
         }
     }
-    super::yt::resolve(page_url, fallback_title)
-        .await
-        .map_err(|error| error.to_string())
+    fallback(page_url, fallback_title, failure, false).await
 }
 
 /// Resolve a page again because the previous addresses were refused. A helper
@@ -65,6 +65,7 @@ pub async fn renew_page(
     page_url: &str,
     fallback_title: &str,
 ) -> Result<(Manifest, SourcePlan), String> {
+    let mut failure = None;
     if available(app) {
         match resolve(app, page_url, fallback_title).await {
             Ok(answer) => return Ok(answer),
@@ -73,13 +74,37 @@ pub async fn renew_page(
                     "warn",
                     &format!("the video helper could not read the page again: {error}"),
                 );
+                failure = Some(error);
             }
         }
     }
-    super::yt::renew(page_url, fallback_title)
-        .await
-        .map_err(|error| error.to_string())
+    fallback(page_url, fallback_title, failure, true).await
 }
+
+/// What is left when the helper did not answer.
+///
+/// The in-house path knows YouTube and nothing else, so it is only asked for a
+/// YouTube page. Another page is answered with what the helper said, or with
+/// the one thing the reader can act on when it is not installed.
+async fn fallback(
+    page_url: &str,
+    fallback_title: &str,
+    failure: Option<String>,
+    fresh: bool,
+) -> Result<(Manifest, SourcePlan), String> {
+    if super::yt::is_youtube_page(page_url) {
+        let answer = if fresh {
+            super::yt::renew(page_url, fallback_title).await
+        } else {
+            super::yt::resolve(page_url, fallback_title).await
+        };
+        return answer.map_err(|error| error.to_string());
+    }
+    Err(failure.unwrap_or_else(|| {
+        "the video helper is not installed, so this page cannot be read".to_string()
+    }))
+}
+
 
 /// Ask the helper for one page.
 pub async fn resolve(

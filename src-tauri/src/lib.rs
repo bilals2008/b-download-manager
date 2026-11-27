@@ -17,6 +17,7 @@ mod lifecycle;
 mod mcp;
 mod migrate;
 mod network;
+mod page_media;
 mod prefs;
 mod progress;
 mod proxy;
@@ -30,6 +31,7 @@ mod staging;
 mod state;
 mod toolbars;
 mod torrent;
+mod torrent_list;
 mod tray;
 mod updater;
 mod video;
@@ -162,10 +164,17 @@ pub fn run() {
             // The proxy script is fetched with the same client policy as
             // everything else, and fetched again now and then.
             proxy::start(app.handle().clone());
-            // The phone remote is marked coming soon in the settings window,
-            // so a saved `remote_enabled` does not start the listener. The
-            // setting is kept for when the feature ships.
-            // shortcut: drop this comment and start when the remote ships
+            // The phone remote is off until the reader turns it on; when it
+            // is on, it starts with the application so a paired phone finds
+            // it on the same address.
+            if state.engine_settings().remote_enabled {
+                if let Err(error) = remote::start(app.handle(), &state) {
+                    idm_core::log::write(
+                        "warn",
+                        &format!("the phone remote is on but could not start: {error}"),
+                    );
+                }
+            }
             // A copied link is offered while the application is in the tray.
             clipboard::start(app.handle().clone());
             // The queue's schedule is read on a clock, so a window that opens
@@ -217,6 +226,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             start_download,
+            clipboard::clipboard_text,
             list_downloads,
             pause_download,
             resume_download,
@@ -242,6 +252,7 @@ pub fn run() {
             torrent::torrent_start,
             torrent::torrent_lookup,
             torrent::torrent_jobs,
+            torrent_list::torrent_summaries,
             torrent::torrent_job,
             torrent::torrent_pause,
             torrent::torrent_resume,
@@ -251,6 +262,10 @@ pub fn run() {
             torrent::torrent_remove,
             torrent::torrent_recheck,
             torrent::torrent_set_files,
+            torrent::torrent_add_trackers,
+            torrent::torrent_remove_trackers,
+            torrent::torrent_announce_now,
+            torrent::torrent_check_trackers,
             torrent::torrent_pause_all,
             torrent::torrent_resume_all,
             torrent::torrent_settings,
@@ -355,6 +370,7 @@ pub fn run() {
             video::capture::media_redownload,
             video::capture::media_reparse,
             video::capture::open_video_window,
+            video::capture::page::page_media_open,
             video::capture::open_media_progress,
             video::capture::video_helper_status,
             video::capture::video_helper_install,

@@ -126,12 +126,15 @@ pub(super) async fn parse_manifest(
 ) -> Result<(Manifest, SourcePlan), String> {
     // A YouTube page is resolved through the video helper when it is
     // installed, and through the in-house player clients otherwise; the page's
-    // own formats carry no usable `url`.
-    if job.kind == MediaKindHint::Youtube || crate::video::yt::is_youtube_page(&job.page_url) {
+    // own formats carry no usable `url`. A page pasted into the app is the
+    // same question: the helper knows the site, the fallback knows YouTube.
+    if matches!(job.kind, MediaKindHint::Youtube | MediaKindHint::Page)
+        || crate::video::yt::is_youtube_page(&job.page_url)
+    {
         return resolve_youtube(app, job).await;
     }
     match infer_kind(job.kind, &job.manifest_url) {
-        MediaKindHint::Youtube => resolve_youtube(app, job).await,
+        MediaKindHint::Youtube | MediaKindHint::Page => resolve_youtube(app, job).await,
         MediaKindHint::Hls => parse_hls(job).await,
         MediaKindHint::Dash => parse_dash(job).await,
         MediaKindHint::File => parse_file(job).await,

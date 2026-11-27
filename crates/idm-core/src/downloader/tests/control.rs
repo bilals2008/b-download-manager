@@ -5,9 +5,7 @@ use super::*;
 #[tokio::test]
 async fn a_file_is_downloaded_over_ftp() {
     // A file of two ranges, so the parts have to be joined in order.
-    let data: Vec<u8> = (0..(SEGMENT_TARGET + 4 * 1024 * 1024))
-        .map(|i| (i % 251) as u8)
-        .collect();
+    let data: Vec<u8> = (0..(2 * MIN_SPLIT)).map(|i| (i % 251) as u8).collect();
     let server = crate::ftp::server::TestServer::start(data.clone());
     let url = format!(
         "ftp://user:secret@127.0.0.1:{}{}",

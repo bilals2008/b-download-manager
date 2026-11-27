@@ -8,6 +8,7 @@ import {
 } from "@/components/icons/action-icons";
 import { WarningMark } from "@/components/icons/desktop-icons";
 import { CloseGlyph, ChevronDown, ChevronUp } from "@/components/icons/ui-icons";
+import { CountryFlag } from "@/components/ui/country-flag";
 import { DialogAction } from "@/components/ui/dialog-action";
 import { Tooltip } from "@/components/ui/tooltip";
 import { ConnectionDetails } from "@/components/windows/progress/connection-details";
@@ -153,7 +154,12 @@ export function DownloadStatusTab({
           {info.status === "completed" ? "—" : resumeLabel(info.resumable)}
         </Field>
         <Field label="Speed limit">{limitLabel(info.speedLimit)}</Field>
-        <Field label="Server">{serverLabel(info)}</Field>
+        <Field label="Server">
+          <span className="inline-flex items-center justify-end gap-1.5 align-middle">
+            <CountryFlag code={info.country} />
+            <span className="truncate">{serverLabel(info)}</span>
+          </span>
+        </Field>
       </dl>
 
       {problem ? (

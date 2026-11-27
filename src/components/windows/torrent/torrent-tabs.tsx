@@ -1,8 +1,12 @@
 import { useRef } from "react";
 
+import {
+  TorrentTabGlyph,
+  type TorrentGlyphKind,
+} from "@/components/icons/ui-icons";
 import { cn } from "@/lib/utils";
 
-export type TorrentTabId = "overview" | "files" | "pieces" | "peers" | "trackers";
+export type TorrentTabId = TorrentGlyphKind;
 
 interface Tab {
   id: TorrentTabId;
@@ -26,10 +30,12 @@ interface TorrentTabsProps {
 /**
  * Five tabs over one panel.
  *
- * The window owns the panel, so the tabs only report which page it should
- * draw. Arrow keys walk the strip, Home and End go to its ends, and the tab
- * that is not selected leaves the Tab order, which is the pattern the ARIA
- * authoring practices describe for a tab list.
+ * The chosen page is a soft chip with its mark in the accent, not an underline
+ * under plain text: the tabs sit between the summary and the table, and a tint
+ * says which page is open without drawing a rule across the window. Arrow
+ * keys walk the strip, Home and End go to its ends, and the unselected tabs
+ * leave the Tab order, which is the pattern the ARIA authoring practices
+ * describe.
  */
 export function TorrentTabs({ active, onChange }: TorrentTabsProps) {
   const refs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -44,16 +50,8 @@ export function TorrentTabs({ active, onChange }: TorrentTabsProps) {
     <div
       role="tablist"
       aria-label="Torrent details"
-      className="relative grid w-full max-w-md shrink-0 auto-cols-fr grid-flow-col self-start"
+      className="flex w-fit max-w-full gap-0.5 overflow-x-auto rounded-chrome bg-chrome-menu p-1 scrollbar-thin"
     >
-      <span
-        aria-hidden="true"
-        style={{
-          width: `${100 / TABS.length}%`,
-          transform: `translateX(${TABS.findIndex((tab) => tab.id === active) * 100}%)`,
-        }}
-        className="pointer-events-none absolute inset-y-0 left-0 rounded-chrome bg-primary transition-transform duration-300 ease-out motion-reduce:transition-none"
-      />
       {TABS.map((tab, index) => {
         const selected = tab.id === active;
         return (
@@ -85,12 +83,19 @@ export function TorrentTabs({ active, onChange }: TorrentTabsProps) {
               }
             }}
             className={cn(
-              "relative truncate rounded-chrome px-3 py-1.5 text-xs transition-colors focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:outline-none",
+              "flex items-center gap-1.5 rounded-chrome px-2.5 py-1 text-[13px] transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none",
               selected
-                ? "font-medium text-primary-foreground"
-                : "text-chrome-muted hover:text-chrome-menu-text",
+                ? "bg-chrome-menu-active text-chrome-title-text"
+                : "text-chrome-muted hover:bg-chrome-menu-hover hover:text-chrome-menu-text",
             )}
           >
+            <TorrentTabGlyph
+              kind={tab.id}
+              className={cn(
+                "size-3.5 shrink-0 transition-colors duration-150",
+                selected ? "text-chrome-focus" : "opacity-70",
+              )}
+            />
             {tab.label}
           </button>
         );

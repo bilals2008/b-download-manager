@@ -66,7 +66,8 @@ cannot put it on a cross-origin request without a preflight, and the preflight i
 refused unless the origin is an extension's, so the app and the extension find
 each other with no code to copy. A request whose `Host` is not the bridge's own
 address is refused (that is the shape of DNS rebinding), an `Origin` is refused
-unless it is a well-formed `moz-extension://` or `chrome-extension://` one, and
+unless it is a well-formed `moz-extension://`, `chrome-extension://` or
+`safari-web-extension://` one, and
 only such an origin is ever echoed back in `Access-Control-Allow-Origin`.
 
 ```powershell
@@ -76,15 +77,35 @@ pnpm probe:bridge    # against the running app: the rules, and one real download
 The extension treats `/v1/ping` as the handshake: a different program holding
 the port is reported as a mismatch, not as a connection.
 
-- **Firefox** (`extension-firefox/`): Manifest V3 with an event page, the
-  right-click hand-off, download takeover and a download button on each detected
-  video with live progress. Load it temporarily from `about:debugging#/runtime/this-firefox`;
-  the signed release is on Mozilla Add-ons.
-- **Chrome and Edge** (`browser-extension/`): the right-click hand-off and
-  download takeover, with no video overlay and no live download list. Load it
-  with **Load unpacked** on `chrome://extensions` or `edge://extensions`.
+The integration is written once, in `extensions/source/`, and each browser gets
+a folder that adds only its manifest to it. `extensions/build.mjs` puts the two
+together in `extensions/dist/<browser>/`.
 
-Both read the same versioned loopback API.
+```powershell
+pnpm build:extensions               # all three, into extensions/dist/
+node extensions/build.mjs chromium  # just one of them
+```
+
+A Chromium background is a service worker, so it is one file: `worker.js`
+imports the shared background list with `importScripts`, adapter first. The
+`check:extension` run loads that chain in a worker-shaped global — no `window`,
+no `document` — so a listener registered too late or a stray DOM call fails the
+check rather than the reader's browser.
+
+- **Firefox** (`extensions/firefox/`): Manifest V3 with an event page. Load it
+  temporarily from `about:debugging#/runtime/this-firefox`; the signed release is
+  on Mozilla Add-ons.
+- **Chrome, Edge, Brave, Opera and Vivaldi** (`extensions/chromium/`): Manifest
+  V3 with a service worker, whose entry imports the shared background. Load it
+  with **Load unpacked** on `chrome://extensions` or `edge://extensions`, and
+  press **Reload** on its card after each rebuild.
+- **Safari** (`extensions/safari/`): Manifest V3 with a non-persistent
+  background document, wrapped into an app by Apple's converter on macOS.
+
+Every build reads the same versioned loopback API, and runs the same overlay,
+link window and settings page. Chromium reaches them through
+`extensions/source/lib/platform.js`, which adapts `chrome`'s callback API to the
+promise-shaped `browser` the shared scripts use.
 
 ## What the application writes
 

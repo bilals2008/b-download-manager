@@ -15,6 +15,15 @@ export interface Settings {
   closeToTray: boolean;
   /** Whether a finished download gets its own window. */
   showCompleteDialog: boolean;
+  /** Whether a finished download plays a sound. */
+  completionSound: boolean;
+  /**
+   * Which of the built-in sounds it plays. Stored as text: the sound module
+   * owns the list, and a name it does not know plays the default there.
+   */
+  completionSoundName: string;
+  /** How loud that sound is, from 0 to 100. */
+  completionSoundVolume: number;
   /** Whether a new download opens its progress window. */
   showProgressOnStart: boolean;
   /** Whether a video download opens the quality window that follows it. */
@@ -102,6 +111,9 @@ export const DEFAULT_SETTINGS: Settings = {
   minimizeToTray: false,
   closeToTray: true,
   showCompleteDialog: true,
+  completionSound: true,
+  completionSoundName: "chime",
+  completionSoundVolume: 60,
   showProgressOnStart: false,
   showVideoWindowOnStart: false,
   torrentClosedHint: true,
@@ -190,6 +202,20 @@ export function loadSettings(): Settings {
       showCompleteDialog: boolean(
         value.showCompleteDialog,
         DEFAULT_SETTINGS.showCompleteDialog,
+      ),
+      completionSound: boolean(
+        value.completionSound,
+        DEFAULT_SETTINGS.completionSound,
+      ),
+      completionSoundName: text(
+        value.completionSoundName,
+        DEFAULT_SETTINGS.completionSoundName,
+      ),
+      completionSoundVolume: number(
+        value.completionSoundVolume,
+        DEFAULT_SETTINGS.completionSoundVolume,
+        0,
+        100,
       ),
       showProgressOnStart: boolean(
         value.showProgressOnStart,

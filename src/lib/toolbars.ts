@@ -16,12 +16,7 @@ const CATALOG = [
   { command: "delete", label: "Delete" },
   { command: "delete-completed", label: "Delete Completed" },
   { command: "options", label: "Options" },
-  {
-    command: "scheduler",
-    label: "Scheduler",
-    disabled: true,
-    note: "Queues and schedules are coming soon",
-  },
+  { command: "scheduler", label: "Scheduler" },
   { command: "start-queue", label: "Start Queue" },
   { command: "stop-queue", label: "Stop Queue" },
   { command: "tell-friend", label: "Tell a Friend" },

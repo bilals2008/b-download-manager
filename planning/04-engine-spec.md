@@ -30,17 +30,19 @@ this. It does not handle the `*` total case or `416` — both are gaps.
 **Goal:** decide the number of connections and the boundaries.
 
 ```
-count = clamp(ceil(total / SEGMENT_TARGET), 1, max_connections)
+count = clamp(total / MIN_SPLIT, 1, max_connections)
 ```
 
-`SEGMENT_TARGET` is currently 16 MiB. The boundaries are then split evenly,
-with the remainder spread over the first segments, so the ranges are
-contiguous and cover the file exactly.
+`MIN_SPLIT` is 1 MiB: one range per megabyte, capped by the number of
+connections the file deserves. A file under 1 MiB is one range. A fixed
+16 MiB target was used before, which gave every file under 16 MiB a single
+connection and made small downloads slow no matter what the reader set.
+The boundaries are then split evenly, with the remainder spread over the
+first segments, so the ranges are contiguous and cover the file exactly.
 
-**Open question:** the reference product's own rule is unknown. See
-[02-rea-plan.md](./02-rea-plan.md) Priority 1. Until it is known, the
-alternative is to **measure**: sweep the connection count against a
-range-capable server and pick the split that maximises throughput.
+**Open question:** how many connections a file deserves is still the
+reference product's rule of one per 10 KB (`connections_for`). See
+[02-rea-plan.md](./02-rea-plan.md) Priority 1.
 
 **Current implementation:** `segmenter::plan()`.
 

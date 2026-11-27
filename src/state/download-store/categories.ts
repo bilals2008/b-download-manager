@@ -31,6 +31,11 @@ import {
 } from "@/lib/ipc";
 import { mediaForget } from "@/lib/media";
 
+import {
+  releaseTorrentCategory,
+  rememberTorrentCategory,
+  renameTorrentCategory,
+} from "./torrent-categories";
 import type { WorkspaceState } from "./types";
 
 /** The pieces of the store the category work reaches for. */
@@ -135,6 +140,9 @@ export function useCategories({
     const affected = latest.current.downloads.filter(
       (item) => item.category === originalName,
     );
+    // A torrent row is rebuilt from the torrent summaries, so its category
+    // lives in the torrent choices, not in the engine index.
+    renameTorrentCategory(originalName, name);
     setState((state) => ({
       ...state,
       filter: state.filter === originalName ? name : state.filter,
@@ -193,6 +201,7 @@ export function useCategories({
 
     commitCategories(current.filter((category) => category.name !== name));
 
+    releaseTorrentCategory(name);
     const remaining = affected.filter((item) => !deleted.has(item.id));
     setState((state) => ({
       ...state,
@@ -226,7 +235,13 @@ export function useCategories({
       ),
     }));
     for (const item of changed) {
-      run(setDownloadCategory(item.id, category));
+      // A torrent row is not an engine download: its category is kept beside
+      // the torrent choices, so the next summary does not undo it.
+      if (item.torrent === undefined) {
+        run(setDownloadCategory(item.id, category));
+      } else {
+        rememberTorrentCategory(item.torrent, category);
+      }
     }
   }
 
@@ -267,6 +282,7 @@ export function useCategories({
       (item) =>
         ids.includes(item.id) &&
         !item.mediaJob &&
+        item.torrent === undefined &&
         item.status !== "completed" &&
         item.status !== "queued",
     );
@@ -289,7 +305,11 @@ export function useCategories({
   /** Take queued rows out of the queue and leave them paused. */
   function dequeue(ids: number[]) {
     const changed = latest.current.downloads.filter(
-      (item) => ids.includes(item.id) && !item.mediaJob && item.status === "queued",
+      (item) =>
+        ids.includes(item.id) &&
+        !item.mediaJob &&
+        item.torrent === undefined &&
+        item.status === "queued",
     );
     if (changed.length === 0) {
       return;

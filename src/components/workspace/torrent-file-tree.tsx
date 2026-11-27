@@ -13,7 +13,6 @@ import {
   ChevronRight,
   Glyph,
 } from "@/components/icons/ui-icons";
-import { DialogAction } from "@/components/ui/dialog-action";
 import { formatSize } from "@/lib/downloads";
 import { cn } from "@/lib/utils";
 
@@ -97,7 +96,7 @@ function RowCheckbox({
     <label
       htmlFor={id}
       className={cn(
-        "flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 py-0.5",
+        "flex min-w-0 flex-1 cursor-pointer items-center gap-2 py-0.5",
         disabled && "cursor-default opacity-55",
         className,
       )}
@@ -122,12 +121,12 @@ function RowCheckbox({
 }
 
 /**
- * The files of a torrent, drawn as the reference manager's Name / Size table.
+ * The files of a torrent, grouped the way the torrent is written.
  *
- * A torrent can hold hundreds of files in many folders, so the list is
- * grouped the way the torrent is written: a folder is ticked or unticked as
- * a whole, and the files under it follow. A folder can also be folded away
- * without changing what is selected.
+ * A folder is ticked or unticked as a whole and the files under it follow; a
+ * folder can also be folded away without changing what is selected. The tree
+ * scrolls on its own, so a torrent of hundreds of files never pushes the Save
+ * to row out of the dialog.
  */
 export function TorrentFileTree({
   files,
@@ -171,8 +170,8 @@ export function TorrentFileTree({
   }
 
   return (
-    <div className="flex flex-col">
-      <div className="max-h-72 overflow-y-auto rounded-chrome border border-chrome-line scrollbar-thin">
+    <div className="flex flex-col gap-2">
+      <div className="max-h-64 overflow-y-auto rounded-chrome bg-chrome-canvas scrollbar-thin">
         <table
           className="w-full table-fixed border-collapse text-xs"
           aria-label="Files in this torrent"
@@ -181,13 +180,13 @@ export function TorrentFileTree({
             <tr>
               <th
                 scope="col"
-                className="sticky top-0 z-10 bg-chrome-popup px-2 py-1.5 text-left font-medium text-chrome-muted"
+                className="sticky top-0 z-10 bg-chrome-canvas px-3 py-2 text-left text-chrome-micro font-medium text-chrome-muted"
               >
                 Name
               </th>
               <th
                 scope="col"
-                className="sticky top-0 z-10 w-24 bg-chrome-popup px-2 py-1.5 text-right font-medium text-chrome-muted"
+                className="sticky top-0 z-10 w-24 bg-chrome-canvas px-3 py-2 text-right text-chrome-micro font-medium text-chrome-muted"
               >
                 Size
               </th>
@@ -195,14 +194,15 @@ export function TorrentFileTree({
           </thead>
           <tbody>
             {groups.map((group, groupIndex) => {
-              const kept = group.indexes.filter((index) => picked.has(index))
-                .length;
+              const kept = group.indexes.filter((index) =>
+                picked.has(index),
+              ).length;
               const all = kept === group.indexes.length;
               const folded = collapsed.has(group.folder);
               return (
                 <Fragment key={group.folder || groupIndex}>
                   {group.folder ? (
-                    <tr>
+                    <tr className="hover:bg-chrome-popup-hover">
                       <td className="px-2 py-1">
                         <div className="flex min-w-0 items-center gap-1">
                           <button
@@ -210,7 +210,7 @@ export function TorrentFileTree({
                             aria-expanded={!folded}
                             aria-label={`${folded ? "Expand" : "Collapse"} ${group.folder}`}
                             onClick={() => toggleFolder(group.folder)}
-                            className="flex size-5 shrink-0 items-center justify-center rounded-chrome text-chrome-muted transition-colors hover:bg-chrome-menu-hover hover:text-chrome-menu-text focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
+                            className="flex size-5 shrink-0 items-center justify-center rounded-chrome text-chrome-muted transition-colors hover:text-chrome-menu-text focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:ring-inset focus-visible:outline-none"
                           >
                             {folded ? (
                               <ChevronRight className="size-3.5" />
@@ -233,7 +233,7 @@ export function TorrentFileTree({
                           />
                         </div>
                       </td>
-                      <td className="px-2 py-1 text-right tabular-nums text-chrome-muted">
+                      <td className="px-3 py-1 text-right text-chrome-micro tabular-nums text-chrome-muted">
                         {formatSize(group.length)}
                       </td>
                     </tr>
@@ -241,8 +241,11 @@ export function TorrentFileTree({
                   {folded && group.folder
                     ? null
                     : group.indexes.map((index) => (
-                        <tr key={`${index}-${files[index].path}`}>
-                          <td className="py-0.5 pr-2 pl-8">
+                        <tr
+                          key={`${index}-${files[index].path}`}
+                          className="hover:bg-chrome-popup-hover"
+                        >
+                          <td className="py-1 pr-3 pl-9">
                             <RowCheckbox
                               id={`${idPrefix}-file-${index}`}
                               label={fileName(files[index].path)}
@@ -256,7 +259,7 @@ export function TorrentFileTree({
                               }
                             />
                           </td>
-                          <td className="px-2 py-0.5 text-right tabular-nums text-chrome-muted">
+                          <td className="px-3 py-1 text-right text-chrome-micro tabular-nums text-chrome-muted">
                             {formatSize(files[index].length)}
                           </td>
                         </tr>
@@ -267,26 +270,28 @@ export function TorrentFileTree({
           </tbody>
         </table>
       </div>
-      <div className="flex items-center justify-between gap-2 pt-2">
+      <div className="flex items-center justify-between gap-2">
         <div className="flex shrink-0 items-center gap-1">
-          <DialogAction
-            tone="quiet"
+          <button
+            type="button"
             disabled={disabled || selected.length === files.length}
             onClick={() => onChange(files.map((_, index) => index))}
+            className="rounded-chrome px-1.5 py-0.5 text-chrome-micro text-chrome-muted transition-colors hover:bg-chrome-menu-hover hover:text-chrome-menu-text focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:outline-none disabled:cursor-default disabled:opacity-45 disabled:hover:bg-transparent disabled:hover:text-chrome-muted"
           >
             Select all
-          </DialogAction>
-          <DialogAction
-            tone="quiet"
+          </button>
+          <button
+            type="button"
             disabled={disabled || selected.length === 0}
             onClick={() => onChange([])}
+            className="rounded-chrome px-1.5 py-0.5 text-chrome-micro text-chrome-muted transition-colors hover:bg-chrome-menu-hover hover:text-chrome-menu-text focus-visible:ring-2 focus-visible:ring-chrome-focus focus-visible:outline-none disabled:cursor-default disabled:opacity-45 disabled:hover:bg-transparent disabled:hover:text-chrome-muted"
           >
             Select none
-          </DialogAction>
+          </button>
         </div>
-        <p className="min-w-0 truncate text-chrome-micro text-chrome-muted">
-          Selected: {selected.length} {selected.length === 1 ? "file" : "files"}, {" "}
-          {formatSize(bytes)}
+        <p className="min-w-0 truncate text-chrome-micro tabular-nums text-chrome-muted">
+          {selected.length} of {files.length}{" "}
+          {files.length === 1 ? "file" : "files"} · {formatSize(bytes)}
         </p>
       </div>
     </div>

@@ -48,6 +48,10 @@ pub enum MediaKindHint {
     File,
     /// A YouTube watch page the app resolves through the iOS player client.
     Youtube,
+    /// A page pasted into the app with no manifest yet. It is resolved through
+    /// the video helper, or through the in-house YouTube path when no helper
+    /// is installed.
+    Page,
 }
 
 /// The parsed form a job keeps for the download that follows.

@@ -27,7 +27,7 @@ await import("./check-extension/page-sources.mjs");
 
 await import("./check-extension/bridge.mjs");
 await import("./check-extension/background.mjs");
-await import("./check-extension/chrome.mjs");
+await import("./check-extension/browsers.mjs");
 
 // The overlay needs a page rather than a sandbox: scripts/check-overlay.mjs
 // runs the content scripts in a fake one and exercises the button there.

@@ -87,9 +87,9 @@ async fn a_redirected_download_finishes() {
 async fn bench_local_segmented() {
     const CHUNK: usize = 256 * 1024;
     let delay = Duration::from_millis(15);
-    // Four ranges of sixteen megabytes: the plan is four ranges when four
+    // Four ranges of a megabyte each: the plan is four ranges when four
     // connections are allowed and one when only one is.
-    let data: Vec<u8> = (0..4 * SEGMENT_TARGET).map(|i| (i % 251) as u8).collect();
+    let data: Vec<u8> = (0..4 * MIN_SPLIT).map(|i| (i % 251) as u8).collect();
     let url = spawn_paced_server(data.clone(), CHUNK, delay);
     let dir = temp_dir("bench-local");
 
@@ -174,7 +174,7 @@ async fn range_request_lands_at_the_right_offset_in_the_part_file() {
 async fn a_server_that_sends_the_wrong_bytes_goes_on_with_one_connection() {
     // A file of two ranges, so the second one can be checked against the
     // head of the file.
-    let data: Vec<u8> = (0..(2 * SEGMENT_TARGET)).map(|i| (i % 251) as u8).collect();
+    let data: Vec<u8> = (0..(2 * MIN_SPLIT)).map(|i| (i % 251) as u8).collect();
     let url = spawn_lying_server(data.clone());
     let dir = temp_dir("lying");
     let dest = dir.join("out.bin");

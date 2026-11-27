@@ -21,6 +21,15 @@ pub struct AnnounceResult {
     pub incomplete: u64,
 }
 
+/// How long one UDP tracker may take to answer a question, both for the
+/// connection id and for the peer list.
+const UDP_ANSWER: Duration = Duration::from_secs(8);
+
+/// How long a UDP tracker may take from the first datagram to the last. A
+/// tracker that never answers must not hold the job: the other trackers and
+/// the peer table are waiting behind it.
+const UDP_TOTAL: Duration = Duration::from_secs(18);
+
 /// Tell a tracker who we are and ask it for peers. The proxy, when there is
 /// one, carries the HTTP announce; a UDP tracker is reached directly, the
 /// way the protocol is spoken.
@@ -39,7 +48,16 @@ pub async fn announce(
         .ok_or_else(|| TorrentError::Malformed("the peer id is not hex".into()))?;
 
     if tracker.starts_with("udp://") {
-        return udp_announce(tracker, &hash, &id, port, event, left).await;
+        return tokio::time::timeout(
+            UDP_TOTAL,
+            udp_announce(tracker, &hash, &id, port, event, left),
+        )
+        .await
+        .unwrap_or_else(|_| {
+            Err(TorrentError::Network(format!(
+                "the tracker {tracker} did not answer in time"
+            )))
+        });
     }
     if !tracker.starts_with("http://") && !tracker.starts_with("https://") {
         return Err(TorrentError::Unsupported(format!(
@@ -118,8 +136,10 @@ async fn udp_announce(
     let mut addresses = tokio::net::lookup_host((host, tracker_port))
         .await
         .map_err(|e| TorrentError::Network(e.to_string()))?;
+    // The socket is IPv4, so an IPv6 address for the same host is not the one
+    // to use: a host with both answers was failing its announce before.
     let address = addresses
-        .next()
+        .find(SocketAddr::is_ipv4)
         .ok_or_else(|| TorrentError::Network(format!("{host} has no address")))?;
     let socket = tokio::net::UdpSocket::bind("0.0.0.0:0")
         .await
@@ -140,13 +160,22 @@ async fn udp_announce(
         .map_err(|e| TorrentError::Network(e.to_string()))?;
 
     let mut buffer = [0u8; 2048];
-    let read = socket
-        .recv(&mut buffer)
+    let read = tokio::time::timeout(UDP_ANSWER, socket.recv(&mut buffer))
         .await
+        .map_err(|_| TorrentError::Network(format!("{host} did not answer the connect")))?
         .map_err(|e| TorrentError::Network(e.to_string()))?;
     if read < 16 {
         return Err(TorrentError::Network(
             "the tracker answered with too little".into(),
+        ));
+    }
+    // A connect answer is action 0 with the transaction id it was asked with;
+    // anything else is another message and its bytes are not a connection id.
+    let action = u32::from_be_bytes(buffer[0..4].try_into().unwrap_or([0; 4]));
+    let answered = u32::from_be_bytes(buffer[4..8].try_into().unwrap_or([0; 4]));
+    if action != 0 || answered != transaction {
+        return Err(TorrentError::Network(
+            "the tracker did not answer the connect".into(),
         ));
     }
     let connection_id = u64::from_be_bytes(buffer[8..16].try_into().unwrap_or([0; 8]));
@@ -170,18 +199,32 @@ async fn udp_announce(
         .await
         .map_err(|e| TorrentError::Network(e.to_string()))?;
 
-    let read = socket
-        .recv(&mut buffer)
+    let read = tokio::time::timeout(UDP_ANSWER, socket.recv(&mut buffer))
         .await
+        .map_err(|_| TorrentError::Network(format!("{host} did not answer the announce")))?
         .map_err(|e| TorrentError::Network(e.to_string()))?;
     if read < 20 {
         return Err(TorrentError::Network(
             "the tracker answered with too little".into(),
         ));
     }
-    let interval = u32::from_be_bytes(buffer[4..8].try_into().unwrap_or([0; 4])) as u64;
-    let complete = u32::from_be_bytes(buffer[12..16].try_into().unwrap_or([0; 4])) as u64;
-    let incomplete = u32::from_be_bytes(buffer[16..20].try_into().unwrap_or([0; 4])) as u64;
+    // An announce answer is action 1, its transaction id, the interval, the
+    // leechers, the seeders and then six bytes a peer. Reading the seeders
+    // out of the leechers' bytes is how a tracker of ten seeders was shown as
+    // ten leechers, and the interval out of the transaction id made the job
+    // wait an hour before asking anyone again.
+    let action = u32::from_be_bytes(buffer[0..4].try_into().unwrap_or([0; 4]));
+    let answered = u32::from_be_bytes(buffer[4..8].try_into().unwrap_or([0; 4]));
+    if action != 1 || answered != transaction {
+        let refusal = String::from_utf8_lossy(&buffer[8..read]);
+        return Err(TorrentError::Network(format!(
+            "the tracker refused the announce: {}",
+            refusal.trim()
+        )));
+    }
+    let interval = u32::from_be_bytes(buffer[8..12].try_into().unwrap_or([0; 4])) as u64;
+    let incomplete = u32::from_be_bytes(buffer[12..16].try_into().unwrap_or([0; 4])) as u64;
+    let complete = u32::from_be_bytes(buffer[16..20].try_into().unwrap_or([0; 4])) as u64;
     let mut peers = Vec::new();
     let mut at = 20;
     while at + 6 <= read {
@@ -296,7 +339,7 @@ fn peer_from_bytes(bytes: &[u8]) -> SocketAddr {
 mod tests {
     use super::*;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    use tokio::net::TcpListener;
+    use tokio::net::{TcpListener, UdpSocket};
 
     /// A tracker that answers with one peer.
     async fn a_tracker() -> String {
@@ -354,6 +397,82 @@ mod tests {
         .await
         .unwrap_err();
         assert!(error.to_string().contains("tracker"));
+    }
+
+    /// A tracker that speaks BEP 15: a connection id, then the peer list.
+    async fn a_udp_tracker() -> String {
+        let socket = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let address = socket.local_addr().unwrap();
+        tokio::spawn(async move {
+            let mut request = [0u8; 2048];
+            let (read, from) = socket.recv_from(&mut request).await.unwrap();
+            assert_eq!(read, 16, "a connect request is sixteen bytes");
+            let transaction = u32::from_be_bytes(request[12..16].try_into().unwrap());
+            let mut reply = Vec::new();
+            reply.extend_from_slice(&0u32.to_be_bytes());
+            reply.extend_from_slice(&transaction.to_be_bytes());
+            reply.extend_from_slice(&0x0123_4567_89ab_cdefu64.to_be_bytes());
+            socket.send_to(&reply, from).await.unwrap();
+
+            let (read, from) = socket.recv_from(&mut request).await.unwrap();
+            assert_eq!(read, 98, "an announce request is ninety-eight bytes");
+            let transaction = u32::from_be_bytes(request[12..16].try_into().unwrap());
+            let mut reply = Vec::new();
+            reply.extend_from_slice(&1u32.to_be_bytes());
+            reply.extend_from_slice(&transaction.to_be_bytes());
+            reply.extend_from_slice(&1800u32.to_be_bytes());
+            reply.extend_from_slice(&7u32.to_be_bytes());
+            reply.extend_from_slice(&3u32.to_be_bytes());
+            reply.extend_from_slice(&[127, 0, 0, 1, 0x1a, 0xe1]);
+            socket.send_to(&reply, from).await.unwrap();
+        });
+        format!("udp://{address}")
+    }
+
+    #[tokio::test]
+    async fn a_udp_tracker_answers_with_its_counts_and_peers() {
+        let tracker = a_udp_tracker().await;
+        let result = announce(
+            &tracker,
+            &"0".repeat(40),
+            &"1".repeat(40),
+            6881,
+            "started",
+            0,
+            None,
+        )
+        .await
+        .expect("the tracker answered");
+        assert_eq!(result.interval, 1800, "the interval is at bytes 8..12");
+        assert_eq!(result.complete, 3, "the seeders are at bytes 16..20");
+        assert_eq!(result.incomplete, 7, "the leechers are at bytes 12..16");
+        assert_eq!(result.peers.len(), 1);
+        assert_eq!(result.peers[0].port(), 6881);
+    }
+
+    #[tokio::test]
+    async fn a_udp_tracker_that_never_answers_is_an_error() {
+        // A socket that takes datagrams and says nothing. Before the deadline
+        // this call waited forever, and every tracker behind it, the peer
+        // table and the whole job waited with it.
+        let socket = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let address = socket.local_addr().unwrap();
+        let silence = tokio::spawn(async move {
+            let mut buffer = [0u8; 2048];
+            let _ = socket.recv_from(&mut buffer).await;
+            // Keep the socket open, and never answer.
+            tokio::time::sleep(Duration::from_secs(30)).await;
+        });
+        let tracker = format!("udp://{address}");
+        let hash = "0".repeat(40);
+        let peer = "1".repeat(40);
+        let failure = announce(&tracker, &hash, &peer, 6881, "started", 0, None);
+        let error = tokio::time::timeout(Duration::from_secs(25), failure)
+            .await
+            .expect("the announce gave up")
+            .expect_err("no answer is an error");
+        assert!(error.to_string().contains("did not answer"));
+        silence.abort();
     }
 
     #[tokio::test]

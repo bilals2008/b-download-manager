@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::bencode::{bencode_decode, bencode_encode, BencodeValue};
+use crate::pieces::choose_piece;
 use crate::session::{JobRequest, JobSource, TorrentClient};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;

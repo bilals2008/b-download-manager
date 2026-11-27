@@ -25,6 +25,11 @@ import {
   stopQueue,
 } from "@/lib/ipc";
 import {
+  torrentPause,
+  torrentRemove,
+  torrentResume,
+} from "@/lib/ipc-torrent";
+import {
   mediaCancel as cancelMedia,
   mediaForget,
   mediaResume as resumeMedia,
@@ -32,6 +37,7 @@ import {
 import { rangeIds } from "@/lib/selection";
 import type { DownloadInfo } from "@/types";
 
+import { useBulkActions } from "./bulk";
 import { useCategories } from "./categories";
 import {
   MEDIA_ROW_BASE,
@@ -43,8 +49,10 @@ import {
   sortDownloads,
 } from "./list";
 import { useMediaRows } from "./media";
+import { useCompletionSound } from "../use-completion-sound";
 import { useRowMapping } from "./rows";
 import { useStartPath } from "./start";
+import { useTorrentRows } from "./torrents";
 import type { AddOutcome, DownloadStore, WorkspaceState } from "./types";
 
 export type { AddOutcome, NewDownload, SelectMode } from "./types";
@@ -87,6 +95,10 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
     latest.current = state;
   }, [state]);
 
+  // Every finished download is announced once, media rows included: they
+  // arrive in the same list.
+  useCompletionSound(state.downloads);
+
   const run = useCallback((task: Promise<unknown>) => {
     task.catch((failure: unknown) => setError(describeError(failure)));
   }, []);
@@ -114,6 +126,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
   const { samples, sampleFor, toDownload } = useRowMapping({ categoriesRef });
 
   const media = useMediaRows(setState, sampleFor, dismissedMedia, categoriesRef);
+  useTorrentRows(setState, categoriesRef);
 
   // A link that the browser extension handed over.
   useEffect(() => {
@@ -220,8 +233,10 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
         // reload that lands after their poll must not wipe them: the engine
         // rows are replaced, the media rows stay until their own poll says
         // otherwise.
-        const media = current.downloads.filter((item) => item.mediaJob);
-        const merged = [...downloads, ...media];
+        const kept = current.downloads.filter(
+          (item) => item.mediaJob !== undefined || item.torrent !== undefined,
+        );
+        const merged = [...downloads, ...kept];
         return {
           ...current,
           downloads: merged,
@@ -300,6 +315,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
   );
 
   const startPath = useStartPath({ setState, forget });
+  const bulk = useBulkActions({ latest, setState, run });
 
   const store: DownloadStore = {
     downloads: state.downloads,
@@ -541,6 +557,16 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
           }
           continue;
         }
+        // A torrent is held and let go by the torrent client, not by the
+        // engine's download commands.
+        if (item.torrent) {
+          run(
+            action === "resume"
+              ? torrentResume(item.torrent)
+              : torrentPause(item.torrent),
+          );
+          continue;
+        }
         if (action === "pause") {
           run(pauseDownload(item.id));
         } else if (action === "stop") {
@@ -571,81 +597,9 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
     answerConflict: (answer, applyToRemaining) =>
       startPath.settleConflict({ choice: answer, applyToRemaining }),
     cancelConflict: () => startPath.settleConflict(null),
-    pauseAll: () => {
-      const items = latest.current.downloads.filter(
-        (item) => item.status === "downloading" && !item.mediaJob,
-      );
-      if (items.length === 0) {
-        return;
-      }
-      setState((current) => ({
-        ...current,
-        downloads: current.downloads.map((item) =>
-          item.status === "downloading" && !item.mediaJob
-            ? { ...item, status: "paused", speed: 0, eta: 0 }
-            : item,
-        ),
-      }));
-      run(Promise.all(items.map((item) => pauseDownload(item.id))));
-    },
-    resumeAll: () => {
-      // The mirror of Pause All: everything that is holding. A media job has
-      // no pause, but a stopped one continues from the bytes it kept.
-      const items = latest.current.downloads.filter(
-        (item) =>
-          (item.mediaJob === undefined || item.mediaCanResume === true) &&
-          (item.status === "paused" ||
-            item.status === "stopped" ||
-            item.status === "error"),
-      );
-      if (items.length === 0) {
-        return;
-      }
-      setState((current) => ({
-        ...current,
-        downloads: current.downloads.map((item) =>
-          item.status === "paused" ||
-          item.status === "stopped" ||
-          item.status === "error"
-            ? { ...item, status: "downloading", speed: 0, eta: 0, error: null }
-            : item,
-        ),
-      }));
-      run(
-        Promise.all(
-          items.map((item) =>
-            item.mediaJob
-              ? resumeMedia(item.mediaJob)
-              : resumeDownload(item.id),
-          ),
-        ),
-      );
-    },
-    stopAll: () => {
-      const items = latest.current.downloads.filter(
-        (item) => item.status === "downloading",
-      );
-      if (items.length === 0) {
-        return;
-      }
-      setState((current) => ({
-        ...current,
-        downloads: current.downloads.map((item) =>
-          item.status === "downloading"
-            ? { ...item, status: "stopped", speed: 0, eta: 0 }
-            : item,
-        ),
-      }));
-      run(
-        Promise.all(
-          items.map((item) =>
-            item.mediaJob
-              ? cancelMedia(item.mediaJob)
-              : cancelDownload(item.id),
-          ),
-        ),
-      );
-    },
+    pauseAll: bulk.pauseAll,
+    resumeAll: bulk.resumeAll,
+    stopAll: bulk.stopAll,
     redownloadSelected: () => {
       // A live row has to be stopped before it can start over, so it is left
       // out instead of answering with an error nobody asked for.
@@ -653,6 +607,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
         (item) =>
           latest.current.selected.includes(item.id) &&
           !item.mediaJob &&
+          !item.torrent &&
           item.status !== "downloading" &&
           item.status !== "queued",
       );
@@ -682,7 +637,7 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
     },
     deleteCompleted: () => {
       const ids = latest.current.downloads
-        .filter((item) => isFinished(item) && !item.mediaJob)
+        .filter((item) => isFinished(item) && !item.mediaJob && !item.torrent)
         .map((item) => item.id);
       if (ids.length === 0) {
         return;
@@ -726,6 +681,12 @@ export function DownloadProvider({ children }: { children: ReactNode }) {
           if (item?.mediaJob) {
             dismissedMedia.current.add(item.url);
             await mediaForget(item.mediaJob, false);
+            forget(id);
+            return;
+          }
+          // A torrent leaves the list, its files stay where they are.
+          if (item?.torrent) {
+            await torrentRemove(item.torrent, false);
             forget(id);
             return;
           }

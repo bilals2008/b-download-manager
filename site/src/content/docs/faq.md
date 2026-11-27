@@ -9,11 +9,11 @@ There is nothing to buy, no account to create, and no ads. It is a personal proj
 
 ## Does it need to be installed?
 
-Yes. Every release has an installer for Windows, macOS and Linux. See [Getting the app](/installation/) for the file for your system. The Firefox extension is a separate install from [Mozilla Add-ons](https://addons.mozilla.org/en-US/firefox/addon/b-download-manager/).
+Yes. Every release has an installer for Windows, macOS and Linux. See [Getting the app](/installation/) for the file for your system. The browser extension is a separate install: Firefox from [Mozilla Add-ons](https://addons.mozilla.org/en-US/firefox/addon/b-download-manager/), the other browsers from this repository — see [Getting the app](/installation/#browser-extension).
 
 ## Which browsers can send links to the app?
 
-Firefox, through the extension on Mozilla Add-ons. It hands links, videos and files to the app over a bridge that stays on your own computer. Chrome, Edge and Brave versions are still being finished.
+Firefox, Chrome, Edge, Brave, Opera, Vivaldi and Safari 16.4 or newer, through the extension. It hands links, videos and files to the app over a bridge that stays on your own computer. Firefox is on Mozilla Add-ons; the Chromium and Safari builds are loaded from the repository because they are not in a store yet.
 
 ## Which computers does it run on?
 

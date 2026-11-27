@@ -1,7 +1,7 @@
 use super::assembly::assemble;
 use super::ranges::fetch_range;
 use super::*;
-use crate::segmenter::SEGMENT_TARGET;
+use crate::segmenter::MIN_SPLIT;
 use std::net::TcpListener;
 use std::sync::mpsc;
 

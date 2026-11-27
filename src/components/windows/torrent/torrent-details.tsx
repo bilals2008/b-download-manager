@@ -1,8 +1,10 @@
 import { useState } from "react";
 
+import { SpinnerGlyph } from "@/components/icons/ui-icons";
 import { DialogAction } from "@/components/ui/dialog-action";
 import { Progress } from "@/components/ui/progress";
-import { formatEta, formatSize, formatSpeed } from "@/lib/downloads";
+import { Tooltip } from "@/components/ui/tooltip";
+import { formatSize } from "@/lib/downloads";
 import { openPath } from "@/lib/ipc";
 import {
   torrentPause,
@@ -12,6 +14,7 @@ import {
   torrentSetSeeding,
   type TorrentJob,
 } from "@/lib/ipc-torrent";
+import { cn } from "@/lib/utils";
 
 import { TorrentFiles } from "./torrent-files";
 import { TorrentOverview } from "./torrent-overview";
@@ -20,7 +23,6 @@ import { TorrentPieces } from "./torrent-pieces";
 import { TorrentTabs, type TorrentTabId } from "./torrent-tabs";
 import { TorrentTrackers } from "./torrent-trackers";
 import { fraction, statusSentence } from "./torrent-status";
-import { cn } from "@/lib/utils";
 
 interface TorrentDetailsProps {
   /** The job the reader is looking at. */
@@ -28,27 +30,58 @@ interface TorrentDetailsProps {
   /** Whether something is being done right now. */
   busy: boolean;
   /** Do something to the job and read the jobs again. */
-  run: (action: () => Promise<unknown>) => Promise<void>;
+  run: (
+    action: () => Promise<unknown>,
+    patch?: (jobs: TorrentJob[]) => TorrentJob[],
+  ) => Promise<void>;
 }
 
 /**
- * What a job is: its size, its speed, its peers and what it is doing.
+ * The same jobs with one of them held or let go, drawn the moment the button
+ * is pressed. The engine answers a fraction of a second later, and a button
+ * that waits for it reads as a button that did not hear the click.
+ */
+function shown(
+  jobs: TorrentJob[],
+  id: string,
+  state: "paused" | "downloading",
+): TorrentJob[] {
+  return jobs.map((entry) =>
+    entry.infoHash === id
+      ? {
+          ...entry,
+          downSpeed: state === "paused" ? 0 : entry.downSpeed,
+          upSpeed: state === "paused" ? 0 : entry.upSpeed,
+          eta: state === "paused" ? null : entry.eta,
+          status: { state } as TorrentJob["status"],
+        }
+      : entry,
+  );
+}
+
+/**
+ * What one job is: its progress, its numbers, its files and its swarm.
  *
- * The pages are the five the reader asks for: the summary, the files, the
- * pieces, the peers and the trackers.
+ * The summary stays above the pages, so the reader never loses the answer to
+ * "how is it going" while looking at a tracker. The commands sit below the
+ * pages, and removing a job asks once, in place, instead of opening a second
+ * question.
  */
 export function TorrentDetails({ job, busy, run }: TorrentDetailsProps) {
   const [tab, setTab] = useState<TorrentTabId>("overview");
-  // A removal is asked for once: the first click arms it, the second one
-  // means it, because removing a job that is seeding stops the upload.
-  const [removing, setRemoving] = useState<"job" | "files" | null>(null);
+  const [removing, setRemoving] = useState(false);
+  // The command that is on its way, so its own button shows it.
+  const [working, setWorking] = useState<string | null>(null);
 
   if (!job) {
     return (
-      <div className="flex flex-1 items-center justify-center px-6">
-        <p className="max-w-64 text-center text-xs text-chrome-muted">
-          Pick a torrent to see its files, its pieces, its peers and what it
-          is doing.
+      <div className="flex min-w-0 flex-1 flex-col items-center justify-center px-8 text-center">
+        <p className="max-w-64 text-xs text-chrome-menu-text">
+          No torrent chosen
+        </p>
+        <p className="mt-1 max-w-64 text-chrome-micro text-chrome-muted">
+          Pick one on the left to see its files, pieces, peers and what it is
+          doing.
         </p>
       </div>
     );
@@ -57,76 +90,103 @@ export function TorrentDetails({ job, busy, run }: TorrentDetailsProps) {
   const paused = job.status.state === "paused";
   const done = job.status.state === "completed" || job.status.state === "seeding";
   const seeding = job.status.state === "seeding";
+  const percent = Math.round(fraction(job) * 100);
+
+  /** Run one command with its button marked until it answers. */
+  function act(
+    label: string,
+    action: () => Promise<unknown>,
+    patch?: (jobs: TorrentJob[]) => TorrentJob[],
+  ) {
+    setWorking(label);
+    void run(action, patch).finally(() => setWorking(null));
+  }
+
+  /** The spinner of a button, when that button is the one waiting. */
+  function wheel(label: string) {
+    return working === label ? (
+      <SpinnerGlyph className="size-3.5 shrink-0 motion-safe:animate-spin motion-reduce:animate-none" />
+    ) : undefined;
+  }
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <div className="shrink-0 px-4 pt-3 pb-2">
-        <div className="flex items-baseline justify-between gap-3">
-          <p className="truncate text-sm font-medium text-chrome-title-text">
-            {job.name}
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col px-4">
+      <div className="shrink-0 pt-1 pb-2">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <Tooltip content={job.name} className="block min-w-0">
+              <p className="truncate text-[13px] font-medium text-chrome-title-text">
+                {job.name}
+              </p>
+            </Tooltip>
+            <p
+              className={cn(
+                "mt-0.5 truncate text-chrome-micro",
+                job.error || job.status.state === "failed"
+                  ? "text-chrome-error"
+                  : "text-chrome-muted",
+              )}
+            >
+              {statusSentence(job.status)} · {formatSize(job.downloaded)} of{" "}
+              {formatSize(job.totalLength)}
+            </p>
+          </div>
+          <p className="shrink-0 text-lg leading-6 tabular-nums text-chrome-title-text">
+            {percent}%
           </p>
-          <span className="shrink-0 text-xs tabular-nums text-chrome-menu-text">
-            {Math.round(fraction(job) * 100)}%
-          </span>
         </div>
-        <p
-          className={cn(
-            "mt-0.5 truncate text-chrome-micro",
-            job.error || job.status.state === "failed"
-              ? "text-chrome-error"
-              : "text-chrome-muted",
-          )}
-        >
-          {statusSentence(job.status)}
-        </p>
         <Progress
           value={fraction(job) * 100}
           aria-label={`Progress of ${job.name}`}
           className="mt-2 h-1.5"
         />
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-2 text-chrome-micro tabular-nums text-chrome-muted">
-          <span>
-            {formatSize(job.downloaded)} of {formatSize(job.totalLength)}
-          </span>
-          <span>{formatSpeed(job.downSpeed) || "0 B/s"} down</span>
-          <span>{formatSpeed(job.upSpeed) || "0 B/s"} up</span>
-          <span>
-            {job.eta === null ? "no estimate" : `${formatEta(job.eta)} left`}
-          </span>
-        </div>
       </div>
 
-      <div className="shrink-0 px-4 pb-2">
+      <div className="shrink-0">
         <TorrentTabs active={tab} onChange={setTab} />
       </div>
 
+      {/* The gutter is reserved even when a page does not scroll, so a table
+          never jumps sideways and the bar never sits on the last column. The
+          page rises the last few pixels as it replaces the one before it. */}
       <div
+        key={tab}
         role="tabpanel"
         id={`torrent-panel-${tab}`}
         aria-labelledby={`torrent-tab-${tab}`}
-        className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto scrollbar-thin px-4"
+        className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto pt-2 pr-2 scrollbar-thin [scrollbar-gutter:stable] motion-safe:animate-page-in motion-reduce:animate-none"
       >
         {tab === "overview" ? <TorrentOverview job={job} /> : null}
         {tab === "files" ? <TorrentFiles job={job} /> : null}
         {tab === "pieces" ? <TorrentPieces job={job} /> : null}
         {tab === "peers" ? <TorrentPeers job={job} /> : null}
-        {tab === "trackers" ? <TorrentTrackers job={job} /> : null}
+        {tab === "trackers" ? <TorrentTrackers job={job} run={run} /> : null}
       </div>
 
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-chrome-line px-4 py-2">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 pt-2 pb-3">
         {paused ? (
           <DialogAction
             tone="primary"
+            icon={wheel("resume")}
             disabled={busy}
-            onClick={() => void run(() => torrentResume(job.infoHash))}
+            onClick={() =>
+              act("resume", () => torrentResume(job.infoHash), (jobs) =>
+                shown(jobs, job.infoHash, "downloading"),
+              )
+            }
           >
             Resume
           </DialogAction>
         ) : (
           <DialogAction
             tone="primary"
-            disabled={busy}
-            onClick={() => void run(() => torrentPause(job.infoHash))}
+            icon={wheel("pause")}
+            disabled={busy || done}
+            onClick={() =>
+              act("pause", () => torrentPause(job.infoHash), (jobs) =>
+                shown(jobs, job.infoHash, "paused"),
+              )
+            }
           >
             Pause
           </DialogAction>
@@ -134,9 +194,12 @@ export function TorrentDetails({ job, busy, run }: TorrentDetailsProps) {
         {done ? (
           <DialogAction
             tone="secondary"
+            icon={wheel("seeding")}
             disabled={busy}
             onClick={() =>
-              void run(() => torrentSetSeeding(job.infoHash, !job.seeding))
+              act("seeding", () =>
+                torrentSetSeeding(job.infoHash, !job.seeding),
+              )
             }
           >
             {seeding ? "Stop seeding" : "Seed this"}
@@ -144,48 +207,66 @@ export function TorrentDetails({ job, busy, run }: TorrentDetailsProps) {
         ) : null}
         <DialogAction
           tone="quiet"
+          icon={wheel("recheck")}
           disabled={busy}
-          onClick={() => void run(() => torrentRecheck(job.infoHash))}
+          onClick={() => act("recheck", () => torrentRecheck(job.infoHash))}
         >
           Check again
         </DialogAction>
         <DialogAction
-          tone="secondary"
+          tone="quiet"
           onClick={() => {
             void openPath(job.directory).catch(() => undefined);
           }}
         >
           Open folder
         </DialogAction>
-        <DialogAction
-          tone={removing === "job" ? "danger" : "quiet"}
-          disabled={busy}
-          className="ml-auto"
-          onClick={() => {
-            if (removing === "job") {
-              setRemoving(null);
-              void run(() => torrentRemove(job.infoHash, false));
-            } else {
-              setRemoving("job");
-            }
-          }}
-        >
-          {removing === "job" ? "Remove this job?" : "Remove"}
-        </DialogAction>
-        <DialogAction
-          tone={removing === "files" ? "danger" : "quiet"}
-          disabled={busy}
-          onClick={() => {
-            if (removing === "files") {
-              setRemoving(null);
-              void run(() => torrentRemove(job.infoHash, true));
-            } else {
-              setRemoving("files");
-            }
-          }}
-        >
-          {removing === "files" ? "Remove the files too?" : "Remove with files"}
-        </DialogAction>
+
+        {removing ? (
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
+            <span className="mr-1 text-chrome-micro text-chrome-muted">
+              Remove this torrent?
+            </span>
+            <DialogAction
+              tone="quiet"
+              disabled={busy}
+              onClick={() => setRemoving(false)}
+            >
+              Keep
+            </DialogAction>
+            <DialogAction
+              tone="danger"
+              icon={wheel("remove")}
+              disabled={busy}
+              onClick={() => {
+                setRemoving(false);
+                act("remove", () => torrentRemove(job.infoHash, false));
+              }}
+            >
+              Keep files
+            </DialogAction>
+            <DialogAction
+              tone="danger"
+              icon={wheel("remove-files")}
+              disabled={busy}
+              onClick={() => {
+                setRemoving(false);
+                act("remove-files", () => torrentRemove(job.infoHash, true));
+              }}
+            >
+              Delete files
+            </DialogAction>
+          </div>
+        ) : (
+          <DialogAction
+            tone="quiet"
+            className="ml-auto"
+            disabled={busy}
+            onClick={() => setRemoving(true)}
+          >
+            Remove…
+          </DialogAction>
+        )}
       </div>
     </div>
   );

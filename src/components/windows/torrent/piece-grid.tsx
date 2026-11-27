@@ -16,6 +16,9 @@ interface PieceGridProps {
   inflight: number | null;
   /** The words the picture is given to a screen reader. */
   label: string;
+  /** Grow the cells to fill the height of the frame, so a small torrent is
+   * a map of the whole panel instead of a thin strip at its top. */
+  fill?: boolean;
 }
 
 /** The bytes a base64 bitmap stands for. */
@@ -54,7 +57,13 @@ function hasPiece(bytes: Uint8Array, index: number): boolean {
  * name, so nothing has to walk twenty thousand cells to learn what the
  * torrent has.
  */
-export function PieceGrid({ bits, count, inflight, label }: PieceGridProps) {
+export function PieceGrid({
+  bits,
+  count,
+  inflight,
+  label,
+  fill = false,
+}: PieceGridProps) {
   const frame = useRef<HTMLDivElement | null>(null);
   const canvas = useRef<HTMLCanvasElement | null>(null);
 
@@ -74,14 +83,30 @@ export function PieceGrid({ bits, count, inflight, label }: PieceGridProps) {
       if (width <= 0 || count <= 0) {
         return;
       }
-      const columns = Math.max(1, Math.floor(width / PITCH));
+      // A filled grid takes the largest square that still fits every piece in
+      // the height it was given; the default keeps the time-tested 6px cell.
+      let cell = CELL;
+      let pitch = PITCH;
+      if (fill) {
+        const height = holder.clientHeight;
+        for (let candidate = 22; candidate >= 2; candidate -= 1) {
+          const columns = Math.max(1, Math.floor(width / candidate));
+          const rows = Math.ceil(count / columns);
+          if (rows * candidate <= height) {
+            pitch = candidate;
+            cell = Math.max(1, candidate - 1);
+            break;
+          }
+        }
+      }
+      const columns = Math.max(1, Math.floor(width / pitch));
       const rows = Math.ceil(count / columns);
       const ratio = window.devicePixelRatio || 1;
 
-      element.style.width = `${columns * PITCH}px`;
-      element.style.height = `${rows * PITCH}px`;
-      element.width = Math.round(columns * PITCH * ratio);
-      element.height = Math.round(rows * PITCH * ratio);
+      element.style.width = `${columns * pitch}px`;
+      element.style.height = `${rows * pitch}px`;
+      element.width = Math.round(columns * pitch * ratio);
+      element.height = Math.round(rows * pitch * ratio);
       context.setTransform(ratio, 0, 0, ratio, 0, 0);
 
       // The colours are the tokens of the appearance, so the grid follows the
@@ -95,7 +120,7 @@ export function PieceGrid({ bits, count, inflight, label }: PieceGridProps) {
         context.fillStyle = hasPiece(bytes, index) ? accent : empty;
         const column = index % columns;
         const row = Math.floor(index / columns);
-        context.fillRect(column * PITCH, row * PITCH, CELL, CELL);
+        context.fillRect(column * pitch, row * pitch, cell, cell);
       }
 
       // The piece that is on its way is drawn in the accent at half strength:
@@ -105,7 +130,7 @@ export function PieceGrid({ bits, count, inflight, label }: PieceGridProps) {
         context.fillStyle = accent;
         const column = inflight % columns;
         const row = Math.floor(inflight / columns);
-        context.fillRect(column * PITCH, row * PITCH, CELL, CELL);
+        context.fillRect(column * pitch, row * pitch, cell, cell);
         context.globalAlpha = 1;
       }
     }
@@ -125,10 +150,15 @@ export function PieceGrid({ bits, count, inflight, label }: PieceGridProps) {
       resize.disconnect();
       appearance.disconnect();
     };
-  }, [bits, count, inflight]);
+  }, [bits, count, inflight, fill]);
 
   return (
-    <div ref={frame} role="img" aria-label={label} className="w-full">
+    <div
+      ref={frame}
+      role="img"
+      aria-label={label}
+      className={fill ? "h-full w-full" : "w-full"}
+    >
       <canvas ref={canvas} aria-hidden="true" className="block" />
     </div>
   );

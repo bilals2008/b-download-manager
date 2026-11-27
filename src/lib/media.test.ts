@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  captionChoices,
   formatDuration,
   initialQuality,
   mediaRows,
@@ -151,6 +152,59 @@ describe("qualityToken", () => {
   it("falls back to the label, then to nothing", () => {
     expect(qualityToken(job(), "a1")).toBe("Audio");
     expect(qualityToken(job(), "missing")).toBe("");
+  });
+});
+
+describe("caption tracks", () => {
+  function withCaptions(): MediaJobView {
+    return job({
+      subtitles: [
+        {
+          id: "s0",
+          name: "English",
+          language: "en",
+          container: "vtt",
+          isDefault: true,
+        },
+        {
+          id: "s1",
+          name: "Deutsch",
+          language: null,
+          container: "vtt",
+          isDefault: false,
+        },
+      ],
+      formats: [
+        ...job().formats,
+        {
+          id: "s0-en-default",
+          kind: "subtitle",
+          container: "vtt",
+          codec: null,
+          width: null,
+          height: null,
+          fps: null,
+          bandwidth: null,
+          size: null,
+          label: "English (en, default)",
+        },
+      ],
+    });
+  }
+
+  it("never lists a caption track among the qualities", () => {
+    const rows = mediaRows(withCaptions());
+    expect(rows.some((row) => row.id === "s0-en-default")).toBe(false);
+    expect(rows.map((row) => row.id)).toEqual(["v1080", "v720", "a2"]);
+  });
+
+  it("offers no captions, then each track with its language", () => {
+    expect(captionChoices([])).toEqual([{ value: "", label: "None" }]);
+    expect(captionChoices(withCaptions().subtitles)).toEqual([
+      { value: "", label: "None" },
+      { value: "s0", label: "English (en, default)" },
+      { value: "s1", label: "Deutsch" },
+    ]);
   });
 });
 

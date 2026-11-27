@@ -23,7 +23,7 @@ measured 6 November 2026.
 
 | Question | Why it matters | Where the code landed |
 |---|---|---|
-| Is a 16 MiB segment target right? | It was a guess. A sweep against a real server would settle it. | `connections_for()` sizes by total, one connection per 10 KB, capped; the sweep has never been run on an unthrottled link |
+| Is a 16 MiB segment target right? | No: it gave every file under 16 MiB one connection, so small videos and small files crawled. | Resolved: `plan()` makes one range per `MIN_SPLIT` (1 MiB), capped by the connection count |
 | Is growing on "most bytes remaining" the right rule? | Growth should trigger on a *lagging* connection, not a large one. | Resolved: `maybe_grow()` compares progress ratios now (M4 in [06](./06-milestones.md)) |
 | What should happen when a server does not support ranges but the file is huge? | Today: one connection, very slow. | Unchanged; the downgrade is correct, just slow |
 | Should the manifest be a file or a database? | A file is portable and diffable. | A file, written to a temp path and renamed (`session.rs:120`) |

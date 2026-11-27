@@ -31,12 +31,12 @@ use crate::state::AppState;
 /// The one client of the whole app, so the request budget of a torrent is
 /// one budget and not one per window.
 pub struct Torrents {
-    client: TorrentClient,
+    pub(crate) client: TorrentClient,
 }
 
 static TORRENTS: OnceLock<Torrents> = OnceLock::new();
 
-fn torrents() -> &'static Torrents {
+pub(crate) fn torrents() -> &'static Torrents {
     TORRENTS.get_or_init(|| Torrents {
         client: TorrentClient::new(),
     })
@@ -282,6 +282,151 @@ pub fn torrent_set_files(id: String, wanted: Vec<usize>) -> Result<(), String> {
         .client
         .set_files(&id, wanted)
         .map_err(|error| error.to_string())
+}
+
+/// Add trackers to a job, on top of the ones the torrent came with. The
+/// answer is the job, so the window updates its tracker list in one round
+/// trip.
+#[tauri::command]
+pub fn torrent_add_trackers(id: String, urls: Vec<String>) -> Result<TorrentJob, String> {
+    torrents()
+        .client
+        .add_trackers(&id, &urls)
+        .map_err(|error| error.to_string())?;
+    torrents()
+        .client
+        .job(&id)
+        .ok_or_else(|| "unknown torrent".to_string())
+}
+
+/// Drop trackers from a job. The torrent's own list is untouched on disk.
+#[tauri::command]
+pub fn torrent_remove_trackers(id: String, urls: Vec<String>) -> Result<TorrentJob, String> {
+    torrents()
+        .client
+        .remove_trackers(&id, &urls)
+        .map_err(|error| error.to_string())?;
+    torrents()
+        .client
+        .job(&id)
+        .ok_or_else(|| "unknown torrent".to_string())
+}
+
+/// Ask the job's trackers again now, instead of at the interval they set.
+#[tauri::command]
+pub fn torrent_announce_now(id: String) -> Result<(), String> {
+    torrents()
+        .client
+        .announce_now(&id)
+        .map_err(|error| error.to_string())
+}
+
+/// What one tracker answered when it was asked about this job, before it is
+/// added to the job's list.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrackerCheck {
+    /// The address that was asked.
+    pub url: String,
+    /// Whether it answered at all.
+    pub ok: bool,
+    /// How many peers it named.
+    pub peers: u64,
+    /// How many of them have the whole torrent.
+    pub seeders: u64,
+    /// How many of them have part of it.
+    pub leechers: u64,
+    /// What it said back, when it said no.
+    pub message: Option<String>,
+}
+
+/// Ask each tracker about this job without adding it, so a dead address is
+/// not saved into the list. Every tracker is asked at the same time; one that
+/// is down costs its own timeout and not the others'.
+#[tauri::command]
+pub async fn torrent_check_trackers(
+    state: State<'_, AppState>,
+    id: String,
+    urls: Vec<String>,
+) -> Result<Vec<TrackerCheck>, String> {
+    let settings = state.engine_settings();
+    let port = if settings.torrent_port == 0 {
+        6881
+    } else {
+        settings.torrent_port
+    };
+    let proxy = (!settings.proxy_url.is_empty()).then(|| settings.proxy_url.clone());
+    let peer_id = check_peer_id();
+    // A magnet does not know its size yet, and a tracker reads `left=0` as
+    // "this one has everything", which gets no peers back.
+    let left = torrents()
+        .client
+        .job(&id)
+        .map(|job| job.total_length)
+        .unwrap_or(0)
+        .max(1);
+    let mut tasks = tokio::task::JoinSet::new();
+    for url in urls {
+        let url = url.trim().to_owned();
+        if url.is_empty() {
+            continue;
+        }
+        let peer_id = peer_id.clone();
+        let proxy = proxy.clone();
+        let id = id.clone();
+        tasks.spawn(async move {
+            let answer = idm_torrent::announce(
+                &url,
+                &id,
+                &peer_id,
+                port,
+                "started",
+                left,
+                proxy.as_deref(),
+            )
+            .await;
+            match answer {
+                Ok(result) => TrackerCheck {
+                    url,
+                    ok: true,
+                    peers: result.peers.len() as u64,
+                    seeders: result.complete,
+                    leechers: result.incomplete,
+                    message: None,
+                },
+                Err(error) => TrackerCheck {
+                    url,
+                    ok: false,
+                    peers: 0,
+                    seeders: 0,
+                    leechers: 0,
+                    message: Some(error.to_string()),
+                },
+            }
+        });
+    }
+    let mut checks = Vec::new();
+    while let Some(joined) = tasks.join_next().await {
+        if let Ok(check) = joined {
+            checks.push(check);
+        }
+    }
+    Ok(checks)
+}
+
+/// A peer id for a check, which is not a job: it only asks a tracker a
+/// question, and no peer is ever connected under it.
+fn check_peer_id() -> String {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static COUNT: AtomicU32 = AtomicU32::new(0);
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|since| since.as_nanos() as u64)
+        .unwrap_or(0);
+    let tie = COUNT.fetch_add(1, Ordering::Relaxed) as u64;
+    let mut id = String::from("2d4244");
+    id.push_str(&format!("{:034x}", nanos ^ (tie << 20)));
+    id
 }
 
 /// Remove a job. The files go only when the reader says they should.

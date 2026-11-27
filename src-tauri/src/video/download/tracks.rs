@@ -458,11 +458,14 @@ fn progress_sink(
     })
 }
 
-pub(super) fn finish_saved(state: &AppState, id: u64, dest: PathBuf) {
+/// Mark a job saved. `notice` says what was asked for and not delivered (a
+/// caption the site refused); the file itself is there either way.
+pub(super) fn finish_saved(state: &AppState, id: u64, dest: PathBuf, notice: Option<String>) {
     state.update_media_job(id, |job| {
         job.downloading = false;
         job.done = true;
         job.error = None;
+        job.notice = notice;
         job.stage = Some("Saved".to_string());
         job.dest = Some(dest.to_string_lossy().to_string());
         job.fraction = 1.0;

@@ -1,6 +1,7 @@
 import { useRef } from "react";
 
 import { FileTypeIcon, StatusMark } from "@/components/icons/desktop-icons";
+import { TorrentGlyph } from "@/components/icons/ui-icons";
 import { Tooltip } from "@/components/ui/tooltip";
 import { SelectionCheckbox } from "@/components/workspace/selection-checkbox";
 import { DownloadProgress } from "@/components/workspace/download-progress";
@@ -111,22 +112,42 @@ export function DownloadRow({
             onToggle={onToggle}
           />
 
-          <FileTypeIcon
-            category={item.category}
-            name={item.fileName}
-            className="size-5.5 shrink-0"
-          />
+          {/* A torrent says so with its own mark instead of a file type: the
+              row is a folder of files coming from a swarm, and no single
+              extension can stand for it. */}
+          {item.torrent ? (
+            <TorrentGlyph className="size-5.5 shrink-0 text-icon-amber" />
+          ) : (
+            <FileTypeIcon
+              category={item.category}
+              name={item.fileName}
+              className="size-5.5 shrink-0"
+            />
+          )}
 
           <div ref={nameRef} className="min-w-0 flex-1">
-            <Tooltip
-              content={item.url}
-              side="bottom"
-              className="block min-w-0"
-            >
-              <span className="block truncate text-chrome-menu-text">
-                {displayFileName(item.fileName)}
+            <span className="flex min-w-0 items-center gap-2">
+              <Tooltip
+                content={item.torrent ? item.savePath : item.url}
+                side="bottom"
+                className="block min-w-0"
+              >
+                <span className="block truncate text-chrome-menu-text">
+                  {displayFileName(item.fileName)}
+                </span>
+              </Tooltip>
+              {item.torrent ? (
+                <span className="shrink-0 rounded-chrome bg-chrome-row-alt px-1.5 py-px text-chrome-micro text-chrome-muted">
+                  Torrent
+                </span>
+              ) : null}
+            </span>
+            {item.torrent ? (
+              <span className="mt-0.5 block truncate text-chrome-micro text-chrome-muted">
+                {item.torrentFiles ?? 0}{" "}
+                {item.torrentFiles === 1 ? "file" : "files"} · {item.savePath}
               </span>
-            </Tooltip>
+            ) : null}
             {!item.error && item.mediaStage && item.status !== "completed" ? (
               <span className="mt-0.5 block truncate text-chrome-micro text-chrome-muted">
                 {item.mediaStage}

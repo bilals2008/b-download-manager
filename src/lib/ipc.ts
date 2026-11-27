@@ -103,6 +103,11 @@ export interface StartRefusal {
   suggested: string;
 }
 
+/** The text on the clipboard right now, as the backend reads it. */
+export function readClipboardText(): Promise<string> {
+  return invoke<string>("clipboard_text");
+}
+
 export function startDownload(input: StartDownloadInput): Promise<StartOutcome> {
   return invoke<StartOutcome>("start_download", {
     request: {

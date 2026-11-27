@@ -220,6 +220,7 @@ pub async fn renew(
 mod client;
 mod parse;
 mod resolver;
+pub(crate) mod transcript;
 
 use resolver::remember;
 
